@@ -19,7 +19,7 @@ turn re-reads ~220k tokens):
 | H10 the lead's own context (`ccx lead`, per-turn hint) | ✅ PR #3 |
 | H11 week-long comparison: the tool (`ccx trial`) | ✅ PR #5 — the week of data is collected by the eval session (PR #6, with J0, E8, F9) |
 | J1 + J2 what a turn re-reads, where the cache broke (`ccx lead --breakdown`, `--cache`) | ✅ PR #8 |
-| J3 long output cut down before the lead reads it (`ccx sum`) | PR #9 |
+| J3 long output cut down before the lead reads it (`ccx sum`) | ✅ PR #9 |
 | J6 this page down to one page | this change |
 | I1–I4 adapters per agent, vendor decides "another", fallback and reviewers from data | done on `feat/i1-adapters`, held by J13 until the H11/J0 numbers are in |
 
