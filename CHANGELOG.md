@@ -1,6 +1,16 @@
 # Changelog
 
 ## Unreleased
+- One adapter per agent CLI (proposals I1–I4). `ccx/agents/<name>.py` answers the same questions for Codex, Claude
+  Code and Gemini CLI: how to run it headless and parse the result, where its sessions live, how to check its
+  login, its instruction file and start hook, how permissions are given, its vendor, official or community
+  support, the CLI version checked, and what it can do (`can_lead`, `can_work`, `can_resume`, `builtin_subagents`,
+  `quota_readable`, `live_cost`, `turn_hook`). `runners.py` keeps the shared parts and re-exports the old names.
+  `ccx agents` lists them (plus providers); `ccx doctor` shows each one's vendor, support and capabilities, and only
+  the official agents are required. "Another agent" now means another vendor: DeepSeek through the Claude CLI is
+  its own vendor (a provider can say `vendor = "..."`), so Claude may review DeepSeek's work. The quota fallback
+  lets routing pick the cheapest in total among installed agents of another vendor, and reviewers default to
+  routing's cheapest easy-read rung per other-vendor agent; `[review] by` is empty by default and only pins.
 - Research on similar projects (proposals J8–J10), docs only: `docs/research/landscape.md` / `.zh.md` covers OpenAI's
   official codex-plugin-cc (facts with sources, overlap, a coexistence plan that is not implemented yet, tests still to
   run), a comparison of similar projects (also a new "Similar projects" section in both READMEs) and eight name options

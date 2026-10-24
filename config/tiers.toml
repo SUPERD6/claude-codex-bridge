@@ -94,7 +94,9 @@ mode = "auto"
 min_lines = 50        # auto 时：代码（不含 .md 等文档）改动达到这么多行也审；0 = 不按行数触发
 fix_rounds = 1
 max_diff_chars = 12000
-by = { codex = "claude:haiku:low", claude = "codex:gpt-6-luna:low", deepseek = "codex:gpt-6-luna:low", gemini = "codex:gpt-6-luna:low" }
+# 审查者默认按数据选（提案 I4）：已安装、另一家厂商（I3）、按选模型算一次“简单只读”最省的那一档。
+# 想固定某家的审查者就在这里写，例如 by = { codex = "claude:haiku:low" }（写了的排在最前）。
+by = {}
 # 审查没能完成（2026-10-24 实测：haiku 两次因输出太长、结构化输出重试用完而失败）时，换下一个另一家的模型再审一次
 also = ["claude:sonnet:medium", "codex:gpt-6-luna:high"]
 
