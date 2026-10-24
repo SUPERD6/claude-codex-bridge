@@ -182,6 +182,21 @@ PyPI).
 URL), the package name in `pyproject.toml`, links in the README and website, and the `pipx install git+…` command. The
 `ccx` command can stay.
 
+**Decision (2026-10-24): renamed to `relayline`** (the `ccx` command and the `ccx/` package stay). Checked before
+renaming, all on 2026-10-24:
+
+| Where | Query | Result |
+|---|---|---|
+| USPTO [Trademark Search](https://tmsearch.uspto.gov/) | `relayline` | no results (a control query `relay` returned 796) |
+| [TMview](https://www.tmdn.org/tmview/) (EUIPO and other offices) | `relayline` | no results (control `relay`: 3,015) |
+| TMview | `relay line` (contains) | 2 unrelated, ended marks: RELAYPAY ONLINE PAYMENT SOLUTIONS (AU), CHICAGO SHORELINE MARATHON AND RELAY (US) |
+| npm | `registry.npmjs.org/relayline`, `/relay-line`; npm search `relayline` | 404, 404; 0 packages |
+| PyPI | `pypi.org/pypi/relayline/json` | 404 (free) |
+| GitHub | `relayline in:name`; `github.com/relayline` | 5 repos, all 0 stars, other fields; no such user or org |
+
+Not a legal clearance: only exact-name searches; marks that are just `RELAY` exist in software classes (e.g. a live
+US registration in class 42), so a compound with `relay` is not unique as a word.
+
 ## Sources
 
 All checked 2026-10-24.

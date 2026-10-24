@@ -19,7 +19,7 @@
       <a href="#how" class="hide-s">怎么工作</a>
       <a href="../demo/" class="hide-s">看板示例</a>
       <a href="#faq" class="hide-s">常见问题</a>
-      <a href="https://github.com/SUPERD6/claude-codex-bridge">GitHub</a>
+      <a href="https://github.com/SUPERD6/relayline">GitHub</a>
       <a href="../" hreflang="en" lang="en">English</a>
       <button class="theme" type="button" aria-label="切换浅色/深色" title="切换浅色/深色">◐</button>
     </nav>
@@ -30,8 +30,8 @@
       <h1>Claude Code 和 Codex，互为子智能体</h1>
       <p class="sub">ccx 把每一块工作交给最便宜、又大概率能做完的模型，在另一个工具里跑完，由你验收，并记下花了多少。</p>
       <div class="install">
-        <code>pipx install git+https://github.com/SUPERD6/claude-codex-bridge</code>
-        <button class="copy" type="button" data-copy="pipx install git+https://github.com/SUPERD6/claude-codex-bridge"
+        <code>pipx install git+https://github.com/SUPERD6/relayline</code>
+        <button class="copy" type="button" data-copy="pipx install git+https://github.com/SUPERD6/relayline"
                 data-done="已复制" data-fail="请手动复制">复制</button>
       </div>
       <p class="then">然后运行 <code>ccx setup</code>——每一步都会说明，改东西之前先问你。</p>
@@ -94,12 +94,12 @@
     <h2>常见问题</h2>
     <details><summary>多一个智能体，不是更费 token 吗？</summary><p>只有很小的任务会，这时 ccx 会直接让你自己做。其余的子智能体用比主智能体便宜的模型、精简启动；看板会用你自己的运行算出差多少。</p></details>
     <details><summary>我用的是订阅，不是 API，也适用吗？</summary><p>适用。花费按 API 价格折算，方便比较；看板也会显示每个工具的额度用在了哪里。一边额度用完了，任务会换到另一边。</p></details>
-    <details><summary>让子智能体改文件安全吗？</summary><p>只能改任务所在的文件夹；每次可写运行都会拍快照，可以 <code>ccx undo</code>；<code>--mode read</code> 或 <code>--worktree</code> 不会动你的工作区。详见 <a href="https://github.com/SUPERD6/claude-codex-bridge/blob/main/SECURITY.zh.md">SECURITY.zh.md</a>。</p></details>
+    <details><summary>让子智能体改文件安全吗？</summary><p>只能改任务所在的文件夹；每次可写运行都会拍快照，可以 <code>ccx undo</code>；<code>--mode read</code> 或 <code>--worktree</code> 不会动你的工作区。详见 <a href="https://github.com/SUPERD6/relayline/blob/main/SECURITY.zh.md">SECURITY.zh.md</a>。</p></details>
     <details><summary>支持哪些工具？</summary><p>Claude Code 和 Codex CLI，两个方向都在真机上测过。Gemini CLI 和用 DeepSeek 的 Claude Code 已经适配，但还没真跑过。</p></details>
   </section>
 
-  <footer><span>ccx · MIT</span><a href="https://github.com/SUPERD6/claude-codex-bridge">GitHub</a>
-    <a href="https://github.com/SUPERD6/claude-codex-bridge/blob/main/SECURITY.zh.md">SECURITY.zh.md</a><a href="../" lang="en">English</a>
+  <footer><span>ccx · MIT</span><a href="https://github.com/SUPERD6/relayline">GitHub</a>
+    <a href="https://github.com/SUPERD6/relayline/blob/main/SECURITY.zh.md">SECURITY.zh.md</a><a href="../" lang="en">English</a>
     <span>与 Anthropic、OpenAI 无关。Claude Code 和 Codex 分别是其所有者的产品。</span></footer>
 </div>
 <script src="../app.js"></script>

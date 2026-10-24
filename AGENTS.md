@@ -1,4 +1,4 @@
-# claude-codex-bridge — instructions for coding agents (Claude Code, Codex, Gemini CLI)
+# relayline (formerly claude-codex-bridge) — instructions for coding agents (Claude Code, Codex, Gemini CLI)
 
 `ccx` lets Claude Code and Codex (and Gemini CLI) be each other's lead / sub-agent, with shared skills, MCP,
 incremental memory, resumable runs and token accounting. Python 3.11+, standard library only.
