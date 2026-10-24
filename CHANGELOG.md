@@ -10,6 +10,12 @@
   built-in helper's parent conversation, and self-run samples count only their own conversation.
 - Read-only sub-tasks are told their shell still works: in a real E8 run gpt-6-luna/low once answered that it had
   no tool to read the file it was asked to read.
+- Trust in probable verdicts (proposal J7). `ccx stats --summary` / `ccx report` count how many probable verdicts
+  (H13) were later judged again by you or the lead and how many of those the other way; once 5+ were re-judged and
+  over 20% overturned, new probable verdicts stop teaching routing (a weak check may pass wrong work as right).
+- J0 baseline of the lead's own cost: `scripts/eval/j0_baseline.py real` (the real lead sessions and the ledger, no
+  model calls) and `tasks --ref REV` (three fixed lead tasks in a clone at that commit with the person's default
+  setup, answers checked against the clone); rerun after J1–J6 with the same arguments.
 - Measured H11 (first batch), E8 and F9 on the real CLIs ([report](docs/research/2026-10-24-h11-e8-f9-measurements.md), about $0.56 in all). New
   `scripts/eval/`: `h11_compare.py` (paired lead-does-it vs lead-delegates on generated repos with hidden
   acceptance tests, verdicts via `ccx verify`, spend cap), `e8_handoff.py` (a real outgoing lead, `--from-transcript`,

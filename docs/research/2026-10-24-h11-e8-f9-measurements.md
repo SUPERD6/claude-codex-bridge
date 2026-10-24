@@ -1,4 +1,4 @@
-# Measured: does delegating save the lead anything (H11, first batch), real two-way handovers (E8), built-in sub-agents on/off (F9)
+# Measured: the lead's cost baseline (J0), does delegating save the lead anything (H11, first batch), real two-way handovers (E8), built-in sub-agents on/off (F9), trust in probable verdicts (J7)
 
 English · [中文](2026-10-24-h11-e8-f9-measurements.zh.md) · 2026-10-24 · ccx 0.4.0 · claude 2.1.309 · codex-cli 0.164.0 · Windows 11
 
@@ -11,7 +11,54 @@ English · [中文](2026-10-24-h11-e8-f9-measurements.zh.md) · 2026-10-24 · cc
 | E8: can the next lead say where things stand and what's next from the handoff alone? | Controlled: 3/3 right (Codex → Claude clean stop, Codex → Claude killed mid-work, Claude → Codex clean stop). **The real long session (this one → Codex) was wrong at first**: the handoff's plan was stuck at its first state, so the receiver thought no experiment had run. Right after the fix. | Controlled: good; one real session only |
 | F9: do built-in sub-agents actually start when on? | **0 of 5 runs started any** (on ×2, off ×2, and on with a brief that explicitly asks for one sub-agent per module). Cost ($0.0024–0.0037) and time (22–26 s) differ within noise; all correct. | Good for gpt-6-luna low; higher tiers not tried (this week's Codex quota) |
 
+| J0: what does a lead request cost now? | Real sessions, last 7 days: Claude median **352k tokens, $0.11 a request**, 99% cache reads, cache breaks only 5% of spend; sub-runs $0.42 in 7 days. In the fixed tasks the default setup puts **~55k tokens** in every request before any work; reading STATUS adds ~5k. | Real data is a reading: good; fixed tasks only 2 runs each |
+| J7: how many probable verdicts are overturned later? | Counted now, with a switch (5+ re-judged and >20% overturned → they stop teaching routing). **None of the 18 probable verdicts has been re-judged yet**, so no rate yet. | No data |
+
 Two ccx bugs found and fixed in this PR (both in `ccx handoff --from-transcript`); six more listed in section 5.
+
+## 0. J0: the lead's own cost, before proposal J
+
+Proposal J (J1 fixed overhead, J2 cache breaks, J3 compressed outputs, J6 a one-page STATUS) acts on the lead's own
+context, so it is measured now on the current version (main `3e72847`) and again with the same commands once J1–J6
+are merged. Script: `scripts/eval/j0_baseline.py`.
+
+**Real sessions** (`real --days 7`, no model calls; every lead request in the tools' own session files, ccx sub-runs
+excluded, all projects on this machine):
+
+| | Claude lead | Codex lead |
+|---|---|---|
+| requests / sessions | 2,456 / 164 | 14,653 / 22 |
+| tokens re-read per request: median / p90 | **351,853** / 803,663 | 223,485 / 345,855 |
+| $ per request: median / mean | **$0.112** / $0.125 | $0.036 / $0.060 |
+| 7 days | $307.61 | $873.75 |
+| cache read / write share (tokens) | 99.0% / 1.0% | 97.7% / 0% |
+| cache breaks (a write of 20k+ tokens and over half the request) | 8, $15.14 | 0 |
+
+ccx sub-runs in the same window: 116, $0.42 (25 of them this evaluation). Against PR #3's reading (~220k tokens,
+~$0.06 a turn), the Claude median grew: many long conversations lately (p90 ~800k). Almost all spend is re-reading
+(99% cache reads); real cache breaks are 5% of it. So J's best levers are reading less per request (J1, J3, J6, fresh
+conversations); J2's ceiling is about those 5%.
+
+**Fixed tasks** (`tasks --ref 3e72847 --repeat 2`, haiku): in a clone at that commit, a new headless Claude Code lead
+with the person's **default** setup (their CLAUDE.md, hooks, skills, MCP — what J1–J3 and J6 change; no slim flags)
+does three everyday lead jobs, twice each. Answers are checked against facts read from the clone (version, files the
+last 3 commits changed, the function behind `--sweep`), so "right" means the same before and after.
+
+| Task | Right | Requests | First request (fixed overhead) | Median request | Read in all | Cache-read share | $ |
+|---|---|---|---|---|---|---|---|
+| orient: follow the repo's start-here notes; version and next 3 steps | 2/2 | 2 | 53,508 | 58,990 | 117,980 | 61% | 0.0102 |
+| diff: summarise the last 3 commits | 2/2 | 2.5 | 55,168 | 56,255 | 140,837 | 84% | 0.0061 |
+| code: where `ccx verify --sweep` lives and how it decides | 2/2 | 5 | 55,161 | 57,132 | 287,426 | 92% | 0.0080 |
+
+Medians of 2; $ at haiku prices. Every request starts at ~55k tokens before doing anything (system prompt, tools,
+MCP, skill list, CLAUDE.md / AGENTS.md, start-up hooks): what J1 is to break down. Reading STATUS (23KB) adds ~5k per
+request: ~10% in a fresh conversation, ~1.5% in a 350k one — J6's order of magnitude. The diff output added only ~1k
+per request here (haiku read `--stat` and part of the diff); J3 needs larger outputs to show. Note: my first expected
+answer for "code" was wrong (functions named `*sweep*`; the real ones are `soft_verdicts` / `_soft_verdict`), which
+marked both runs wrong; the script is fixed and both stored answers re-scored as right (marked `rescored`).
+
+After J: `python scripts/eval/j0_baseline.py tasks --ref <new commit> --repeat 2 --tag after-J`, `real --days 7`,
+then `summary`. Done when, per the plan, the average $ per request on the same tasks falls and correctness does not.
 
 ## 1. Budget and spend
 
@@ -24,7 +71,8 @@ Cap: about $1 API-equivalent for all real runs; Codex gpt-6-luna low only, Claud
 | H11 sonnet batch | 6 pairs + 1 single arm (stopped by its $0.5 cap) | $0.446 |
 | E8 | 3 controlled handovers + 2 asks on the real session | ~$0.02 |
 | F9 | 5 Codex sub-runs | $0.017 |
-| **Total** | | **~$0.56** |
+| J0 fixed tasks | 6 haiku leads | $0.049 |
+| **Total** | | **~$0.61** |
 
 Leads: `total_cost_usd` reported by `claude -p`; sub-runs: AE$ from the ccx ledger.
 
@@ -158,6 +206,15 @@ Bash` and no `Agent` tool, so "on" cannot start any there either (the code comme
 | 7 | The report's "estimated saving" is not what was measured to save (section 2). | Not fixed. |
 | 8 | "On disk now": `strip()` drops the first `git status --short` line's leading space (` M a.py` reads as staged `M a.py`). | Not fixed (cosmetic). |
 
+## 5b. J7: how often probable verdicts are overturned
+
+H13 lets ccx record "probably right" (`soft`) when nobody judged a run; with a weak check that "right" can be false,
+and it feeds routing. Added here: `soft_trust` in `ccx stats --summary` (probable verdicts, how many were judged again
+by you or the lead, how many of those the other way, the share), shown on the success card of `ccx report` ("N/M
+probable overturned later"); once 5+ were re-judged and over 20% overturned, new probable verdicts stop teaching
+routing (still recorded and shown; the card says so). Real ledger now: 18 probable verdicts, **none re-judged yet**,
+so there is no rate yet and learning goes on. Getting one needs spot checks (section 7).
+
 ## 6. Limits
 - **Tasks too small and easy:** both arms always right, so correctness and rework could not differ (0 follow-ups, 0
   lead edits after delegating, 0 failed sub-run checks). Self needs 3 requests, delegating at least 2: at most one
@@ -180,11 +237,13 @@ Bash` and no `Agent` tool, so "on" cannot start any there either (the code comme
    routing picks 20% of tasks it would delegate for the lead to do itself, and `ccx ab done <id> --ok 1|0` records
    what the lead used (`selfrun` events). Compare "lead requests × context" with delegated tasks of the same
    difficulty after a week.
-3. **A verdict for every delegated task:** `ccx verify <run_id> --ok 1|0`, or at least the session-start
+3. **Spot-check probable verdicts (J7):** each week pick 5 `soft` runs at random, look, `ccx verify`; only then does
+   `soft_trust` have an overturn rate.
+4. **A verdict for every delegated task:** `ccx verify <run_id> --ok 1|0`, or at least the session-start
    `ccx verify --sweep`. Before this run the ledger had 2 human verdicts; now 31 (25 from this run).
-4. **E8:** at every real switch of leads (quota out, changing tools), build the handoff with `--from-transcript`, have
+5. **E8:** at every real switch of leads (quota out, changing tools), build the handoff with `--from-transcript`, have
    the new lead first write where it thinks things stand and what's next, compare with the old session, `ccx verify`.
-5. **F9:** when the Codex quota allows, `python scripts/eval/f9_subagents.py run --model gpt-6.1-sol --effort medium`;
+6. **F9:** when the Codex quota allows, `python scripts/eval/f9_subagents.py run --model gpt-6.1-sol --effort medium`;
    if still nothing starts, document "allowed, but Codex 0.164 rarely starts any by itself".
 
 ## 8. Reproduce
@@ -192,6 +251,9 @@ Logged-in `claude` and `codex` CLIs; run the scripts with a Python that has pyte
 PATH, so the agents use it in the scratch repos).
 
 ```
+python scripts/eval/j0_baseline.py real --days 7
+python scripts/eval/j0_baseline.py tasks --ref <commit> --repeat 2 --tag before-J
+python scripts/eval/j0_baseline.py summary
 python scripts/eval/h11_compare.py list
 python scripts/eval/h11_compare.py run --pairs 8 --tag haiku1 --budget 0.6
 python scripts/eval/h11_compare.py run --pairs 8 --tag sonnet1 --lead-model sonnet --lead-effort medium --lead-budget 0.3 --budget 0.5
@@ -202,5 +264,5 @@ python scripts/eval/f9_subagents.py run --repeat 2 --explicit 1
 python scripts/eval/f9_subagents.py summary
 ```
 
-Raw results: `.ccx/eval/{h11,e8,f9}/results.jsonl` (not in git: they hold local paths). Verdicts are in the ccx ledger
+Raw results: `.ccx/eval/{h11,e8,f9}/results.jsonl` and `.ccx/eval/j0/{real,tasks}.jsonl` (not in git: they hold local paths). Verdicts are in the ccx ledger
 under the labels `eval-h11:*`, `eval-e8:*`, `eval-f9:*`.

@@ -56,6 +56,12 @@ H12, H14–H16, I8, then the open-source release. Each step: a branch, tests, a 
 - **CI.** Jobs have not started since 2026-10-24 (GitHub: payments / spending limit; private-repo minutes, macOS
   10x). The workflow now runs a small set on push and the full matrix on tags/PRs/by hand (`cdfc13a`); it runs
   again once minutes reset or billing is sorted (the user's account). Unlimited once the repo is public.
+- **J0 baseline (2026-10-24, same report, `scripts/eval/j0_baseline.py`).** Real lead, last 7 days: Claude median
+  352k tokens / $0.11 per request (99% cache reads; 8 cache breaks = 5% of spend), Codex 223k / $0.036; sub-runs $0.42.
+  Fixed tasks at `3e72847` (haiku, default setup): ~55k tokens per request before any work; STATUS adds ~5k; 6/6
+  right. Rerun with `--ref <new commit> --tag after-J` once J1–J6 are merged.
+- **J7 (2026-10-24).** `soft_trust` in `ccx stats --summary` / the report; probable verdicts stop teaching routing
+  once 5+ were re-judged and over 20% overturned. Now: 18 probable, none re-judged yet — spot-check 5 a week.
 - **H11 first batch (2026-10-24, [report](research/2026-10-24-h11-e8-f9-measurements.md), `scripts/eval/`).** 14 paired small tasks,
   lead does it vs lead delegates to Codex luna/low, all correct both ways. A sonnet lead made one request fewer
   per task (3 → 2, 6/6, p = 0.031); a haiku lead re-checked and saved none (total $ ×2.3). Delegating was ~16 s
