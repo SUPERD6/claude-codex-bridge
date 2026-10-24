@@ -15,6 +15,7 @@ changed — else unknown."""
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 CLAUDE_TTL_MIN = 5          # default prompt-cache lifetime when the log doesn't say (Claude Code asks for 1 h)
@@ -166,6 +167,104 @@ def _advice(parts: list[dict]) -> list[str]:
         elif x["part"] == "start hook output":
             out.append(f"start hook output: {cost}. A shorter start-up note is cheaper on every turn.")
     return out
+
+
+# ---------------------------------------------------------------- J5
+LADDER = {"claude": ["opus", "sonnet", "haiku"], "codex": ["gpt-6-astra", "gpt-6.1-sol", "gpt-6-luna"]}
+RECENT_TURNS = 30
+SHELL_WRITES = re.compile(r"sed -i|write_text|open\([^)]*['\"][wa]['\"]|Set-Content|Out-File|tee|>>|[^-=2]> ?[\w./~$\"']|git (commit|apply|am)")
+DOC_EXT = (".md", ".txt", ".rst", ".adoc", ".json", ".toml", ".yml", ".yaml", ".csv", ".html")
+
+
+def _rung_of(agent: str, model: str) -> str | None:
+    m = (model or "").lower()
+    for r in LADDER.get(agent, []):
+        if r in m or r.replace(".", "-") in m:
+            return r
+    return None
+
+
+def _claude_turns(evs: list[dict]) -> list[dict]:
+    """Per assistant reply: usage, model and what it did (edited code / edited docs / read or ran / only talked)."""
+    from .runners import usage_dict
+    out: list[dict] = []
+    by_id: dict[str, dict] = {}
+    for e in evs:
+        if e.get("type") != "assistant" or e.get("isSidechain"):
+            continue
+        m = e.get("message") or {}
+        if not m.get("usage") or m.get("model") == "<synthetic>":
+            continue
+        t = by_id.get(m.get("id"))
+        if t is None:                         # one reply is logged as several lines, one per content block
+            u = m["usage"]
+            t = {"usage": usage_dict(fresh=u.get("input_tokens", 0) or 0,
+                                     write=u.get("cache_creation_input_tokens", 0) or 0,
+                                     cached=u.get("cache_read_input_tokens", 0) or 0,
+                                     out=u.get("output_tokens", 0) or 0),
+                 "model": m.get("model") or "", "work": "talk"}
+            by_id[m.get("id")] = t
+            out.append(t)
+        for c in m.get("content") or []:
+            if not isinstance(c, dict) or c.get("type") != "tool_use":
+                continue
+            name, inp = c.get("name", ""), c.get("input") or {}
+            path = str(inp.get("file_path") or inp.get("notebook_path") or "")
+            if name in ("Edit", "Write", "MultiEdit", "NotebookEdit"):
+                t["work"] = "docs" if path.lower().endswith(DOC_EXT) and t["work"] != "code" else "code"
+            elif name in ("Bash", "PowerShell") and SHELL_WRITES.search(str(inp.get("command") or "")):
+                t["work"] = "code"            # files changed through the shell count as editing (can't tell docs apart)
+            elif t["work"] == "talk":
+                t["work"] = "read"
+    return out
+
+
+def suggest(p, agent: str, path: Path, turns: int = RECENT_TURNS) -> dict:
+    """A model for the lead itself (J5): what the recent turns did, what a turn costs on this model, what it
+    would cost one rung down, and how many turns pay back the one cache rewrite a switch costs (J2)."""
+    from .context import turn_tokens
+    if agent != "claude":
+        return {"agent": agent, "suggestion": None,
+                "note": "only read from Claude Code logs so far (Codex logs don't say what each turn did)"}
+    ts = _claude_turns(_lines(path))[-turns:]
+    if not ts:
+        return {"agent": agent, "suggestion": None, "note": "no turns in this session file"}
+    model = ts[-1]["model"]
+    cur = _rung_of(agent, model)
+    mix: dict[str, int] = {}
+    for t in ts:
+        mix[t["work"]] = mix.get(t["work"], 0) + 1
+    ctx = sorted(turn_tokens(t["usage"]) for t in ts)[len(ts) // 2]
+    out_tok = sorted(int(t["usage"].get("output_tokens", 0) or 0) for t in ts)[len(ts) // 2]
+    from . import learn
+    per_turn = lambda m: learn.price_usd(p, agent, m, {"cached_input_tokens": ctx,  # noqa: E731
+                                                       "output_tokens": out_tok}) or 0.0
+    rows = []
+    for r in LADDER[agent]:
+        rows.append({"model": r, "usd_per_turn": round(per_turn(r), 4), "current": r == cur})
+    code_share = mix.get("code", 0) / len(ts)
+    res = {"agent": agent, "model": model, "recent_turns": len(ts), "work": mix, "context_tokens": ctx,
+           "models": rows, "suggestion": None}
+    ladder = LADDER[agent]
+    if cur is None or cur == ladder[-1]:
+        res["note"] = "already on the cheapest rung" if cur else f"unknown model {model!r}"
+        return res
+    down = ladder[ladder.index(cur) + 1]
+    save = per_turn(cur) - per_turn(down)
+    switch = (learn.price_usd(p, agent, down, {"cache_write_tokens": ctx}) or 0.0) \
+        - (learn.price_usd(p, agent, down, {"cached_input_tokens": ctx}) or 0.0)
+    payback = int(switch / save) + 1 if save > 0 else None
+    res.update(saving_per_100_turns=round(100 * save, 2), switch_cost_usd=round(switch, 3), payback_turns=payback)
+    if code_share <= 0.2:
+        what = ", ".join(f"{k} {v}" for k, v in sorted(mix.items(), key=lambda x: -x[1]))
+        res["suggestion"] = down
+        res["why"] = (f"the last {len(ts)} turns were mostly not code ({what}); {down} costs "
+                      f"${save * 100:.2f} less per 100 turns here, and the switch re-writes the cache once "
+                      f"(${switch:.3f}, paid back after ~{payback} turns). Switch back for hard code or design.")
+    else:
+        res["why"] = (f"{code_share:.0%} of the last {len(ts)} turns edited code: stay on {cur}; for doc or "
+                      f"mechanical stretches {down} would save ${save * 100:.2f} per 100 turns")
+    return res
 
 
 # ---------------------------------------------------------------- J2
