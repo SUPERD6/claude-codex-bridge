@@ -115,7 +115,36 @@ def cmd_lead(a) -> int:
     return 0
 
 
+def cmd_trial(a) -> int:
+    """A week-long formal comparison (H11): half the delegable tasks done by the lead itself, half delegated."""
+    from .. import trial
+    p = paths()
+    if a.trial_cmd == "start":
+        t = trial.start(p, a.days, a.rate, a.note or "")
+        _out({**t, "how": "nothing else to do: `ccx run`/`ccx route` now tell you which tasks to do yourself "
+                          "(close each with `ccx ab done ID --ok 1|0`), and judge delegated work with `ccx verify` "
+                          "as usual; `ccx trial report` any time"})
+    elif a.trial_cmd == "stop":
+        _out(trial.stop(p))
+    elif a.markdown:
+        print(trial.markdown(trial.summarize(p)) or "no trial yet")
+    else:
+        _out(trial.summarize(p))
+    return 0
+
+
 def register(sub) -> None:
+    tr = sub.add_parser("trial", help="a formal comparison over a week: half the delegable tasks done by the lead "
+                        "itself, half delegated, measured the same way")
+    trs = tr.add_subparsers(dest="trial_cmd", required=True)
+    ts = trs.add_parser("start")
+    ts.add_argument("--days", type=float, default=7.0)
+    ts.add_argument("--rate", type=float, default=0.5, help="share of tasks the lead does itself (default 0.5)")
+    ts.add_argument("--note", help="what this trial is about")
+    trs.add_parser("stop")
+    trp = trs.add_parser("report", help="the comparison so far (the last trial when none is running)")
+    trp.add_argument("--markdown", action="store_true", help="the table for the README")
+    tr.set_defaults(fn=cmd_trial)
     ld = sub.add_parser("lead", help="how many tokens each turn of your lead conversations re-reads, and when a "
                         "fresh conversation would be cheaper")
     ld.add_argument("--hours", type=float, default=24.0)
