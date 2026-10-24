@@ -8,11 +8,16 @@ Numbers, and how each one is computed (kept simple so anyone can re-derive them)
   Codex credits             AE$ x 25 (OpenAI credit conversion noted in docs/research, 2026-10-23).
   Cache-read share          cached / (fresh + cache write + cached) input tokens.
   Cost per success (CPS)    sub-agent AE$ / runs that ended done (verified when a verdict exists).
-  Estimated saving          per delegated run: what the same tokens would cost at the lead's model price,
-                            minus what the sub-agent cost, minus the lead's brief+review overhead
-                            (400 output + 1500+1000*b input tokens at the lead's price). 95% CI by bootstrap
-                            over runs. Assumes the lead would have used about as many tokens; the A/B
-                            self-run samples test that assumption (same difficulty bucket, measured).
+  Saving                    measured when a `ccx trial` has enough tasks in both halves (`saving_kind`
+                            "measured"): the trial's saving per task (lead's own $ when it did the task minus
+                            lead + sub-agent $ when it delegated) x delegated runs in the window.
+                            Otherwise a MODEL (`saving_kind` "model"), shown as such: per delegated run, what
+                            the sub-agent's tokens would cost at the lead's model price, minus what the
+                            sub-agent cost, minus the lead's brief+review overhead (400 output + 1500+1000*b
+                            input tokens at the lead's price); 95% CI by bootstrap over runs. H11 (2026-10-24,
+                            docs/research) measured something else: what the lead saves is the requests it
+                            does not make x its own context per request — about one request per small task,
+                            and only when the lead trusts ccx's check instead of re-running it.
 """
 from __future__ import annotations
 
@@ -209,6 +214,10 @@ def summarize(p: Paths, data: dict) -> dict:
     for q in sorted(data["quota"], key=lambda q: q["ts"]):
         quota[f"{q['agent']}:{q['window']}"] = q
     limit_hits = sum(1 for r in data["runs"] if r.get("kind") == "quota")
+    tr = _trial(p)
+    measured = tr and tr.get("enough") and tr.get("saving_per_task_usd") is not None
+    # delegated runs that held up (a failed run saved nothing), the same rule as the model estimate above
+    n_delegated = sum(1 for r in run_rows if (r["verdict"] if r["verdict"] is not None else r["status"] == "done"))
 
     return {
         "generated": time.strftime("%Y-%m-%d %H:%M"), "days": data["days"], "lead_seen": data["lead_seen"],
@@ -223,9 +232,13 @@ def summarize(p: Paths, data: dict) -> dict:
                    "reasons": data["reasons"],
                    "cps": round(sub_ae / done, 5) if done else None,
                    "cache_read_share": round(cached / tot_in, 3) if tot_in else None,
-                   "saving": round(sum(savings), 4) if savings else None,
-                   "saving_ci95": [round(x, 4) for x in (_bootstrap(savings) or ())] or None,
-                   "saving_n": len(savings), "quota_stops": limit_hits,
+                   "saving": (round(tr["saving_per_task_usd"] * n_delegated, 4) if measured
+                              else round(sum(savings), 4) if savings else None),
+                   "saving_kind": "measured" if measured else "model",
+                   "saving_ci95": ([round(x * n_delegated, 4) for x in tr["saving_ci95"]] if measured
+                                   and tr.get("saving_ci95") else
+                                   [round(x, 4) for x in (_bootstrap(savings) or ())] or None),
+                   "saving_n": n_delegated if measured else len(savings), "quota_stops": limit_hits,
                    "lead_turns": len(lead_turns), "lead_turn_tokens_median": mid[0] if mid else None,
                    "lead_turn_ae_median": round(mid[1], 4) if mid else None,
                    "lead_one_rung_down_saving": round(down_saving, 2) if lead_turns else None},
@@ -234,7 +247,7 @@ def summarize(p: Paths, data: dict) -> dict:
         "days_series": [{"day": d, **{f"{a}:{r}": round(v[(a, r)], 5) for a, r in STREAMS}}
                         for d, v in sorted(by_day.items())],
         "runs": sorted(run_rows, key=lambda r: r["run_id"], reverse=True),
-        "ab": ab, "trial": _trial(p), "quota": list(quota.values()), "compare": compare,
+        "ab": ab, "trial": tr, "quota": list(quota.values()), "compare": compare,
     }
 
 
@@ -376,11 +389,16 @@ def render_html(s: dict) -> str:
     ci = t.get("saving_ci95")
     saving_note = (f"95% CI {_usd(ci[0])} … {_usd(ci[1])} · n={t['saving_n']}" if ci else
                    f"n={t['saving_n']} (CI needs ≥3 runs)")
+    measured = t.get("saving_kind") == "measured"
+    saving_note += (" · measured by ccx trial (per task × delegated runs)" if measured else
+                    " · a model, not measured: the sub-agent's tokens at the lead's price. Measured (H11): what the "
+                    "lead saves is the requests it doesn't make — about one per small task, only when it trusts "
+                    "ccx's check. Measure yours with `ccx trial start`")
     tiles = [
         ("Total spend (AE$)", _usd(t["ae"]), f"last {s['days']} days · lead {_usd(t['lead_ae'])}"
          if s["lead_seen"] else f"last {s['days']} days · sub-agents only"),
         ("Sub-agent spend", _usd(t["sub_ae"]), f"{t['runs']} run{'' if t['runs'] == 1 else 's'} · cost/success {_usd(t['cps'])}"),
-        ("Estimated saving", _usd(t["saving"]), saving_note),
+        ("Saving (measured)" if measured else "Estimated saving (model)", _usd(t["saving"]), saving_note),
         ("Success rate", "–" if t["done_rate"] is None else f"{t['done_rate'] * 100:.0f}%",
          f"{t['verified']} judged by you or the lead · {t.get('soft_verified', 0)} probable (auto)"
          + _soft_note(t.get("soft_trust"))),
@@ -481,7 +499,7 @@ last {s['days']} days · amounts are API-equivalent USD (AE$), not your subscrip
 first use, so delegations close together are cheaper.</p></div>
 {ab_html}{cmp_html}{quota_html}
 <div class="card"><h2>Delegated runs</h2><div class="scroll"><table class="tbl"><tr><th>day</th><th>task</th><th>who</th>
-<th>model → escalation</th><th>result</th><th class="r">tokens</th><th class="r">AE$</th><th class="r">est. saving</th></tr>
+<th>model → escalation</th><th>result</th><th class="r">tokens</th><th class="r">AE$</th><th class="r">est. saving (model)</th></tr>
 {run_rows or '<tr><td colspan="8">No runs yet.</td></tr>'}</table></div>
 <p class="note">Saving = same tokens at the lead's model price − sub-agent cost − brief/review overhead. Negative means
 delegating cost more than doing it yourself would have.</p></div>

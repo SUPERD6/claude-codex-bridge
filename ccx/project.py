@@ -168,47 +168,113 @@ HANDOFF_TEMPLATE = """## Done
 
 
 def handoff(root: Path, by: str, to: str, text: str) -> dict:
-    """Write a baton for the next lead. The other side's session start shows it once, in full."""
+    """Write a baton for the next lead. Each handoff gets its own file in .ccx/handoffs/, so parallel sessions can't
+    overwrite each other's; handoff.md is only the latest. The other side's session start lists every one it has
+    not seen yet."""
     pp = ProjectPaths(root)
     if not pp.memory_index.exists():
         init(root)
     ts = time.strftime("%Y-%m-%dT%H:%M:%S")
     body = text.strip() or HANDOFF_TEMPLATE
     doc = f"<!-- ccx:handoff from={by} to={to} ts={ts} -->\n# Handoff {by} -> {to} ({ts})\n\n{body}\n"
+    hist = root / ".ccx" / "handoffs"
+    hist.mkdir(parents=True, exist_ok=True)
+    stem = f"{ts.replace(':', '')}-{by}-to-{to}"
+    own = hist / f"{stem}.md"
+    n = 1
+    while own.exists():                       # two handoffs in the same second (parallel sessions)
+        n += 1
+        own = hist / f"{stem}-{n}.md"
+    own.write_text(doc, encoding="utf-8")
     f = root / ".ccx" / "handoff.md"
     f.write_text(doc, encoding="utf-8")
-    hist = root / ".ccx" / "handoffs"
-    hist.mkdir(exist_ok=True)
-    (hist / f"{ts.replace(':', '')}-{by}-to-{to}.md").write_text(doc, encoding="utf-8")
+    rel = own.relative_to(root).as_posix()
     first = next((l.strip("-# ").strip() for l in body.splitlines() if l.strip("-# ").strip()), "")
-    memory.add(pp, f"Handoff {by} -> {to}: {first[:160]} (full text: .ccx/handoff.md)", by, "handoff")
-    return {"handoff": str(f), "chars": len(doc), "to": to}
+    memory.add(pp, f"Handoff {by} -> {to}: {first[:160]} (full text: {rel})", by, "handoff")
+    return {"handoff": str(own), "latest": str(f), "chars": len(doc), "to": to}
+
+
+_HEAD = re.compile(r"<!-- ccx:handoff from=(\S+) to=(\S+) ts=(\S+) -->")
+
+
+def _for_me(m: re.Match | None, me: str) -> bool:
+    # to me (even from my own kind: a fresh conversation, J4), or to anyone but me
+    return bool(m) and m.group(2) in (me, "any") and not (m.group(1) == me and m.group(2) == "any")
+
+
+def pending_handoffs(root: Path, me: str) -> list[tuple[Path, re.Match, str]]:
+    """Handoffs addressed to me (or to any) that I have not been shown yet, oldest first."""
+    d = root / ".ccx"
+    files = sorted((d / "handoffs").glob("*.md"), key=_order) if (d / "handoffs").exists() else []
+    if not files and (d / "handoff.md").exists():
+        files = [d / "handoff.md"]               # written before handoffs/ existed
+    seen = _seen(root).get(me)
+    out = []
+    for f in files:
+        doc = f.read_text(encoding="utf-8", errors="replace")
+        m = _HEAD.match(doc)
+        if not _for_me(m, me):
+            continue
+        if isinstance(seen, str) and m.group(3) <= seen:    # old format: the last timestamp shown
+            continue
+        if isinstance(seen, list) and f.name in seen:
+            continue
+        out.append((f, m, doc[m.end():].strip()))
+    return out
+
+
+def _seen(root: Path) -> dict:
+    f = root / ".ccx" / "handoff.seen.json"
+    try:
+        return json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
+    except json.JSONDecodeError:
+        return {}
 
 
 def pending_handoff(root: Path, me: str, advance: bool = True) -> str:
-    """The latest handoff addressed to me (or to any), shown once per agent."""
-    f = root / ".ccx" / "handoff.md"
-    if not f.exists():
-        return ""
-    doc = f.read_text(encoding="utf-8")
-    m = re.match(r"<!-- ccx:handoff from=(\S+) to=(\S+) ts=(\S+) -->", doc)
-    if not m or m.group(2) not in (me, "any") or (m.group(1) == me and m.group(2) == "any"):
-        return ""                 # to me (even from my own kind: a fresh conversation, J4), or to anyone but me
-    seen_f = root / ".ccx" / "handoff.seen.json"
-    try:
-        seen = json.loads(seen_f.read_text(encoding="utf-8")) if seen_f.exists() else {}
-    except json.JSONDecodeError:
-        seen = {}
-    if seen.get(me) == m.group(3):
+    """Every handoff to me (or to any) not shown yet, each once per agent: the newest whole or summarised, older
+    ones (parallel sessions) one line each with their file."""
+    todo = pending_handoffs(root, me)
+    if not todo:
         return ""
     if advance:
-        seen[me] = m.group(3)
-        seen_f.write_text(json.dumps(seen), encoding="utf-8")
-    text = doc[m.end():].strip()
-    head = f"[ccx handoff to you from {m.group(1)}]\n"
-    if len(text) <= HANDOFF_WHOLE:
-        return head + text
-    return head + _handoff_summary(text) + "\n\n(summary; the full handoff is in .ccx/handoff.md)"
+        seen = _seen(root)
+        old = seen.get(me)
+        names = old if isinstance(old, list) else []
+        if isinstance(old, str):                 # convert: everything up to that timestamp was shown
+            for f in (root / ".ccx" / "handoffs").glob("*.md"):
+                m = _HEAD.match(f.read_text(encoding="utf-8", errors="replace"))
+                if m and m.group(3) <= old:
+                    names.append(f.name)
+        seen[me] = sorted({*names, *(f.name for f, _, _ in todo)}, key=lambda n: _order(Path(n)))[-200:]
+        (root / ".ccx" / "handoff.seen.json").write_text(json.dumps(seen), encoding="utf-8")
+    f, m, text = todo[-1]
+    rel = f.relative_to(root).as_posix()
+    head = f"[ccx handoff to you from {m.group(1)}] ({m.group(3)}, {rel})\n"
+    body = text if len(text) <= HANDOFF_WHOLE else \
+        _handoff_summary(text) + f"\n\n(summary; the full handoff is in {rel})"
+    if len(todo) == 1:
+        return head + body
+    others = [f"- {m2.group(3)} from {m2.group(1)}: {_first_line(t)} ({f2.relative_to(root).as_posix()})"
+              for f2, m2, t in todo[:-1]]
+    return (f"[ccx: {len(todo)} handoffs to you not seen yet (parallel sessions); the newest first, then the others "
+            f"— read the one that belongs to your task]\n" + head + body
+            + "\n\n[older handoffs not seen yet]\n" + "\n".join(others))
+
+
+def _order(f: Path) -> tuple[str, int]:
+    """Time order of handoff files: name, then the -2, -3 ... of a second handoff in the same second."""
+    m = re.match(r"(.*?)(?:-(\d+))?$", f.stem)
+    return m.group(1), int(m.group(2) or 1)
+
+
+def _first_line(text: str) -> str:
+    """What a handoff is about, in one line: its first line of text that is not a heading or ccx's own note."""
+    for line in text.splitlines():
+        t = line.strip("-* _").strip()
+        if t and not t.startswith("#") and not t.lower().startswith(("auto-assembled", "handoff ")):
+            return t[:120]
+    return ""
 
 
 HANDOFF_WHOLE = 2000      # shorter handoffs are shown whole at session start

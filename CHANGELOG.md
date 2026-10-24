@@ -5,6 +5,15 @@
   install command (`pipx install git+https://github.com/SUPERD6/relayline`), and the links in the README, website,
   CONTRIBUTING and issue templates. The `ccx` command and the `ccx/` package are unchanged; GitHub redirects the old
   URL. The README now opens by saying how it differs from CCB and from OpenAI's codex-plugin-cc.
+- Handoffs are no longer lost between parallel sessions: each one has its own file in `.ccx/handoffs/` (`handoff.md`
+  is only the latest), and session start lists every handoff to you not seen yet — the newest whole or summarised,
+  the others one line each with their file. `ccx fresh` points the new conversation at its own handoff file.
+- `--from-transcript` handoffs: the numbered list from the agent's latest message when no plan tool was used; the
+  conversation's last 5 `ccx run`s with their check and verdict; `git status --short` keeps its leading space.
+- The dashboard's saving is measured from `ccx trial` when a trial has enough tasks in both halves, otherwise it is
+  labelled a model ("Estimated saving (model)", `saving_kind` in `ccx stats --summary`) with what it assumes.
+- agent-delegate: when ccx already ran your `--check` and it passed, don't run it again yourself (H11: that is what
+  makes delegating save the lead a turn).
 - `ccx ui`, a read-only live page on this machine (proposal G1). Left: contents (overview → projects → tasks →
   split pieces), red counts of what waits for you, search, quota by pace. Middle: each task as an org chart — you →
   the lead (model, its own sub-agents as dashed tags, spend vs budget) → one column per worker; a new agent gets its

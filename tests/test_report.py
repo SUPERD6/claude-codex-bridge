@@ -83,6 +83,28 @@ class TestReport(ReportEnv):
         self.assertGreater(res["totals"]["ae"], 0)
         st = self.j("stats", "--summary")
         self.assertIn("saving", st["totals"])
+        self.assertEqual(st["totals"]["saving_kind"], "model")               # no trial yet: shown as a model
+        self.assertIn("Estimated saving (model)", html)
+        self.assertIn("a model, not measured", html)
+
+    def test_saving_from_a_trial_is_measured(self):
+        import os
+        from unittest import mock
+        from ccx import report
+        from ccx.config import paths
+        out = self.j("run", "--from", "claude", "--to", "codex", "--b", "4", "implement")
+        self.j("verify", out["run_id"], "--ok", "1")
+        arm = {"n": 10, "lead_tokens_mean": 1, "lead_usd_mean": 0.1, "sub_usd_mean": 0, "total_usd_mean": 0.1,
+               "minutes_mean": 1, "ok_rate": 1.0}
+        tr = {"trial": {"id": "t1"}, "enough": True, "saving_per_task_usd": 0.04, "saving_ci95": [0.01, 0.07],
+              "arms": {"self": arm, "delegated": arm}, "running": False, "buckets": []}
+        with mock.patch.dict(os.environ, self.env), mock.patch.object(report, "_trial", return_value=tr):
+            p = paths()
+            s = report.summarize(p, report.collect(p, 7, include_lead=False))
+            html = report.render_html(s)
+        self.assertEqual((s["totals"]["saving_kind"], s["totals"]["saving"], s["totals"]["saving_ci95"]),
+                         ("measured", 0.04, [0.01, 0.07]))                   # one delegated run held up
+        self.assertIn("Saving (measured)", html)
 
     def test_empty_report(self):
         self.j("report", "--no-lead")
