@@ -57,6 +57,22 @@ per request here (haiku read `--stat` and part of the diff); J3 needs larger out
 answer for "code" was wrong (functions named `*sweep*`; the real ones are `soft_verdicts` / `_soft_verdict`), which
 marked both runs wrong; the script is fixed and both stored answers re-scored as right (marked `rescored`).
 
+**Rerun after J1–J3 and J6 were merged** (`--ref 4c580c0 --tag after-J`, haiku, twice each, 6/6 right, $0.047):
+
+| Task | Median request before → after | Read in all before → after | $ before → after |
+|---|---|---|---|
+| orient | 58,990 → **54,529** (−4.5k) | 117,980 → 109,058 | 0.0102 → 0.0053 |
+| diff | 56,255 → 57,428 | 140,837 → 174,126 | 0.0061 → 0.0076 |
+| code | 57,132 → 57,037 | 287,426 → 286,603 | 0.0080 → 0.0079 |
+
+Only the start-up task changed: after J6 the lead no longer reads the whole STATUS at start, ~4.5k tokens (~8%) less
+per request (the "before" orient run 1 also wrote the cache, so the halved $ overstates it). The fixed overhead is
+still ~55k a request: J1 and J2 are diagnostics (`ccx lead --breakdown`, `--cache`) and J3's `ccx sum` must be used by
+the lead, which none of the three tasks did; the person's setup did not change either. The extra diff reading is half
+a request more, noise at n = 2. For J1–J3 to show, act on `--breakdown` (drop unused MCP / skills) or have
+agent-delegate tell the lead to use `ccx sum` on large output, then measure again; the real-session `real --days 7`
+needs a week first.
+
 After J: `python scripts/eval/j0_baseline.py tasks --ref <new commit> --repeat 2 --tag after-J`, `real --days 7`,
 then `summary`. Done when, per the plan, the average $ per request on the same tasks falls and correctness does not.
 
