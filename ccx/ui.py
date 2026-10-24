@@ -34,6 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
 
+from . import agents
 from . import queue as wq
 from .config import Paths, claude_home, codex_home, load_config
 from .usage import _ts
@@ -102,6 +103,9 @@ class Reader:
                 if line:
                     t["state"] = fold(t["state"], line)
         return t["state"]
+
+    def cfg(self) -> dict:
+        return self.every("cfg", 30, lambda: load_config(self.p))
 
     def every(self, key: str, seconds: float, make):
         hit = self._timed.get(key)
@@ -205,15 +209,28 @@ def _fold_claude(state: dict, line: str) -> dict:
 
 
 def _session_file(rd: Reader, agent: str, sid: str) -> Path | None:
+    """The session file of `sid` under the agent's own folder (its adapter's home). Only Codex and Claude Code
+    sessions are read; the layout is each tool's own (see their adapters' session_files)."""
     def search():
+        home = agents.get(agent).home() if agent in agents.NAMES and agents.get(agent).home else None
+        if home is None:
+            return None
         if agent == "codex":
-            root = codex_home() / "sessions"
+            root = home / "sessions"
             hits = sorted(root.rglob(f"rollout-*{sid}.jsonl")) if root.exists() else []
-        else:
-            root = claude_home() / "projects"
+        elif agent == "claude":
+            root = home / "projects"
             hits = sorted(root.glob(f"*/{sid}.jsonl")) if root.exists() else []
+        else:
+            hits = []
         return hits[-1] if hits else None
     return rd.find(f"{agent}:{sid}", search)
+
+
+def cli_of(name: str | None, cfg: dict) -> str | None:
+    """The CLI an agent name runs on: itself, or for a provider (e.g. deepseek) the CLI it is configured on."""
+    pv = (cfg.get("providers") or {}).get(name or "")
+    return str(pv.get("agent", "claude")) if pv is not None else name
 
 
 def live(rd: Reader, rec: dict) -> dict:
@@ -227,8 +244,7 @@ def live(rd: Reader, rec: dict) -> dict:
             pass
     out = {"beat": beat, "tokens": None}
     sid = rec.get("session_id")
-    agent = rec.get("to")
-    cli = agent if agent in ("codex", "claude") else ("claude" if rec.get("provider") else agent)
+    cli = cli_of(rec.get("to"), rd.cfg())
     if sid and cli in ("codex", "claude"):
         f = _session_file(rd, cli, sid)
         if f:

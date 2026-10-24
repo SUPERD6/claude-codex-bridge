@@ -136,6 +136,16 @@ class TestData(Env):
             fh.write(line(5000))
         self.assertEqual(pieces(ui.collect(self.p, rd=rd))[0]["tokens"], 5010)      # read on, not from the top
 
+    def test_provider_reads_the_session_file_of_the_cli_it_runs_on(self):
+        sid = "5f0c0000-0000-4000-8000-00000000d5ee"
+        put_run(self.hub, "r-ds", self.work, to="deepseek", provider="deepseek", state="running", result=None,
+                ok=False, attempts=[], session_id=sid)
+        f = self.home_claude / "projects" / "work" / f"{sid}.jsonl"
+        f.parent.mkdir(parents=True)
+        f.write_text(json.dumps({"type": "assistant", "message": {"id": "m1", "model": "deepseek-flash", "usage": {
+            "input_tokens": 700, "output_tokens": 50}}}) + "\n", encoding="utf-8")
+        self.assertEqual(pieces(ui.collect(self.p))[0]["tokens"], 750)
+
     def test_never_calls_a_model_or_the_quota_probe(self):
         put_run(self.hub, "r1", self.work)
         boom = mock.Mock(side_effect=AssertionError("must not run"))
