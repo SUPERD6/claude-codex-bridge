@@ -1,6 +1,11 @@
 # Changelog
 
 ## Unreleased
+- `ccx uninstall --apply` run once for real (J12, report section 5c), and three things it found fixed: tool files
+  keep their own line endings (an LF `config.toml` came back CRLF); after uninstall, `ccx sync` puts the Codex hook
+  block back where it was, not at the end (Codex keeps hook trust by position, so moved hooks ask for trust again);
+  uninstall now says how to put everything back (`ccx sync --apply`, `ccx skills install --replace --apply`,
+  `ccx doctor` — sync alone does not bring back ccx's skills).
 - Handoffs are no longer lost between parallel sessions: each one has its own file in `.ccx/handoffs/` (`handoff.md`
   is only the latest), and session start lists every handoff to you not seen yet — the newest whole or summarised,
   the others one line each with their file. `ccx fresh` points the new conversation at its own handoff file.
