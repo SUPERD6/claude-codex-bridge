@@ -22,6 +22,7 @@ turn re-reads ~220k tokens):
 | J3 long output cut down before the lead reads it (`ccx sum`) | ✅ PR #9 |
 | J6 this page down to one page | this change |
 | I1–I4 adapters per agent, vendor decides "another", fallback and reviewers from data | done on `feat/i1-adapters`, held by J13 until the H11/J0 numbers are in |
+| J4 one step to a fresh conversation (`ccx fresh`) | this change |
 
 ## Next three
 

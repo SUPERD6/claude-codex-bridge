@@ -1,6 +1,11 @@
 # Changelog
 
 ## Unreleased
+- One step to a fresh conversation (proposal J4): `ccx fresh [--as claude|codex] [--note ...] [--launch]` writes the
+  handoff from this conversation's own session file (as `ccx handoff --from-transcript` does) addressed to the same
+  tool, and says how to open the new conversation; `--launch` starts it in a terminal. A new conversation of the
+  same tool in this folder now sees a handoff addressed to it (before, a handoff was never shown to the tool that
+  wrote it). The H10 per-turn hint now says: ask the person, then `ccx fresh`.
 - STATUS is one page (proposal J6): what is going on now, the next three items and a short "how sure we are";
   the old 24 KB page moved to `docs/STATUS-archive.md` / `.zh.md` as it stood. AGENTS.md no longer tells every
   agent to read it first, only when it needs to know where things stand — anything read at start-up is re-read
