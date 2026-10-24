@@ -82,6 +82,31 @@ def spent_today(p: Paths, agent: str) -> float:
     return sum((r.get("ae_by_agent") or {}).get(agent, 0.0) for r in rows(p) if (r.get("ts") or 0) >= midnight)
 
 
+SOFT_MAX_OVERTURN = 0.2     # J7: above this share of overturned probable verdicts they stop feeding routing ...
+SOFT_MIN_RECHECKED = 5      # ... once at least this many were judged again by the person or the lead
+
+
+def soft_trust(rows_: list[dict]) -> dict:
+    """How often a probable verdict ccx drew by itself (H13, `soft`) was later judged the other way by the person
+    or the lead. Too often, and a weak check is passing wrong work as right: probable verdicts then stop teaching."""
+    soft: dict[str, bool] = {}
+    rechecked = overturned = 0
+    for r in rows_:                                     # the ledger is in time order
+        if r.get("type") != "verify" or not r.get("run_id"):
+            continue
+        rid = r["run_id"]
+        if r.get("soft"):
+            soft.setdefault(rid, bool(r.get("ok")))
+        elif rid in soft:
+            rechecked += 1
+            overturned += bool(r.get("ok")) != soft.pop(rid)
+    n_soft = rechecked + len(soft)
+    rate = overturned / rechecked if rechecked else None
+    learn_ok = not (rechecked >= SOFT_MIN_RECHECKED and rate > SOFT_MAX_OVERTURN)
+    return {"soft": n_soft, "rechecked": rechecked, "overturned": overturned,
+            "overturn_rate": None if rate is None else round(rate, 3), "learn": learn_ok}
+
+
 def rows(p: Paths) -> list[dict]:
     if not p.ledger.exists():
         return []

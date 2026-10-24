@@ -818,7 +818,7 @@ def _soft_verdict(p: Paths, record: dict, ok: bool, reason: str, note: str) -> N
     record["verdict"] = {"ok": ok, "soft": True, "reason": reason, "note": note, "ts": time.time()}
     how = record.get("learned")
     auto_ok = bool(record.get("ok") and (record.get("result") or {}).get("status") == "done")
-    if (record.get("route") or {}).get("b") is not None and (how is None or (how == "auto" and auto_ok != ok)):
+    if (record.get("route") or {}).get("b") is not None and (how is None or (how == "auto" and auto_ok != ok))             and ledger.soft_trust(ledger.rows(p))["learn"]:      # J7: not when they were often overturned
         try:
             learn.record_outcomes(p, record, final_ok=ok)
             record["learned"] = "soft"
