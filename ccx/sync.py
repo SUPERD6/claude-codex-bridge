@@ -58,9 +58,21 @@ def _backup(path: Path) -> None:
 
 
 def _write(path: Path, text: str) -> None:
+    """Write a tool's file in the line endings it already has (a new file gets LF). Text mode would turn a
+    user's LF config.toml into CRLF on Windows (seen live, J12 2026-10-24)."""
     path.parent.mkdir(parents=True, exist_ok=True)
+    crlf = path.exists() and b"\r\n" in path.read_bytes()
     _backup(path)
-    path.write_text(text, encoding="utf-8")
+    text = text.replace("\r\n", "\n")
+    with open(path, "w", encoding="utf-8", newline="") as fh:
+        fh.write(text.replace("\n", "\r\n") if crlf else text)
+
+
+# J12: where `ccx uninstall` took the Codex hook block out (the line that came after it). A later sync puts the
+# block back in front of that line: Codex keeps hook trust by position, so an appended block would move the
+# person's own hooks to other positions and make Codex ask to trust them again.
+def _anchor_file(p: Paths) -> Path:
+    return p.state / "codex-hooks-anchor.txt"
 
 
 def ccx_command(*args: str) -> str:
@@ -177,7 +189,14 @@ def sync_hooks(p: Paths, plan: Plan) -> None:
         TOML_END,
     ])
     pat = re.compile(re.escape(TOML_BEGIN) + r".*?" + re.escape(TOML_END), re.S)
-    new = pat.sub(lambda _: block, old) if pat.search(old) else old.rstrip() + "\n\n" + block + "\n"
+    anchor = _anchor_file(p).read_text(encoding="utf-8") if _anchor_file(p).exists() else ""
+    if pat.search(old):
+        new = pat.sub(lambda _: block, old)
+    elif anchor and old.count("\n" + anchor + "\n") == 1:          # back where `ccx uninstall` took it from
+        i = old.index("\n" + anchor + "\n") + 1
+        new = old[:i] + block + "\n\n" + old[i:]
+    else:
+        new = old.rstrip() + "\n\n" + block + "\n"
     if new != old:
         try:
             tomllib.loads(new)
@@ -185,7 +204,7 @@ def sync_hooks(p: Paths, plan: Plan) -> None:
             plan.warnings.append(f"would make {ct} invalid TOML ({e}); Codex hook NOT added")
             return
         plan.do(f"add SessionStart hook block to {ct} (trust it once via /hooks in Codex)",
-                lambda: _write(ct, new))
+                lambda: (_write(ct, new), _anchor_file(p).unlink(missing_ok=True)))
 
 
 # ------------------------------------------------------------ skills
@@ -412,10 +431,18 @@ def uninstall(p: Paths, apply: bool) -> Plan:
     if ct.exists():
         old = ct.read_text(encoding="utf-8")
         pat = re.compile(r"\n*" + re.escape(TOML_BEGIN) + r".*?" + re.escape(TOML_END) + r"\n?", re.S)
+        m = pat.search(old)
         new = pat.sub("\n", old)
         if new != old:
             tomllib.loads(new)
-            plan.do(f"remove ccx hook block from {ct}", lambda: _write(ct, new))
+            after = next((line for line in old[m.end():].splitlines() if line.strip()), "")
+
+            def remove(new=new, after=after):
+                _write(ct, new)
+                if after:
+                    _anchor_file(p).parent.mkdir(parents=True, exist_ok=True)
+                    _anchor_file(p).write_text(after, encoding="utf-8")
+            plan.do(f"remove ccx hook block from {ct}", remove)
     for f in (claude_home() / "CLAUDE.md", codex_home() / "AGENTS.md"):
         if f.exists():
             old = f.read_text(encoding="utf-8")

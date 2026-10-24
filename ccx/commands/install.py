@@ -214,6 +214,9 @@ def cmd_uninstall(a) -> int:
         print(x)
     if not a.apply:
         print("\n(dry run — re-run with --apply to remove; your hub data is kept)")
+    else:
+        print("\nTo put it back: `ccx sync --apply` (hooks, memory, MCP), then `ccx skills install --replace --apply` "
+              "(the ccx skills; your own copies restored above are backed up again), then `ccx doctor`.")
     return 0
 
 
