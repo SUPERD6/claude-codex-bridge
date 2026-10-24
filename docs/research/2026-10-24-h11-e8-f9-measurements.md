@@ -73,6 +73,11 @@ a request more, noise at n = 2. For J1–J3 to show, act on `--breakdown` (drop 
 agent-delegate tell the lead to use `ccx sum` on large output, then measure again; the real-session `real --days 7`
 needs a week first.
 
+**Third run** (after this report's section 5 fixes, `5162034`, haiku, twice each, 6/6 right, $0.042): orient's
+median request 56,381 (58,990 before J, 54,529 right after J6: STATUS has gained a few rows since), diff 58,829, code
+56,995; the first request still ~55k. As expected: those fixes change handoffs, the dashboard and a skill, not what
+these three tasks read.
+
 After J: `python scripts/eval/j0_baseline.py tasks --ref <new commit> --repeat 2 --tag after-J`, `real --days 7`,
 then `summary`. Done when, per the plan, the average $ per request on the same tasks falls and correctness does not.
 
@@ -221,6 +226,21 @@ Bash` and no `Agent` tool, so "on" cannot start any there either (the code comme
 | 6 | F9 "on by default" starts nothing with codex-cli 0.164 + luna low; slim Claude sub-agents have no Agent tool. | Not fixed; the docs should say so. |
 | 7 | The report's "estimated saving" is not what was measured to save (section 2). | Not fixed. |
 | 8 | "On disk now": `strip()` drops the first `git status --short` line's leading space (` M a.py` reads as staged `M a.py`). | Not fixed (cosmetic). |
+
+**Follow-up (2026-10-24, branch `fix/handoff-report-findings`):** 3, 4, 5, 7 and 8 are fixed, and agent-delegate now
+carries H11's lesson:
+
+| # | Fix |
+|---|---|
+| 3 | Each handoff has its own file (`.ccx/handoffs/`, a second one in the same second gets `-2`); `handoff.md` is only the latest. Session start lists **every** handoff to you not seen yet: the newest whole or summarised, the others one line each with their file; "seen" is kept per file, and the old timestamp form still counts. `ccx fresh` points the new conversation at its own file, not the shared `handoff.md`. |
+| 4 | Without a plan tool, the numbered list (2+ items) in the agent's latest message that has one, marked "which steps are done is not tracked"; Codex and Claude session files. |
+| 5 | A new section "ccx runs from this conversation": the last 5 `ccx run`s (id, model, result, check passed or not, verdict incl. probable, summary), found by the ledger's `lead_session`. |
+| 7 | With a `ccx trial` that has enough tasks in both halves the dashboard shows the **measured** saving (per task × delegated runs that held up); otherwise the tile reads "Estimated saving (model)" and says what it assumes, what H11 measured and to run `ccx trial start`. `ccx stats --summary` gains `saving_kind` (`measured` / `model`). |
+| 8 | `git status --short` loses only trailing whitespace; the first line keeps its leading space. |
+| — | agent-delegate (EN + ZH): when the result's `check` shows ccx ran `--check` and it passed, the lead does not re-run it; it reads `check` and the diff. |
+
+Item 6 (say in the docs what F9 "on" really means) is still open. Also: PR #6's raw result files (`.ccx/eval/…`,
+git-ignored) went with the old worktree folder when it was cleaned up; the tables in this report are what is left.
 
 ## 5b. J7: how often probable verdicts are overturned
 

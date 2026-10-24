@@ -143,7 +143,28 @@ class TestHandoff(AdapterEnv):
         self.assertNotIn("step 3:", first)                          # finished history left in the file
         self.assertNotIn("old finished item", first)
         self.assertNotIn("its detail line", first)
-        self.assertIn("full handoff is in .ccx/handoff.md", first)
+        self.assertRegex(first, r"full handoff is in \.ccx/handoffs/\S+-claude-to-codex\.md")
+
+    def test_parallel_handoffs_are_all_shown(self):
+        # two sessions hand over in the same project before the next one starts: neither handoff is lost (seen live,
+        # 2026-10-24: the second overwrote the first's .ccx/handoff.md)
+        self.j("handoff", "--by", "claude", "--to", "codex", "## Next\n- finish the parser")
+        self.j("handoff", "--by", "claude", "--to", "codex", "## Next\n- fix the docs")
+        files = sorted((self.work / ".ccx" / "handoffs").glob("*-claude-to-codex*.md"))
+        self.assertEqual(len(files), 2)                              # same second: a second file, not overwritten
+        first = self.ccx("mem", "delta", "--as", "codex").stdout
+        self.assertIn("2 handoffs to you not seen yet", first)
+        self.assertIn("fix the docs", first)                         # the newest in full
+        self.assertIn("finish the parser", first)                    # the other one listed
+        self.assertIn(files[0].name, first)
+        self.assertNotIn("handoff", self.ccx("mem", "delta", "--as", "codex").stdout)   # each shown once
+
+    def test_old_seen_format_still_counts(self):
+        self.j("handoff", "--by", "claude", "--to", "codex", "## Next\n- old one")
+        doc = (self.work / ".ccx" / "handoff.md").read_text(encoding="utf-8")
+        ts = doc.split("ts=")[1].split(" ")[0]
+        (self.work / ".ccx" / "handoff.seen.json").write_text(json.dumps({"codex": ts}), encoding="utf-8")
+        self.assertNotIn("handoff to you", self.ccx("mem", "delta", "--as", "codex").stdout)
 
     def test_empty_handoff_writes_template(self):
         out = self.j("handoff", "--by", "codex", "--to", "claude")

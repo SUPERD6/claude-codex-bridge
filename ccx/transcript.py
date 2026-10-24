@@ -41,7 +41,8 @@ def _user_text(t: str) -> str | None:
 
 
 def read_codex(path: Path) -> dict:
-    d = {"agent": "codex", "users": [], "final": "", "plan": [], "files": [], "failed": []}
+    d = {"agent": "codex", "users": [], "final": "", "plan": [], "files": [], "failed": [], "texts": [],
+         "session": None}
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
         try:
             e = json.loads(line)
@@ -50,6 +51,14 @@ def read_codex(path: Path) -> dict:
         pl = e.get("payload") or {}
         typ = pl.get("type")
         it = pl.get("item") or {}
+        if e.get("type") == "session_meta" and not d["session"]:
+            d["session"] = pl.get("id") or pl.get("session_id")
+        if typ == "item_completed" and it.get("type") == "AgentMessage":
+            d["texts"].append("".join(c.get("text", "") for c in it.get("content") or []))
+        elif typ == "agent_message" and pl.get("message"):
+            d["texts"].append(pl["message"])
+        elif e.get("type") == "response_item" and typ == "message" and pl.get("role") == "assistant":
+            d["texts"].append("".join(c.get("text", "") for c in pl.get("content") or []))
         if typ == "item_completed" and it.get("type") == "UserMessage":
             t = _user_text("".join(c.get("text", "") for c in it.get("content") or []))
             if t:
@@ -93,7 +102,8 @@ def read_codex(path: Path) -> dict:
 
 
 def read_claude(path: Path) -> dict:
-    d = {"agent": "claude", "users": [], "final": "", "plan": [], "files": [], "failed": []}
+    d = {"agent": "claude", "users": [], "final": "", "plan": [], "files": [], "failed": [], "texts": [],
+         "session": path.stem}
     bash: dict[str, str] = {}
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
         try:
@@ -122,6 +132,7 @@ def read_claude(path: Path) -> dict:
             texts = [c.get("text", "") for c in content or [] if isinstance(c, dict) and c.get("type") == "text"]
             if any(t.strip() for t in texts):
                 d["final"] = "\n".join(t for t in texts if t.strip())
+                d["texts"].append(d["final"])
             for c in content or []:
                 if not isinstance(c, dict) or c.get("type") != "tool_use":
                     continue
@@ -201,7 +212,7 @@ def _git(root: Path, *args: str) -> str:
     try:
         r = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, timeout=20,
                            stdin=subprocess.DEVNULL, encoding="utf-8", errors="replace")
-        return r.stdout.strip() if r.returncode == 0 else ""
+        return r.stdout.rstrip().lstrip("\n") if r.returncode == 0 else ""
     except (OSError, subprocess.TimeoutExpired):
         return ""
 
@@ -212,7 +223,30 @@ def _first_sentence(t: str) -> str:
     return (m.group(1) if m else t)[:160]
 
 
-def build(d: dict, root: Path, path: Path, unfinished: str = "", max_chars: int = MAX_CHARS) -> str:
+_NUMBERED = re.compile(r"^\s*(\d{1,2})[.)、．]\s+(\S.*)$")
+
+
+def plan_from_text(texts: list[str]) -> list[str]:
+    """No plan tool was used: the numbered list (2+ items) in the agent's latest message that has one."""
+    for t in reversed(texts or []):
+        steps = [m.group(2).strip() for m in map(_NUMBERED.match, (t or "").splitlines()) if m]
+        if len(steps) >= 2:
+            return [x[:200] for x in steps[:15]]
+    return []
+
+
+def _plan_text(d: dict) -> str:
+    if d["plan"]:
+        return "\n".join(f"- [{'x' if p.get('status') == 'completed' else ' '}] {p.get('step')} ({p.get('status')})"
+                         for p in d["plan"])
+    steps = plan_from_text(d.get("texts") or [])
+    if steps:
+        return ("(no plan tool was used: the numbered list from its latest message that had one; which steps are "
+                "done is not tracked)\n" + "\n".join(f"{i}. {x}" for i, x in enumerate(steps, 1)))
+    return "(no plan list found in the transcript: judge from the sections below)"
+
+
+def build(d: dict, root: Path, path: Path, unfinished: str = "", max_chars: int = MAX_CHARS, runs: str = "") -> str:
     users = d["users"]
     goal = users[0] if users else "(no user message found)"
     recent = users[-3:] if len(users) > 1 else []
@@ -225,10 +259,7 @@ def build(d: dict, root: Path, path: Path, unfinished: str = "", max_chars: int 
         f"({time.strftime('%Y-%m-%d %H:%M')}); the agent did not write it. Check before trusting: the files exist, "
         f"the tests named here pass, `git status` matches._",
         "## Goal (the person's first message)\n" + goal[:1200],
-        "## Plan, as the agent last left it\n" + ("\n".join(f"- [{'x' if p.get('status') == 'completed' else ' '}] "
-                                                         f"{p.get('step')} ({p.get('status')})" for p in d["plan"])
-                                                 or "(no plan list found in the transcript: judge from the sections "
-                                                    "below)"),
+        "## Plan, as the agent last left it\n" + _plan_text(d),
         "## The person's recent messages\n" + ("\n".join(f"- {u[:600]}" for u in recent) or "(none)")
         + ("\n\nEarlier, first sentences only:\n" + "\n".join(f"- {_first_sentence(u)}" for u in earlier[-8:])
            if earlier else ""),
@@ -239,6 +270,8 @@ def build(d: dict, root: Path, path: Path, unfinished: str = "", max_chars: int 
         "## On disk now\n```\n" + (status or "(clean or not a git repository)") + "\n```"
         + (f"\n```\n{stat}\n```" if stat else ""),
     ]
+    if runs:
+        parts.append("## ccx runs from this conversation (newest last)\n" + runs)
     if unfinished:
         parts.append("## Unfinished tasks\n" + unfinished)
     parts.append(f"## Full transcript\n`{path}` — open it for details; it is not copied here.")

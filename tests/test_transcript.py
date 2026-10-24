@@ -110,6 +110,30 @@ class TestRead(unittest.TestCase):
         d["final"] = "z" * 5000
         self.assertLessEqual(len(transcript.build(d, self.t, f, max_chars=3000)), 3000)
 
+    def test_plan_from_a_numbered_list(self):
+        # no plan tool: the plan written in a message, as Codex luna wrote it in the E8 trial (2026-10-24)
+        msg = lambda text, phase="commentary": {"type": "event_msg", "payload": {  # noqa: E731
+            "type": "item_completed", "item": {"type": "AgentMessage", "phase": phase, "content": [{"text": text}]}}}
+        ev = [{"type": "session_meta", "payload": {"id": "019a-x", "cwd": "/w", "originator": "codex_desktop"}},
+              msg("计划：\n\n1. 查看 a.py 和 b.py\n2. 实现 is_palindrome 和 chunks\n3. 运行测试后停止"),
+              msg("1 file changed, 2 tests"), msg("已完成 a、b。", "final_answer")]
+        d = transcript.read_codex(_w(self.t / "n.jsonl", ev))
+        self.assertEqual(d["session"], "019a-x")
+        text = transcript.build(d, self.t, self.t / "n.jsonl")
+        self.assertIn("no plan tool was used", text)
+        self.assertIn("2. 实现 is_palindrome 和 chunks", text)
+        self.assertEqual(transcript.plan_from_text(["no list here", "1. only one"]), [])
+
+    def test_git_status_keeps_its_leading_space(self):
+        g = ["git", "-c", "user.name=t", "-c", "user.email=t@t"]
+        subprocess.run(["git", "init", "-q"], cwd=self.t, check=True)
+        (self.t / "a.py").write_text("x = 1\n", encoding="utf-8")
+        subprocess.run([*g, "add", "a.py"], cwd=self.t, check=True)
+        subprocess.run([*g, "commit", "-qm", "init"], cwd=self.t, check=True)
+        (self.t / "a.py").write_text("x = 2\n", encoding="utf-8")
+        f = _w(self.t / "s.jsonl", claude_events())
+        self.assertIn("```\n M a.py", transcript.build(transcript.read_claude(f), self.t, f))   # unstaged, not "M "
+
     def test_redact(self):
         for s in ("ghp_" + "x" * 30, "Bearer " + "q" * 30, "api_key=hunter2hunter2", "AKIA" + "A" * 16):
             self.assertEqual(transcript.redact(f"a {s} b").count("[redacted]"), 1, s)
@@ -156,6 +180,20 @@ class TestCommand(Env):
         r = self.ccx("handoff", "--from-transcript", "codex", "--to", "claude")
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("no codex session file", r.stderr + r.stdout)
+
+    def test_handoff_lists_the_conversations_ccx_runs(self):
+        slug = re.sub(r"[^A-Za-z0-9]", "-", str(self.work.resolve()))
+        _w(self.home_claude / "projects" / slug / "abc.jsonl", claude_events())
+        mine = json.loads(self.ccx("run", "--to", "codex", "--tier", "T1", "--mode", "read", "--check", "exit 0",
+                                   "look at x", env={"CCX_LEAD_SESSION": "abc"}).stdout)["run_id"]
+        other = json.loads(self.ccx("run", "--to", "codex", "--tier", "T1", "--mode", "read", "look at y",
+                                    env={"CCX_LEAD_SESSION": "someone-else"}).stdout)["run_id"]
+        self.assertEqual(self.ccx("handoff", "--from-transcript", "claude", "--to", "codex", "--no-model").returncode, 0)
+        text = (self.work / ".ccx" / "handoff.md").read_text(encoding="utf-8")
+        self.assertIn("## ccx runs from this conversation", text)
+        self.assertIn(f"`{mine}` codex", text)
+        self.assertIn("check passed, unjudged", text)
+        self.assertNotIn(other, text)
 
     def test_worktree_inside_the_main_checkout(self):
         # Claude Code's .claude/worktrees/<name> sits inside the main checkout: the project layer (.ccx) is the
