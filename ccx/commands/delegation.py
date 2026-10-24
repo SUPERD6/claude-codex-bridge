@@ -28,13 +28,14 @@ def cmd_ab(a) -> int:
         raise FileNotFoundError(f"no open A/B sample {a.ab_id}")
     s = json.loads(f.read_text(encoding="utf-8"))
     subs = {x for r in ledger.rows(p) if not r.get("type") for x in r.get("sessions", [])}
-    w = usage.window_usage(s["caller"], s["ts"], None, subs)
+    w = usage.window_usage(s["caller"], s["ts"], None, subs, s.get("lead_session"))
     model = w["model"] or load_config(p).get("lead", {}).get(s["caller"], "")
     ae = learn.price_usd(p, s["caller"], model, w["usage"])
     row = {"type": "selfrun", "ab_id": s["id"], "agent": s["caller"], "model": model, "b": s["b"],
            "would_route": s["would_route"], "ok": bool(a.ok), "usage4": w["usage"],
            "messages": w["messages"], "ae_usd": None if ae is None else round(ae, 6),
-           "seconds": round(time.time() - s["ts"], 1), "ts": time.time()}
+           "seconds": round(time.time() - s["ts"], 1), "ts": time.time(),
+           **{k: s[k] for k in ("trial", "bucket", "kind") if s.get(k)}}
     ledger.append_event(p, row)
     f.unlink()
     _out(row)
@@ -98,7 +99,7 @@ def cmd_run(a) -> int:
     if prev:
         res["continued_from"] = prev          # same sub-session: it remembers the earlier task(s)
     res["route"] = {k: v for k, v in route.items() if k in ("source", "b", "rung", "p", "chain_p", "tier",
-                                                              "stale", "mode")}
+                                                              "stale", "mode", "trial")}
     _out(res)
     return 0 if rec["ok"] else 2
 

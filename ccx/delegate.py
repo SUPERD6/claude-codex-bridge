@@ -436,7 +436,9 @@ def run(req: Request, p: Paths) -> dict:
         cwd = make_worktree(cwd, run_id)
 
     ctx = _project_context(cwd)
-    mode_text = ("read-only: analyse, do not modify files. If finishing really needs edits, do not make them: stop "
+    # "read-only" alone made gpt-6-luna/low answer once that it had no tool to read files (E8 run, 2026-10-24)
+    mode_text = ("read-only: read files and run commands that change nothing (your shell tool works), but do not "
+                 "modify files. If finishing really needs edits, do not make them: stop "
                  f"with status blocked and start the summary with {NEEDS_WRITE}: what you would change and why"
                  if req.mode == "read" else "you may edit files in the workspace; keep changes minimal and on-task")
     if not req.allow_subagents:
