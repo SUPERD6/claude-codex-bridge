@@ -25,10 +25,11 @@ turn re-reads ~220k tokens):
 | J8–J10 official codex-plugin-cc, similar projects, name options (docs only, [landscape](research/landscape.md)) | ✅ PR #4; coexistence plan not implemented or tested; the name waits for the user |
 | I1–I4 adapters per agent, vendor decides "another", fallback and reviewers from data | ✅ PR #11 — new interface: `ccx.agents.get(name)` → `Adapter` (build/parse, vendor, support, tested_version, capabilities()); `ccx.agents.vendor()`, `others()`; `ccx agents` lists them as JSON |
 | J4 one step to a fresh conversation (`ccx fresh`) | ✅ PR #12 |
+| J5 a model for the lead itself (`ccx lead --suggest`, a line in `ccx report`) | this change |
 
 ## Next three
 
-1. F10–F14 on the new adapters; then J5 and J11 (J4: PR #12).
+1. F10–F14 on the new adapters (narrowed by the PR #6 measurements); J11 is PR #14.
 2. J0 on real sessions (`scripts/eval/j0_baseline.py real --days 7`) a week after J1–J6, against the baseline in
    PR #6; spot-check 5 probable verdicts a week so J7 has an overturn rate.
 3. Then the rest of the unified order: H5–H7 + I6 shared memory, H3–H4 + I7 `ccx discuss`, H8–H9, G1 UI (PR #7)
