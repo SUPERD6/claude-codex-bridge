@@ -115,7 +115,31 @@ def transcript_handoff(p, root: Path, agent: str, session: str | None = None, ma
         made = _handoff_by_model(p, root, agent, f)
         if made:
             return f, transcript.from_model(made[1], made[0], here, f, unfinished, cap)
-    return f, transcript.build(d, here, f, unfinished, cap)
+    return f, transcript.build(d, here, f, unfinished, cap, runs=session_runs(p, d.get("session")))
+
+
+def session_runs(p, session: str | None, limit: int = 5) -> str:
+    """The last `ccx run`s this conversation started: id, model, result, check, verdict, summary (from the ledger)."""
+    from .. import ledger
+    if not session:
+        return ""
+    rows = ledger.rows(p)
+    verdict = {r["run_id"]: r for r in rows if r.get("type") == "verify" and r.get("run_id")}
+    mine = [r for r in rows if not r.get("type") and r.get("lead_session") == session][-limit:]
+    out = []
+    for r in mine:
+        try:
+            rec = ledger.load_run(p, r["run_id"])
+        except (FileNotFoundError, KeyError, ValueError):
+            rec = {}
+        res, chk, v = rec.get("result") or {}, rec.get("check") or {}, verdict.get(r["run_id"])
+        last = (rec.get("attempts") or [{}])[-1]
+        check = "no check" if not chk else ("check passed" if chk.get("passed") else "check FAILED")
+        judged = "unjudged" if not v else (("right" if v.get("ok") else "wrong") + (" (probable)" if v.get("soft") else ""))
+        summary = " ".join(str(res.get("summary") or rec.get("error") or "").split())[:200]
+        out.append(f"- `{r['run_id']}` {r.get('to')} {last.get('model') or ''}: {r.get('status')}, {check}, {judged}"
+                   + (f" — {summary}" if summary else ""))
+    return "\n".join(out)
 
 
 def _handoff_by_model(p, root: Path, agent: str, f: Path) -> tuple[str, str] | None:

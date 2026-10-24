@@ -205,7 +205,7 @@ def _for_me(m: re.Match | None, me: str) -> bool:
 def pending_handoffs(root: Path, me: str) -> list[tuple[Path, re.Match, str]]:
     """Handoffs addressed to me (or to any) that I have not been shown yet, oldest first."""
     d = root / ".ccx"
-    files = sorted((d / "handoffs").glob("*.md")) if (d / "handoffs").exists() else []
+    files = sorted((d / "handoffs").glob("*.md"), key=_order) if (d / "handoffs").exists() else []
     if not files and (d / "handoff.md").exists():
         files = [d / "handoff.md"]               # written before handoffs/ existed
     seen = _seen(root).get(me)
@@ -242,13 +242,15 @@ def pending_handoff(root: Path, me: str, advance: bool = True) -> str:
         old = seen.get(me)
         names = old if isinstance(old, list) else []
         if isinstance(old, str):                 # convert: everything up to that timestamp was shown
-            names = [f.name for f in sorted((root / ".ccx" / "handoffs").glob("*.md"))
-                     if (_HEAD.match(f.read_text(encoding="utf-8", errors="replace")) or [None] * 4)[3] or "" <= old]
-        seen[me] = sorted({*names, *(f.name for f, _, _ in todo)})[-200:]
+            for f in (root / ".ccx" / "handoffs").glob("*.md"):
+                m = _HEAD.match(f.read_text(encoding="utf-8", errors="replace"))
+                if m and m.group(3) <= old:
+                    names.append(f.name)
+        seen[me] = sorted({*names, *(f.name for f, _, _ in todo)}, key=lambda n: _order(Path(n)))[-200:]
         (root / ".ccx" / "handoff.seen.json").write_text(json.dumps(seen), encoding="utf-8")
     f, m, text = todo[-1]
     rel = f.relative_to(root).as_posix()
-    head = f"[ccx handoff to you from {m.group(1)}, {m.group(3)}: {rel}]\n"
+    head = f"[ccx handoff to you from {m.group(1)}] ({m.group(3)}, {rel})\n"
     body = text if len(text) <= HANDOFF_WHOLE else \
         _handoff_summary(text) + f"\n\n(summary; the full handoff is in {rel})"
     if len(todo) == 1:
@@ -260,10 +262,17 @@ def pending_handoff(root: Path, me: str, advance: bool = True) -> str:
             + "\n\n[older handoffs not seen yet]\n" + "\n".join(others))
 
 
+def _order(f: Path) -> tuple[str, int]:
+    """Time order of handoff files: name, then the -2, -3 ... of a second handoff in the same second."""
+    m = re.match(r"(.*?)(?:-(\d+))?$", f.stem)
+    return m.group(1), int(m.group(2) or 1)
+
+
 def _first_line(text: str) -> str:
+    """What a handoff is about, in one line: its first line of text that is not a heading or ccx's own note."""
     for line in text.splitlines():
-        t = line.strip("-#* _").strip()
-        if t and not t.lower().startswith(("auto-assembled", "handoff ")):
+        t = line.strip("-* _").strip()
+        if t and not t.startswith("#") and not t.lower().startswith(("auto-assembled", "handoff ")):
             return t[:120]
     return ""
 
