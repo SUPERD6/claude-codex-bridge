@@ -210,6 +210,5 @@ def unfinished_line(root: Path) -> str:
     open_ = [it for it in q["items"].values() if it["status"] not in TERMINAL + ("split",)]
     if not open_:
         return ""
-    r = len(ready(q))
-    return (f"ccx queue: {len(open_)} open item(s) in this project, {r} ready — `ccx q tree` to see them, "
-            f"`ccx q run` to continue")
+    from .lang import say
+    return say("hint_queue", n=len(open_), r=len(ready(q)))

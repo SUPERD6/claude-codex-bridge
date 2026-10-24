@@ -199,6 +199,8 @@ SETTINGS = {   # key -> (type, help). Only these can be set with `ccx config set
     "lead.codex": (str, "model the Codex lead runs on, e.g. gpt-6.1-sol"),
     "sessions.auto_archive_hours": (float, "archive finished sub-agent sessions after N hours (0 = off)"),
     "report.publish_dir": (str, "local clone of your private usage repo; `ccx report --publish` commits there"),
+    "ui.lang": (str, "zh | en: language of `ccx ui` and of the lines ccx writes into conversations (unset: the "
+                     "page follows the browser, the lines stay English)"),
 }
 
 
@@ -218,6 +220,8 @@ def set_setting(p: Paths, key: str, raw: str) -> dict:
         k = float(raw)
         if not 0 <= k <= 1:
             raise ValueError("tradeoff knob must be between 0 and 1")
+    if key == "ui.lang" and raw not in ("zh", "en"):
+        raise ValueError("ui.lang must be zh or en")
     try:
         val = typ(raw)
     except ValueError as e:
