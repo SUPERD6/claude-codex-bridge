@@ -23,7 +23,8 @@ def cmd_handoff(a) -> int:
     text = Path(a.file).read_text(encoding="utf-8") if a.file else (" ".join(a.text) if a.text else "")
     src = None
     if a.from_transcript:
-        src = transcript_handoff(paths(), root, a.from_transcript, a.session, a.max_chars, not a.no_model)
+        src = transcript_handoff(paths(), root, a.from_transcript, a.session, a.max_chars, not a.no_model,
+                                 where=Path.cwd())
         if src is None:
             raise ValueError(f"no {a.from_transcript} session file found for {root} (give --session ID)")
         by = a.by or a.from_transcript
@@ -47,14 +48,20 @@ def cmd_handoff(a) -> int:
     return 0
 
 
-def transcript_handoff(p, root: Path, agent: str, session: str | None = None,
-                       max_chars: int | None = None, use_model: bool = True) -> tuple[Path, str] | None:
-    """(session file, handoff text) assembled by code from `agent`'s newest main session in `root`."""
+def transcript_handoff(p, root: Path, agent: str, session: str | None = None, max_chars: int | None = None,
+                       use_model: bool = True, where: Path | None = None) -> tuple[Path, str] | None:
+    """(session file, handoff text) assembled by code from `agent`'s newest main session in `where` (the lead's own
+    folder) or else `root`. They differ in a git worktree inside the main checkout: the project layer is the main
+    checkout's, but the lead's session and its git state belong to the worktree."""
     from .. import ledger, queue, transcript
     import contextlib
     import io
     mine = {s for r in ledger.rows(p) for s in [r.get("session_id"), *(r.get("sessions") or [])] if s}
-    f = transcript.find_session(agent, root, mine, session)
+    f = None
+    for here in dict.fromkeys(x.resolve() for x in (where, root) if x):
+        f = transcript.find_session(agent, here, mine, session)
+        if f:
+            break
     if f is None:
         return None
     d = transcript.read_codex(f) if agent == "codex" else transcript.read_claude(f)
@@ -71,8 +78,8 @@ def transcript_handoff(p, root: Path, agent: str, session: str | None = None,
     if transcript.empty(d) and use_model:
         made = _handoff_by_model(p, root, agent, f)
         if made:
-            return f, transcript.from_model(made[1], made[0], root, f, unfinished, cap)
-    return f, transcript.build(d, root, f, unfinished, cap)
+            return f, transcript.from_model(made[1], made[0], here, f, unfinished, cap)
+    return f, transcript.build(d, here, f, unfinished, cap)
 
 
 def _handoff_by_model(p, root: Path, agent: str, f: Path) -> tuple[str, str] | None:
