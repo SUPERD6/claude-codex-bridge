@@ -1,6 +1,15 @@
 # Changelog
 
 ## Unreleased
+- Handoffs are no longer lost between parallel sessions: each one has its own file in `.ccx/handoffs/` (`handoff.md`
+  is only the latest), and session start lists every handoff to you not seen yet — the newest whole or summarised,
+  the others one line each with their file. `ccx fresh` points the new conversation at its own handoff file.
+- `--from-transcript` handoffs: the numbered list from the agent's latest message when no plan tool was used; the
+  conversation's last 5 `ccx run`s with their check and verdict; `git status --short` keeps its leading space.
+- The dashboard's saving is measured from `ccx trial` when a trial has enough tasks in both halves, otherwise it is
+  labelled a model ("Estimated saving (model)", `saving_kind` in `ccx stats --summary`) with what it assumes.
+- agent-delegate: when ccx already ran your `--check` and it passed, don't run it again yourself (H11: that is what
+  makes delegating save the lead a turn).
 - One step to a fresh conversation (proposal J4): `ccx fresh [--as claude|codex] [--note ...] [--launch]` writes the
   handoff from this conversation's own session file (as `ccx handoff --from-transcript` does) addressed to the same
   tool, and says how to open the new conversation; `--launch` starts it in a terminal. A new conversation of the
