@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+- Renamed to **relayline** (was `claude-codex-bridge`): the GitHub repo, the package name in `pyproject.toml`, the
+  install command (`pipx install git+https://github.com/SUPERD6/relayline`), and the links in the README, website,
+  CONTRIBUTING and issue templates. The `ccx` command and the `ccx/` package are unchanged; GitHub redirects the old
+  URL. The README now opens by saying how it differs from CCB and from OpenAI's codex-plugin-cc.
 - `ccx ui`, a read-only live page on this machine (proposal G1). Left: contents (overview → projects → tasks →
   split pieces), red counts of what waits for you, search, quota by pace. Middle: each task as an org chart — you →
   the lead (model, its own sub-agents as dashed tags, spend vs budget) → one column per worker; a new agent gets its

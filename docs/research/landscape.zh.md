@@ -166,6 +166,19 @@ Claude、Codex、OpenAI、Anthropic、Gemini、GPT 等厂商或产品名。改�
 **如果改名，影响面（供拍板参考，本 PR 不动）：** GitHub 仓库名（GitHub 会自动重定向旧地址）、`pyproject.toml` 的包名、
 README 和网站里的链接、安装命令 `pipx install git+…`。命令 `ccx` 可以保持不变。
 
+**决定（2026-10-24）：改名为 `relayline`**（命令 `ccx` 和 Python 包目录 `ccx/` 不变）。改名前查过，都在 2026-10-24：
+
+| 查哪里 | 查什么 | 结果 |
+|---|---|---|
+| USPTO [商标检索](https://tmsearch.uspto.gov/) | `relayline` | 没有结果（对照查 `relay` 有 796 条，说明检索在工作） |
+| [TMview](https://www.tmdn.org/tmview/)（含 EUIPO 和其他商标局） | `relayline` | 没有结果（对照 `relay`：3,015 条） |
+| TMview | `relay line`（包含） | 2 条无关且已失效：RELAYPAY ONLINE PAYMENT SOLUTIONS（澳大利亚）、CHICAGO SHORELINE MARATHON AND RELAY（美国） |
+| npm | `registry.npmjs.org/relayline`、`/relay-line`；npm 搜索 `relayline` | 404、404；0 个包 |
+| PyPI | `pypi.org/pypi/relayline/json` | 404（未占用） |
+| GitHub | `relayline in:name`；`github.com/relayline` | 5 个仓库，都是 0 星、领域无关；没有这个用户或组织 |
+
+这不是法律意义上的商标清查：只查了同名；软件类里已有单词 `RELAY` 的商标（例如美国第 42 类一条有效注册），所以带 relay 的组合词并不独特。
+
 ## 来源
 
 所有链接 2026-10-24 查看。

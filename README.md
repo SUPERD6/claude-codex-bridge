@@ -4,14 +4,20 @@
 </picture>
 
 <p align="center">
-  <a href="https://github.com/SUPERD6/claude-codex-bridge/actions/workflows/test.yml"><img alt="tests" src="https://github.com/SUPERD6/claude-codex-bridge/actions/workflows/test.yml/badge.svg"></a>
+  <a href="https://github.com/SUPERD6/relayline/actions/workflows/test.yml"><img alt="tests" src="https://github.com/SUPERD6/relayline/actions/workflows/test.yml/badge.svg"></a>
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776AB">
   <img alt="dependencies: standard library only" src="https://img.shields.io/badge/dependencies-stdlib%20only-1f7a3a">
   <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/license-MIT-0f7c80"></a>
-  <a href="https://github.com/SUPERD6/claude-codex-bridge/releases"><img alt="release" src="https://img.shields.io/github/v/release/SUPERD6/claude-codex-bridge"></a>
+  <a href="https://github.com/SUPERD6/relayline/releases"><img alt="release" src="https://img.shields.io/github/v/release/SUPERD6/relayline"></a>
 </p>
 
-<p align="center">English · <a href="README.zh.md">中文</a> · <a href="https://superd6.github.io/claude-codex-bridge/">Website</a></p>
+<p align="center">English · <a href="README.zh.md">中文</a> · <a href="https://superd6.github.io/relayline/">Website</a></p>
+
+**relayline** (formerly `claude-codex-bridge`; the command is still `ccx`) is not
+[CCB](https://github.com/SeemSeam/claude_codex_bridge) (`SeemSeam/claude_codex_bridge`, a visible terminal workspace
+for watching and steering many agents) and not OpenAI's official [codex-plugin-cc](https://github.com/openai/codex-plugin-cc)
+(a Claude Code plugin that sends work to Codex only): it hands work between the tools in both directions, picks the
+cheapest model likely to finish each piece, and records what it cost. More in [Similar projects](#similar-projects).
 
 > **Work in progress (v0.4, October 2026).** It runs every day on one Windows machine, both directions, terminal and
 > desktop apps. Not done yet:
@@ -31,7 +37,7 @@ runs it in the other tool, has the lead check the result and records what it cos
 doing the cheap work. Either tool can lead; Gemini CLI, and DeepSeek through Claude Code, can take work too.
 
 ```bash
-pipx install git+https://github.com/SUPERD6/claude-codex-bridge
+pipx install git+https://github.com/SUPERD6/relayline
 ccx setup                    # guided: explains each step and asks before changing anything
 ccx run --to codex --mode read "Summarise README.md in three lines"
 ```
@@ -139,7 +145,7 @@ automatic memory stays its own: ccx doesn't copy one into the other.
 **Without a clone** (the skills and config ship inside the package):
 
 ```bash
-pipx install git+https://github.com/<you>/claude-codex-bridge
+pipx install git+https://github.com/<you>/relayline
 ccx init --hub <your hub path>
 ccx doctor
 ```
@@ -147,8 +153,8 @@ ccx doctor
 **From a clone** (to develop, or to let `git pull` upgrade the skills linked into your hub):
 
 ```powershell
-git clone https://github.com/<you>/claude-codex-bridge
-cd claude-codex-bridge
+git clone https://github.com/<you>/relayline
+cd relayline
 .\install.ps1 -Hub <your hub path>      # Windows; macOS/Linux: ./install.sh <hub path>
 ```
 
