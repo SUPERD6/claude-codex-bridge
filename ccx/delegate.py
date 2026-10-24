@@ -118,13 +118,12 @@ class Request:
     review_round: int = 0           # 1 = this run fixes what a review found
 
 
-def other(agent: str) -> str:
-    """Quota fallback target: the first other installed agent (codex <-> claude preferred)."""
-    order = {"codex": ["claude", "gemini"], "claude": ["codex", "gemini"], "gemini": ["codex", "claude"]}
-    for a in order.get(agent, ["codex", "claude"]):
-        if find_bin(a):
-            return a
-    return order.get(agent, ["codex"])[0]
+def other(agent: str, cfg: dict | None = None) -> str:
+    """Quota fallback target when nothing better is known: an installed agent of another vendor, official first
+    (ccx/agents). With a difficulty, _fallback_plan lets routing choose among all of them by total cost."""
+    from .agents import others
+    got = others(agent, cfg) or others(agent, cfg, only_installed=False)
+    return got[0] if got else "codex"
 
 
 def _provider_envs(cfg: dict, plan: list[dict]) -> dict:
@@ -227,12 +226,15 @@ def _plan(req: Request, p: Paths, cfg: dict, max_esc: int) -> list[dict]:
 
 
 def _fallback_plan(req: Request, p: Paths, cfg: dict, failed: dict) -> dict | None:
-    """First rung on the other agent after a quota stop."""
-    to = other(failed["agent"])
+    """First rung on another vendor's agent after a quota stop: routing picks the cheapest in total among the
+    installed ones that can work (I4); without a difficulty, the first of them."""
+    from .agents import others
+    to = other(failed["agent"], cfg)
     b = (req.route or {}).get("b")
     if b is not None:
         try:
-            pk = learn.pick(p, float(b), [to], (req.route or {}).get("tradeoff", "balanced"), mode=req.mode)
+            pk = learn.pick(p, float(b), others(failed["agent"], cfg) or [to],
+                            (req.route or {}).get("tradeoff", "balanced"), mode=req.mode)
             return _rung_spec(pk["rung"])
         except Exception:  # noqa: BLE001
             pass
@@ -711,7 +713,7 @@ def _review(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path, run_dir:
                     int(rc.get("min_lines", 50)))
     if not why:
         return
-    cands = rv.reviewers(cfg, req.provider or req.to, find_bin)
+    cands = rv.reviewers(cfg, req.provider or req.to, find_bin, p)
     if not cands:
         record["review"] = {"verdict": "not-run", "reason": why, "error": "no reviewer from another vendor installed"}
         return

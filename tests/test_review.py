@@ -37,6 +37,27 @@ class TestReason(unittest.TestCase):
         self.assertEqual(review.reviewers(cfg, "gemini", lambda a: True),
                          [("claude", "haiku", "low"), ("codex", "gpt-6-luna", "low")])
 
+    def test_vendor_not_cli_decides_who_is_another(self):
+        cfg = {"review": {"by": {}}, "providers": {"deepseek": {"agent": "claude"}}}
+        # DeepSeek runs through the Claude CLI but is its own vendor: Claude may review it (I3)
+        self.assertEqual(review.reviewers({**cfg, "review": {"also": ["claude:haiku:low"]}}, "deepseek",
+                                          lambda a: True), [("claude", "haiku", "low")])
+        self.assertEqual(review.reviewers({**cfg, "review": {"also": ["claude:haiku:low"]}}, "claude",
+                                          lambda a: True), [])
+        from ccx import agents
+        self.assertTrue(agents.same_vendor("claude", "claude"))
+        self.assertFalse(agents.same_vendor("claude", "deepseek", cfg))
+        cfg["providers"]["deepseek"]["vendor"] = "anthropic"          # a provider can say it is the same vendor
+        self.assertTrue(agents.same_vendor("claude", "deepseek", cfg))
+
+    def test_reviewers_from_routing_data(self):
+        import tempfile
+        from pathlib import Path
+        from ccx.config import Paths
+        with tempfile.TemporaryDirectory() as d:
+            got = review.reviewers({"review": {}}, "claude", lambda a: a in ("codex", "claude"), Paths(Path(d)))
+        self.assertTrue(got and all(a == "codex" for a, _, _ in got))     # routing's cheapest codex read rung
+
     def test_verdict(self):
         self.assertEqual(review.verdict({"summary": "REVIEW: issues", "open_questions": ["a"]})["verdict"], "issues")
         self.assertEqual(review.verdict({"summary": "review: pass — fine"})["verdict"], "pass")

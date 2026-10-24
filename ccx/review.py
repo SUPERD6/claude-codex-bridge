@@ -108,16 +108,31 @@ def reason(mode: str, risk: str | None, result: dict, claimed: list[str], actual
     return None
 
 
-def reviewers(cfg: dict, worker: str, installed) -> list[tuple[str, str, str]]:
-    """(agent, model, effort) candidates for reviewing `worker`'s work, best first: other vendors' cheap models.
-    The next one is tried when a review can't finish (haiku ran out of structured-output retries twice in the
-    2026-10-24 trial)."""
+REVIEW_B = 3.0           # a review reads one diff against one brief: routed like an easy read-only task
+
+
+def reviewers(cfg: dict, worker: str, installed, p=None) -> list[tuple[str, str, str]]:
+    """(agent, model, effort) candidates for reviewing `worker`'s work, best first: models of another vendor (I3),
+    never a cash provider. Order: what the person pinned in [review] by; then, per installed agent of another
+    vendor, the rung routing finds cheapest for an easy read (I4: from data, not a fixed table); then
+    [review] also. The next one is tried when a review can't finish (haiku ran out of structured-output retries
+    twice in the 2026-10-24 trial)."""
+    from .agents import NAMES, others, same_vendor
     rc = cfg.get("review") or {}
     by = rc.get("by") or {}
+    rungs = [by.get(worker)] + [v for k, v in by.items() if k != worker]
+    if p is not None:
+        from . import learn
+        for agent in others(worker, cfg):
+            try:
+                rungs.append(learn.pick(p, REVIEW_B, [agent], "save", mode="read", kind="read")["rung"])
+            except Exception:  # noqa: BLE001 — no routing data for it: the pinned ones still apply
+                pass
     out = []
-    for rung in filter(None, [by.get(worker)] + [v for k, v in by.items() if k != worker] + list(rc.get("also") or [])):
+    for rung in filter(None, rungs + list(rc.get("also") or [])):
         agent, model, effort = rung.split(":", 2)
-        if agent != worker and agent != "deepseek" and installed(agent) and (agent, model, effort) not in out:
+        if (agent in NAMES and not same_vendor(agent, worker, cfg) and installed(agent)
+                and (agent, model, effort) not in out):
             out.append((agent, model, effort))
     return out
 
