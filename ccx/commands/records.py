@@ -144,7 +144,41 @@ def cmd_trial(a) -> int:
     return 0
 
 
+def cmd_sum(a) -> int:
+    """Run a command and print only what matters of its output (J3); the full output stays in .ccx/sum/."""
+    import subprocess
+    from .. import summarize
+    from ..config import ccx_argv
+    argv = [x for x in a.argv if x != "--"]
+    if not argv:
+        raise ValueError("usage: ccx sum [options] -- <command> [args...]")
+    res = summarize.run(argv, Path.cwd(), a.kind, a.max_chars, a.shell)
+    print(summarize.header(res, argv))
+    print(res["text"])
+    if a.ask:
+        brief = (f"Read the file {res['log']} (output of `{' '.join(argv)}`, exit {res['exit']}). Answer: {a.ask}\n"
+                 "Quote only the few lines that matter. Do not run the command again and do not edit anything.")
+        r = subprocess.run([*ccx_argv(), "run", "--mode", "read", "--kind", "read", "--b", "2", "--no-ab", brief],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace")
+        try:
+            import json
+            got = json.loads(r.stdout)
+            print(f"\n[ccx sum --ask → {got.get('agent')} {got.get('model')}, run {got.get('run_id')}]\n"
+                  f"{got.get('summary') or got.get('advice') or r.stdout[-1500:]}")
+        except ValueError:
+            print("\n[ccx sum --ask failed]\n" + (r.stdout + r.stderr)[-1500:])
+    return res["exit"]
+
+
 def register(sub) -> None:
+    sm = sub.add_parser("sum", help="run a command and show only what matters of its output (tests: failures; "
+                        "diffs: per file; logs: errors); the full output is kept in .ccx/sum/")
+    sm.add_argument("--kind", choices=["auto", "test", "diff", "log"], default="auto")
+    sm.add_argument("--max-chars", type=int, default=2000)
+    sm.add_argument("--shell", action="store_true", help="run through the shell (pipes, globs)")
+    sm.add_argument("--ask", help="too long still: a cheap routed model answers this from the saved output")
+    sm.add_argument("argv", nargs="+", help="-- then the command")
+    sm.set_defaults(fn=cmd_sum)
     tr = sub.add_parser("trial", help="a formal comparison over a week: half the delegable tasks done by the lead "
                         "itself, half delegated, measured the same way")
     trs = tr.add_subparsers(dest="trial_cmd", required=True)
