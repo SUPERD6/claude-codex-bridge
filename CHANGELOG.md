@@ -1,6 +1,12 @@
 # Changelog
 
 ## Unreleased
+- Long output cut down before the lead reads it (proposal J3): `ccx sum -- <command>` runs the command, keeps the
+  full output in `.ccx/sum/` (git-ignored, last 20) and prints only what matters — for tests each failure's header,
+  last frame and error line plus the summary; for diffs files changed with +/− counts and the first hunks; for logs
+  error lines with one line of context, repeats folded, and the tail. Capped at 2,000 characters
+  (`--max-chars`); `--ask "..."` lets a cheap routed model answer from the saved output; the exit code is the
+  command's. agent-delegate tells the lead to use it. Here a 40,657-character `git diff` came back as 2,053.
 - What the lead re-reads every turn (proposal J1): `ccx lead --breakdown` splits the first turn's measured
   prefix into system prompt, built-in tool definitions, each MCP server's tool definitions, each instruction file,
   the skill list, the start hook's output and the rest, from the tools' own session files (Claude Code's request
