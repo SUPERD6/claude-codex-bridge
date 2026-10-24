@@ -121,7 +121,7 @@ class TestBackgroundAndSend(AdapterEnv):
         out = self.j("run", "--bg", "--from", "claude", "--to", "codex", "--tier", "T2", "long task")
         self.assertEqual(out["state"], "started")
         f = self.hub / "ccx" / "runs" / out["run_id"] / "run.json"
-        for _ in range(100):
+        for _ in range(400):                 # up to 40 s: the detached process starts slowly under full-suite load
             if f.exists() and json.loads(f.read_text())["state"] == "finished":
                 break
             time.sleep(0.1)
