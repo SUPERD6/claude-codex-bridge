@@ -4,14 +4,19 @@
 </picture>
 
 <p align="center">
-  <a href="https://github.com/SUPERD6/claude-codex-bridge/actions/workflows/test.yml"><img alt="tests" src="https://github.com/SUPERD6/claude-codex-bridge/actions/workflows/test.yml/badge.svg"></a>
+  <a href="https://github.com/SUPERD6/relayline/actions/workflows/test.yml"><img alt="tests" src="https://github.com/SUPERD6/relayline/actions/workflows/test.yml/badge.svg"></a>
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776AB">
   <img alt="dependencies: standard library only" src="https://img.shields.io/badge/dependencies-stdlib%20only-1f7a3a">
   <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/license-MIT-0f7c80"></a>
-  <a href="https://github.com/SUPERD6/claude-codex-bridge/releases"><img alt="release" src="https://img.shields.io/github/v/release/SUPERD6/claude-codex-bridge"></a>
+  <a href="https://github.com/SUPERD6/relayline/releases"><img alt="release" src="https://img.shields.io/github/v/release/SUPERD6/relayline"></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · 中文 · <a href="https://superd6.github.io/claude-codex-bridge/zh/">网站</a></p>
+<p align="center"><a href="README.md">English</a> · 中文 · <a href="https://superd6.github.io/relayline/zh/">网站</a></p>
+
+**relayline**（原名 `claude-codex-bridge`，命令仍是 `ccx`）不是
+[CCB](https://github.com/SeemSeam/claude_codex_bridge)（`SeemSeam/claude_codex_bridge`，一个能同时看、同时指挥多个代理的可见终端工作区），
+也不是 OpenAI 官方的 [codex-plugin-cc](https://github.com/openai/codex-plugin-cc)（Claude Code 插件，只把活交给 Codex）：
+它让几个工具双向互相派活，为每块工作挑最便宜、又大概率能做完的模型，并记下花了多少。详见[同类项目对比](#同类项目对比)。
 
 > **仍在开发中（v0.4，2026 年 10 月）。** 它每天在一台 Windows 电脑上真实使用，两个方向、终端和桌面端都跑通了。还没做完的：
 > - **还没有真实的“省了多少”数据。** 两周带验收结论的真实使用还没积累，选模型的初始参数未校准；下面的数字都是单次真实运行。
@@ -23,7 +28,7 @@
 **让 Claude Code 和 Codex 互相派活。** ccx 为每一块工作挑一个最便宜、又大概率能做完的模型，交给另一个工具去跑，由主智能体验收，并记下花了多少——贵的主智能体就不用再干便宜的活。谁当主都行；也可以派给 Gemini CLI，或通过 Claude Code 用 DeepSeek。
 
 ```bash
-pipx install git+https://github.com/SUPERD6/claude-codex-bridge
+pipx install git+https://github.com/SUPERD6/relayline
 ccx setup                    # 向导：每一步都说明，改东西前先问
 ccx run --to codex --mode read "用三行总结 README.md"
 ```
@@ -102,7 +107,7 @@ ccx run --to codex --mode read "用三行总结 README.md"
 **不克隆仓库**（技能和配置都打在包里）：
 
 ```bash
-pipx install git+https://github.com/<you>/claude-codex-bridge
+pipx install git+https://github.com/<you>/relayline
 ccx init --hub <你的个人hub路径>
 ccx doctor
 ```
@@ -110,8 +115,8 @@ ccx doctor
 **从克隆的仓库装**（要改代码，或者想让 `git pull` 直接升级接进 hub 的技能）：
 
 ```powershell
-git clone https://github.com/<you>/claude-codex-bridge
-cd claude-codex-bridge
+git clone https://github.com/<you>/relayline
+cd relayline
 .\install.ps1 -Hub <你的个人hub路径>     # Windows；macOS/Linux：./install.sh <hub路径>
 ```
 

@@ -6,6 +6,10 @@
   block back where it was, not at the end (Codex keeps hook trust by position, so moved hooks ask for trust again);
   uninstall now says how to put everything back (`ccx sync --apply`, `ccx skills install --replace --apply`,
   `ccx doctor` — sync alone does not bring back ccx's skills).
+- Renamed to **relayline** (was `claude-codex-bridge`): the GitHub repo, the package name in `pyproject.toml`, the
+  install command (`pipx install git+https://github.com/SUPERD6/relayline`), and the links in the README, website,
+  CONTRIBUTING and issue templates. The `ccx` command and the `ccx/` package are unchanged; GitHub redirects the old
+  URL. The README now opens by saying how it differs from CCB and from OpenAI's codex-plugin-cc.
 - Handoffs are no longer lost between parallel sessions: each one has its own file in `.ccx/handoffs/` (`handoff.md`
   is only the latest), and session start lists every handoff to you not seen yet — the newest whole or summarised,
   the others one line each with their file. `ccx fresh` points the new conversation at its own handoff file.
