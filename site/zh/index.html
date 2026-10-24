@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ccx — Claude Code ⇄ Codex</title>
+<meta name="description" content="让 Claude Code 和 Codex 互相派活：每一块工作交给最便宜、又大概率能做完的模型。">
+<meta property="og:title" content="ccx — Claude Code 和 Codex 互为子智能体">
+<meta property="og:description" content="最便宜、又能做完的模型——做完要验收，花了多少有账可查。">
+<meta property="og:image" content="../assets/social-preview.png">
+<link rel="alternate" hreflang="en" href="../">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<div class="wrap">
+  <header class="bar">
+    <a class="mark" href="./">ccx</a>
+    <nav aria-label="主导航">
+      <a href="#how" class="hide-s">怎么工作</a>
+      <a href="../demo/" class="hide-s">看板示例</a>
+      <a href="#faq" class="hide-s">常见问题</a>
+      <a href="https://github.com/SUPERD6/claude-codex-bridge">GitHub</a>
+      <a href="../" hreflang="en" lang="en">English</a>
+      <button class="theme" type="button" aria-label="切换浅色/深色" title="切换浅色/深色">◐</button>
+    </nav>
+  </header>
+
+  <section class="hero">
+    <div>
+      <h1>Claude Code 和 Codex，互为子智能体</h1>
+      <p class="sub">ccx 把每一块工作交给最便宜、又大概率能做完的模型，在另一个工具里跑完，由你验收，并记下花了多少。</p>
+      <div class="install">
+        <code>pipx install git+https://github.com/SUPERD6/claude-codex-bridge</code>
+        <button class="copy" type="button" data-copy="pipx install git+https://github.com/SUPERD6/claude-codex-bridge"
+                data-done="已复制" data-fail="请手动复制">复制</button>
+      </div>
+      <p class="then">然后运行 <code>ccx setup</code>——每一步都会说明，改东西之前先问你。</p>
+      <div class="lanes"><span><i class="dot" style="background:var(--amber)"></i>Claude Code</span>
+        <span><i class="dot" style="background:var(--teal)"></i>Codex</span><span>Gemini CLI（可选）</span></div>
+    </div>
+    <div class="term" aria-label="示例会话">
+      <div class="top">在 Windows 上的一次真实运行（有删节）</div>
+<pre><span class="p">$</span> ccx route --to codex --b 2
+  <span class="t">codex:gpt-6-luna:low</span>   p 0.65 · 含升档 0.95
+
+<span class="p">$</span> ccx run --to codex --mode read "读 README.md 第一行并报告"
+  <span class="a">claude → codex</span>   luna/low · 一次完成 · 5.5 秒
+  status   <span class="g">done</span>
+  summary  "# claude-codex-bridge (`ccx`)"
+  tokens   输入 2.28 万 · 输出 65 · <span class="g">$0.0023</span>
+
+<span class="p">$</span> ccx verify 20261023-150840-aa6c --ok 1
+  <span class="g">✓ 已记录</span>——选模型会据此学习</pre>
+    </div>
+  </section>
+
+  <section class="nums" aria-label="真机实测">
+    <div><b>4.6 万 → 1.36 万</b><span>启动一个 Claude 子智能体的 token（每次请求）</span></div>
+    <div><b>$2.8–4.4</b><span>每 1% Codex 周额度的折算费，4 个时段都稳定</span></div>
+    <div><b>139 个测试</b><span>Linux · Windows · macOS，Python 3.11–3.13</span></div>
+  </section>
+
+  <h2>能做什么</h2>
+  <section class="feat">
+    <div><h3>两个方向都行</h3><p>Claude Code 当主、Codex 干活，或者反过来；终端和桌面端都可以。</p></div>
+    <div><h3>自动选模型</h3><p>5 个问题打出难度 → 选智能体、模型和强度，并给出成功率；每次 <code>ccx verify</code> 都让它更准。</p></div>
+    <div><h3>启动省钱</h3><p>子智能体精简启动；一小时内同一个子会话接着用，缓存不失效。</p></div>
+    <div><h3>共享记忆</h3><p>开局只推对方新写的几行；还有两边都能看到的项目层。</p></div>
+    <div><h3>断了能续</h3><p>额度用完、崩溃或关了窗口：<code>ccx task resume</code> 接着原来的会话做。</p></div>
+    <div><h3>有账可查</h3><p>每次运行的 token 和花费，以及派出去到底省了多少的看板。</p></div>
+  </section>
+
+  <section id="how">
+    <h2>怎么工作</h2>
+    <div class="figure">
+      <img class="for-light" src="../assets/architecture-light.svg" width="1200" height="540"
+           alt="谁当主都行；ccx 把简报交给另一个工具在后台跑、交回 JSON；开局时 hub 给两个工具推新记忆、交接和没做完的任务；项目的 .ccx 文件夹放背景、日志、inbox 和断点">
+      <img class="for-dark" src="../assets/architecture-dark.svg" width="1200" height="540" alt="">
+    </div>
+    <ol class="how">
+      <li><b>打分</b>改几个文件、跨几个模块、目标清不清楚、风险、要不要新设计 → 难度 0–10。</li>
+      <li><b>选档</b>成功率够高的档位里挑最便宜的；卡住了有升档路线。</li>
+      <li><b>运行</b>另一个智能体在你的文件夹里后台干活；改动可以撤回，也可以放在单独的分支上。</li>
+      <li><b>验收</b>你看一眼 diff，再 <code>ccx verify</code>——选模型会按你的工作校准。</li>
+    </ol>
+  </section>
+
+  <section class="demo" id="dashboard">
+    <p><b>看看看板。</b>一份用假数据生成的 <code>ccx report</code>：谁花了哪类 token、额度、每次成功的花费、派出去省了多少。</p>
+    <a class="btn" href="../demo/">打开示例看板</a>
+  </section>
+
+  <section id="faq">
+    <h2>常见问题</h2>
+    <details><summary>多一个智能体，不是更费 token 吗？</summary><p>只有很小的任务会，这时 ccx 会直接让你自己做。其余的子智能体用比主智能体便宜的模型、精简启动；看板会用你自己的运行算出差多少。</p></details>
+    <details><summary>我用的是订阅，不是 API，也适用吗？</summary><p>适用。花费按 API 价格折算，方便比较；看板也会显示每个工具的额度用在了哪里。一边额度用完了，任务会换到另一边。</p></details>
+    <details><summary>让子智能体改文件安全吗？</summary><p>只能改任务所在的文件夹；每次可写运行都会拍快照，可以 <code>ccx undo</code>；<code>--mode read</code> 或 <code>--worktree</code> 不会动你的工作区。详见 <a href="https://github.com/SUPERD6/claude-codex-bridge/blob/main/SECURITY.zh.md">SECURITY.zh.md</a>。</p></details>
+    <details><summary>支持哪些工具？</summary><p>Claude Code 和 Codex CLI，两个方向都在真机上测过。Gemini CLI 和用 DeepSeek 的 Claude Code 已经适配，但还没真跑过。</p></details>
+  </section>
+
+  <footer><span>ccx · MIT</span><a href="https://github.com/SUPERD6/claude-codex-bridge">GitHub</a>
+    <a href="https://github.com/SUPERD6/claude-codex-bridge/blob/main/SECURITY.zh.md">SECURITY.zh.md</a><a href="../" lang="en">English</a>
+    <span>与 Anthropic、OpenAI 无关。Claude Code 和 Codex 分别是其所有者的产品。</span></footer>
+</div>
+<script src="../app.js"></script>
+</body>
+</html>

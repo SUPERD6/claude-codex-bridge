@@ -1,0 +1,36 @@
+name: Bug report
+description: Something in ccx does not work as described
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks! Please don't paste tokens, keys or private paths. Security problems: use "Report a vulnerability" instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to reproduce
+      description: The ccx command(s) you ran.
+      render: shell
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: "`ccx --version`, `codex --version`, `claude --version`, Python, OS"
+      placeholder: "ccx 0.3.0 · codex-cli 0.164.0 · Claude Code 2.1.309 · Python 3.12 · Windows 11"
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: "`ccx doctor` and `ccx show <run_id>` output"
+      description: Remove anything private before pasting.
+      render: text

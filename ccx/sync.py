@@ -1,0 +1,431 @@
+"""Wire the shared hub into both tools. Idempotent; dry-run by default.
+
+  skills : one real copy per skill, the other tool gets a directory junction
+           (Windows) / symlink (else). Edit once, both see it.
+  memory : Claude  -> ~/.claude/CLAUDE.md block that @imports MEMORY.md (live)
+           Codex   -> <CODEX_HOME>/AGENTS.md block with MEMORY.md inlined
+                      (re-rendered on `ccx mem compact` / `ccx sync`)
+  hooks  : SessionStart in both tools runs `ccx mem delta --as <tool>`
+           (prints only the other side's new entries; usually nothing)
+  mcp    : <hub>/mcp/servers.json is the one registry; registered into each
+           tool through its own CLI (`claude mcp add-json`, `codex mcp add`),
+           never by hand-editing their config files.
+Every file we touch is backed up once per day as <name>.ccx-backup-YYYYMMDD.
+"""
+from __future__ import annotations
+
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+
+if sys.version_info >= (3, 11):
+    import tomllib
+
+from . import memory
+from .config import Paths, ccx_argv, claude_home, codex_home, data_dir
+from .runners import bin_argv, find_bin
+
+BEGIN = "<!-- ccx:begin {id} -->"
+END = "<!-- ccx:end {id} -->"
+TOML_BEGIN = "# >>> ccx:begin hooks (managed by claude-codex-bridge; edit via `ccx sync`)"
+TOML_END = "# <<< ccx:end hooks"
+HOST_SPECIFIC_MCP = {"node_repl", "cua_repl"}   # tied to the Codex desktop app; never shared
+
+
+@dataclass
+class Plan:
+    apply: bool
+    actions: list[str] = field(default_factory=list)
+    warnings: list[str] = field(default_factory=list)
+
+    def do(self, msg: str, fn=None):
+        self.actions.append(("" if self.apply else "[dry-run] ") + msg)
+        if self.apply and fn:
+            fn()
+
+
+def _backup(path: Path) -> None:
+    if path.exists():
+        b = path.with_name(path.name + ".ccx-backup-" + time.strftime("%Y%m%d"))
+        if not b.exists():
+            shutil.copy2(path, b)
+
+
+def _write(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _backup(path)
+    path.write_text(text, encoding="utf-8")
+
+
+def ccx_command(*args: str) -> str:
+    """Shell command that runs this checkout of ccx with the current Python."""
+    return " ".join(x if x in ("-m", "ccx") else f'"{x}"' for x in ccx_argv()) + " " + " ".join(args)
+
+
+# ------------------------------------------------------------ managed blocks
+def upsert_block(text: str, block_id: str, body: str) -> str:
+    b, e = BEGIN.format(id=block_id), END.format(id=block_id)
+    block = f"{b}\n{body.rstrip()}\n{e}"
+    pat = re.compile(re.escape(b) + r".*?" + re.escape(e), re.S)
+    if pat.search(text):
+        return pat.sub(lambda _: block, text, count=1)
+    return (text.rstrip() + "\n\n" if text.strip() else "") + block + "\n"
+
+
+def claude_memory_block(p: Paths) -> str:
+    return (f"## 共享记忆与协作（ccx）\n@{p.memory_index.as_posix()}\n"
+            f"- ccx 命令：`{ccx_command()}`（下文简写 ccx）\n"
+            "- 学到长期有效、Codex 也该知道的事实/偏好：`ccx mem add \"一句话\" --by claude`\n"
+            "- 把子任务派给 Codex：按 agent-delegate 技能做。")
+
+
+def codex_memory_block(p: Paths) -> str:
+    snap = p.memory_index.read_text(encoding="utf-8") if p.memory_index.exists() else ""
+    return ("## 共享记忆与协作（ccx，自动生成，勿手改；原件 "
+            f"{p.memory_index.as_posix()}）\n"
+            f"- ccx 命令：`{ccx_command()}`（下文简写 ccx）\n"
+            "- 学到长期有效、Claude 也该知道的事实/偏好：`ccx mem add \"一句话\" --by codex`\n"
+            "- 把子任务派给 Claude Code：按 agent-delegate 技能做。\n\n" + snap.strip())
+
+
+def sync_memory(p: Paths, plan: Plan) -> None:
+    if p.snapshot_external:
+        # the tools already load this snapshot themselves (e.g. a shared AGENTS.md); writing blocks into
+        # their instruction files would duplicate it or break the setup that loads it
+        if not p.memory_index.exists():
+            plan.warnings.append(f"external snapshot {p.memory_index} does not exist")
+        plan.actions.append(f"(skip) snapshot {p.memory_index} is external: both tools already load it")
+        if not p.memory.exists():
+            plan.do(f"create journal folder {p.memory}", lambda: memory.ensure(p))
+        return
+    if not p.memory_index.exists():
+        plan.do(f"create shared memory snapshot {p.memory_index}", lambda: memory.ensure(p))
+    cm = claude_home() / "CLAUDE.md"
+    old = cm.read_text(encoding="utf-8") if cm.exists() else ""
+    new = upsert_block(old, "memory", claude_memory_block(p))
+    if new != old:
+        plan.do(f"update managed block in {cm}", lambda: _write(cm, new))
+    am = codex_home() / "AGENTS.md"
+    old = am.read_text(encoding="utf-8") if am.exists() else ""
+    # snapshot may not exist yet in dry-run; render what it will be
+    body = codex_memory_block(p) if p.memory_index.exists() else codex_memory_block(p) + \
+        "\n" + memory.SNAPSHOT_TEMPLATE
+    new = upsert_block(old, "memory", body)
+    if new != old:
+        plan.do(f"update managed block in {am}", lambda: _write(am, new))
+
+
+# ------------------------------------------------------------ hooks
+def sync_hooks(p: Paths, plan: Plan) -> None:
+    # Claude Code: settings.json -> hooks.SessionStart
+    sj = claude_home() / "settings.json"
+    data = {}
+    if sj.exists():
+        try:
+            data = json.loads(sj.read_text(encoding="utf-8") or "{}")
+        except json.JSONDecodeError:
+            plan.warnings.append(f"{sj} is not valid JSON; skipped Claude hook")
+            data = None
+    if data is not None:
+        cmd = ccx_command("mem", "delta", "--as", "claude")
+        groups = data.setdefault("hooks", {}).setdefault("SessionStart", [])
+        mine = [h for g in groups for h in g.get("hooks", []) if "mem delta" in h.get("command", "")
+                and "ccx" in h.get("command", "")]
+        if not mine:
+            groups.append({"matcher": "startup|resume|clear|compact",
+                           "hooks": [{"type": "command", "command": cmd, "timeout": 15}]})
+            text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+            plan.do(f"add SessionStart hook to {sj}", lambda: _write(sj, text))
+        elif mine[0]["command"] != cmd:
+            mine[0]["command"] = cmd
+            text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+            plan.do(f"update SessionStart hook command in {sj}", lambda: _write(sj, text))
+
+    # Codex: config.toml inline [[hooks.SessionStart]] in a marked block
+    ct = codex_home() / "config.toml"
+    old = ct.read_text(encoding="utf-8") if ct.exists() else ""
+    cmd = ccx_command("mem", "delta", "--as", "codex")
+    block = "\n".join([
+        TOML_BEGIN,
+        "[[hooks.SessionStart]]",
+        'matcher = "startup|resume|clear|compact"',
+        "[[hooks.SessionStart.hooks]]",
+        'type = "command"',
+        f"command = '{cmd}'",
+        'statusMessage = "ccx: shared memory delta"',
+        "timeout = 15",
+        TOML_END,
+    ])
+    pat = re.compile(re.escape(TOML_BEGIN) + r".*?" + re.escape(TOML_END), re.S)
+    new = pat.sub(lambda _: block, old) if pat.search(old) else old.rstrip() + "\n\n" + block + "\n"
+    if new != old:
+        try:
+            tomllib.loads(new)
+        except tomllib.TOMLDecodeError as e:
+            plan.warnings.append(f"would make {ct} invalid TOML ({e}); Codex hook NOT added")
+            return
+        plan.do(f"add SessionStart hook block to {ct} (trust it once via /hooks in Codex)",
+                lambda: _write(ct, new))
+
+
+# ------------------------------------------------------------ skills
+def _is_link(path: Path) -> bool:
+    """Symlink, or (Windows) a directory junction. Python 3.11 has no Path.is_junction, so the
+    reparse-point attribute is checked directly there."""
+    if path.is_symlink():
+        return True
+    if os.name != "nt":
+        return False
+    try:
+        import stat
+        return bool(os.lstat(path).st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+    except (OSError, AttributeError):
+        return False
+
+
+def _norm(path: Path) -> str:
+    return os.path.normcase(os.path.abspath(str(path)))
+
+
+def _target(link: Path) -> Path:
+    """Where a symlink / junction points, one step (not the whole chain)."""
+    try:
+        t = os.readlink(link)
+    except OSError:
+        return Path()
+    t = t[4:] if t.startswith("\\\\?\\") else t           # Windows junctions read back as \\?\D:\...
+    return (link.parent / t) if not os.path.isabs(t) else Path(t)
+
+
+def _unlink(link: Path) -> None:
+    os.rmdir(link) if os.name == "nt" else link.unlink()
+
+
+def _link(src: Path, dst: Path) -> None:
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if os.name == "nt":
+        import _winapi
+        _winapi.CreateJunction(str(src), str(dst))
+    else:
+        os.symlink(src, dst, target_is_directory=True)
+
+
+def _skill_dirs(root: Path) -> dict[str, Path]:
+    out = {}
+    if not root.is_dir():
+        return out
+    for d in sorted(root.iterdir()):
+        if d.name.startswith(".") or not d.is_dir() or _is_link(d):
+            continue
+        if (d / "SKILL.md").exists():
+            out[d.name] = d
+    return out
+
+
+def sync_skills(p: Paths, plan: Plan) -> None:
+    claude_dir, codex_dir = claude_home() / "skills", codex_home() / "skills"
+    owners = [("bridge", data_dir("skills")), ("hub", p.skills),
+              ("codex", codex_dir), ("claude", claude_dir)]
+    real: dict[str, tuple[str, Path]] = {}
+    for owner, root in owners:
+        for name, d in _skill_dirs(root).items():
+            if name in real and real[name][1].resolve() != d.resolve():
+                plan.warnings.append(f"skill '{name}' exists in both {real[name][1]} and {d}; "
+                                     "kept the first, rename one to share both")
+                continue
+            real.setdefault(name, (owner, d))
+    lay = p.layout
+    inc, exc = set(lay.get("skills_include") or []), set(lay.get("skills_exclude") or [])
+    for name, (owner, src) in real.items():
+        if (inc and name not in inc) or name in exc:
+            continue                      # not linked: its description would cost tokens every session
+        for tool, tdir in (("claude", claude_dir), ("codex", codex_dir)):
+            if owner == tool:
+                continue
+            dst = tdir / name
+            if dst.exists() or _is_link(dst):
+                try:
+                    if dst.resolve() == src.resolve():
+                        continue
+                except OSError:
+                    pass
+                if not _is_link(dst):
+                    continue  # a real, different skill with the same name: never overwrite
+                plan.warnings.append(f"{dst} links elsewhere; left unchanged")
+                continue
+            plan.do(f"link skill {name}: {dst} -> {src}", lambda s=src, d=dst: _link(s, d))
+
+
+# ------------------------------------------------------------ MCP
+def load_registry(p: Paths) -> dict:
+    """-> {"servers": {name: {command, args, env, targets}}}, from either registry format."""
+    if not p.mcp_registry.exists():
+        return {"servers": {}}
+    raw = json.loads(p.mcp_registry.read_text(encoding="utf-8"))
+    if "mcpServers" in raw:                      # common {"mcpServers": {...}} format
+        return {"servers": {k: {**v, "targets": v.get("targets", ["claude", "codex"])}
+                            for k, v in raw["mcpServers"].items()}, "_format": "mcpServers"}
+    raw.setdefault("servers", {})
+    raw["_format"] = "ccx"
+    return raw
+
+
+def import_codex_mcp(p: Paths, plan: Plan) -> None:
+    ct = codex_home() / "config.toml"
+    if not ct.exists():
+        plan.warnings.append(f"no {ct}; nothing to import")
+        return
+    conf = tomllib.loads(ct.read_text(encoding="utf-8"))
+    reg = load_registry(p)
+    added = []
+    for name, s in (conf.get("mcp_servers") or {}).items():
+        if name in HOST_SPECIFIC_MCP or name in reg["servers"] or s.get("enabled") is False:
+            continue
+        if "command" not in s:
+            continue  # URL servers: add manually with their auth settings
+        reg["servers"][name] = {"command": s["command"], "args": s.get("args", []),
+                                "env": s.get("env", {}), "targets": ["claude", "codex"]}
+        added.append(name)
+    if added:
+        reg.pop("_format", None)
+        text = json.dumps(reg, ensure_ascii=False, indent=2) + "\n"
+        plan.do(f"import MCP servers from Codex into {p.mcp_registry}: {', '.join(added)}",
+                lambda: _write(p.mcp_registry, text))
+
+
+def _claude_has(name: str) -> bool:
+    r = subprocess.run([*bin_argv("claude"), "mcp", "get", name], capture_output=True, text=True,
+                       stdin=subprocess.DEVNULL)
+    return r.returncode == 0
+
+
+def sync_mcp(p: Paths, plan: Plan) -> None:
+    reg = load_registry(p)
+    ct = codex_home() / "config.toml"
+    codex_conf = tomllib.loads(ct.read_text(encoding="utf-8")) if ct.exists() else {}
+    have_codex = set((codex_conf.get("mcp_servers") or {}).keys())
+    for name, s in reg.get("servers", {}).items():
+        targets = s.get("targets", ["claude", "codex"])
+        if "codex" in targets and name not in have_codex:
+            if find_bin("codex"):
+                argv = [*bin_argv("codex"), "mcp", "add", name]
+                for k, v in (s.get("env") or {}).items():
+                    argv += ["--env", f"{k}={v}"]
+                argv += ["--", s["command"], *s.get("args", [])]
+                plan.do(f"codex mcp add {name}", lambda a=argv: subprocess.run(a, check=True, stdin=subprocess.DEVNULL,
+                                                           capture_output=True))
+            else:
+                plan.warnings.append(f"codex CLI not found; MCP '{name}' not added to Codex")
+        if "claude" in targets:
+            if not find_bin("claude"):
+                plan.warnings.append(f"claude CLI not found; MCP '{name}' not added to Claude")
+                continue
+            if _claude_has(name):
+                continue
+            cfg = {"type": "stdio", "command": s["command"], "args": s.get("args", []),
+                   "env": s.get("env", {})}
+            argv = [*bin_argv("claude"), "mcp", "add-json", "-s", "user", name, json.dumps(cfg)]
+            plan.do(f"claude mcp add-json -s user {name}", lambda a=argv: subprocess.run(a, check=True, stdin=subprocess.DEVNULL,
+                                                           capture_output=True))
+
+
+def run_external_sync(p: Paths, plan: Plan) -> None:
+    cmd = p.layout["external_sync"]
+    def go():
+        r = subprocess.run(cmd, shell=True, cwd=str(p.hub), capture_output=True, text=True,
+                           stdin=subprocess.DEVNULL, timeout=300)
+        if r.returncode != 0:
+            raise RuntimeError(f"external sync failed ({r.returncode}): {(r.stderr or r.stdout)[-400:]}")
+    plan.do(f"run the hub's own sync for skills/MCP: {cmd}", go)
+
+
+def sync_all(p: Paths, apply: bool, parts: list[str]) -> Plan:
+    plan = Plan(apply=apply)
+    if apply:
+        p.state.mkdir(parents=True, exist_ok=True)
+    external = bool(p.layout.get("external_sync"))
+    if external and ("skills" in parts or "mcp" in parts):
+        run_external_sync(p, plan)          # it owns skill links + MCP registration; don't duplicate
+        parts = [x for x in parts if x not in ("skills", "mcp")]
+    if "skills" in parts:
+        sync_skills(p, plan)
+    if "memory" in parts:
+        sync_memory(p, plan)
+    if "hooks" in parts:
+        sync_hooks(p, plan)
+    if "mcp" in parts:
+        import_codex_mcp(p, plan)
+        if apply:
+            sync_mcp(p, plan)
+        else:
+            plan.actions.append("[dry-run] register registry servers missing from claude/codex")
+    return plan
+
+
+# ------------------------------------------------------------ uninstall
+def uninstall(p: Paths, apply: bool) -> Plan:
+    """Remove everything ccx added to the tools and the hub's skill links (restoring what `skills install
+    --replace` backed up). Hub data (memory, ledger, the backups' history) is left alone."""
+    plan = Plan(apply=apply)
+    sj = claude_home() / "settings.json"
+    if sj.exists():
+        try:
+            data = json.loads(sj.read_text(encoding="utf-8") or "{}")
+        except json.JSONDecodeError:
+            data = None
+        groups = (data or {}).get("hooks", {}).get("SessionStart", [])
+        keep = [g for g in groups if not any("ccx" in h.get("command", "") and "mem delta" in h.get("command", "")
+                                             for h in g.get("hooks", []))]
+        if data is not None and len(keep) != len(groups):
+            data["hooks"]["SessionStart"] = keep
+            if not keep:
+                del data["hooks"]["SessionStart"]
+            if not data["hooks"]:
+                del data["hooks"]
+            text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+            plan.do(f"remove ccx SessionStart hook from {sj}", lambda: _write(sj, text))
+    ct = codex_home() / "config.toml"
+    if ct.exists():
+        old = ct.read_text(encoding="utf-8")
+        pat = re.compile(r"\n*" + re.escape(TOML_BEGIN) + r".*?" + re.escape(TOML_END) + r"\n?", re.S)
+        new = pat.sub("\n", old)
+        if new != old:
+            tomllib.loads(new)
+            plan.do(f"remove ccx hook block from {ct}", lambda: _write(ct, new))
+    for f in (claude_home() / "CLAUDE.md", codex_home() / "AGENTS.md"):
+        if f.exists():
+            old = f.read_text(encoding="utf-8")
+            b, e = BEGIN.format(id="memory"), END.format(id="memory")
+            new = re.sub(r"\n*" + re.escape(b) + r".*?" + re.escape(e) + r"\n?", "\n", old, flags=re.S)
+            if new != old:
+                plan.do(f"remove ccx memory block from {f}", lambda f=f, new=new: _write(f, new))
+    bridge = data_dir("skills").resolve()
+    # hub links to the bundled skills come from `ccx skills install`; put back what --replace backed up
+    gone = set()                          # hub skill paths that will no longer exist
+    if p.skills.is_dir():
+        for link in sorted(p.skills.iterdir()):
+            if _is_link(link) and _norm(_target(link).parent) == _norm(bridge):
+                backups = sorted((p.state / "skill-backups").glob(f"{link.name}-*"))                     if (p.state / "skill-backups").is_dir() else []
+                if backups:
+                    plan.do(f"remove skill link {link}, restore {backups[-1]}",
+                            lambda link=link, b=backups[-1]: (_unlink(link), shutil.move(str(b), str(link))))
+                else:
+                    gone.add(_norm(link))
+                    plan.do(f"remove skill link {link}", lambda link=link: _unlink(link))
+    for d in (claude_home() / "skills", codex_home() / "skills"):
+        if not d.is_dir():
+            continue
+        for link in d.iterdir():
+            # only links straight to ccx's bundled skills, or to a hub skill removed above; links that a
+            # hub sync made to the hub's own (restored) folders stay
+            if _is_link(link) and (_norm(_target(link).parent) == _norm(bridge) or _norm(_target(link)) in gone):
+                plan.do(f"remove skill link {link}", lambda link=link: _unlink(link))
+    if not plan.actions:
+        plan.actions.append("nothing to remove")
+    return plan

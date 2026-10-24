@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "claude-codex-bridge"
+version = "0.4.0"
+description = "Claude Code <-> Codex (and Gemini CLI) as lead/sub-agents: routing, shared skills/MCP/incremental memory, resumable runs, token accounting"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = []            # stdlib only
+
+[project.scripts]
+ccx = "ccx.cli:main"
+
+[tool.setuptools]
+# config/, skills/ and hub-seed/ stay at the top of the repo (the hub links to skills/ in a clone) and ship
+# inside the package as data: ccx/_config, ccx/_skills, ccx/_hubseed (see ccx.config.data_dir).
+packages = ["ccx", "ccx.commands", "ccx._config", "ccx._skills", "ccx._hubseed"]
+package-dir = { "ccx" = "ccx", "ccx.commands" = "ccx/commands", "ccx._config" = "config", "ccx._skills" = "skills", "ccx._hubseed" = "hub-seed" }
+
+[tool.setuptools.package-data]
+"ccx._config" = ["*.toml", "*.json"]
+"ccx._skills" = ["**/*.md", "**/*.py", "**/*.toml", "**/*.json"]
+"ccx._hubseed" = ["**/*.md", "**/*.json"]
+
+# Install:   pipx install git+https://github.com/<owner>/claude-codex-bridge   (or from a clone: pipx install .)
+# Develop:   python -m pip install -e <path-to-clone>   — a clone keeps using config/ and skills/ in place

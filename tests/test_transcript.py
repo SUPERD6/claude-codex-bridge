@@ -1,0 +1,151 @@
+"""E8: a handoff assembled by code from the outgoing lead's session file (fake transcripts, no real CLIs)."""
+import json
+import re
+import sys
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from ccx import transcript  # noqa: E402
+from test_ccx import Env  # noqa: E402
+
+SECRET = "sk-" + "a1B2" * 8
+
+
+def _w(path: Path, events: list[dict]) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(json.dumps(e) + "\n" for e in events), encoding="utf-8")
+    return path
+
+
+def codex_events(cwd: str, sid: str = "019a-main", originator: str = "codex_desktop") -> list[dict]:
+    item = lambda it: {"type": "event_msg", "payload": {"type": "item_completed", "item": it}}  # noqa: E731
+    return [
+        {"type": "session_meta", "payload": {"id": sid, "cwd": cwd, "originator": originator}},
+        {"type": "response_item", "payload": {"type": "message", "role": "user",
+                                              "content": [{"text": "# AGENTS.md instructions for x"}]}},
+        item({"type": "UserMessage", "content": [{"text": "Add a --json flag to the report command."}]}),
+        item({"type": "CommandExecution", "command": ["bash", "-lc", "pytest -q"], "exit_code": 1,
+              "aggregated_output": "1 failed: test_report_json"}),
+        item({"type": "FileChange", "changes": {"ccx/report.py": {}, "tests/test_report.py": {}}}),
+        item({"type": "UserMessage", "content": [{"text": f"use my key {SECRET} if needed"}]}),
+        item({"type": "AgentMessage", "phase": "final_answer",
+              "content": [{"text": "Flag added; test_report_json still fails on the date format."}]}),
+    ]
+
+
+def claude_events() -> list[dict]:
+    return [
+        {"type": "user", "message": {"content": "<command-name>/clear</command-name>"}},
+        {"type": "user", "isCompactSummary": True, "message": {"content": "This session is being continued..."}},
+        {"type": "user", "message": {"content": '<artifact-view-context a="1">{"mode":"edit"}</artifact-view-context>'}},
+        {"type": "user", "message": {"content": "Rename the setup wizard's steps."}},
+        {"type": "assistant", "message": {"content": [
+            {"type": "tool_use", "id": "t1", "name": "TodoWrite",
+             "input": {"todos": [{"content": "rename steps", "status": "completed"},
+                                 {"content": "update docs", "status": "in_progress"}]}},
+            {"type": "tool_use", "id": "t2", "name": "Edit", "input": {"file_path": "ccx/setup.py"}},
+            {"type": "tool_use", "id": "t3", "name": "Bash", "input": {"command": "python -m unittest"}}]}},
+        {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": "t3", "is_error": True,
+                                                  "content": "FAILED (errors=2)"}]}},
+        {"type": "assistant", "isSidechain": True, "message": {"content": [{"type": "text", "text": "sub-agent"}]}},
+        {"type": "assistant", "message": {"content": [{"type": "text", "text": "Steps renamed; docs next."}]}},
+    ]
+
+
+class TestRead(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        self.t = Path(tempfile.mkdtemp())
+
+    def test_codex(self):
+        d = transcript.read_codex(_w(self.t / "r.jsonl", codex_events("/w")))
+        self.assertEqual(d["users"][0], "Add a --json flag to the report command.")   # injected AGENTS.md skipped
+        self.assertEqual(d["files"], ["ccx/report.py", "tests/test_report.py"])
+        self.assertEqual(d["failed"][0]["cmd"], "pytest -q")
+        self.assertIn("date format", d["final"])
+
+    def test_codex_old_format(self):
+        args = {"plan": [{"step": "write parser", "status": "completed"}, {"step": "tests", "status": "pending"}]}
+        ev = [{"type": "event_msg", "payload": {"type": "user_message", "message": "Build the parser."}},
+              {"type": "response_item", "payload": {"type": "function_call", "name": "update_plan",
+                                                    "arguments": json.dumps(args)}},
+              {"type": "response_item", "payload": {"type": "function_call", "name": "apply_patch",
+                                                    "arguments": json.dumps({"input": "*** Add File: p.py\n"})}}]
+        d = transcript.read_codex(_w(self.t / "old.jsonl", ev))
+        self.assertEqual([s["status"] for s in d["plan"]], ["completed", "pending"])
+        self.assertEqual(d["files"], ["p.py"])
+        self.assertEqual(d["users"], ["Build the parser."])
+
+    def test_claude(self):
+        d = transcript.read_claude(_w(self.t / "s.jsonl", claude_events()))
+        self.assertEqual(d["users"], ["Rename the setup wizard's steps."])          # /clear skipped
+        self.assertEqual(d["plan"][1], {"step": "update docs", "status": "in_progress"})
+        self.assertEqual(d["files"], ["ccx/setup.py"])
+        self.assertEqual(d["failed"][0]["cmd"], "python -m unittest")
+        self.assertEqual(d["final"], "Steps renamed; docs next.")                    # sidechain ignored
+
+    def test_build_redacts_and_caps(self):
+        f = _w(self.t / "r.jsonl", codex_events("/w"))
+        text = transcript.build(transcript.read_codex(f), self.t, f, unfinished="task-1: 2/4 steps")
+        self.assertNotIn(SECRET, text)
+        self.assertIn("[redacted]", text)
+        for h in ("## Goal", "## Plan", "## Where it stopped", "## Files it changed", "## Unfinished tasks",
+                  "## Full transcript", "Check before trusting"):
+            self.assertIn(h, text)
+        d = transcript.read_codex(f)
+        d["users"] = ["x" * 5000] + ["y" * 900] * 6
+        d["final"] = "z" * 5000
+        self.assertLessEqual(len(transcript.build(d, self.t, f, max_chars=3000)), 3000)
+
+    def test_redact(self):
+        for s in ("ghp_" + "x" * 30, "Bearer " + "q" * 30, "api_key=hunter2hunter2", "AKIA" + "A" * 16):
+            self.assertEqual(transcript.redact(f"a {s} b").count("[redacted]"), 1, s)
+        self.assertEqual(transcript.redact("plain words"), "plain words")
+
+
+class TestCommand(Env):
+    def test_codex_from_transcript(self):
+        here = str(self.work.resolve())
+        _w(self.home_codex / "sessions" / "2026" / "rollout-1-sub.jsonl",
+           codex_events(here, "019a-sub", originator="codex_exec"))                 # a headless sub-run: skipped
+        _w(self.home_codex / "sessions" / "2026" / "rollout-0-main.jsonl", codex_events(here))
+        r = self.ccx("handoff", "--from-transcript", "codex", "--to", "claude", "also check the docs")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        out = json.loads(r.stdout)
+        self.assertIn("rollout-0-main", out["from_transcript"])
+        text = (self.work / ".ccx" / "handoff.md").read_text(encoding="utf-8")
+        self.assertIn("Add a --json flag", text)
+        self.assertIn("## Added by hand\nalso check the docs", text)
+        self.assertNotIn(SECRET, text)
+
+    def test_unknown_format_falls_back_to_a_model(self):
+        slug = re.sub(r"[^A-Za-z0-9]", "-", str(self.work.resolve()))
+        _w(self.home_claude / "projects" / slug / "new.jsonl", [{"kind": "turn", "who": "person", "said": "hi"}])
+        out_file = self.work / ".ccx" / "handoff-by-model.md"
+        env = {"FAKE_WRITE": f"{out_file}=## Goal\nparse the logs (from the model) {SECRET}"}
+        r = self.ccx("handoff", "--from-transcript", "claude", "--to", "codex", env=env)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        text = (self.work / ".ccx" / "handoff.md").read_text(encoding="utf-8")
+        self.assertIn("model fallback", text)
+        self.assertIn("parse the logs (from the model)", text)
+        self.assertNotIn(SECRET, text)
+        self.assertFalse(out_file.exists())                                   # the draft is cleaned up
+        self.assertTrue(any("could not read" in c["prompt"] for c in self.calls()))
+        r = self.ccx("handoff", "--from-transcript", "claude", "--to", "codex", "--no-model")
+        self.assertIn("no user message found", (self.work / ".ccx" / "handoff.md").read_text(encoding="utf-8"))
+
+    def test_claude_from_transcript_and_missing(self):
+        slug = re.sub(r"[^A-Za-z0-9]", "-", str(self.work.resolve()))
+        _w(self.home_claude / "projects" / slug / "abc.jsonl", claude_events())
+        r = self.ccx("handoff", "--from-transcript", "claude", "--to", "codex")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("update docs (in_progress)", (self.work / ".ccx" / "handoff.md").read_text(encoding="utf-8"))
+        r = self.ccx("handoff", "--from-transcript", "codex", "--to", "claude")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("no codex session file", r.stderr + r.stdout)
+
+
+if __name__ == "__main__":
+    unittest.main()

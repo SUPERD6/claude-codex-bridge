@@ -1,0 +1,4 @@
+{
+  "_comment": "One MCP registry for both tools. `ccx sync` imports portable servers from Codex's config.toml (skipping desktop-only ones like node_repl) and registers missing ones into Claude Code and Codex via their own CLIs. targets: which tools get the server.",
+  "servers": {}
+}

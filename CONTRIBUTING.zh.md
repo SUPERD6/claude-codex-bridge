@@ -1,0 +1,46 @@
+# 参与贡献
+
+[English](CONTRIBUTING.md) · 中文
+
+谢谢你来帮忙。ccx 刻意保持小巧：Python 3.11+，只用标准库，凡是关于外部命令行工具的说法都对照过那个工具本身。请继续保持。
+
+## 开始之前
+
+- 报 bug、提想法：开一个 issue（有模板）。安全问题请看 [SECURITY.zh.md](SECURITY.zh.md)，不要开公开 issue。
+- 改动比较大时，先开 issue 商量好怎么做，再动手写。
+- 现在做到哪了、下一步是什么：[docs/STATUS.zh.md](docs/STATUS.zh.md)。设计和理由：[docs/DESIGN.zh.md](docs/DESIGN.zh.md)、[docs/DECISIONS.md](docs/DECISIONS.md)。
+
+## 准备环境
+
+```bash
+git clone https://github.com/SUPERD6/claude-codex-bridge
+cd claude-codex-bridge
+python -m pip install -e . pytest
+python -m pytest -q tests            # 每次提交前都必须全部通过
+```
+
+测试从不调用真正的智能体：`tests/fakes/` 里有替身版的 `codex`、`claude` 和 `gemini` 命令行，输出的事件格式和真的一样。CI 在 Linux、Windows、macOS × Python 3.11–3.13 上跑这些测试，还会打出 wheel、装好后运行装好的 `ccx`（`tests/smoke_installed.py`）。
+
+## 规则
+
+- **每个改动都带测试。** 修 bug 要附一个没有这个修复就会失败的测试。
+- **仓库里不放个人内容**：不放名字、本机路径或数据。个人的东西放在用户自己的 hub 里。
+- **文档两种语言**：`x.md`（英文）和 `x.zh.md`（中文），互相链接。更新 `CHANGELOG.md`；真正的决定写进 `docs/DECISIONS.md`。
+- **核对外部事实**：依赖的参数、事件字段或价格，都要用 `--help` 或官方文档确认，并写明核对的版本（`ccx/runners.py` 里的 `TESTED_VERSIONS`，README 的“已核对的外部事实”）。
+- **不碰账号凭据**，也不改工具配置里 ccx 标记块以外的地方。
+- 小步提交、说明清楚；行为变化写进 CHANGELOG。
+
+## 为另一个智能体命令行加适配器
+
+Gemini CLI 就是现成的例子，照着做：
+
+1. `ccx/runners.py`：写 `<agent>_invocation(...)`（后台运行、续接和权限参数）和 `parse_<agent>(stdout, stderr, rc, last_file)`（状态、JSON 结果、按 `usage_dict` 四类整理的用量、会话 ID、失败类型）。把两者登记到 `BUILDERS` 和 `PARSERS`，核对过的版本写进 `TESTED_VERSIONS`。
+2. `ccx/config.py`：把它加进 `DELEGATE_AGENTS`。
+3. `config/tiers.toml`：每一档的模型和强度，以及 `[permissions.<agent>]` 的 `read` 和 `write`。
+4. `skills/task-routing/data/priors.toml`：档位（模型、强度、能力）和价格，并写明价格的出处。
+5. `tests/fakes/fake_<agent>.py`：一个输出和真命令行相同事件的替身，再仿照 `tests/test_adapters.py` 里的 `TestGemini` 写测试。
+6. 对真的命令行跑一次，在 PR 里写清楚（版本、跑了什么、得到了什么）。
+
+## 提交 PR
+
+写明改了什么、为什么改、怎么测的，以及没能测到的部分——PR 模板问的就是这些。提交贡献即表示你同意以 [MIT 许可](LICENSE) 发布你的工作，并遵守[行为准则](CODE_OF_CONDUCT.md)。

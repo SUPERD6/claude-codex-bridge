@@ -1,0 +1,111 @@
+"""Stand-in for `codex exec` used by tests. Mimics codex-cli 0.163 JSONL events.
+
+FAKE_STATUS: done | blocked | blocked_then_done | policy_then_done | policy | auth | quota | hang
+FAKE_LOG:    file to append argv (json) for assertions
+"""
+import json
+import os
+import sys
+import time
+import uuid
+
+argv = sys.argv[1:]
+prompt = sys.stdin.read()
+if argv[:1] == ["--version"]:
+    print(os.environ.get("FAKE_CODEX_VERSION", "codex-cli 0.163.0 (fake)")); sys.exit(0)
+log = os.environ.get("FAKE_LOG")
+if log:
+    with open(log, "a", encoding="utf-8") as f:
+        f.write(json.dumps({"agent": "codex", "argv": argv, "prompt": prompt,
+                            "depth": os.environ.get("CCX_DEPTH")}) + "\n")
+
+if argv[:2] == ["login", "status"]:
+    print("Logged in using ChatGPT"); sys.exit(0)
+if argv[:1] == ["agents"]:
+    print("thread-123  running  my desktop session"); sys.exit(0)
+if argv[:1] in (["archive"], ["unarchive"]):
+    print(argv[0] + "d " + argv[1]); sys.exit(0)
+if argv[:1] == ["queue"]:
+    print("queued for " + argv[argv.index("--thread") + 1]); sys.exit(0)
+
+mode = os.environ.get("FAKE_STATUS_CODEX") or os.environ.get("FAKE_STATUS", "done")
+resuming = argv[:2] == ["exec", "resume"]
+tid = argv[2] if resuming else str(uuid.uuid4())
+out_file = argv[argv.index("-o") + 1] if "-o" in argv else None
+
+print(json.dumps({"type": "thread.started", "thread_id": tid}), flush=True)
+print(json.dumps({"type": "turn.started"}), flush=True)
+model = argv[argv.index("-m") + 1] if "-m" in argv else ""
+if model and model in os.environ.get("FAKE_UNSUPPORTED", "").split(","):
+    print(json.dumps({"type": "error", "message": json.dumps({"type": "error", "status": 400, "error": {
+        "type": "invalid_request_error",
+        "message": f"The '{model}' model is not supported when using Codex with a ChatGPT account."}})}))
+    print(json.dumps({"type": "turn.failed", "error": {"message": "unsupported model"}}))
+    sys.exit(1)
+if mode == "quota":
+    print(json.dumps({"type": "error", "message": "429 Too Many Requests: usage limit reached, try again at 18:00"}))
+    print(json.dumps({"type": "turn.failed", "error": {"message": "usage limit reached"}}))
+    sys.exit(1)
+if os.environ.get("FAKE_BIG_CHILD") and os.environ.get("CODEX_HOME"):
+    # a runaway multi_agent child: lots of tokens straight away (for the spend watchdog)
+    d = os.path.join(os.environ["CODEX_HOME"], "sessions", "2026", "10", "24")
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, f"rollout-x-{tid}-big.jsonl"), "w", encoding="utf-8") as fh:
+        fh.write(json.dumps({"type": "session_meta", "payload": {"id": f"{tid}-big", "source": {
+            "subagent": {"thread_spawn": {"parent_thread_id": tid}}}}}) + "\n")
+        fh.write(json.dumps({"type": "event_msg", "timestamp": "2026-10-24T00:00:01Z", "payload": {
+            "type": "token_count", "info": {"total_token_usage": {"input_tokens": 50_000_000, "cached_input_tokens": 0,
+                                                                  "output_tokens": 1_000_000}}}}) + "\n")
+if mode == "hang":
+    time.sleep(30)
+if mode == "auth":
+    print(json.dumps({"type": "error", "message": "unexpected status 401 Unauthorized"}))
+    print(json.dumps({"type": "turn.failed", "error": {"message": "401 Unauthorized"}}))
+    sys.exit(1)
+
+for spec in filter(None, os.environ.get("FAKE_WRITE", "").split(";")):   # "path=content;path2=content"
+    path, _, content = spec.partition("=")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(content)
+status = "done"
+if mode == "blocked" or (mode == "blocked_then_done" and not resuming):
+    status = "blocked"
+if mode == "policy" or (mode == "policy_then_done" and not resuming):   # as codex-cli 0.164 on Windows
+    status = "blocked"
+    print('ERROR codex_core::tools::router: error=exec_command failed: CreateProcess { message: "Rejected('
+          '\\"`powershell.exe -Command \'Get-Content README.md\'` rejected: blocked by policy\\")" }',
+          file=sys.stderr)
+res = {"status": status, "summary": f"fake codex {status}", "files_changed": ["a.py"] if status == "done" else [],
+       "commands_run": ["pytest -q"], "verification": "pytest -q passed" if status == "done" else "not-run",
+       "open_questions": [] if status == "done" else ["need X"], "next_step": ""}
+print(json.dumps({"type": "item.completed", "item": {"id": "i1", "type": "agent_message", "text": json.dumps(res)}}))
+usage = {"input_tokens": 1200, "cached_input_tokens": 800, "output_tokens": 150}
+if log:   # like codex-cli 0.164: turn.completed after `exec resume` carries the session's running total
+    tf = os.path.join(os.path.dirname(log), f"codex-total-{tid}.json")
+    if os.path.exists(tf):
+        with open(tf, encoding="utf-8") as fh:
+            before = json.load(fh)
+        usage = {k: before[k] + v for k, v in usage.items()}
+    with open(tf, "w", encoding="utf-8") as fh:
+        json.dump(usage, fh)
+if os.environ.get("FAKE_CHILD") and os.environ.get("CODEX_HOME"):
+    # like codex-cli 0.164 multi_agent: the child is its own session (source.subagent.thread_spawn.parent_thread_id)
+    # and its tokens are NOT in the parent's turn.completed. Each call adds 500 in / 100 cached / 20 out to it.
+    d = os.path.join(os.environ["CODEX_HOME"], "sessions", "2026", "10", "24")
+    os.makedirs(d, exist_ok=True)
+    cf = os.path.join(d, f"rollout-x-{tid}-child.jsonl")
+    n = 1
+    if os.path.exists(cf):
+        with open(cf, encoding="utf-8") as fh:
+            n = sum(1 for line in fh if '"token_count"' in line) + 1
+    meta = {"type": "session_meta", "payload": {"id": f"{tid}-child", "originator": "codex_exec",
+            "source": {"subagent": {"thread_spawn": {"parent_thread_id": tid}}}}}
+    rows = [meta] + [{"type": "event_msg", "timestamp": "2026-10-24T00:00:0%dZ" % i, "payload": {
+        "type": "token_count", "info": {"total_token_usage": {"input_tokens": 500 * i, "cached_input_tokens": 100 * i,
+                                                              "output_tokens": 20 * i}}}} for i in range(1, n + 1)]
+    with open(cf, "w", encoding="utf-8") as fh:
+        fh.write("\n".join(json.dumps(r) for r in rows) + "\n")
+print(json.dumps({"type": "turn.completed", "usage": usage}))
+if out_file:
+    with open(out_file, "w", encoding="utf-8") as f:
+        f.write(json.dumps(res))

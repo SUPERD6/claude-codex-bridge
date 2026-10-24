@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.ccx/runs/
+.ccx-worktrees/
+*.ccx-backup-*
+
+# build leftovers / personal launchers
+*.egg-info/
+*.local.cmd
+*.local.sh
+
+# this repo's own project layer (handoffs, journal) is personal
+.ccx/
+
+# website build output (scripts/build_site.py)
+_site/

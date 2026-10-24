@@ -1,0 +1,150 @@
+"""`ccx setup`: a guided first run — check, hub, init, sync (preview, then apply on a yes), doctor, selftest.
+
+Every change is previewed and asked about first. Not on a terminal and no --yes: it only shows the plan.
+Goal: a new user delegates for the first time within five minutes."""
+from __future__ import annotations
+
+import contextlib
+import io
+import json
+import sys
+from pathlib import Path
+
+from .config import hub_dir, paths, user_config_file
+from .runners import bin_argv, find_bin
+
+LOGIN = {"codex": "codex login", "claude": "claude  (then /login)", "gemini": "gemini  (then sign in)"}
+
+
+class Wizard:
+    def __init__(self, yes: bool, interactive: bool):
+        self.yes, self.interactive = yes, interactive
+
+    def say(self, text: str = "") -> None:
+        print(text, flush=True)
+
+    def step(self, n: int, title: str) -> None:
+        self.say(f"\n[{n}/6] {title}")
+
+    def ask(self, question: str, default: bool = False) -> bool:
+        if self.yes:
+            self.say(f"  {question} yes (--yes)")
+            return True
+        if not self.interactive:
+            self.say(f"  {question} (skipped: not on a terminal; run `ccx setup` yourself, or add --yes)")
+            return False
+        hint = "Y/n" if default else "y/N"
+        try:
+            ans = input(f"  {question} [{hint}] ").strip().lower()
+        except EOFError:                     # input ended (e.g. Windows NUL looks like a terminal)
+            self.interactive = False
+            self.say("\n  (no answer: input ended) — treated as no")
+            return False
+        return default if not ans else ans in ("y", "yes", "是", "好")
+
+    def text(self, question: str, default: str) -> str:
+        if self.yes or not self.interactive:
+            return default
+        try:
+            ans = input(f"  {question} [{default}] ").strip()
+        except EOFError:
+            self.interactive = False
+            self.say("")
+            return default
+        return ans or default
+
+
+def _login_ok(agent: str) -> bool | None:
+    import subprocess
+    cmd = {"codex": ["login", "status"], "claude": ["auth", "status"]}.get(agent)
+    if not cmd:
+        return None
+    try:
+        r = subprocess.run([*bin_argv(agent), *cmd], capture_output=True, text=True, timeout=30,
+                           stdin=subprocess.DEVNULL, encoding="utf-8", errors="replace")
+    except (OSError, subprocess.SubprocessError):
+        return None
+    out = (r.stdout or "") + (r.stderr or "")
+    try:
+        return bool(json.loads(r.stdout).get("loggedIn"))
+    except (json.JSONDecodeError, AttributeError):
+        return r.returncode == 0 and "not logged in" not in out.lower()
+
+
+def run(yes: bool = False, hub: str | None = None) -> int:
+    from .commands.install import init_hub
+    from .sync import sync_all
+    w = Wizard(yes, sys.stdin.isatty())
+    w.say("ccx setup — every change is shown first and only made after you say yes.")
+
+    w.step(1, "Check the tools")
+    agents = [a for a in ("codex", "claude", "gemini") if find_bin(a)]
+    for a in ("codex", "claude", "gemini"):
+        if a not in agents:
+            w.say(f"  {a:7s} not installed" + ("" if a == "gemini" else "  ← needed for that direction"))
+            continue
+        ok = _login_ok(a)
+        w.say(f"  {a:7s} installed, " + {True: "logged in", False: f"NOT logged in → run: {LOGIN[a]}",
+                                         None: "login unknown"}[ok])
+    if not {"codex", "claude"} & set(agents):
+        w.say("  Neither Codex nor Claude Code is installed. Install one or both, then run `ccx setup` again.")
+        return 2
+
+    w.step(2, "Your hub (personal folder for memory, skills, MCP and the ledger)")
+    already = user_config_file().exists() and not hub
+    where = Path(hub or (str(hub_dir()) if already else w.text("Where should it live?", str(hub_dir())))).expanduser()
+    w.say(f"  hub: {where}" + ("  (already set; `ccx setup --hub <path>` to change)" if already else ""))
+    if not already:
+        w.say("  Already have a shared AGENTS.md or your own sync script? Stop here and use "
+              "`ccx init --hub … --snapshot … --external-sync …` instead.")
+
+    w.step(3, "Create the hub skeleton (only adds files, never changes existing ones)")
+    if not w.ask(f"Create/update ccx files in {where}?", default=True):
+        w.say("  Stopped. Nothing was changed.")
+        return 0
+    with contextlib.redirect_stdout(io.StringIO()):
+        info = init_hub(str(where))
+    w.say(f"  done: hub {info['hub']}")
+
+    w.step(4, "Wire both tools (session-start hook, skills, MCP)")
+    p = paths()
+    plan = sync_all(p, apply=False, parts=["skills", "memory", "hooks", "mcp"])
+    if not plan.actions:
+        w.say("  nothing to change — already wired")
+    for x in plan.actions:
+        w.say("  - " + x.replace("[dry-run] ", ""))
+    for x in plan.warnings:
+        w.say("  ! " + x)
+    applied = False
+    if plan.actions and w.ask("Make these changes? (each changed file is backed up first)"):
+        with contextlib.redirect_stdout(io.StringIO()):
+            sync_all(p, apply=True, parts=["skills", "memory", "hooks", "mcp"])
+        applied = True
+        w.say("  done")
+    elif plan.actions:
+        w.say("  skipped — run `ccx sync --apply` later (`ccx uninstall` removes it again)")
+
+    w.step(5, "Health check")
+    from .doctor import doctor
+    doctor(p)
+    if applied and "codex" in agents:
+        w.say("  Codex: open Codex once and trust the hook in /hooks (\"ccx: shared memory delta\").")
+
+    w.step(6, "Try it")
+    if w.ask("Run one tiny real task per installed agent (cheapest model, a few cents at most)?"):
+        from types import SimpleNamespace
+        from .commands.install import cmd_selftest
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            cmd_selftest(SimpleNamespace(agents=None, provider=None))
+        try:
+            for r in json.loads(buf.getvalue())["selftest"]:
+                w.say(f"  {r['agent']:7s} {'ok' if r['ok'] else 'FAILED'}  {r.get('model') or r.get('error', '')}")
+        except (json.JSONDecodeError, KeyError):
+            w.say(buf.getvalue())
+    other = "codex" if "codex" in agents else "claude"
+    w.say("\nYour first delegation (from inside Claude Code or Codex, or a terminal):")
+    w.say(f'  ccx run --from {"claude" if other == "codex" else "codex"} --to {other} --mode read '
+          '"Read README.md and summarise it in three lines"')
+    w.say("Then check it and record your verdict: ccx verify <run_id> --ok 1")
+    return 0

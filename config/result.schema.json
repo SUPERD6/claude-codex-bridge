@@ -1,0 +1,58 @@
+{
+  "title": "ccx sub-agent result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "status",
+    "summary",
+    "files_changed",
+    "commands_run",
+    "verification",
+    "open_questions",
+    "next_step"
+  ],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": [
+        "done",
+        "partial",
+        "blocked",
+        "failed"
+      ],
+      "description": "done=fully finished; partial=some parts left; blocked=needs info/permission; failed=could not do it"
+    },
+    "summary": {
+      "type": "string",
+      "description": "What was done and the outcome, at most ~120 words. Facts only."
+    },
+    "files_changed": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Paths created/modified/deleted, relative to the workspace."
+    },
+    "commands_run": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Important commands only (tests, builds), not every ls."
+    },
+    "verification": {
+      "type": "string",
+      "description": "How the result was checked and what the check proves. 'not-run' if nothing was checked."
+    },
+    "open_questions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "next_step": {
+      "type": "string",
+      "description": "Single most useful next action for the orchestrator, or empty string."
+    }
+  }
+}

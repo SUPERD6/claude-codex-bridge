@@ -1,0 +1,485 @@
+"""Delegating work: run, ask, resume, batch, send, route, verify, A/B, task, plan."""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+import time
+import uuid
+
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+from .. import learn, ledger, router, usage
+from ..config import AGENTS, DELEGATE_AGENTS, PROVIDER_AGENTS, TIER_ORDER, ccx_argv, load_config, paths
+from ..delegate import Request, compact, run, verify
+from ..runners import find_bin
+from .common import (_brief, _caller, _out, _routing_args, _spec_from_args, _target, find_continuable,
+    apply_mode, find_seat, installed_agents, lead_session_id, parse_quota, provider_agents, resolve)
+from .install import tier_spec_safe
+
+
+def cmd_ab(a) -> int:
+    """Close an A/B self-run sample: sum the lead's own usage since the sample opened."""
+    p = paths()
+    f = p.state / "ab" / f"{a.ab_id}.json"
+    if not f.exists():
+        raise FileNotFoundError(f"no open A/B sample {a.ab_id}")
+    s = json.loads(f.read_text(encoding="utf-8"))
+    subs = {x for r in ledger.rows(p) if not r.get("type") for x in r.get("sessions", [])}
+    w = usage.window_usage(s["caller"], s["ts"], None, subs)
+    model = w["model"] or load_config(p).get("lead", {}).get(s["caller"], "")
+    ae = learn.price_usd(p, s["caller"], model, w["usage"])
+    row = {"type": "selfrun", "ab_id": s["id"], "agent": s["caller"], "model": model, "b": s["b"],
+           "would_route": s["would_route"], "ok": bool(a.ok), "usage4": w["usage"],
+           "messages": w["messages"], "ae_usd": None if ae is None else round(ae, 6),
+           "seconds": round(time.time() - s["ts"], 1), "ts": time.time()}
+    ledger.append_event(p, row)
+    f.unlink()
+    _out(row)
+    return 0
+
+
+# ---------------------------------------------------------------- commands
+def _background(argv: list[str], p) -> dict:
+    """Re-run this exact command detached; the run id is fixed up front so the caller can poll it."""
+    import subprocess
+    run_id = time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:4]
+    (p.runs / run_id).mkdir(parents=True, exist_ok=True)
+    log = p.runs / run_id / "bg.log"
+    env = {**os.environ, "CCX_RUN_ID": run_id}
+    args = [a for a in argv if a != "--bg"]
+    kw = {"creationflags": 0x00000008 | 0x00000200} if os.name == "nt" else {"start_new_session": True}
+    with open(log, "w", encoding="utf-8") as lf:
+        subprocess.Popen([*ccx_argv(), *args],
+                         stdout=lf, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=env, cwd=os.getcwd(), **kw)
+    return {"run_id": run_id, "state": "started", "check": f"ccx show {run_id}", "log": str(log)}
+
+
+def cmd_run(a) -> int:
+    p = paths()
+    cfg = load_config(p)
+    if a.bg:
+        if not a.brief and not a.brief_file:
+            raise ValueError("--bg needs the task as text or --brief-file (stdin is not passed on)")
+        _out(_background(sys.argv[1:], p))
+        return 0
+    text = _brief(a)
+    caller = _caller(a.caller)
+    spec = _spec_from_args(a, text)
+    mode = apply_mode(spec)                      # before routing: start-up cost depends on read/write
+    kw, route = resolve(spec, caller, p, cfg)
+    route["mode"] = mode
+    if kw is None:
+        _out({"delegated": False, "advice": route.get("advice"), "route": route,
+              "hint": "add --force to delegate anyway"})
+        return 0
+    lead = lead_session_id(caller)
+    cwd = Path(a.cwd or os.getcwd())
+    fork = None
+    if a.fork:
+        if kw["to"] != "claude" or caller != "claude" or not os.environ.get("CLAUDE_CODE_SESSION_ID"):
+            raise ValueError("--fork works only from a Claude Code lead to a Claude sub-agent (a session can "
+                             "only be copied within the same tool); other directions get the context via the brief")
+        fork = os.environ["CLAUDE_CODE_SESSION_ID"]
+    if a.seat:
+        prev = None if (a.new or a.fork or a.worktree) else find_seat(p, a.seat, cwd, kw["to"])
+    else:
+        prev = None if (a.new or a.fork or a.worktree) else find_continuable(p, lead, cwd, kw["to"])
+    req = Request(brief=text, mode=mode["mode"], mode_source=mode["source"], mode_why=mode["why"], cwd=cwd, caller=caller,
+                  worktree=a.worktree, escalate=False if a.no_escalate else None,
+                  label=f"seat:{a.seat}" if a.seat else (a.label or ""),
+                  fallback=not a.no_fallback, task=a.task, step=a.step, mcp=True if a.mcp else None,
+                  lead_session=lead, resume_run=prev, continued=bool(prev), fork_lead=fork,
+                  allow_subagents=not a.no_subagents, check=a.check, review=a.review, risk=a.risk, **kw)
+    rec = run(req, p)
+    res = compact(rec)
+    if prev:
+        res["continued_from"] = prev          # same sub-session: it remembers the earlier task(s)
+    res["route"] = {k: v for k, v in route.items() if k in ("source", "b", "rung", "p", "chain_p", "tier",
+                                                              "stale", "mode")}
+    _out(res)
+    return 0 if rec["ok"] else 2
+
+
+def cmd_send(a) -> int:
+    """Talk to a running *desktop/interactive* Codex session (the Codex app) instead of a headless one."""
+    import subprocess
+    if a.to != "codex":
+        raise ValueError("sending into a live session is supported for Codex (codex queue); for Claude use "
+                         "`ccx resume <run_id>` or `claude --resume <session>`")
+    codex = find_bin("codex")
+    if not codex:
+        raise FileNotFoundError("codex CLI not found")
+    from ..runners import bin_argv
+    if a.list or not a.thread:
+        from ..usage import codex_threads
+        _out({"threads": codex_threads(),
+              "next": "ccx send --to codex --thread <thread> \"message\" (pick one whose cwd is your project)"})
+        return 0
+    text = " ".join(a.message) if a.message else sys.stdin.read()
+    if not a.force:
+        # don't cut in while the person is working in that conversation (OpenRig's typing guard)
+        import time as _t
+        from ..usage import thread_activity
+        waited, act = 0, thread_activity(a.thread)
+        while act["busy"] and waited < a.wait:
+            _t.sleep(min(10, a.wait - waited))
+            waited += 10
+            act = thread_activity(a.thread)
+        if act["busy"]:
+            _out({"ok": False, "held": True, "thread": a.thread, "why": act["why"],
+                  "next": "send again when the conversation is idle, or add --force to send now"})
+            return 2
+    r = subprocess.run([*bin_argv("codex"), "queue", "--thread", a.thread, "--message", text],
+                       capture_output=True, text=True, stdin=subprocess.DEVNULL)
+    _out({"ok": r.returncode == 0, "thread": a.thread, "output": (r.stdout or r.stderr).strip()[-800:]})
+    return 0 if r.returncode == 0 else 2
+
+
+def cmd_ask(a) -> int:
+    """Quick second opinion from another model: read-only, low effort, no escalation, not learned from."""
+    p = paths()
+    cfg = load_config(p)
+    caller = _caller(a.caller)
+    to = _target(a.to, caller)
+    spec = tier_spec_safe(cfg, "T2", to)
+    if not spec:
+        raise ValueError(f"no T2 model configured for {to}")
+    effort = "default" if to == "gemini" else "low"
+    req = Request(to=to, brief=_brief(a), mode="read", cwd=Path(a.cwd or os.getcwd()), caller=caller,
+                  escalate=False, label="ask", model=spec["model"], effort=effort, ephemeral=True)
+    rec = run(req, p)
+    c = compact(rec)
+    _out({k: c.get(k) for k in ("run_id", "agent", "model", "ok", "summary", "open_questions", "tokens")})
+    return 0 if rec["ok"] else 2
+
+
+def _run_records(p):
+    for f in p.runs.glob("*/run.json") if p.runs.exists() else []:
+        try:
+            yield json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+
+
+def cmd_task(a) -> int:
+    """Long tasks (task-checkpoint): status, or continue an interrupted one with a single command."""
+    p = paths()
+    cp = learn.module(p, "checkpoint")
+    root = learn.cp_root(Path(a.cwd or os.getcwd()))
+    os.environ.setdefault("CHECKPOINT_ROOT", str(root))
+    if a.task_cmd == "status":
+        return int(cp.main(["status", *([a.task] if a.task else [])]) or 0)
+    t = cp.Task(a.task, root)
+    t.save()
+    steps = t.plan["steps"]
+    nxt = next((s for s in steps if s["status"] in ("doing", "failed")), None) or \
+        next((s for s in steps if s["status"] == "todo"), None)
+    if nxt is None:
+        _out({"task": a.task, "state": "all steps done", "next": "verify, then checkpoint finish"})
+        return 0
+    runs = [r for r in ledger.rows(p) if not r.get("type") and r.get("task") == a.task and r.get("step") == nxt["n"]]
+    if not runs:
+        # a run killed mid-way (closed window, crash) never reached the ledger; its record and session id are on disk
+        runs = sorted((r for r in _run_records(p) if r.get("task") == a.task and r.get("step") == nxt["n"]
+                       and r.get("session_id")), key=lambda r: r.get("ts") or 0)
+    brief = (t.dir / "checkpoint.md").read_text(encoding="utf-8")
+    if not runs:
+        _out({"task": a.task, "step": nxt["n"], "title": nxt["title"], "delegated_before": False,
+              "next": f"do step {nxt['n']} yourself, or: ccx run --task {a.task} --step {nxt['n']} \"...\"",
+              "brief": brief})
+        return 0
+    last = runs[-1]
+    quota_out = last.get("kind") == "quota" and not a.same
+    if quota_out:
+        # the old session's agent is (probably) still out of quota: a fresh session on the other agent,
+        # handed the checkpoint brief + the diff, instead of waiting
+        from ..delegate import other
+        to = other(last["to"])
+        text = (f"Continue step {nxt['n']} ({nxt['title']}) of a task another agent started and was cut off "
+                f"by its quota. Do not redo finished steps. Look at `git diff` for work already done.\n\n{brief}")
+        if last.get("session_id") and last["to"] in ("claude", "codex"):
+            # what the cut-off session itself had got to, read by code from its session file
+            from .memory import transcript_handoff
+            got = transcript_handoff(p, root, last["to"], last["session_id"], 3000, use_model=False)
+            if got:
+                text += "\n\n# Where the cut-off session stood\n" + got[1]
+        req = Request(to=to, brief=text, tier="T2" if to != "gemini" else "T2", caller=_caller(a.caller),
+                      cwd=root, task=a.task, step=nxt["n"], label=f"{a.task}#{nxt['n']}")
+        rec = run(req, p)
+        out = compact(rec) | {"handoff": f"{last['to']} -> {to} (quota)"}
+    else:
+        req = Request(to=last["to"], brief=f"Continue step {nxt['n']} ({nxt['title']}) from where you stopped. "
+                      "Do not redo finished work.", resume_run=last["run_id"], caller=_caller(a.caller))
+        rec = run(req, p)
+        out = compact(rec) | {"resumed": last["run_id"]}
+    _out(out)
+    return 0 if rec["ok"] else 2
+
+
+def cmd_verify(a) -> int:
+    if a.builtin:
+        from ..delegate import verify_builtin
+        if a.b is None:
+            raise ValueError("--builtin needs --b (the difficulty ccx route used)")
+        _out(verify_builtin(paths(), a.builtin, a.b, bool(a.ok), a.agent_id, a.note))
+        return 0
+    if not a.run_id:
+        raise ValueError("give a run id, or --builtin <rung> --b <b> for work your own sub-agent did")
+    _out(verify(paths(), a.run_id, bool(a.ok), a.note))
+    return 0
+
+
+def cmd_plan(a) -> int:
+    """Thin wrapper over the task-split skill (size / check / template / record / show)."""
+    p = paths()
+    sp = learn.module(p, "split")
+    return int(sp.main(a.args) or 0)
+
+
+def cmd_resume(a) -> int:
+    p = paths()
+    req = Request(to="codex", brief=_brief(a), tier=a.tier, resume_run=a.run_id,
+                  caller=_caller(a.caller), escalate=False if a.no_escalate else None,
+                  model=a.model, effort=a.effort)
+    rec = run(req, p)
+    _out(compact(rec))
+    return 0 if rec["ok"] else 2
+
+
+def cmd_batch(a) -> int:
+    """plan.json: {"tasks":[{"id", "brief", "to"?, "mode"?, "cwd"?, "tier"? | "model"+"effort"? |
+    rubric keys ("files","coupling","clarity","risk","novelty")?, "minutes"?, "task"?, "step"?}]}"""
+    p = paths()
+    cfg = load_config(p)
+    plan = json.loads(Path(a.plan).read_text(encoding="utf-8"))
+    caller = _caller(a.caller)
+    tasks = plan["tasks"]
+    for t in tasks:
+        apply_mode(t)                            # a task without "mode" gets it from its brief
+    writers = [t for t in tasks if t["mode"] == "write"]
+
+    def in_git(cwd: str | None) -> bool:
+        import subprocess
+        return subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], cwd=cwd or os.getcwd(),
+                              capture_output=True, stdin=subprocess.DEVNULL).returncode == 0
+    reqs, skipped = [], []
+    for t in tasks:
+        kw, route = resolve(t, caller, p, cfg)
+        if kw is None:
+            skipped.append({"id": t.get("id"), "advice": route.get("advice")})
+            continue
+        reqs.append(Request(brief=t["brief"], mode=t["mode"], mode_source=t["mode_source"], mode_why=t["mode_why"],
+                            check=t.get("check"),
+                            cwd=Path(t.get("cwd") or os.getcwd()), caller=caller, label=t.get("id", ""),
+                            task=t.get("task"), step=t.get("step"),
+                            # parallel writers in one repo must not trample each other
+                            # (outside git there is no worktree: they share the folder, so keep pieces disjoint)
+                            worktree=t.get("worktree", len(writers) > 1 and t in writers
+                                           and in_git(t.get("cwd"))), **kw))
+    with ThreadPoolExecutor(max_workers=int(cfg["defaults"].get("max_parallel", 3))) as ex:
+        results = list(ex.map(lambda r: compact(run(r, p)), reqs))
+    _out({"results": results, "do_yourself": skipped})
+    return 0 if all(r["ok"] for r in results) else 2
+
+
+def cmd_quota(a) -> int:
+    from .. import quota
+    p = paths()
+    extra = {}
+    if a.backfill:
+        extra["backfilled"] = quota.backfill(p)
+    if a.probe:
+        extra["probe_readings"] = quota.probe(p)
+    pr = quota.pressure(p)
+    lam = {}
+    try:
+        tr = learn.module(p, "routing")
+        lam = {ag: round(tr.shadow_lambda(v), 2) for ag, v in pr["quota"].items()}
+    except Exception:  # noqa: BLE001
+        pass
+    _out({"projected_at_reset": pr["quota"], "quota_price_share_of_api": lam, "windows": pr["pace"], **extra})
+    return 0
+
+
+def cmd_bench(a) -> int:
+    """Thin wrapper over task_routing.py refresh / sources (the data lives next to the routing state)."""
+    tr = learn.module(paths(), "routing")
+    if not hasattr(tr, "bench"):
+        raise ValueError("the installed task-routing skill is older than benchmark support: update it")
+    b = tr.bench()
+    if a.what == "refresh":
+        _out(b.refresh(tr.bench_path(), plugin_dirs=tr.bench_plugin_dirs() if hasattr(tr, "bench_plugin_dirs") else ()))
+    else:
+        d = b.load(tr.bench_path())
+        _out({"cache": str(tr.bench_path()), "age_days": b.age_days(tr.bench_path()), **b.summary(d)} if d
+             else {"cache": str(tr.bench_path()), "empty": "run: ccx bench refresh"})
+    return 0
+
+
+def cmd_route(a) -> int:
+    p = paths()
+    cfg = load_config(p)
+    if a.coupling or a.clarity or a.risk or a.novelty or a.b is not None or a.minutes:
+        spec = {"to": a.to, "files": a.files, "b": a.b, "coupling": a.coupling, "clarity": a.clarity,
+                "risk": a.risk, "novelty": a.novelty, "tradeoff": a.tradeoff, "force": True,
+                "minutes": a.minutes,
+                "brief": " ".join(a.text or []), "mode": getattr(a, "mode", None), "kind": a.kind}
+        mode = apply_mode(spec)
+        kw, route = resolve(spec, _caller(None), p, cfg)
+        route["mode"] = mode            # recommended read/write and why; routing priced the start-up with it
+        if a.lead and route.get("rung"):
+            ctx = a.ctx_tokens
+            for f in a.ctx_files or []:        # rough: 4 bytes per token
+                try:
+                    ctx += Path(f).stat().st_size // 4
+                except OSError:
+                    pass
+            route["self_vs_delegate"] = learn.self_vs_delegate(p, route["b"], a.lead, route["rung"], ctx,
+                                                               a.turns_left, route["tradeoff"])
+            route["self_vs_delegate"]["ctx_tokens"] = ctx
+            others = ((installed_agents() or list(DELEGATE_AGENTS)) + provider_agents(load_config(p))
+                      if a.to == "auto" else [a.to])      # three_way holds pay-per-token agents back itself
+            quota = parse_quota(a.quota)
+            choice = learn.three_way(p, route["b"], a.lead, others, ctx, a.turns_left, route["tradeoff"],
+                                     needs=tuple(x for x in (a.needs or "").split(",") if x), quota=quota,
+                                     kind=learn.task_kind(mode["mode"], a.kind), risk=a.risk or "low")
+            if choice:
+                route["choice"] = choice      # self / built-in sub-agent / ccx: see the agent-delegate skill
+        _out(route)
+        return 0
+    r = router.classify(" ".join(a.text), a.files)
+    t = cfg["tiers"][r.tier]
+    out = r.as_dict() | {"label": t.get("label"), "when": t.get("when"),
+                         "note": "keyword heuristic; give the rubric flags for a calibrated pick",
+                         "mode": apply_mode({"brief": " ".join(a.text or []), "mode": getattr(a, "mode", None)})}
+    for ag in AGENTS:
+        if t.get(ag):
+            out[ag] = t[ag]
+    _out(out)
+    return 0
+
+
+def register(sub) -> None:
+    r = sub.add_parser("run", help="delegate one task to the other agent")
+    r.add_argument("brief", nargs="*", help="task text (or use --brief-file / stdin)")
+    r.add_argument("--brief-file")
+    r.add_argument("--to", choices=["auto", *DELEGATE_AGENTS, *PROVIDER_AGENTS], default="auto")
+    r.add_argument("--from", dest="caller", choices=[*DELEGATE_AGENTS, "user"])
+    r.add_argument("--provider", help="model API behind an agent CLI, e.g. deepseek (see [providers] in config)")
+    r.add_argument("--bg", action="store_true", help="run detached; poll with `ccx show <run_id>`")
+    r.add_argument("--tier", choices=["auto", *TIER_ORDER], default="auto")
+    r.add_argument("--mode", choices=["read", "write"],
+                   help="read: analyse only; write: may edit files. Not given: inferred from the task text "
+                        "(analysis verbs -> read, edit verbs -> write, unclear -> write)")
+    r.add_argument("--cwd")
+    _routing_args(r)
+    r.add_argument("--model", help="explicit model (skips routing), e.g. gpt-6.1-sol or sonnet")
+    r.add_argument("--effort", help="explicit reasoning effort: low|medium|high|xhigh|max")
+    r.add_argument("--minutes", type=float, help="how long a skilled engineer would need, in minutes: the standard "
+                   "difficulty unit (b = log2 minutes, blended 60/40 with the rubric); task-split learns from it too")
+    r.add_argument("--task", help="task-checkpoint task id: the session id is saved into it at once")
+    r.add_argument("--step", type=int, help="task-checkpoint step number")
+    r.add_argument("--force", action="store_true", help="delegate even when routing says do it yourself/split")
+    r.add_argument("--no-ab", action="store_true", help="never pick this task as an A/B self-run sample")
+    r.add_argument("--mcp", action="store_true", help="Claude sub-agent: also load MCP tools (bigger start-up)")
+    r.add_argument("--new", action="store_true", help="always a fresh sub-session (default: continue the last "
+                   "one from this conversation, same folder and agent, if under 1 h old)")
+    r.add_argument("--fork", action="store_true", help="Claude lead -> Claude sub only: start from a copy of "
+                   "your whole conversation (full context, costs more per turn)")
+    r.add_argument("--worktree", action="store_true", help="isolate write task in a git worktree")
+    r.add_argument("--quota", action="append", metavar="AGENT=USED",
+                   help="share of a subscription's quota already used (claude=0.8); from 70%% routing also "
+                        "considers pay-per-token providers such as deepseek")
+    r.add_argument("--seat", metavar="NAME", help="a named long-lived role (e.g. reviewer): its sub-session is "
+                   "kept for a week and reused by the next --seat NAME task here; --new starts it over")
+    r.add_argument("--check", metavar="CMD", help="acceptance command (e.g. 'python -m pytest -q tests/test_x.py'): "
+                   "the sub-agent runs it before finishing, then ccx runs it again; a failure counts as a failure")
+    r.add_argument("--allow-subagents", action="store_true", help="(default now) the sub-agent may use its own "
+                   "sub-agents: one level, counted, stopped over [subagents] max_usd")
+    r.add_argument("--no-subagents", action="store_true", help="the sub-agent may not start its own sub-agents")
+    r.add_argument("--review", choices=["auto", "on", "off"], default="auto", help="independent review of the diff "
+                   "by another vendor's cheap model: auto = only when --risk is visible/critical, the sub-agent is "
+                   "unsure, or its claimed files don't match the diff (default); on = every write run; off")
+    r.add_argument("--no-escalate", action="store_true")
+    r.add_argument("--no-fallback", action="store_true", help="on quota/rate limit, stop instead of "
+                   "retrying on the other agent")
+    r.add_argument("--label")
+    r.set_defaults(fn=cmd_run)
+    ak = sub.add_parser("ask", help="quick read-only second opinion from the other agent (low effort)")
+    ak.add_argument("brief", nargs="*"); ak.add_argument("--brief-file")
+    ak.add_argument("--to", choices=["auto", *DELEGATE_AGENTS, *PROVIDER_AGENTS], default="auto")
+    ak.add_argument("--from", dest="caller", choices=[*DELEGATE_AGENTS, "user"]); ak.add_argument("--cwd")
+    ak.set_defaults(fn=cmd_ask)
+    tk = sub.add_parser("task", help="long tasks: status, or resume an interrupted one (task-checkpoint)")
+    tks = tk.add_subparsers(dest="task_cmd", required=True)
+    tst = tks.add_parser("status"); tst.add_argument("task", nargs="?")
+    trs = tks.add_parser("resume"); trs.add_argument("task")
+    trs.add_argument("--same", action="store_true", help="resume the same session even after a quota stop")
+    trs.add_argument("--from", dest="caller", choices=[*DELEGATE_AGENTS, "user"])
+    for x in (tst, trs):
+        x.add_argument("--cwd")
+    tk.set_defaults(fn=cmd_task)
+    se = sub.add_parser("send", help="send a message into a live Codex desktop/interactive session")
+    se.add_argument("message", nargs="*")
+    se.add_argument("--to", choices=["codex", "claude"], default="codex")
+    se.add_argument("--thread", help="Codex thread id (see --list)")
+    se.add_argument("--list", action="store_true", help="list live sessions (codex agents)")
+    se.add_argument("--wait", type=int, default=120, help="seconds to wait for the conversation to go idle (120)")
+    se.add_argument("--force", action="store_true", help="send even while you are working in that conversation")
+    se.set_defaults(fn=cmd_send)
+    v = sub.add_parser("verify", help="record your verdict on a run (calibrates routing and splitting)")
+    v.add_argument("run_id", nargs="?")
+    v.add_argument("--ok", type=int, choices=[0, 1], required=True)
+    v.add_argument("--note", default="", help="why (kept with the verdict)")
+    v.add_argument("--builtin", metavar="RUNG", help="work your own built-in sub-agent did, e.g. claude-builtin:haiku:low")
+    v.add_argument("--b", type=float, help="with --builtin: the difficulty ccx route used")
+    v.add_argument("--agent-id", help="with --builtin: the sub-agent's id, so its real cost is read and learned")
+    v.set_defaults(fn=cmd_verify)
+    pl = sub.add_parser("plan", help="task-split: size / check / template / record / show",
+                        add_help=False)
+    pl.add_argument("args", nargs=argparse.REMAINDER)
+    pl.set_defaults(fn=cmd_plan)
+    rs = sub.add_parser("resume", help="follow up in the same sub-session (cheap: keeps its context)")
+    rs.add_argument("run_id")
+    rs.add_argument("brief", nargs="*")
+    rs.add_argument("--brief-file")
+    rs.add_argument("--tier", choices=["auto", *TIER_ORDER], default="auto")
+    rs.add_argument("--from", dest="caller", choices=[*AGENTS, "user"])
+    rs.add_argument("--no-escalate", action="store_true")
+    rs.add_argument("--model")
+    rs.add_argument("--effort")
+    rs.set_defaults(fn=cmd_resume)
+    b = sub.add_parser("batch", help="run independent tasks in parallel from plan.json")
+    b.add_argument("plan")
+    b.add_argument("--from", dest="caller", choices=[*AGENTS, "user"])
+    b.set_defaults(fn=cmd_batch)
+    ro = sub.add_parser("route", help="which agent/model/effort for a task (rubric -> task-routing)")
+    ro.add_argument("text", nargs="*", help="the task description (used to recommend read or write)")
+    ro.add_argument("--mode", choices=["read", "write"], help="explicit read/write (else inferred from the text)")
+    ro.add_argument("--minutes", type=float, help="how long a skilled engineer would need (standard difficulty unit)")
+    ro.add_argument("--to", choices=["auto", *DELEGATE_AGENTS, *PROVIDER_AGENTS], default="auto")
+    _routing_args(ro)
+    sv = ro.add_argument_group("self vs delegate (needs --lead)")
+    sv.add_argument("--lead", help="your own rung, e.g. claude:opus:high")
+    sv.add_argument("--ctx-files", nargs="*", help="files you would have to read yourself")
+    sv.add_argument("--ctx-tokens", type=int, default=0, help="or the token count directly")
+    sv.add_argument("--turns-left", type=int, default=10, help="turns this session will still run")
+    sv.add_argument("--needs", help="comma list that only a ccx run gives: undo,worktree,other-vendor,resume")
+    sv.add_argument("--quota", action="append", metavar="AGENT=USED",
+                    help="share of an agent's quota already used, e.g. claude=0.4 (Codex's is read automatically)")
+    ro.set_defaults(fn=cmd_route)
+    bn = sub.add_parser("bench", help="public benchmark data for routing: refresh (weekly by itself) or show sources")
+    bn.add_argument("what", choices=["sources", "refresh"], nargs="?", default="sources")
+    bn.set_defaults(fn=cmd_bench)
+    qu = sub.add_parser("quota", help="subscription quota by pace: projected use of each window at its reset")
+    qu.add_argument("--probe", action="store_true", help="one tiny Claude request now, to read its windows")
+    qu.add_argument("--backfill", action="store_true", help="read Claude windows from past run logs (once)")
+    qu.set_defaults(fn=cmd_quota)
+    ab = sub.add_parser("ab", help="close an A/B self-run sample")
+    abs_ = ab.add_subparsers(dest="ab_cmd", required=True)
+    abd = abs_.add_parser("done"); abd.add_argument("ab_id"); abd.add_argument("--ok", type=int, choices=[0, 1],
+                                                                               required=True)
+    ab.set_defaults(fn=cmd_ab)

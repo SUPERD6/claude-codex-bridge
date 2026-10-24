@@ -1,0 +1,40 @@
+# task-split defaults. Every number is a dated guess or a cited value; calibrate from your own runs.
+version = 1
+as_of = "2026-10-23"
+
+# METR (Kwa et al. 2025): p(success) = sigmoid(beta * (ln h50 - ln t)), t = task length in human-minutes.
+# Their 80% horizon is ~5x shorter than the 50% horizon  =>  beta = ln(4)/ln(5) ~= 0.86.
+beta = 0.86
+
+# 50%-success horizon h50 in human-minutes, per agent:model:effort.
+# GUESSES for this generation (METR trend: horizons double ~every 7 months). Replace with measured values.
+[h50_minutes]
+"codex:gpt-6-luna:low"      = 20
+"codex:gpt-6-luna:high"     = 40
+"codex:gpt-6.1-sol:medium"  = 120
+"codex:gpt-6.1-sol:high"    = 200
+"codex:gpt-6.1-sol:xhigh"   = 280
+"codex:gpt-6-astra:xhigh"   = 420
+"codex:gpt-6-astra:max"     = 540
+"claude:haiku:low"          = 20
+"claude:sonnet:medium"      = 120
+"claude:sonnet:high"        = 180
+"claude:opus:high"          = 360
+"claude:opus:max"           = 480
+"gemini:flash-lite:default" = 40     # guesses; calibrate from your own runs
+"gemini:flash:default"      = 120
+"gemini:pro:default"        = 260
+
+# Per-piece overhead in human-minute equivalents: brief + startup + review + integration/handoff.
+# (Attention-tax/handoff-tax model: decomposition pays only when the context cost avoided exceeds this.)
+[overhead_minutes]
+delegated = 8     # another agent: brief + cold start + you verify its diff
+self      = 3     # you do the piece yourself: re-orient + verify
+
+# Guards
+[guards]
+min_piece_minutes = 10      # smaller pieces are overhead-dominated: merge them
+max_children = 5            # ADaPT: split into 3-5 sub-tasks per level
+max_depth = 3               # ADaPT: recursive splitting depth limit
+target_p = 0.80             # aim each piece at >= 80% success on its intended rung
+context_share_max = 0.35    # a piece's must-read context should stay under ~35% of the window

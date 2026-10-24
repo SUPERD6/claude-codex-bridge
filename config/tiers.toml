@@ -1,0 +1,113 @@
+# ccx 分级配置：按任务难度选模型和推理强度。
+# 原则：能自己两三步做完的不派（T0）；派出去时用"能做好的最便宜一档"；
+# 失败或卡住才升一级（最多升 max_escalations 次）。
+#
+# 模型名核对来源（2026-10-22）：
+#   OpenAI "Using GPT-6" 文档：gpt-6-astra（最强）、gpt-6.1-sol（平衡）、gpt-6-luna（最快最省）
+#   gpt-6.1-sol 支持 reasoning effort：low / medium / high / xhigh / max
+#   Claude Code CLI 2.1.309：--model 接受别名 haiku / sonnet / opus / fable，--effort 接受 low/medium/high/xhigh/max
+# 模型会更新，改这里即可，代码不用动。用户覆盖文件：<hub>/ccx/tiers.toml（同结构，只写要改的键）。
+
+[defaults]
+auto_escalate = true      # 子任务返回 blocked/failed 时，在同一会话里换更强一档继续（续接上下文，不重新喂背景）
+max_escalations = 1
+max_parallel = 3          # batch 并行上限
+max_depth = 1             # 子智能体不能再派子智能体，防止套娃烧 token
+timeout_sec = 1800
+tradeoff = "balanced"     # 省钱 save | 平衡 balanced | 快 fast，或 0..1 的旋钮（0 最省，1 最快）；ccx config set defaults.tradeoff 0.3
+ab_self_rate = 0.1        # 约 10% 的可派任务让主智能体自己做，用来实测“到底省了多少”（0 = 关）
+
+[lead]                    # 主智能体平时用的模型，只用来估算“如果自己做要花多少”
+claude = "opus"
+codex = "gpt-6.1-sol"
+
+[report]
+publish_dir = ""          # 你的私有用量仓库的本地克隆；ccx report --publish 提交到这里
+
+[tiers.T0]
+label = "自己做"
+when = "两三步就能完成、只改一两处、或说明任务比做任务还长。派出去的开销（写简报+对方读仓库）比直接做更贵。"
+delegate = false
+
+[tiers.T1]
+label = "机械活"
+when = "改名、格式化、补注释/类型、按明确规则批量替换、样板代码、总结日志、查找定位。"
+codex  = { model = "gpt-6-luna",  effort = "low" }
+claude = { model = "haiku",       effort = "low", lean = true }
+gemini = { model = "flash-lite",       effort = "default" }
+# lean = true：子任务不加载 MCP 工具定义（--strict-mcp-config），机械活用不到，省输入 token。
+# gemini 用别名 flash-lite / flash / pro：Gemini CLI 自己解析成当前最新的型号，不用在这里写死版本号。
+# Gemini CLI 没有推理强度参数，effort 只做记录。
+
+[tiers.T2]
+label = "常规开发"
+when = "单个功能、复现清楚的 bug、补测试、单模块小重构、写脚本。"
+codex  = { model = "gpt-6.1-sol", effort = "medium" }
+claude = { model = "sonnet",      effort = "medium" }
+gemini = { model = "flash",       effort = "default" }
+
+[tiers.T3]
+label = "困难"
+when = "跨多个文件/模块、原因不明的 bug、性能问题、需要先读懂较大代码库再改、方案设计。"
+codex  = { model = "gpt-6.1-sol", effort = "high" }
+claude = { model = "opus",        effort = "high" }
+gemini = { model = "pro",       effort = "default" }
+
+[tiers.T4]
+label = "关键/研究级"
+when = "架构决策、安全审查、并发/正确性证明、新算法、出错代价很高的改动。"
+codex  = { model = "gpt-6-astra", effort = "xhigh" }
+claude = { model = "opus",        effort = "max" }
+gemini = { model = "pro",       effort = "default" }
+
+# 权限：read = 只读分析；write = 可以改文件。
+[permissions.codex]
+# 用 -c sandbox_mode=...，因为 `codex exec resume` 不接受 -s，用同一写法新开和续接都能用。
+read  = ["-c", "sandbox_mode=\"read-only\""]
+write = ["-c", "sandbox_mode=\"workspace-write\""]
+
+[permissions.claude]
+# dontAsk：没被允许的工具一律拒绝，不会卡在等人点"允许"。
+read  = ["--permission-mode", "dontAsk", "--allowed-tools", "Read Grep Glob Bash(git status:*) Bash(git diff:*) Bash(git log:*) Bash(ls:*)"]
+write = ["--permission-mode", "acceptEdits", "--allowed-tools", "Read Grep Glob Edit Write Bash(git:*) Bash(python:*) Bash(pytest:*) Bash(npm:*) Bash(node:*)"]
+
+# Claude 子智能体的启动开销（实测 2026-10-23，haiku）：默认约 4.6 万 token，每次启动还会重新写入约 9.6k 缓存。
+# 只给 6 个工具 + 把“当前目录/git 状态”这类每次都变的段落移出系统提示后：第一次请求约 1.36 万 token（只读 4 个工具约 1.06 万），
+# 一小时内再次启动只新写入约 650 token，其余读缓存（0.1 倍价格），而且跨项目也能复用。
+[claude_subagent]
+tools_write = "Read,Grep,Glob,Edit,Write,Bash"   # 只加载这些内置工具的定义（--tools）
+tools_read  = "Read,Grep,Glob,Bash"
+exclude_dynamic = true   # --exclude-dynamic-system-prompt-sections：系统提示不随目录变，缓存可跨项目复用
+mcp = false              # false = 不加载 MCP 工具定义（--strict-mcp-config）；需要 MCP 时设 true 或 ccx run --mcp
+skills = true            # false = 不加载技能列表（--disable-slash-commands）；T1 这类 lean 档位总是关闭
+
+[sessions]
+# 子智能体会话结束超过这么多小时，下次开局时自动归档（Codex：codex archive；Claude：把记录挪到 ccx-archive，可恢复）。
+# 比“自动续接”的 1 小时窗口长，所以还可能接新任务的会话不会被归档。0 = 不自动归档。
+auto_archive_hours = 2
+
+[review]
+# 独立审查（提案 F1）：子任务改完文件后，由另一家的便宜模型对照任务说明审一遍改动，只回“通过 / 有问题 + 在哪”。
+# auto = 只在 --risk visible/critical、代码改动 ≥ min_lines 行、子智能体自己说没把握（open_questions）、或它说改的文件和实际改动对不上时审；
+# on = 每次改了文件都审；off = 不审（ccx run --review 可以单次覆盖）。有问题时交回原会话改一轮，再审一次。
+mode = "auto"
+min_lines = 50        # auto 时：代码（不含 .md 等文档）改动达到这么多行也审；0 = 不按行数触发
+fix_rounds = 1
+max_diff_chars = 12000
+by = { codex = "claude:haiku:low", claude = "codex:gpt-6-luna:low", deepseek = "codex:gpt-6-luna:low", gemini = "codex:gpt-6-luna:low" }
+# 审查没能完成（2026-10-24 实测：haiku 两次因输出太长、结构化输出重试用完而失败）时，换下一个另一家的模型再审一次
+also = ["claude:sonnet:medium", "codex:gpt-6-luna:high"]
+
+[permissions.gemini]
+# plan = 只读；auto_edit = 自动批准改文件（命令行工具仍需批准，无头模式下会被拒绝，比 yolo 安全）。
+read  = ["--approval-mode", "plan"]
+write = ["--approval-mode", "auto_edit"]
+
+# 模型来源（provider）：同一个 CLI 换一个 API，当作一个单独的智能体（自己的档位、价格和学习）。
+# 用法：ccx run --to deepseek --model deepseek-flash "..."（或 --provider deepseek）；自动选模型时，要所有订阅额度都用到 70% 以上才会考虑它（它花真钱）。
+# 值以 $ 开头的从你的环境变量读取，ccx 不保存任何密钥。
+[providers.deepseek]
+agent = "claude"
+models = ["deepseek-flash"]   # deepseek-v4-pro 仍可用 --model 显式指定，但不参与自动选择（评测里比 flash 弱、更贵）
+env = { ANTHROPIC_BASE_URL = "https://api.deepseek.com/anthropic", ANTHROPIC_API_KEY = "$DEEPSEEK_API_KEY" }
+daily_usd = 1.0   # 每天最多花多少真钱（美元）；到了就不再派给它（ccx report 单独一行显示）

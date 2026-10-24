@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 340" width="1200" height="340" role="img" aria-labelledby="t d">
+  <title id="t">ccx — Claude Code and Codex hand work to each other</title>
+  <desc id="d">Claude Code hands a task to Codex; ccx routes it to a small model, Codex finishes in one attempt, and the result is verified at a cost of $0.0023 (a real run).</desc>
+  <rect width="1200" height="340" rx="16" fill="#0f1318"/>
+  <g font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">
+    <text x="64" y="122" font-size="84" font-weight="700" fill="#e7ebf0">ccx</text>
+  </g>
+  <g font-family="-apple-system,&quot;Segoe UI&quot;,Helvetica,Arial,sans-serif">
+    <text x="64" y="178" font-size="30" font-weight="600" fill="#e7ebf0">Claude Code ⇄ Codex,</text>
+    <text x="64" y="216" font-size="30" font-weight="600" fill="#e7ebf0">each other's sub-agent</text>
+    <text x="64" y="262" font-size="21" fill="#97a1ae">The cheapest model likely to finish each piece —</text>
+    <text x="64" y="292" font-size="21" fill="#97a1ae">checked, and with the receipt.</text>
+  </g>
+  <g font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">
+    <rect x="640" y="32" width="512" height="276" rx="12" fill="#161b22" stroke="#2b323c"/>
+    <rect x="672" y="58" width="300" height="44" rx="8" fill="#e3a14e"/>
+    <text x="692" y="88" font-size="21" font-weight="600" fill="#0f1318">Claude Code · lead</text>
+    <path d="M700 102 V 138 M692 130 L700 140 L708 130" stroke="#6b7684" stroke-width="2.5" fill="none"/>
+    <text x="724" y="128" font-size="18" fill="#97a1ae">route b=2 → luna · low · p 0.95</text>
+    <rect x="672" y="146" width="380" height="44" rx="8" fill="#4cc3c6"/>
+    <text x="692" y="176" font-size="21" font-weight="600" fill="#0f1318">Codex · done, 1 attempt</text>
+    <path d="M700 190 V 226 M692 218 L700 228 L708 218" stroke="#6b7684" stroke-width="2.5" fill="none"/>
+    <text x="724" y="216" font-size="18" fill="#97a1ae">you check the diff</text>
+    <text x="672" y="268" font-size="24" font-weight="700" fill="#58c27a">✓ verified</text>
+    <text x="860" y="268" font-size="24" font-weight="700" fill="#e7ebf0">$0.0023</text>
+    <text x="990" y="268" font-size="17" fill="#97a1ae">real run</text>
+  </g>
+</svg>

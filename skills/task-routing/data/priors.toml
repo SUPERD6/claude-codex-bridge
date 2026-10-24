@@ -1,0 +1,175 @@
+# task-routing priors. Starting points only; route.py learns from recorded outcomes.
+# Every number here is a GUESS or a cited value — see references/method.md. Recalibrate, don't trust.
+version = 1
+as_of = "2026-10-24"
+
+# Rungs = (agent, model, effort). theta_prior = initial ability guess (not a benchmark score).
+# 'price' names an entry in [prices].
+rungs = [
+  { agent = "codex", model = "gpt-6-luna", effort = "low", theta = 2.5, price = "gpt-6-luna" },
+  { agent = "codex", model = "gpt-6-luna", effort = "high", theta = 3.5, price = "gpt-6-luna" },
+  { agent = "codex", model = "gpt-6.1-sol", effort = "medium", theta = 5.5, price = "gpt-6-1-sol" },
+  { agent = "codex", model = "gpt-6.1-sol", effort = "high", theta = 6.5, price = "gpt-6-1-sol" },
+  { agent = "codex", model = "gpt-6.1-sol", effort = "xhigh", theta = 7.3, price = "gpt-6-1-sol" },
+  { agent = "codex", model = "gpt-6-astra", effort = "xhigh", theta = 8.5, price = "gpt-6-astra" },
+  { agent = "codex", model = "gpt-6-astra", effort = "max", theta = 9.2, price = "gpt-6-astra" },
+  { agent = "claude", model = "haiku", effort = "low", theta = 2.5, price = "haiku" },
+  { agent = "claude", model = "sonnet", effort = "medium", theta = 5.5, price = "sonnet" },
+  { agent = "claude", model = "sonnet", effort = "high", theta = 6.3, price = "sonnet" },
+  { agent = "claude", model = "opus", effort = "high", theta = 7.6, price = "opus" },
+  { agent = "claude", model = "opus", effort = "max", theta = 9.0, price = "opus" },
+  # DeepSeek through Claude Code (a ccx provider): pay per token, real money. Hand-set guesses; public benchmarks
+  # (scripts/merge.py) and the 10 local calibration tasks of 2026-10-24 (recorded as outcomes, method.md 8) move
+  # them. Escalation continues on Claude ([escalate_to]).
+  # Three efforts, picked by difficulty like any other ladder (benchmarks measure flash at high and max).
+  # deepseek-v4-pro is no rung: older, weaker than flash in every source and ~2.5x its price (2026-10-24);
+  # it stays callable with an explicit --model.
+  { agent = "deepseek", model = "deepseek-flash", effort = "low", theta = 3.5, price = "deepseek-flash" },
+  { agent = "deepseek", model = "deepseek-flash", effort = "high", theta = 5.0, price = "deepseek-flash" },
+  { agent = "deepseek", model = "deepseek-flash", effort = "max", theta = 5.5, price = "deepseek-flash" },
+  # Gemini CLI: aliases resolve to the current model; no effort flag ("default"). Thetas are guesses.
+  { agent = "gemini", model = "flash-lite", effort = "default", theta = 3.5, price = "gemini-flash-lite" },
+  { agent = "gemini", model = "flash", effort = "default", theta = 5.5, price = "gemini-flash" },
+  { agent = "gemini", model = "pro", effort = "default", theta = 7.0, price = "gemini-pro" },
+]
+
+# Price lookup by model name for models that are not routing rungs (explicit --model, providers).
+[model_prices]
+"deepseek-flash" = "deepseek-flash"
+"deepseek-v4-pro" = "deepseek-v4-pro"
+"gemini-4-argon" = "gemini-4-argon"
+
+# IRT 2PL: P(success) = 1 / (1 + exp(-a * (theta - b)))
+# b = task difficulty 0..10 from the rubric; theta = rung ability on the same scale.
+[irt]
+a = 1.2            # slope: theta - b = +1.2 -> ~81% ; +2 -> ~92%
+learning_rate = 0.25  # Elo-style update: theta += lr * (y - p)
+decay_per_week = 0.95 # shrink learned offsets toward the prior (models change)
+
+
+# Cost model (rough; replaced by measured averages once outcomes are recorded)
+[cost]
+# fixed context per request, first request of a fresh session (ccx selftest + single-request probes, 2026-10-23):
+#   claude haiku slim: write 13.6k, read 10.6k (default CLI ~46k) · codex-cli 0.164: full user config 21.0k, lean 18.1k
+startup_tokens = { claude = 13600, codex = 21000 }       # default per agent (claude write, codex full config)
+# codex low rungs start lean; claude read-only runs; *-builtin = the leads' own sub-agents (measured 2026-10-24)
+# deepseek: Claude Code with --bare (minimal system prompt), first request 1.5k (selftest 2026-10-24)
+startup_by = { "codex:lean" = 18100, "claude:read" = 10600, "claude-builtin" = 58400, "codex-builtin" = 22200, "deepseek" = 1500 }
+cached_share = 0.85        # share of input that is a cache read (Anthropic reports median 84% in agent loops)
+turns_base = 4             # turns ~= turns_base + turns_per_b * b
+turns_per_b = 1.5
+fresh_input_per_turn = 3000
+output_base = 1500         # output tokens ~= output_base * (1 + b/2) * effort_mult
+effort_mult = { low = 0.5, medium = 1.0, high = 1.9, xhigh = 4.0, max = 13.0 }  # high/max from a 3rd-party Sonnet 5.5 effort benchmark
+
+# USD per 1M tokens. Source: research notes 2026-10-23 (platform.claude.com/docs/en/about-claude/pricing,
+# developers.openai.com/api/docs/models). Verify before trusting; prices change monthly.
+[prices.gpt-6-luna]
+input = 0.10
+cached = 0.01
+output = 0.50
+[prices.gpt-6-1-sol]
+input = 2.00
+cached = 0.10
+output = 10.00
+[prices.gpt-6-astra]
+input = 10.00
+cached = 1.00
+output = 50.00
+[prices.haiku]
+cache_write_5m_mult = 1.25   # Anthropic: cache writes bill above input
+cache_write_1h_mult = 2.0    # headless claude -p writes its ~48.7k-token start-up prompt with 1h TTL
+input = 0.10
+cached = 0.01
+output = 0.50
+[prices.sonnet]
+cache_write_5m_mult = 1.25   # Anthropic: cache writes bill above input
+cache_write_1h_mult = 2.0    # headless claude -p writes its ~48.7k-token start-up prompt with 1h TTL
+input = 2.00
+cached = 0.10
+output = 10.00
+[prices.opus]
+cache_write_5m_mult = 1.25   # Anthropic: cache writes bill above input
+cache_write_1h_mult = 2.0    # headless claude -p writes its ~48.7k-token start-up prompt with 1h TTL
+input = 4.00
+cached = 0.20
+output = 20.00
+
+# After an agent's own ladder, escalation continues on this agent's rungs above it (a failed DeepSeek piece goes to
+# Claude, not back to the lead).
+[escalate_to]
+deepseek = "claude"
+
+# Agents billed in real money per token (no subscription quota). three_way only offers them while a subscription
+# agent's quota is at or above `from_quota`; until then the subscription's cheap rungs cost nothing extra.
+[cash]
+agents = ["deepseek"]
+from_quota = 0.7
+
+# Off-peak prices (api-docs.deepseek.com/quick_start/pricing, read 2026-10-24): half price outside the peak hours,
+# which are UTC hours [1,4) and [6,10) Monday-Friday (Chinese public holidays are off-peak too; not modelled).
+[offpeak.deepseek]
+mult = 0.5
+peak_utc = [[1, 4], [6, 10]]
+weekdays_only = true
+
+# How public benchmark rows (scripts/benchmarks.py) name each rung's model: regexes on the name with everything but
+# letters and digits removed (effort suffixes like "_max" / "(High)" are split off first), with a weight — 1 for
+# the exact version, less for an older or preview one. Used by scripts/merge.py.
+[aliases]
+"haiku" = [["claudehaiku55", 1]]
+"sonnet" = [["claudesonnet55", 1]]
+"opus" = [["claudeopus55", 1]]
+"gpt-6-luna" = [["gpt6luna", 1], ["gpt56luna", 0.5]]
+"gpt-6.1-sol" = [["gpt61sol", 1], ["gpt6sol", 0.5]]
+"gpt-6-astra" = [["gpt6astra", 1]]
+"deepseek-flash" = [["deepseekv41flash1017", 1], ["deepseekv41flash(20260910)?", 0.5]]
+"deepseek-v4-pro" = [["deepseekv4pro(0813|20260813)?", 1], ["deepseekv4propreview", 0.5]]
+"flash-lite" = [["gemini35flashlite", 1], ["gemini31flashlite", 0.5]]
+"flash" = [["gemini38flash", 1]]
+"pro" = [["gemini31pro(preview)?", 1]]
+
+# Policy guards (from the "don't over-delegate / don't over-think" literature, see method.md)
+[policy]
+min_delegate_b = 2      # b <= 1: do it yourself; a sub-agent's startup + your review cost more than the edit
+split_below_p = 0.5     # if even the best escalation chain is below this, split the task instead
+
+# Tradeoff presets: tau = required success probability; cascade = allow "start cheap, escalate"
+[tradeoff.save]
+tau = 0.70
+cascade = true
+[tradeoff.balanced]
+tau = 0.80
+cascade = true
+[tradeoff.fast]
+tau = 0.90
+cascade = false
+
+# Gemini (ai.google.dev/pricing, read 2026-10-22; paid tier, <=200k prompt). Aliases map to:
+# flash-lite = gemini-3.5-flash-lite, flash = gemini-3.8-flash (promo price until 2026-12-31, then 2x),
+# pro = gemini-3.1-pro-preview. gemini-4-argon doubles on 2026-12-01.
+[prices.gemini-flash-lite]
+input = 0.30
+cached = 0.03
+output = 2.50
+[prices.gemini-flash]
+input = 0.75
+cached = 0.075
+output = 3.75
+[prices.gemini-pro]
+input = 2.00
+cached = 0.20
+output = 12.00
+[prices.gemini-4-argon]
+input = 2.00
+cached = 0.10
+output = 10.00
+# DeepSeek (api-docs.deepseek.com/quick_start/pricing, read 2026-10-22, unchanged 2026-10-24): PEAK prices; see [offpeak].
+[prices.deepseek-flash]
+input = 0.30
+cached = 0.006
+output = 1.20
+[prices.deepseek-v4-pro]
+input = 1.32
+cached = 0.044
+output = 3.96
