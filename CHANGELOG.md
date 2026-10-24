@@ -6,6 +6,12 @@
   block back where it was, not at the end (Codex keeps hook trust by position, so moved hooks ask for trust again);
   uninstall now says how to put everything back (`ccx sync --apply`, `ccx skills install --replace --apply`,
   `ccx doctor` — sync alone does not bring back ccx's skills).
+- `ccx/delegate.py` split by job (proposal J11), behaviour unchanged: `prompts.py` (what a sub-agent is told),
+  `plan.py` (which rungs a run tries, budget and provider checks, the fallback to another vendor), `workspace.py`
+  (worktree, ccx's re-run of the check, the snapshot and `ccx undo`), `verdicts.py` (`ccx verify`, built-in
+  verdicts, probable verdicts), `review.py` gains the review step itself, the Codex accounting helpers move to
+  `ccx/agents/codex.py` and writing a run record to `ledger.py`. `delegate.py` (988 → 547 lines) keeps the run loop
+  and re-exports the old names, so `from ccx.delegate import ...` still works.
 - Renamed to **relayline** (was `claude-codex-bridge`): the GitHub repo, the package name in `pyproject.toml`, the
   install command (`pipx install git+https://github.com/SUPERD6/relayline`), and the links in the README, website,
   CONTRIBUTING and issue templates. The `ccx` command and the `ccx/` package are unchanged; GitHub redirects the old
