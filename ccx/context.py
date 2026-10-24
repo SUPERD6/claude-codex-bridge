@@ -51,7 +51,8 @@ def advice(s: dict, threshold: int = THRESHOLD) -> str:
     return (f"[ccx] This conversation re-reads about {k:,.0f}k tokens every turn (≈ ${s['usd_per_turn']:.3f} a turn, "
             f"{s['turns']} turns so far). Cheaper from here: send big reads (many files, logs, research) to a "
             f"sub-agent and take back only its conclusion; and if what comes next is a new piece of work, hand over "
-            f"to a fresh conversation (`ccx handoff --by {s['agent']} --to {s['agent']} \"...\"`).")
+            f"to a fresh conversation: ask the person, then run `ccx fresh` (it writes the handoff from this conversation's "
+            f"file; a new conversation in this folder starts with it).")
 
 
 def _last_turn_claude(transcript: Path) -> tuple[dict, str, int] | None:

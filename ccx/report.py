@@ -50,6 +50,14 @@ def _day(ts: float) -> str:
     return time.strftime("%Y-%m-%d", time.localtime(ts))
 
 
+def _soft_note(st: dict | None) -> str:
+    """J7: how often a probable verdict was later judged the other way (all time, not only this window)."""
+    if not st or not st.get("rechecked"):
+        return ""
+    note = f" · {st['overturned']}/{st['rechecked']} probable overturned later"
+    return note + ("" if st["learn"] else " — too many: they no longer teach routing")
+
+
 def collect(p: Paths, days: int = 30, include_lead: bool = True) -> dict:
     since = time.time() - days * 86400
     cfg = load_config(p)
@@ -86,7 +94,8 @@ def collect(p: Paths, days: int = 30, include_lead: bool = True) -> dict:
     for e in lead_ev:
         e["ae"] = _ae(p, e["agent"], e["model"], e["usage"], ts=e.get("ts"))
         events.append(e)
-    return {"since": since, "days": days, "events": events, "runs": runs, "verdicts": verdicts, "soft": soft, "reasons": reasons,
+    return {"since": since, "days": days, "events": events, "runs": runs, "verdicts": verdicts, "soft": soft,
+            "soft_trust": ledger.soft_trust(ledger.rows(p)), "reasons": reasons,
             "selfruns": selfruns, "quota": quota, "lead_models": cfg.get("lead", {}),
             "lead_seen": include_lead}
 
@@ -201,6 +210,7 @@ def summarize(p: Paths, data: dict) -> dict:
                    "verified": len([r for r in run_rows if r["verdict"] is not None
                                     and not data["soft"].get(r["run_id"])]),
                    "soft_verified": len([r for r in run_rows if data["soft"].get(r["run_id"])]),
+                   "soft_trust": data.get("soft_trust"),
                    "reasons": data["reasons"],
                    "cps": round(sub_ae / done, 5) if done else None,
                    "cache_read_share": round(cached / tot_in, 3) if tot_in else None,
@@ -362,7 +372,8 @@ def render_html(s: dict) -> str:
         ("Sub-agent spend", _usd(t["sub_ae"]), f"{t['runs']} run{'' if t['runs'] == 1 else 's'} · cost/success {_usd(t['cps'])}"),
         ("Estimated saving", _usd(t["saving"]), saving_note),
         ("Success rate", "–" if t["done_rate"] is None else f"{t['done_rate'] * 100:.0f}%",
-         f"{t['verified']} judged by you or the lead · {t.get('soft_verified', 0)} probable (auto)"),
+         f"{t['verified']} judged by you or the lead · {t.get('soft_verified', 0)} probable (auto)"
+         + _soft_note(t.get("soft_trust"))),
         ("Lead cost per turn", "–" if not t.get("lead_turn_tokens_median") else
          f"≈{t['lead_turn_tokens_median'] / 1000:,.0f}k tokens",
          f"median of {t.get('lead_turns', 0)} turns · ≈ {_usd(t.get('lead_turn_ae_median'))} a turn · shorter "

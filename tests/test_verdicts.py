@@ -65,6 +65,42 @@ class TestVerdicts(Env):
         r = self.ccx("verify", run, "--ok", "0", "--reason", "sloppy")
         self.assertNotEqual(r.returncode, 0)
 
+    def test_trust_in_probable_verdicts(self):
+        # J7: share of probable verdicts later judged the other way; above 20% of 5+ they stop teaching routing
+        from ccx import ledger
+        soft = lambda rid, ok=True: {"type": "verify", "run_id": rid, "ok": ok, "soft": True}  # noqa: E731
+        hard = lambda rid, ok: {"type": "verify", "run_id": rid, "ok": ok}  # noqa: E731
+        rows = [soft("a"), hard("a", True), soft("b"), hard("b", False), soft("c"), {"type": "verify", "run_id": "d",
+                "ok": False}, hard("d", True)]
+        self.assertEqual(ledger.soft_trust(rows), {"soft": 3, "rechecked": 2, "overturned": 1,
+                                                   "overturn_rate": 0.5, "learn": True})   # too few rechecked yet
+        many = [x for i in range(5) for x in (soft(f"r{i}"), hard(f"r{i}", i == 0))]
+        self.assertFalse(ledger.soft_trust(many)["learn"])                                 # 4 of 5 overturned
+        self.assertTrue(ledger.soft_trust(many[:2] * 5)["learn"])                         # all confirmed
+
+    def test_overturned_probable_verdicts_stop_teaching(self):
+        import os
+        from unittest import mock
+        from ccx import delegate, ledger
+        from ccx.config import paths
+        with mock.patch.dict(os.environ, self.env):
+            p = paths()
+            for i in range(5):
+                ledger.append_event(p, {"type": "verify", "run_id": f"old{i}", "ok": True, "soft": True})
+                ledger.append_event(p, {"type": "verify", "run_id": f"old{i}", "ok": False})
+            rec = {"run_id": "new1", "ok": True, "result": {"status": "done"}, "route": {"b": 3}}
+            (p.runs / "new1").mkdir(parents=True)
+            with mock.patch.object(delegate.learn, "record_outcomes") as learned:
+                delegate._soft_verdict(p, rec, True, "", "auto")
+                learned.assert_not_called()
+                self.assertNotEqual(rec.get("learned"), "soft")
+                ledger.append_event(p, {"type": "verify", "run_id": "x", "ok": True})   # unrelated: no change
+                with mock.patch.object(ledger, "soft_trust", return_value={"learn": True}):
+                    delegate._soft_verdict(p, dict(rec, run_id="new1"), True, "", "auto")
+                learned.assert_called_once()
+        summary = self.run_ccx("stats", "--summary")["totals"]["soft_trust"]
+        self.assertEqual((summary["rechecked"], summary["overturned"], summary["learn"]), (5, 5, False))
+
 
 if __name__ == "__main__":
     unittest.main()
