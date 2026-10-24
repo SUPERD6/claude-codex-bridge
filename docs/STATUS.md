@@ -1,6 +1,6 @@
 # Status and next steps
 
-English · [中文](STATUS.zh.md) · updated 2026-10-24 · version 0.4.0 · 211 tests
+English · [中文](STATUS.zh.md) · updated 2026-10-24 · version 0.4.0 · 220 tests
 
 This is the working list for whoever continues the project (person or agent). It says what is done, how sure we
 are that it works, and what to do next, in order. Keep it current: when an item is done, move it to "Done" with
@@ -44,7 +44,7 @@ Measured on the real machine (second two-way test, tiny read-only task):
 ## 2. Next steps, in order
 
 ### Now (2026-10-24, after v0.4.0): the unified order of proposals F10–F14, G, H, I
-1 H13 verdicts without asking — ✅ PR #2 · 2 H10 keep the lead's context small — ✅ PR #3 · 3 H11 a week-long comparison — tool ✅ (`ccx trial`, `feat/h11-trial`), the week of data itself is being collected by the eval session (with the E8 two-way handover and F9 on/off checks) · 4 I1–I4 adapters for
+1 H13 verdicts without asking — ✅ PR #2 · 2 H10 keep the lead's context small — ✅ PR #3 · 3 H11 a week-long comparison — tool ✅ (`ccx trial`, `feat/h11-trial`), the week of data itself is being collected by the eval session (with the E8 two-way handover and F9 on/off checks) · (J13: J0–J3, J6 come first; J1–J2 ✅ PR #8, J3 ✅) · 4 I1–I4 adapters for
 many vendors · 5 F10–F14 fewer limits on built-in sub-agents · 6 H5–H7 + I6 shared memory in use · 7 H3–H4 + I7
 `ccx discuss` · 8 H8–H9 collaboration patterns · 9 G1 UI + `ccx stop` + `lang`, I5 more model sources · 10 H1–H2,
 H12, H14–H16, I8, then the open-source release. Each step: a branch, tests, a PR in Chinese, CI green, merge.
@@ -240,6 +240,7 @@ H12, H14–H16, I8, then the open-source release. Each step: a branch, tests, a 
 ## 4. Done recently
 
 - 2026-10-24 J3: `ccx sum -- <command>` (tests, diffs, logs cut down by code; full output kept; `--ask` for a cheap model).
+- 2026-10-24 J1 + J2: `ccx lead --breakdown` (what every turn re-reads, part by part, with advice) and `ccx lead --cache` (turns where the cache broke, the cause, the cost). Real numbers: this session 78.6k tokens a turn (built-in tools ~23k, skill list ~6k, browser MCP ~5.6k); the previous long session 5 breaks, ~$8.5 extra. I1–I4 done on `feat/i1-adapters` but held for J13.
 - 2026-10-24 H11 tool: `ccx trial` (balanced halves, both measured the same way). Quick real E8 runs on this machine:
   Claude → Codex 2 of 3 right (gpt-6-luna/low once said read-only meant no shell — wording fixed), Codex → Claude
   (handover from a headless `codex exec` lead, `--session` needed) 1 of 1 right with haiku/low.

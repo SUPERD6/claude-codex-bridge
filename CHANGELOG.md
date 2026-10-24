@@ -7,6 +7,18 @@
   error lines with one line of context, repeats folded, and the tail. Capped at 2,000 characters
   (`--max-chars`); `--ask "..."` lets a cheap routed model answer from the saved output; the exit code is the
   command's. agent-delegate tells the lead to use it. Here a 40,657-character `git diff` came back as 2,053.
+- What the lead re-reads every turn (proposal J1): `ccx lead --breakdown` splits the first turn's measured
+  prefix into system prompt, built-in tool definitions, each MCP server's tool definitions, each instruction file,
+  the skill list, the start hook's output and the rest, from the tools' own session files (Claude Code's request
+  shape and start-up attachments; Codex's base instructions, tools and AGENTS.md). Sizes are estimated from the text
+  and scaled to the measured count; each part shows its cost per 100 turns, and big ones get advice (turn off an
+  MCP server this project doesn't use, link fewer skills, shorten an instruction file). Here: 78.6k tokens a turn,
+  of which built-in tool definitions ~23k, the skill list ~6k, one browser MCP server ~5.6k.
+- Where the prompt cache broke (proposal J2): `ccx lead --cache` finds turns that re-wrote the conversation into
+  the cache (Claude: cache writes jump; Codex: uncached input jumps) and names the likely cause — idle longer than
+  the cache lives (1 h when Claude Code asks for it, else 5 min; ~10 min for Codex), a model switch, the
+  conversation compacted, an instruction file edited, the tool list changed — with what each break cost over a
+  cache read. The previous long session here had 5 breaks costing ~$8.5 extra (3 idle, 2 compactions).
 - A formal comparison over a week (proposal H11). `ccx trial start [--days 7] [--rate 0.5]` puts about half of the
   delegable tasks on the lead's side ("do this one yourself", closed with `ccx ab done`) and delegates the rest,
   balanced per kind of work and difficulty. Both halves are measured the same way: the lead conversation the task
