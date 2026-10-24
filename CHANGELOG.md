@@ -12,6 +12,14 @@
   (11.6k vs 19.9k cache-write tokens with one sub-agent), so sub-agent tokens were missed. F14: a brief listing
   3+ parts (or `--parallel`) explicitly asks for sub-agents on the independent parts. Docs now say that with
   codex-cli 0.164 + gpt-6-luna/low sub-agents were not started even when asked, so these limits are untested live.
+- Front page brought up to date for relayline: README (EN + ZH) opens with the name, one sentence of what it is and
+  a table of seven things it does with where each stands; the "Measured" table now carries the 2026-10-24 results,
+  the unfavourable ones included (small tasks save only when the lead trusts ccx's check; Codex's own sub-agents never
+  started on luna low); new commands (`ccx lead --breakdown/--cache/--suggest`, `ccx sum`, `ccx fresh`, `ccx trial`,
+  `ccx agents`) in the command list. New banner, architecture (several agent CLIs, ccx, personal and project layer,
+  `ccx ui`) and social preview from `scripts/make_assets.py` (names only, no vendor marks); `scripts/make_demo.py`
+  now shows ccx rerunning the check; fresh `ccx ui` screenshots; `scripts/ui_demo.py` gains `--port` and `--plain`.
+  The website (`site/`, EN + ZH) follows the README.
 - `ccx/delegate.py` split by job (proposal J11), behaviour unchanged: `prompts.py` (what a sub-agent is told),
   `plan.py` (which rungs a run tries, budget and provider checks, the fallback to another vendor), `workspace.py`
   (worktree, ccx's re-run of the check, the snapshot and `ccx undo`), `verdicts.py` (`ccx verify`, built-in

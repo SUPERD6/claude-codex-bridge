@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ccx — Claude Code ⇄ Codex</title>
-<meta name="description" content="Let Claude Code and Codex hand tasks to each other, on the cheapest model likely to finish each piece.">
-<meta property="og:title" content="ccx — Claude Code ⇄ Codex, each other's sub-agent">
-<meta property="og:description" content="The cheapest model likely to finish each piece — checked, and with the receipt.">
+<title>relayline (ccx)</title>
+<meta name="description" content="Coding agents as each other's lead and sub-agent: shared memory, work split by difficulty, every piece checked, and a receipt for what it cost.">
+<meta property="og:title" content="relayline: coding agents as each other's lead and sub-agent">
+<meta property="og:description" content="Claude Code or Codex leads, Gemini CLI takes work too; shared memory, checks, reviews and a ledger. Command: ccx.">
 <meta property="og:image" content="assets/social-preview.png">
 <link rel="alternate" hreflang="zh" href="zh/">
 <link rel="stylesheet" href="style.css">
@@ -14,37 +14,38 @@
 <body>
 <div class="wrap">
   <header class="bar">
-    <a class="mark" href="./">ccx</a>
+    <a class="mark" href="./">relayline</a>
     <nav aria-label="main">
-      <a href="#how" class="hide-s">How it works</a>
-      <a href="demo/" class="hide-s">Dashboard demo</a>
-      <a href="#faq" class="hide-s">FAQ</a>
+      <a href="#seven" class="hide-s">What it does</a>
+      <a href="#numbers" class="hide-s">Measured</a>
+      <a href="#ui" class="hide-s">Live page</a>
+      <a href="#faq" class="hide-s">Questions</a>
       <a href="https://github.com/SUPERD6/relayline">GitHub</a>
-      <a href="zh/" hreflang="zh" lang="zh">中文</a>
-      <button class="theme" type="button" aria-label="Switch light/dark" title="Switch light/dark">◐</button>
+      <a href="zh/" hreflang="zh" lang="zh-CN">中文</a>
+      <button class="theme" type="button" aria-label="Toggle light/dark" title="Toggle light/dark">◐</button>
     </nav>
   </header>
 
   <section class="hero">
     <div>
-      <h1>Claude Code and Codex, each other's sub-agent</h1>
-      <p class="sub">ccx routes every piece of work to the cheapest model likely to finish it, runs it in the other tool,
-        has you check it, and records what it cost.</p>
+      <h1>Coding agents as each other's lead and sub-agent</h1>
+      <p class="sub">Shared memory, work split by difficulty, every piece checked, and a receipt for what it cost. Claude Code or Codex leads; Gemini CLI takes work too. The command is <code>ccx</code>; Python standard library only.</p>
       <div class="install">
         <code>pipx install git+https://github.com/SUPERD6/relayline</code>
         <button class="copy" type="button" data-copy="pipx install git+https://github.com/SUPERD6/relayline"
-                data-done="Copied" data-fail="Select &amp; copy">Copy</button>
+                data-done="Copied" data-fail="Copy manually">Copy</button>
       </div>
-      <p class="then">then <code>ccx setup</code> — it explains each step and asks before changing anything.</p>
+      <p class="then">Then run <code>ccx setup</code> — it explains each step and asks before changing anything.</p>
       <div class="lanes"><span><i class="dot" style="background:var(--amber)"></i>Claude Code</span>
-        <span><i class="dot" style="background:var(--teal)"></i>Codex</span><span>Gemini CLI (optional)</span></div>
+        <span><i class="dot" style="background:var(--teal)"></i>Codex</span>
+        <span><i class="dot" style="background:var(--violet)"></i>Gemini CLI (sub-agent only)</span></div>
     </div>
-    <div class="term" aria-label="example session">
-      <div class="top">a real run on Windows, shortened and translated</div>
+    <div class="term" aria-label="Example session">
+      <div class="top">a real run on Windows (trimmed; the repo was still called claude-codex-bridge)</div>
 <pre><span class="p">$</span> ccx route --to codex --b 2
   <span class="t">codex:gpt-6-luna:low</span>   p 0.65 · with escalation 0.95
 
-<span class="p">$</span> ccx run --to codex --mode read "Read README.md, report line 1"
+<span class="p">$</span> ccx run --to codex --mode read "Read README.md and report its first line"
   <span class="a">claude → codex</span>   luna/low · 1 attempt · 5.5 s
   status   <span class="g">done</span>
   summary  "# claude-codex-bridge (`ccx`)"
@@ -55,54 +56,84 @@
     </div>
   </section>
 
-  <section class="nums" aria-label="measured on a real machine">
-    <div><b>46k → 13.6k</b><span>tokens to start a Claude sub-agent (per request)</span></div>
-    <div><b>$2.8–4.4</b><span>API-equivalent per 1% of Codex weekly quota, stable across 4 windows</span></div>
-    <div><b>139 tests</b><span>Linux · Windows · macOS, Python 3.11–3.13</span></div>
-  </section>
+  <p class="wip"><b>Work in progress (v0.4).</b> Both directions run every day on one Windows machine; the first savings measurements say "it depends" (below); the queue, worktrees and quota fallback are tested only with stand-ins; Gemini CLI has not run for real; multi-turn discussion between two models (<code>ccx discuss</code>) is not built. See <a href="https://github.com/SUPERD6/relayline/blob/main/docs/STATUS.md">STATUS</a>.</p>
 
-  <h2>What it does</h2>
-  <section class="feat">
-    <div><h3>Both directions</h3><p>Claude Code leads and Codex works, or the other way round — terminal or desktop app.</p></div>
-    <div><h3>Picks the model</h3><p>A five-question difficulty score → agent, model and effort, with the odds; learns from every <code>ccx verify</code>.</p></div>
-    <div><h3>Cheap starts</h3><p>Slim sub-agent start-up and the same sub-session continued within an hour, so the cache stays warm.</p></div>
-    <div><h3>Shared memory</h3><p>Only the other side's new lines arrive at session start; a project layer both tools see.</p></div>
-    <div><h3>Resumable</h3><p>Quota stop, crash or closed window: <code>ccx task resume</code> picks up the same session.</p></div>
-    <div><h3>Receipts</h3><p>Every run's tokens and cost; a dashboard of what delegating actually saved.</p></div>
+  <h2 id="seven">Seven things it does</h2>
+  <section class="feat four">
+    <div><h3>1 · Each other's lead and sub-agent</h3><p>Claude Code or Codex leads; Gemini CLI and DeepSeek (through Claude Code) take work. One adapter per CLI; <code>ccx agents</code> lists what each can do.</p></div>
+    <div><h3>2 · Two models talking</h3><p><code>ccx ask</code> for the other vendor's second opinion, <code>ccx resume</code> to follow up in the same sub-session, <code>ccx send</code> into a live Codex session. Multi-turn discussion is not built.</p></div>
+    <div><h3>3 · Shared memory</h3><p>A personal layer (your hub) and a project layer (<code>.ccx/</code>); only the other side's new lines arrive at start; <code>ccx handoff</code> passes the baton, <code>ccx fresh</code> starts a fresh conversation.</p></div>
+    <div><h3>4 · Splitting the work</h3><p>Five questions → agent, model, effort and the odds; it says so when doing it yourself is cheaper or the task should be split. <code>ccx batch</code>, <code>ccx q</code>, resumable.</p></div>
+    <div><h3>5 · Cheap and fast</h3><p>Slim sub-agent start-up; <code>ccx lead</code> (<code>--breakdown</code> / <code>--cache</code> / <code>--suggest</code>) shows what the lead re-reads each turn; <code>ccx sum</code> trims big outputs.</p></div>
+    <div><h3>6 · No drop in quality</h3><p>ccx reruns the check (<code>--check</code>); another vendor reviews the diff (<code>--review</code>); every run gets a verdict (<code>--reason</code>), unjudged ones a probable one; <code>ccx trial</code> for a week-long comparison.</p></div>
+    <div><h3>7 · You stay in control</h3><p>Dry run and backups before config changes; <code>ccx undo</code>; <code>--mode read</code>, <code>--worktree</code>; sub-agents can't delegate further; <code>ccx ui</code> shows everything, read-only.</p></div>
+    <div><h3>Receipts</h3><p>Tokens and cost of every run; <code>ccx report</code> builds a dashboard. <a href="demo/">See a sample</a> (stand-in data).</p></div>
   </section>
 
   <section id="how">
-    <h2>How it works</h2>
+    <h2>How it fits together</h2>
     <div class="figure">
-      <img class="for-light" src="assets/architecture-light.svg" width="1200" height="540"
-           alt="Either tool leads; ccx routes a brief to the other, runs it headless and returns JSON; the hub feeds both tools at session start; the project's .ccx folder holds context, journal, inbox, checkpoints">
-      <img class="for-dark" src="assets/architecture-dark.svg" width="1200" height="540" alt="">
+      <img class="for-light" src="assets/architecture-light.svg" width="1200" height="660"
+           alt="Claude Code, Codex and Gemini CLI connect to ccx; a lead hands a brief to another, which runs headless and returns JSON; ccx routes, reruns the check, asks another vendor to review, records verdicts and costs; below: the personal layer (hub), the project layer (.ccx) and ccx ui, a local read-only page">
+      <img class="for-dark" src="assets/architecture-dark.svg" width="1200" height="660" alt="">
     </div>
     <ol class="how">
-      <li><b>Score</b>Files, coupling, clarity, risk, novelty → difficulty 0–10.</li>
-      <li><b>Route</b>Cheapest rung whose success odds clear the bar; an escalation path if it stalls.</li>
-      <li><b>Run</b>The other agent works headless in your folder; edits can be undone or kept on a branch.</li>
-      <li><b>Check</b>You look at the diff, then <code>ccx verify</code> — routing calibrates to your work.</li>
+      <li><b>Score</b>Files touched, modules crossed, how clear the goal is, risk, new design → difficulty 0–10.</li>
+      <li><b>Pick</b>The cheapest rung likely enough to finish; if it isn't worth delegating, it says so.</li>
+      <li><b>Run</b>The other tool works in your folder, headless; ccx reruns the check, another vendor may review.</li>
+      <li><b>Verify</b>You glance at the diff and <code>ccx verify</code>; routing calibrates on the result.</li>
     </ol>
   </section>
 
+  <section id="numbers">
+    <h2>Measured (2026-10-24)</h2>
+    <p class="note">Real runs on a real machine, the unfavourable results included. Method and limits: <a href="https://github.com/SUPERD6/relayline/blob/main/docs/research/2026-10-24-h11-e8-f9-measurements.md">measurement report</a>.</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Question</th><th>Result</th><th>How sure</th></tr></thead>
+      <tbody>
+        <tr><td>Does handing small tasks to Codex save the lead anything?</td><td><b>It depends on whether the lead trusts ccx's check.</b> sonnet as lead: one request fewer per task (6/6, p = 0.031), total about even; haiku as lead: reruns the tests itself, higher total (median $0.0024 → $0.0056, p = 0.008). Both about 16–18 s slower; 14/14 correct on both sides.</td><td>Sure for small tasks; small samples</td></tr>
+        <tr><td>With a real, long-conversation lead?</td><td>About $0.04 saved and 16 s more waiting per small task (one fewer re-read of about 220k tokens)</td><td>Extrapolated, not measured</td></tr>
+        <tr><td>Where does the money go? (7 days, this machine)</td><td>The lead re-reads a median 352k tokens, $0.11 per request, 99% cache reads; all sub-tasks that week: $0.42</td><td>A reading</td></tr>
+        <tr><td>Do Codex's own sub-agents get used?</td><td>0 of 5 runs on gpt-6-luna low started one, even when asked</td><td>luna low only</td></tr>
+        <tr><td>Can the next agent pick up from a handoff alone?</td><td>3/3 in controlled runs; a real long session failed at first, right after the fix</td><td>One real session</td></tr>
+        <tr><td>Slim start of a Claude sub-agent</td><td>Fixed context per request 46k → 13.6k tokens</td><td>Single run</td></tr>
+        <tr><td>Accounting vs. Codex's weekly quota</td><td>$2.8–4.4 per 1%, stable across 4 windows</td><td>4 windows</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="ui">
+    <h2>The live page: <code>ccx ui</code></h2>
+    <p class="note">Read-only, on 127.0.0.1 only, never calls a model: what waits for your call (red) or review (amber), what each agent is doing, and whether the quota lasts at this pace. Screenshots use demo data (<code>scripts/ui_demo.py</code>).</p>
+    <div class="figure shot">
+      <img class="for-light" src="assets/ui/task-zh.png" width="1440" height="1000" loading="lazy"
+           alt="ccx ui task page in Chinese: a task as an org chart, one column per worker, the side panel showing why a piece needs your call (demo data)">
+      <img class="for-dark" src="assets/ui/task-en-dark.png" width="1440" height="1000" loading="lazy"
+           alt="ccx ui task page in English, dark theme (demo data)">
+    </div>
+    <div class="figure shot">
+      <img src="assets/ui/overview-zh.png" width="1440" height="1000" loading="lazy"
+           alt="ccx ui overview in Chinese: what waits for you, the current lead, projects and the quota forecast (demo data)">
+    </div>
+  </section>
+
   <section class="demo" id="dashboard">
-    <p><b>See the dashboard.</b> A sample <code>ccx report</code>, generated from stand-in data: who spent which tokens,
-      quota, cost per success and what delegating saved.</p>
-    <a class="btn" href="demo/">Open the demo dashboard</a>
+    <p><b>See the dashboard.</b> A <code>ccx report</code> built from stand-in data: who spent which tokens, quota, cost per success, and the estimated saving.</p>
+    <a class="btn" href="demo/">Open the sample dashboard</a>
   </section>
 
   <section id="faq">
     <h2>Questions</h2>
-    <details><summary>Doesn't a second agent cost more tokens?</summary><p>Only for tiny tasks — then ccx tells you to do them yourself. Otherwise the sub-agent runs on a cheaper model than your lead and starts slim; the dashboard shows the difference from your own runs.</p></details>
-    <details><summary>I'm on a subscription, not the API. Does this apply?</summary><p>Yes: costs are shown at API prices so runs are comparable, and the dashboard also shows how much of each tool's quota went where. When one tool runs out, the work moves to the other.</p></details>
-    <details><summary>Is it safe to let a sub-agent edit files?</summary><p>Edits stay in the task's folder, every write run is snapshotted for <code>ccx undo</code>, and <code>--mode read</code> or <code>--worktree</code> keep your tree untouched. See <a href="https://github.com/SUPERD6/relayline/blob/main/SECURITY.md">SECURITY.md</a>.</p></details>
-    <details><summary>Which tools are supported?</summary><p>Claude Code and Codex CLI, tested on a real machine in both directions. Gemini CLI and DeepSeek-backed Claude Code are adapted but not yet run for real.</p></details>
+    <details><summary>Doesn't a second agent cost more tokens?</summary><p>It can. In the measurements, a small task saved something only when the lead answered as soon as ccx's check passed; a lead that reran the tests itself paid for the sub-task on top and waited longer. Most of the money goes on the lead re-reading its own conversation, which is what <code>ccx lead</code>, <code>ccx sum</code> and <code>ccx fresh</code> are for.</p></details>
+    <details><summary>I'm on a subscription, not the API. Does this apply?</summary><p>Yes. Costs are shown at API prices so runs can be compared; the dashboard also shows how much of each tool's quota went where. When one tool runs out, the work moves to the other.</p></details>
+    <details><summary>Is it safe to let a sub-agent edit files?</summary><p>Edits stay in the task's folder, every write run is snapshotted for <code>ccx undo</code>, and <code>--mode read</code> or <code>--worktree</code> keep your tree untouched. Details in <a href="https://github.com/SUPERD6/relayline/blob/main/SECURITY.md">SECURITY.md</a>.</p></details>
+    <details><summary>Which tools work?</summary><p>Claude Code and Codex CLI can lead or work, tested for real in both directions. DeepSeek through Claude Code is calibrated on real tasks; Gemini CLI is adapted but hasn't run for real; both only work as sub-agents.</p></details>
+    <details><summary>Why the new name?</summary><p>The old name, claude-codex-bridge, was nearly the same as another project's (SeemSeam/claude_codex_bridge), and it's no longer just two tools. The command is still <code>ccx</code>; the old address redirects.</p></details>
   </section>
 
-  <footer><span>ccx · MIT</span><a href="https://github.com/SUPERD6/relayline">GitHub</a>
-    <a href="https://github.com/SUPERD6/relayline/blob/main/SECURITY.md">SECURITY.md</a><a href="zh/" lang="zh">中文</a>
-    <span>Not affiliated with Anthropic or OpenAI. Claude Code and Codex are their respective owners' products.</span></footer>
+  <footer><span>relayline · MIT</span><a href="https://github.com/SUPERD6/relayline">GitHub</a>
+    <a href="https://github.com/SUPERD6/relayline/blob/main/SECURITY.md">SECURITY.md</a><a href="zh/" lang="zh-CN">中文</a>
+    <span>Not affiliated with Anthropic, OpenAI or Google. Claude Code, Codex and Gemini CLI are their owners' products.</span></footer>
 </div>
 <script src="app.js"></script>
 </body>

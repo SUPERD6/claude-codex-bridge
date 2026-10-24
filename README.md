@@ -1,6 +1,6 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.svg">
-  <img alt="ccx — Claude Code and Codex hand work to each other; a real run: routed to luna/low, done in one attempt, verified, $0.0023" src="docs/assets/banner-light.svg" width="100%">
+  <img alt="relayline (command ccx): coding agents as each other's lead and sub-agent; Claude Code, Codex, Gemini CLI; a real run: Codex luna/low, done in one attempt, verified, $0.0023" src="docs/assets/banner-light.svg" width="100%">
 </picture>
 
 <p align="center">
@@ -13,28 +13,11 @@
 
 <p align="center">English · <a href="README.zh.md">中文</a> · <a href="https://superd6.github.io/relayline/">Website</a></p>
 
-**relayline** (formerly `claude-codex-bridge`; the command is still `ccx`) is not
-[CCB](https://github.com/SeemSeam/claude_codex_bridge) (`SeemSeam/claude_codex_bridge`, a visible terminal workspace
-for watching and steering many agents) and not OpenAI's official [codex-plugin-cc](https://github.com/openai/codex-plugin-cc)
-(a Claude Code plugin that sends work to Codex only): it hands work between the tools in both directions, picks the
-cheapest model likely to finish each piece, and records what it cost. More in [Similar projects](#similar-projects).
+# relayline
 
-> **Work in progress (v0.4, October 2026).** It runs every day on one Windows machine, both directions, terminal and
-> desktop apps. Not done yet:
-> - **No real savings numbers.** Two weeks of real use with verdicts haven't been collected, so routing priors are
->   uncalibrated and "how much it saves" is not measured; the numbers below are single real runs.
-> - **Tested only with stand-in CLIs:** the work queue (`ccx q`), seats, worktrees and `ccx batch`, fallback to the
->   other agent on a real quota stop, `ccx uninstall --apply`. Gemini CLI has never run for real. macOS and Linux
->   run in CI only.
-> - **Not built yet:** a local live view (`ccx ui`) and an `en`/`zh` switch for the few lines ccx injects into
->   sessions. The website above is not published yet.
->
-> Commit ids in older notes (CHANGELOG, docs/STATUS) refer to the private history before it was squashed for this
-> public release. Issues and feedback are welcome; see [STATUS](docs/STATUS.md) for what is verified and how.
-
-**Let Claude Code and Codex hand tasks to each other.** ccx picks the cheapest model likely to finish each piece,
-runs it in the other tool, has the lead check the result and records what it cost — so the expensive lead stops
-doing the cheap work. Either tool can lead; Gemini CLI, and DeepSeek through Claude Code, can take work too.
+**Coding agents as each other's lead and sub-agent: shared memory, work split by difficulty, every piece checked,
+and a receipt for what it cost.** Claude Code or Codex can lead; Gemini CLI, and DeepSeek through Claude Code, can
+take work too. The command is `ccx`; Python standard library only.
 
 ```bash
 pipx install git+https://github.com/SUPERD6/relayline
@@ -42,34 +25,62 @@ ccx setup                    # guided: explains each step and asks before changi
 ccx run --to codex --mode read "Summarise README.md in three lines"
 ```
 
-<p align="center"><img alt="Animated demo: ccx route picks codex:gpt-6-luna:low, ccx run finishes in one attempt, ccx verify records the verdict" src="docs/assets/demo.svg" width="100%"></p>
+<p align="center"><img alt="Animated demo: ccx route picks codex:gpt-6.1-sol:medium, ccx run finishes in one attempt and ccx reruns the check, ccx verify records the verdict" src="docs/assets/demo.svg" width="100%"></p>
 
-## Measured on a real machine
+> **Work in progress (v0.4, October 2026).** It runs every day on one Windows machine, both directions, terminal and
+> desktop apps.
+> - **Does it save money? The first measurements say "it depends"** (next section): small tasks save only when the
+>   lead trusts ccx's check result. The week-long comparison (`ccx trial`) is still collecting; routing priors are
+>   uncalibrated.
+> - **Tested only with stand-in CLIs:** the work queue (`ccx q`), seats, worktrees and `ccx batch`, fallback to the
+>   other agent on a real quota stop, `ccx uninstall --apply`. Gemini CLI has never run for real. macOS and Linux
+>   run in CI only.
+> - **Not built yet:** multi-turn discussion between two models (`ccx discuss`), `ccx stop`, fuller shared memory
+>   (see "Next" in [STATUS](docs/STATUS.md)). The website is not published yet.
+>
+> Early commit ids in older notes (CHANGELOG, docs/STATUS) refer to the private history squashed before going
+> public. See [STATUS](docs/STATUS.md) for what is verified and how.
 
-| What | Result |
-|---|---|
-| Starting a Claude sub-agent (fixed context per request) | 46k → **13.6k** tokens with ccx's slim start |
-| Small read task, Claude Code → Codex | **1 attempt**, luna/low, **$0.0023** |
-| Usage accounting vs. Codex's own weekly quota | **$2.8–4.4** API-equivalent per 1%, stable across 4 windows |
-| Tests | 139, on Linux, Windows and macOS × Python 3.11–3.13 |
+## Seven things it does
 
-Two weeks of everyday numbers (what delegating actually saved) will replace this table before 1.0.
-
-## What it does
-
-| | |
-|---|---|
-| **Both directions** — Claude Code leads and Codex works, or the other way round; terminal or desktop app. | **Picks the model** — a five-question difficulty score → agent, model, effort and the odds; learns from every `ccx verify`. |
-| **Cheap starts** — slim sub-agent start-up; the same sub-session is continued within an hour, so the cache stays warm. | **Shared memory** — only the other side's new lines arrive at session start; a project layer both tools see. |
-| **Resumable** — quota stop, crash or closed window: `ccx task resume` picks up the same session. | **Receipts** — every run's tokens and cost, and a dashboard of what delegating saved. |
+| | What | Where it stands |
+|---|---|---|
+| **1. Each other's lead and sub-agent** | Claude Code leads and Codex works, or the other way round; Gemini CLI and DeepSeek (through Claude Code) take work. One adapter per CLI; `ccx agents` lists what each can do, the version tested, official or community. | Both directions run for real; Gemini only with stand-ins |
+| **2. Two models talking directly** | `ccx ask` gets a quick second opinion from the other vendor; `ccx resume` follows up in the same sub-session; `ccx send` puts a message into a live Codex session. | These three work for real; multi-turn `ccx discuss` is not built |
+| **3. Shared memory** | A personal layer (your hub: memory, skills, MCP, ledger) and a project layer (`.ccx/`: context, journal, handoffs, checkpoints). The session-start hook brings only the other side's new lines; `ccx handoff` passes the baton, `ccx fresh` moves a long conversation to a fresh one of the same tool. | Works for real; fuller shared memory in progress |
+| **4. Splitting the work** | A five-question difficulty score → agent, model, effort and the odds; when doing it yourself is cheaper, or the task should be split first, it says so instead of delegating. `ccx batch` / `ccx q` run pieces in parallel; `ccx task resume` continues a long task after a stop. | Routing works for real but priors are uncalibrated; the queue only with stand-ins |
+| **5. Cheap and fast** | Slim sub-agent start-up; `ccx lead` shows what every turn of the lead re-reads (`--breakdown` part by part, `--cache` where the prompt cache broke, `--suggest` a model for the lead itself); `ccx sum` gives the lead only what matters of a big output. | The tools exist; how much they save depends on the lead using them (see below) |
+| **6. No drop in quality** | ccx reruns the acceptance command itself (`--check`); another vendor's model reviews the diff (`--review`); every run gets a verdict (`ccx verify --ok 0 --reason wrong`), and runs nobody judged get a probable one from the evidence after 12 hours; `ccx trial` runs a week-long comparison. | Works for real; the automatic verdicts haven't been spot-checked yet |
+| **7. You stay in control** | Config changes are a dry run first and backed up before applying; `ccx undo` reverts a run's edits; `--mode read` / `--worktree` leave your working tree alone; sub-agents can't delegate further; `ccx ui` shows, read-only on this machine, who works on what and what waits for your call. | Works for real; `ccx ui` opened in Edge only |
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture-dark.svg">
-  <img alt="Either tool leads; ccx routes a brief to the other, runs it headless and returns JSON; a session-start hook brings memory, handoffs and unfinished tasks from your hub; the project's .ccx folder holds context, journal, inbox, checkpoints and undo snapshots" src="docs/assets/architecture-light.svg" width="100%">
+  <img alt="Architecture: Claude Code, Codex and Gemini CLI connect to ccx; a lead hands a brief to another, which runs headless and returns JSON; ccx routes, reruns the check, asks another vendor to review, records verdicts and costs; below: the personal layer (hub: memory, skills, MCP, ledger), the project layer (.ccx: context, journal, handoffs, checkpoints, undo snapshots) and ccx ui, a local read-only page" src="docs/assets/architecture-light.svg" width="100%">
 </picture>
+
+## Measured (2026-10-24, ccx 0.4.0)
+
+All from real runs on a real machine; method, raw tables and limits in the
+[measurement report](docs/research/2026-10-24-h11-e8-f9-measurements.md). **The unfavourable results are here too.**
+
+| Question | Result | How sure |
+|---|---|---|
+| Does handing small tasks to Codex save the lead anything? (8 small Python tasks, each done by the lead itself and delegated, paired) | **It depends on whether the lead trusts ccx's check.** sonnet as lead: one request fewer per task (3 → 2, 6/6, p = 0.031), total cost about even. haiku as lead: reruns the tests itself after delegating, so the same number of requests and a higher total (median $0.0024 → $0.0056, p = 0.008). Both **about 16–18 s slower**. 14/14 correct on both sides. | Sure for few-minute tasks; small samples |
+| And with a real, long-conversation lead? | One request fewer ≈ about 220k tokens not re-read ≈ **about $0.04 saved per small task at Opus cache-read prices, 16 s more waiting**; a lead that doesn't save the request just pays about $0.003 more. | **Extrapolated, not measured** |
+| Where does the money actually go? (real sessions on this machine, 7 days) | The Claude lead re-reads a median **352k tokens, $0.11 per request**, 99% cache reads; all ccx sub-tasks in the same week: $0.42. So the lead's own re-reading is what to cut. | A reading; sure |
+| Do Codex's own sub-agents get used? | On gpt-6-luna low, **0 of 5 runs started one**, even when asked explicitly; on vs. off differ within noise. Higher models not tested. | Sure for luna low only |
+| From a handoff alone, can the next agent say where things stand? | 3/3 in controlled runs (including one killed midway); a real long session failed at first (the plan was read stale), right after the fix. | One real session |
+| Slim start of a Claude sub-agent | Fixed context per request 46k → **13.6k** tokens | Single run |
+| Accounting vs. Codex's own weekly quota | **$2.8–4.4** API-equivalent per 1%, stable across 4 windows | 4 windows |
+| Tests | 260, on Linux, Windows and macOS × Python 3.11–3.13 | Logic only, not real CLIs |
 
 Design: [docs/DESIGN.md](docs/DESIGN.md) · Progress: [docs/STATUS.md](docs/STATUS.md) ·
 Decisions: [docs/DECISIONS.md](docs/DECISIONS.md) · Changes: [CHANGELOG.md](CHANGELOG.md)
+
+**Not the similarly named projects:** relayline was called `claude-codex-bridge`, but it is not
+[CCB](https://github.com/SeemSeam/claude_codex_bridge) (`SeemSeam/claude_codex_bridge`, a visible terminal workspace
+for watching and steering many agents) and not OpenAI's official [codex-plugin-cc](https://github.com/openai/codex-plugin-cc)
+(sends work from Claude Code to Codex only). See [Similar projects](#similar-projects).
 
 ## See it live: `ccx ui`
 
@@ -79,7 +90,18 @@ block for the reason, the evidence and the `ccx` command to copy. It reads only 
 write — no model is called — listens on 127.0.0.1 only, and exits a minute after the page is closed.
 `ccx ui --export snapshot.html` writes a static copy; `ccx config set ui.lang zh|en` picks the language.
 
-<img alt="ccx ui: a task as an org chart, columns per worker, the side panel showing why a piece needs a decision" src="docs/assets/ui/task-en-dark.png" width="100%">
+<img alt="ccx ui task page in English, dark theme: a task as an org chart, one column per worker, the side panel showing why a piece needs your call (demo data)" src="docs/assets/ui/task-en-dark.png" width="100%">
+
+<details><summary>Chinese interface, light</summary>
+
+<img alt="ccx ui overview in Chinese: nine things waiting, the current lead, two projects and the quota forecast (demo data)" src="docs/assets/ui/overview-zh.png" width="100%">
+
+<img alt="ccx ui task page in Chinese (demo data)" src="docs/assets/ui/task-zh.png" width="100%">
+
+</details>
+
+The screenshots come from `python scripts/ui_demo.py --plain`: a throwaway hub with real ccx runs on stand-in CLIs,
+nobody's real work.
 
 ## How it works (one example)
 
@@ -145,7 +167,7 @@ automatic memory stays its own: ccx doesn't copy one into the other.
 **Without a clone** (the skills and config ship inside the package):
 
 ```bash
-pipx install git+https://github.com/<you>/relayline
+pipx install git+https://github.com/SUPERD6/relayline
 ccx init --hub <your hub path>
 ccx doctor
 ```
@@ -153,7 +175,7 @@ ccx doctor
 **From a clone** (to develop, or to let `git pull` upgrade the skills linked into your hub):
 
 ```powershell
-git clone https://github.com/<you>/relayline
+git clone https://github.com/SUPERD6/relayline
 cd relayline
 .\install.ps1 -Hub <your hub path>      # Windows; macOS/Linux: ./install.sh <hub path>
 ```
@@ -200,6 +222,11 @@ ccx resume <run_id> "follow-up"       # same sub-session; also how an interrupte
 ccx task status | resume <task>       # long tasks: one command continues the interrupted step (hands off on quota)
 ccx handoff --by claude --to codex "what's done / decided / next" [--next "task 5" ...]   # switch leads
 ccx lead                                     # what each turn of your lead conversations re-reads and costs
+ccx lead --breakdown | --cache | --suggest   # each re-read part / where the cache broke / a model for the lead itself
+ccx sum -- python -m pytest -q               # run a command, show the lead only what matters (tests: failures); full output in .ccx/sum/
+ccx fresh [--launch]                         # move a long conversation to a fresh one of the same tool, handoff from its file
+ccx trial start | stop | report              # a week-long comparison: half the delegable tasks done by the lead, half delegated
+ccx agents                                   # each agent CLI: vendor, what it can do, tested version, official or community
 ccx verify <run_id> --ok 0 --reason wrong     # your verdict (unjudged runs get a probable one after 12 h)
 ccx handoff --from-transcript codex --to claude   # the old lead can't write it (quota out): built from its session file
                                                   # (by code; a format the code can't read goes to a routed sub-agent, --no-model to skip)
@@ -336,9 +363,12 @@ conversation into Codex. What it is still missing: measured savings (see the top
 
 ## Questions
 
-**Doesn't a second agent cost more tokens?** Only for tiny tasks, and then ccx tells you to do them yourself
-(`delegated: false`). Otherwise the sub-agent runs on a cheaper model than your lead and starts slim; `ccx report`
-shows the difference from your own runs, and roughly one task in ten is done by the lead itself to measure it.
+**Doesn't a second agent cost more tokens?** It can. In the measurements, delegating a small task saved something
+only when the lead answered as soon as ccx's check passed (one request fewer per task); a lead that reran the tests
+itself paid for the sub-task on top and waited a dozen seconds longer. For tiny tasks ccx tells you to do them
+yourself (`delegated: false`). Most of the money goes on the lead re-reading its own conversation every turn, which
+is what `ccx lead`, `ccx sum` and `ccx fresh` are for. `ccx report` shows the difference from your own runs;
+`ccx trial` runs a week-long comparison.
 
 **I'm on a subscription, not the API.** Costs are shown at API prices so runs can be compared; the dashboard also
 shows how much of each tool's quota went where. When one tool runs out, the work moves to the other.
@@ -354,8 +384,13 @@ must edit stops with `needs_write` and hands the decision back to you.
 **Does it drive the chat apps?** No. Both sides run in their work mode (`codex exec`, `claude -p`) — the same agents
 you use in a terminal, not a web chat.
 
-**Which tools work?** Claude Code and Codex CLI, tested on a real machine in both directions. DeepSeek-backed
-Claude Code is calibrated on real tasks; Gemini CLI is adapted but not yet run for real.
+**Which tools work?** Claude Code and Codex CLI can lead or work, tested on a real machine in both directions.
+DeepSeek through Claude Code is calibrated on real tasks and only works as a sub-agent; Gemini CLI is adapted
+(community-supported), only works as a sub-agent, and has not run for real yet. One adapter per CLI (`ccx/agents/`);
+`ccx agents` lists what each can do; adding one is described in [CONTRIBUTING.md](CONTRIBUTING.md).
+
+**Can two models discuss directly?** One way, for now: `ccx ask` for a second opinion, `ccx resume` to follow up in
+the same sub-session, `ccx send` into a live Codex session. A multi-turn back-and-forth (`ccx discuss`) is not built.
 
 ## Security
 
@@ -368,4 +403,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) (tests, rules, adding an adapter for anot
 
 ## License
 
-MIT, see [LICENSE](LICENSE). The repository is private for now and opens after v1.0.
+MIT, see [LICENSE](LICENSE).

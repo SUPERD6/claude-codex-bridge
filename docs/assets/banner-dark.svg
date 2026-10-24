@@ -1,28 +1,29 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 340" width="1200" height="340" role="img" aria-labelledby="t d">
-  <title id="t">ccx — Claude Code and Codex hand work to each other</title>
-  <desc id="d">Claude Code hands a task to Codex; ccx routes it to a small model, Codex finishes in one attempt, and the result is verified at a cost of $0.0023 (a real run).</desc>
+  <title id="t">relayline (ccx): coding agents take turns as each other's lead and sub-agent</title>
+  <desc id="d">Claude Code, Codex and Gemini CLI each can lead or work. ccx picks a cheap model likely to finish, reruns the check, has another vendor review the diff, and records the cost. Example from a real run: Codex gpt-6-luna low, one attempt, $0.0023.</desc>
   <rect width="1200" height="340" rx="16" fill="#0f1318"/>
-  <g font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">
-    <text x="64" y="122" font-size="84" font-weight="700" fill="#e7ebf0">ccx</text>
-  </g>
   <g font-family="-apple-system,&quot;Segoe UI&quot;,Helvetica,Arial,sans-serif">
-    <text x="64" y="178" font-size="30" font-weight="600" fill="#e7ebf0">Claude Code ⇄ Codex,</text>
-    <text x="64" y="216" font-size="30" font-weight="600" fill="#e7ebf0">each other's sub-agent</text>
-    <text x="64" y="262" font-size="21" fill="#97a1ae">The cheapest model likely to finish each piece —</text>
-    <text x="64" y="292" font-size="21" fill="#97a1ae">checked, and with the receipt.</text>
+    <text x="64" y="118" font-size="76" font-weight="700" fill="#e7ebf0">relayline</text>
+    <text x="68" y="160" font-size="22" fill="#97a1ae" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">command: ccx</text>
+    <text x="64" y="214" font-size="28" font-weight="600" fill="#e7ebf0">Coding agents as each other's</text>
+    <text x="64" y="250" font-size="28" font-weight="600" fill="#e7ebf0">lead and sub-agent</text>
+    <text x="64" y="294" font-size="20" fill="#97a1ae">Shared memory · the cheapest model likely to finish ·</text>
+    <text x="64" y="320" font-size="20" fill="#97a1ae">checked, reviewed, and with the receipt.</text>
   </g>
   <g font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">
-    <rect x="640" y="32" width="512" height="276" rx="12" fill="#161b22" stroke="#2b323c"/>
-    <rect x="672" y="58" width="300" height="44" rx="8" fill="#e3a14e"/>
-    <text x="692" y="88" font-size="21" font-weight="600" fill="#0f1318">Claude Code · lead</text>
-    <path d="M700 102 V 138 M692 130 L700 140 L708 130" stroke="#6b7684" stroke-width="2.5" fill="none"/>
-    <text x="724" y="128" font-size="18" fill="#97a1ae">route b=2 → luna · low · p 0.95</text>
-    <rect x="672" y="146" width="380" height="44" rx="8" fill="#4cc3c6"/>
-    <text x="692" y="176" font-size="21" font-weight="600" fill="#0f1318">Codex · done, 1 attempt</text>
-    <path d="M700 190 V 226 M692 218 L700 228 L708 218" stroke="#6b7684" stroke-width="2.5" fill="none"/>
-    <text x="724" y="216" font-size="18" fill="#97a1ae">you check the diff</text>
-    <text x="672" y="268" font-size="24" font-weight="700" fill="#58c27a">✓ verified</text>
-    <text x="860" y="268" font-size="24" font-weight="700" fill="#e7ebf0">$0.0023</text>
-    <text x="990" y="268" font-size="17" fill="#97a1ae">real run</text>
+    <rect x="640" y="28" width="512" height="284" rx="12" fill="#161b22" stroke="#2b323c"/>
+    <rect x="664" y="50" width="150" height="40" rx="8" fill="#e3a14e"/><text x="739.0" y="77" font-size="19" font-weight="600" fill="#0f1318" text-anchor="middle">Claude Code</text>
+    <rect x="822" y="50" width="110" height="40" rx="8" fill="#4cc3c6"/><text x="877.0" y="77" font-size="19" font-weight="600" fill="#0f1318" text-anchor="middle">Codex</text>
+    <rect x="940" y="50" width="188" height="40" rx="8" fill="#a990ec"/><text x="1034.0" y="77" font-size="19" font-weight="600" fill="#0f1318" text-anchor="middle">Gemini CLI</text>
+    <text x="664" y="124" font-size="16" fill="#97a1ae">Claude Code or Codex leads · any of them works</text>
+    <rect x="664" y="140" width="464" height="40" rx="8" fill="#1d242d" stroke="#2b323c"/>
+    <text x="682" y="167" font-size="18" fill="#e7ebf0">ccx route → codex · luna · low</text>
+    <text x="664" y="212" font-size="17" fill="#58c27a">✓ check rerun</text>
+    <text x="840" y="212" font-size="17" fill="#58c27a">✓ other-vendor review</text>
+    <text x="664" y="240" font-size="17" fill="#97a1ae">shared memory · handoff · ccx ui</text>
+    <line x1="664" y1="258" x2="1128" y2="258" stroke="#2b323c"/>
+    <text x="664" y="292" font-size="22" font-weight="700" fill="#58c27a">✓ verified</text>
+    <text x="840" y="292" font-size="22" font-weight="700" fill="#e7ebf0">$0.0023</text>
+    <text x="960" y="292" font-size="16" fill="#97a1ae">one real run</text>
   </g>
 </svg>
