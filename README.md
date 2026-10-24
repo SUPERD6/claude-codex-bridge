@@ -24,7 +24,7 @@ cheapest model likely to finish each piece, and records what it cost. More in [S
 > - **No real savings numbers.** Two weeks of real use with verdicts haven't been collected, so routing priors are
 >   uncalibrated and "how much it saves" is not measured; the numbers below are single real runs.
 > - **Tested only with stand-in CLIs:** the work queue (`ccx q`), seats, worktrees and `ccx batch`, fallback to the
->   other agent on a real quota stop, `ccx uninstall --apply`. Gemini CLI has never run for real. macOS and Linux
+>   other agent on a real quota stop. Gemini CLI has never run for real. macOS and Linux
 >   run in CI only.
 > - **Not built yet:** a local live view (`ccx ui`) and an `en`/`zh` switch for the few lines ccx injects into
 >   sessions. The website above is not published yet.
