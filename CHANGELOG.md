@@ -10,6 +10,24 @@
   labelled a model ("Estimated saving (model)", `saving_kind` in `ccx stats --summary`) with what it assumes.
 - agent-delegate: when ccx already ran your `--check` and it passed, don't run it again yourself (H11: that is what
   makes delegating save the lead a turn).
+- `ccx ui`, a read-only live page on this machine (proposal G1). Left: contents (overview → projects → tasks →
+  split pieces), red counts of what waits for you, search, quota by pace. Middle: each task as an org chart — you →
+  the lead (model, its own sub-agents as dashed tags, spend vs budget) → one column per worker; a new agent gets its
+  own column and colour. Blocks that need you are framed red (your call: needs_write, review still failing, check
+  failed, quota/timeout stop, no sign of life for 10 min) or amber (done, waiting for your verdict); the side panel
+  shows why, the evidence (what it says, files, check, review) and the `ccx` command for each button, to copy
+  (phase 1 never runs anything). Queue splits open as their own level (at most 3); filters, a folded history, live
+  tokens of running sub-agents from their session files. Reads only run records, the ledger, queues, session files
+  and kept quota readings, incrementally — never a model, never the quota probe. Standard-library HTTP on 127.0.0.1,
+  a random port, the token after `#` (sent back in a header, never in a URL the server sees), a Host check against
+  DNS rebinding, no CORS, a strict CSP, all data shown as text. Polls every 3 s; the page says "still open" every
+  10 s and the server exits 60 s after that stops. `ccx ui --export FILE` writes a static snapshot.
+- `ccx config set ui.lang zh|en`: one table (`ccx/ui_static/strings.json`) holds every word of the page in both
+  languages and the lines ccx writes into conversations (queue, stale memory, long-conversation hint, and a new
+  session-start line pointing at `ccx ui` when delegated work waits for you). Unset: the page follows the browser,
+  the lines stay English. Not switched: the checkpoint skill's own output, sub-agent briefs (they stay English).
+- `scripts/ui_demo.py`: a throwaway hub of real ccx runs on the stand-in CLIs, to try the page; the fake Codex can
+  now write a growing session file while it hangs (`FAKE_HANG_S`).
 - A model for the lead itself (proposal J5): `ccx lead --suggest` reads the last 30 turns of this conversation
   (Claude Code), sorts them into code edits, doc edits, reading/running and talk (files changed through the shell
   count as code), and compares what a turn costs at this context size on each model. When code is under a fifth of

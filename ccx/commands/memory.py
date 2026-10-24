@@ -194,8 +194,8 @@ def cmd_mem(a) -> int:
         parts = [memory.format_delta(memory.delta(p, a.as_, advance=not a.peek))]
         old = memory.stale(p)
         if old:
-            parts.append(f"[ccx shared memory: {len(old)} note(s) not checked for {memory.STALE_DAYS}+ days — "
-                         f"treat them as 'to check': `ccx mem stale`]")
+            from ..lang import say
+            parts.append(say("hint_mem_stale", p, n=len(old), days=memory.STALE_DAYS))
         root = project.find_root()
         if root:
             parts.append(project.pending_handoff(root, a.as_, advance=not a.peek))
@@ -207,6 +207,14 @@ def cmd_mem(a) -> int:
                 parts.append(wq.unfinished_line(root))
             except Exception:  # noqa: BLE001 — never break session start
                 pass
+        try:                           # delegated work that waits for the person: point at `ccx ui` (G1)
+            from ..lang import say
+            from ..ui import waiting
+            n = waiting(p)
+            if n:
+                parts.append(say("hint_waiting", p, n=n))
+        except Exception:  # noqa: BLE001 — never break session start
+            pass
         out = "\n\n".join(x for x in parts if x)
         if out:
             print(out)
