@@ -126,8 +126,7 @@ class TestBackgroundAndSend(AdapterEnv):
                 break
             time.sleep(0.1)
         log = f.parent / "bg.log"
-        why = (f.read_text() if f.exists() else "no run.json") + "
-" + (log.read_text() if log.exists() else "no bg.log")
+        why = (f.read_text() if f.exists() else "no run.json") + "\n" + (log.read_text() if log.exists() else "no bg.log")
         self.assertEqual(json.loads(f.read_text())["state"], "finished", why[-2000:])
         self.assertEqual(self.j("show", out["run_id"])["status"], "done")
 
