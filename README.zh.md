@@ -28,7 +28,7 @@ ccx run --to codex --mode read "用三行总结 README.md"
 
 > **仍在开发中（v0.4，2026 年 10 月）。** 每天在一台 Windows 电脑上真实使用，两个方向、终端和桌面端都跑通了。
 > - **省没省钱，第一批实测结论是“看情况”**（见下一节）：只在主智能体信 ccx 的验收结果时，小任务才省；一周的正式对比（`ccx trial`）还在收集。选模型的初始参数还没校准。
-> - **只用模拟命令行测过的：** 待办队列（`ccx q`）、长期岗位、worktree 和 `ccx batch`、真实额度用完时换另一边、`ccx uninstall --apply`。Gemini CLI 从没真跑过。macOS 和 Linux 只在 CI 里跑过。
+> - **只用模拟命令行测过的：** 待办队列（`ccx q`）、长期岗位、worktree 和 `ccx batch`、真实额度用完时换另一边。Gemini CLI 从没真跑过。macOS 和 Linux 只在 CI 里跑过。
 > - **还没做的：** 两个模型多轮讨论（`ccx discuss`）、`ccx stop`、更完整的共享记忆（见 [STATUS](docs/STATUS.zh.md)“接下来”）。网站还没发布。
 >
 > 旧记录（CHANGELOG、docs/STATUS）里早期的提交号指的是公开前压缩掉的私有历史。哪些功能验证过、怎么验证的，见 [STATUS](docs/STATUS.zh.md)。
@@ -63,7 +63,7 @@ ccx run --to codex --mode read "用三行总结 README.md"
 | 只凭交接，接手方能说对“做到哪、下一步”吗？ | 受控场景 3/3 说对（含中途被杀）；真实长会话第一次说错（计划读成了过期状态），修好后说对。 | 真实会话只有 1 个 |
 | 精简启动一个 Claude 子智能体 | 每次请求的固定上下文 4.6 万 → **1.36 万** token | 单次实测 |
 | 记账和 Codex 自己的周额度对照 | 每 1% 额度折算 **$2.8–4.4**，4 个时段都稳定 | 4 个时段 |
-| 测试 | 267 个，Linux、Windows、macOS × Python 3.11–3.13 | 只证明逻辑，不证明真机 |
+| 测试 | 268 个，Linux、Windows、macOS × Python 3.11–3.13 | 只证明逻辑，不证明真机 |
 
 设计说明：[docs/DESIGN.zh.md](docs/DESIGN.zh.md) · 进度：[docs/STATUS.zh.md](docs/STATUS.zh.md) · 决策记录：[docs/DECISIONS.md](docs/DECISIONS.md) · 变更：[CHANGELOG.md](CHANGELOG.md)
 

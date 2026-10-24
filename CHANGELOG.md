@@ -1,6 +1,11 @@
 # Changelog
 
 ## Unreleased
+- `ccx uninstall --apply` run once for real (J12, report section 5c), and three things it found fixed: tool files
+  keep their own line endings (an LF `config.toml` came back CRLF); after uninstall, `ccx sync` puts the Codex hook
+  block back where it was, not at the end (Codex keeps hook trust by position, so moved hooks ask for trust again);
+  uninstall now says how to put everything back (`ccx sync --apply`, `ccx skills install --replace --apply`,
+  `ccx doctor` — sync alone does not bring back ccx's skills).
 - A sub-agent's own sub-agents, limited by spend and quota rather than head count (proposals F10–F14, narrowed
   by the PR #6 measurements). F10: Codex's concurrency and F13: its sub-agent model are no longer forced to 3 and
   the parent's rung; ccx sets them only when quota is tight (1 at a time, one rung down) or snug (2), or when the

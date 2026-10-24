@@ -33,7 +33,7 @@ ccx run --to codex --mode read "Summarise README.md in three lines"
 >   lead trusts ccx's check result. The week-long comparison (`ccx trial`) is still collecting; routing priors are
 >   uncalibrated.
 > - **Tested only with stand-in CLIs:** the work queue (`ccx q`), seats, worktrees and `ccx batch`, fallback to the
->   other agent on a real quota stop, `ccx uninstall --apply`. Gemini CLI has never run for real. macOS and Linux
+>   other agent on a real quota stop. Gemini CLI has never run for real. macOS and Linux
 >   run in CI only.
 > - **Not built yet:** multi-turn discussion between two models (`ccx discuss`), `ccx stop`, fuller shared memory
 >   (see "Next" in [STATUS](docs/STATUS.md)). The website is not published yet.
@@ -72,7 +72,7 @@ All from real runs on a real machine; method, raw tables and limits in the
 | From a handoff alone, can the next agent say where things stand? | 3/3 in controlled runs (including one killed midway); a real long session failed at first (the plan was read stale), right after the fix. | One real session |
 | Slim start of a Claude sub-agent | Fixed context per request 46k → **13.6k** tokens | Single run |
 | Accounting vs. Codex's own weekly quota | **$2.8–4.4** API-equivalent per 1%, stable across 4 windows | 4 windows |
-| Tests | 267, on Linux, Windows and macOS × Python 3.11–3.13 | Logic only, not real CLIs |
+| Tests | 268, on Linux, Windows and macOS × Python 3.11–3.13 | Logic only, not real CLIs |
 
 Design: [docs/DESIGN.md](docs/DESIGN.md) · Progress: [docs/STATUS.md](docs/STATUS.md) ·
 Decisions: [docs/DECISIONS.md](docs/DECISIONS.md) · Changes: [CHANGELOG.md](CHANGELOG.md)

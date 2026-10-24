@@ -450,6 +450,26 @@ class TestUninstall(Env):
                          {"language": "zh"})
         self.assertNotIn("ccx", (self.home_codex / "config.toml").read_text(encoding="utf-8"))
         self.assertEqual((self.home_claude / "CLAUDE.md").read_text(encoding="utf-8").strip(), "# mine")
+        self.assertIn("ccx skills install --replace --apply", r.stdout)               # how to put it back
+
+    def test_uninstall_then_sync_gives_back_the_same_codex_config(self):
+        # J12 live run (2026-10-24): the round trip turned the user's LF config.toml into CRLF and moved ccx's block
+        # behind the user's own hooks — Codex keeps hook trust by position, so they'd need trusting again
+        p = Paths(self.hub)
+        for nl in ("\n", "\r\n"):
+            with self.subTest(newline=repr(nl)):
+                ct = self.home_codex / "config.toml"
+                ct.write_bytes('model = "x"\n'.replace("\n", nl).encode())
+                sync_all(p, apply=True, parts=["hooks"])
+                mine = ('\n# my own hook\n[[hooks.SessionStart]]\n[[hooks.SessionStart.hooks]]\ntype = "command"\n'
+                        'command = "echo hi"\n').replace("\n", nl)
+                ct.write_bytes(ct.read_bytes() + mine.encode())
+                before = ct.read_bytes()
+                self.assertEqual(self.ccx("uninstall", "--apply").returncode, 0)
+                self.assertNotIn(b"ccx", ct.read_bytes())
+                self.assertEqual(b"\r\n" in ct.read_bytes(), nl == "\r\n")            # line endings kept
+                sync_all(p, apply=True, parts=["hooks"])
+                self.assertEqual(ct.read_bytes(), before)                             # same place, same bytes
 
 
 class TestProjectLayer(Env):
