@@ -170,6 +170,21 @@ def cmd_sum(a) -> int:
     return res["exit"]
 
 
+def cmd_agents(a) -> int:
+    """What each agent CLI can do, which vendor it is, and whether ccx tests it on a real machine (I2, I8)."""
+    from .. import agents
+    from ..runners import find_bin
+    cfg = load_config(paths())
+    rows = [{"agent": ad.name, "vendor": ad.vendor, "support": ad.support, "tested_version": ad.tested_version,
+             "installed": bool(find_bin(ad.name)), **ad.capabilities(), "context_file": ad.context_file,
+             "start_hook": ad.start_hook, "session_files": ad.session_files} for ad in agents.all_adapters()]
+    for name, pv in (cfg.get("providers") or {}).items():
+        rows.append({"agent": name, "vendor": agents.vendor(name, cfg), "support": "community",
+                     "provider_of": pv.get("agent", "claude"), "can_work": True, "can_lead": False})
+    _out({"agents": rows})
+    return 0
+
+
 def register(sub) -> None:
     sm = sub.add_parser("sum", help="run a command and show only what matters of its output (tests: failures; "
                         "diffs: per file; logs: errors); the full output is kept in .ccx/sum/")
@@ -179,6 +194,8 @@ def register(sub) -> None:
     sm.add_argument("--ask", help="too long still: a cheap routed model answers this from the saved output")
     sm.add_argument("argv", nargs="+", help="-- then the command")
     sm.set_defaults(fn=cmd_sum)
+    ag = sub.add_parser("agents", help="each agent CLI: vendor, what it can do, tested version, official or community")
+    ag.set_defaults(fn=cmd_agents)
     tr = sub.add_parser("trial", help="a formal comparison over a week: half the delegable tasks done by the lead "
                         "itself, half delegated, measured the same way")
     trs = tr.add_subparsers(dest="trial_cmd", required=True)

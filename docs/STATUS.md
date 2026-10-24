@@ -1,6 +1,6 @@
 # Status
 
-English · [中文](STATUS.zh.md) · updated 2026-10-24 · version 0.4.0 · 238 tests
+English · [中文](STATUS.zh.md) · updated 2026-10-24 · version 0.4.0 · 241 tests
 
 One page on purpose: whatever an agent reads at start-up it re-reads on every later turn. Older notes, the full
 confidence table, acceptance checks and the done list are in [STATUS-archive.md](STATUS-archive.md); what changed
@@ -23,11 +23,11 @@ turn re-reads ~220k tokens):
 | J6 this page down to one page | ✅ PR #10 |
 | J8–J10 official codex-plugin-cc, similar projects, name options (docs only, [landscape](research/landscape.md)) | ✅ PR #4; coexistence plan not implemented or tested; the name waits for the user |
 | G1 `ccx ui` (read-only live page) + `ui.lang` | PR #7; `ccx stop` waits for the adapter refactor |
-| I1–I4 adapters per agent, vendor decides "another", fallback and reviewers from data | done on `feat/i1-adapters`, held by J13 until the H11/J0 numbers are in |
+| I1–I4 adapters per agent, vendor decides "another", fallback and reviewers from data | this change — new interface: `ccx.agents.get(name)` → `Adapter` (build/parse, vendor, support, tested_version, capabilities()); `ccx.agents.vendor()`, `others()`; `ccx agents` lists them as JSON |
 
 ## Next three
 
-1. With the J0 baseline and the first H11 numbers in: decide on I1–I4 (ready) and F10–F14.
+1. F10–F14 on the new adapters; then J4, J5, J11.
 2. J4 one-step handover to a fresh conversation, J5 a model suggestion for the lead itself, J7 how often probable
    verdicts get overturned (with the eval session's numbers).
 3. Then the rest of the unified order: H5–H7 + I6 shared memory, H3–H4 + I7 `ccx discuss`, H8–H9, `ccx stop`, I5, H1–H2, H12, H14–H16, I8, and the open-source release.

@@ -36,15 +36,22 @@ def doctor(p: Paths) -> bool:
     except Exception as e:  # noqa: BLE001
         add("tiers.toml", "FAIL", str(e))
 
-    for agent, login in (("codex", ["login", "status"]), ("claude", ["auth", "status"])):
+    from .agents import all_adapters
+    for ad in all_adapters():
+        agent, official = ad.name, ad.support == "official"
         if not find_bin(agent):
-            add(f"{agent} CLI", "FAIL", "not on PATH")
+            if official:                       # the two official agents are expected; the rest are optional
+                add(f"{agent} CLI", "FAIL", "not on PATH")
             continue
         rc, out = _run([*bin_argv(agent), "--version"])
         ver = out.splitlines()[0] if out else ""
-        from .runners import TESTED_VERSIONS
-        add(f"{agent} CLI", "ok" if rc == 0 else "FAIL", f"{ver} (flags checked against {TESTED_VERSIONS[agent]})")
-        rc, out = _run([*bin_argv(agent), *login])
+        can = ", ".join(k for k, v in ad.capabilities().items() if v)
+        add(f"{agent} CLI" + ("" if official else " (optional)"), "ok" if rc == 0 else ("FAIL" if official else "WARN"),
+            f"{ver} (flags checked against {ad.tested_version}; {ad.support}; {ad.vendor}; {can})")
+        if not ad.login_argv:
+            add(f"{agent} login", "Unknown", "ccx can't check this tool's login; its first run will tell")
+            continue
+        rc, out = _run([*bin_argv(agent), *ad.login_argv])
         try:                                   # claude auth status prints JSON
             import json as _j
             js = _j.loads(out)
@@ -64,9 +71,6 @@ def doctor(p: Paths) -> bool:
             state = "Unknown"
         add(f"{agent} login", state, out.splitlines()[0][:90] if out else "")
 
-    if find_bin("gemini"):            # optional third agent: report it, never fail without it
-        rc, out = _run([*bin_argv("gemini"), "--version"])
-        add("gemini CLI (optional)", "ok" if rc == 0 else "WARN", out.splitlines()[0] if out else "")
     add("hub", "ok" if p.hub.exists() else "FAIL", str(p.hub))
     vf = p.state / "version.json"
     if vf.exists():

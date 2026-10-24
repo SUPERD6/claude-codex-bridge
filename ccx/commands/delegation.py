@@ -198,7 +198,7 @@ def cmd_task(a) -> int:
         # the old session's agent is (probably) still out of quota: a fresh session on the other agent,
         # handed the checkpoint brief + the diff, instead of waiting
         from ..delegate import other
-        to = other(last["to"])
+        to = other(last["to"], load_config(p))
         text = (f"Continue step {nxt['n']} ({nxt['title']}) of a task another agent started and was cut off "
                 f"by its quota. Do not redo finished steps. Look at `git diff` for work already done.\n\n{brief}")
         if last.get("session_id") and last["to"] in ("claude", "codex"):
