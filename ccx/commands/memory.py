@@ -17,7 +17,7 @@ def cmd_handoff(a) -> int:
     import contextlib
     import io
     root = project.find_root() or learn.cp_root(Path.cwd())
-    by = a.by or _caller(None)
+    by = a.by or a.from_transcript or _caller(None)    # from a transcript, the old lead is the one handing off
     if by == "user":
         raise ValueError("say who hands off: --by claude|codex|gemini")
     text = Path(a.file).read_text(encoding="utf-8") if a.file else (" ".join(a.text) if a.text else "")

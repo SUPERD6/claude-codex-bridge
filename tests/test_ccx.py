@@ -33,8 +33,10 @@ class Env(unittest.TestCase):
                     "CCX_CONFIG": str(t / "user-config.toml")}       # never the real ~/.ccx/config.toml
         for k in ("CCX_DEPTH", "CCX_ROLE", "FAKE_STATUS", "TASK_SPLIT_HOME", "TASK_ROUTING_HOME",
                   "CHECKPOINT_ROOT", "CLAUDE_CODE_SESSION_ID", "CODEX_THREAD_ID", "CODEX_SESSION_ID",
-                  "CCX_LEAD_SESSION", "CLAUDECODE"):
+                  "CCX_LEAD_SESSION", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT"):
             self.env.pop(k, None)
+        for k in [k for k in self.env if k.startswith("CODEX_") and k != "CODEX_HOME"]:
+            self.env.pop(k)              # run as CI does: no lead tool around, unless a test sets one
         self._old = dict(os.environ)
         os.environ.update({k: v for k, v in self.env.items() if k.startswith(("CCX_", "CODEX_HOME", "CLAUDE_CONFIG"))})
 
