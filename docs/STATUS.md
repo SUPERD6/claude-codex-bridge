@@ -239,6 +239,7 @@ H12, H14–H16, I8, then the open-source release. Each step: a branch, tests, a 
 
 ## 4. Done recently
 
+- 2026-10-24 J3: `ccx sum -- <command>` (tests, diffs, logs cut down by code; full output kept; `--ask` for a cheap model).
 - 2026-10-24 H11 tool: `ccx trial` (balanced halves, both measured the same way). Quick real E8 runs on this machine:
   Claude → Codex 2 of 3 right (gpt-6-luna/low once said read-only meant no shell — wording fixed), Codex → Claude
   (handover from a headless `codex exec` lead, `--session` needed) 1 of 1 right with haiku/low.
