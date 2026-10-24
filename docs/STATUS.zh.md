@@ -21,7 +21,7 @@
 | J8–J10 官方 codex-plugin-cc 共存、同类项目、改名备选（只改文档，[调研](research/landscape.zh.md)） | ✅ PR #4；共存方案未实现、未实测；改名等用户拍板 |
 | I1–I4 适配器按家收拢、按厂商判断“另一家”、额度换边和审查者按数据选 | ✅ PR #11——新接口：`ccx.agents.get(名字)` → `Adapter`（build/parse、vendor、support、tested_version、capabilities()）；`ccx.agents.vendor()`、`others()`；`ccx agents` 以 JSON 列出 |
 | J4 一键换新会话（`ccx fresh`） | ✅ PR #12 |
-| J5 给主智能体自己的档位建议（`ccx lead --suggest`、看板一行） | 本次改动 |
+| J5 给主智能体自己的档位建议（`ccx lead --suggest`、看板一行） | ✅ PR #13 |
 
 ## 接下来三件
 
