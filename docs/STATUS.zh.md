@@ -1,6 +1,6 @@
 # 进度
 
-[English](STATUS.md) · 中文 · 更新于 2026-10-24 · 版本 0.4.0 · 241 个测试
+[English](STATUS.md) · 中文 · 更新于 2026-10-24 · 版本 0.4.0 · 243 个测试
 
 这一页故意只写一页：智能体开局读进来的东西，之后每一轮都要跟着重读。以前的记录、完整的把握程度表、验收检查和完成列表在 [STATUS-archive.zh.md](STATUS-archive.zh.md)；改了什么写在 [CHANGELOG.md](../CHANGELOG.md)。请保持简短：做完一项就在这里写一行，细节放进更新记录。
 
@@ -17,13 +17,14 @@
 | J3 大段输出先压缩再给主智能体（`ccx sum`） | ✅ PR #9 |
 | J6 这一页压到一页 | ✅ PR #10 |
 | J8–J10 官方 codex-plugin-cc 共存、同类项目、改名备选（只改文档，[调研](research/landscape.zh.md)） | ✅ PR #4；共存方案未实现、未实测；改名等用户拍板 |
-| G1 `ccx ui`（本机只读实时页面）+ `ui.lang` | PR #7；`ccx stop` 等适配器重构合并后再做 |
-| I1–I4 适配器按家收拢、按厂商判断“另一家”、额度换边和审查者按数据选 | 本次改动——新接口：`ccx.agents.get(名字)` → `Adapter`（build/parse、vendor、support、tested_version、capabilities()）；`ccx.agents.vendor()`、`others()`；`ccx agents` 以 JSON 列出 |
+| G1 `ccx ui`（本机只读实时页面）+ `ui.lang` | PR #7；`ccx stop` 接着做（适配器已合并） |
+| I1–I4 适配器按家收拢、按厂商判断“另一家”、额度换边和审查者按数据选 | ✅ PR #11——新接口：`ccx.agents.get(名字)` → `Adapter`（build/parse、vendor、support、tested_version、capabilities()）；`ccx.agents.vendor()`、`others()`；`ccx agents` 以 JSON 列出 |
+| J4 一键换新会话（`ccx fresh`） | 本次改动 |
 
 ## 接下来三件
 
-1. 在新适配器上做 F10–F14；然后 J4、J5、J11。
-2. J4 一键换新会话、J5 给主智能体自己的档位建议、J7 自动记的对错被推翻的比例（用实测会话的数字）。
+1. 在新适配器上做 F10–F14；然后 J5、J11（J4：本次改动）。
+2. J7 自动记的对错被推翻的比例（用实测会话的数字）。
 3. 然后是统一顺序里剩下的：H5–H7 + I6 共享记忆、H3–H4 + I7 `ccx discuss`、H8–H9、`ccx stop`、I5、H1–H2、H12、H14–H16、I8，最后开源发布。
 
 ## 把握程度（简版）

@@ -19,6 +19,11 @@
   the lines stay English. Not switched: the checkpoint skill's own output, sub-agent briefs (they stay English).
 - `scripts/ui_demo.py`: a throwaway hub of real ccx runs on the stand-in CLIs, to try the page; the fake Codex can
   now write a growing session file while it hangs (`FAKE_HANG_S`).
+- One step to a fresh conversation (proposal J4): `ccx fresh [--as claude|codex] [--note ...] [--launch]` writes the
+  handoff from this conversation's own session file (as `ccx handoff --from-transcript` does) addressed to the same
+  tool, and says how to open the new conversation; `--launch` starts it in a terminal. A new conversation of the
+  same tool in this folder now sees a handoff addressed to it (before, a handoff was never shown to the tool that
+  wrote it). The H10 per-turn hint now says: ask the person, then `ccx fresh`.
 - One adapter per agent CLI (proposals I1–I4). `ccx/agents/<name>.py` answers the same questions for Codex, Claude
   Code and Gemini CLI: how to run it headless and parse the result, where its sessions live, how to check its
   login, its instruction file and start hook, how permissions are given, its vendor, official or community

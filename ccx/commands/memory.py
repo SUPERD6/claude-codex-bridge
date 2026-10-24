@@ -47,6 +47,39 @@ def cmd_handoff(a) -> int:
     return 0
 
 
+FRESH_PROMPT = "Continue the work described in the handoff at .ccx/handoff.md (it was shown at start-up)."
+
+
+def cmd_fresh(a) -> int:
+    """Hand this long conversation over to a fresh one of the same tool (J4): the handoff is assembled by code from
+    this conversation's own session file, the next conversation in this folder starts with it."""
+    import subprocess
+    import sys
+    from .. import project
+    from ..runners import bin_argv
+    root = project.find_root() or learn.cp_root(Path.cwd())
+    agent = a.as_ or _caller(None)
+    if agent not in ("claude", "codex"):
+        raise ValueError("say which lead: --as claude|codex")
+    src = transcript_handoff(paths(), root, agent, a.session, a.max_chars, not a.no_model)
+    if src is None:
+        raise ValueError(f"no {agent} session file found for {root} (give --session ID)")
+    text = src[1] + (f"\n\n## Note from the person\n{a.note}" if a.note else "")
+    out = project.handoff(root, agent, agent, text)
+    cmd = [*bin_argv(agent), FRESH_PROMPT]        # both CLIs take the first prompt as an argument
+    out.update(from_transcript=str(src[0]),
+               next=f"open a new {agent} conversation in {root}: its start shows the handoff. In a terminal: "
+                    f"{agent} \"{FRESH_PROMPT}\"" + ("" if a.launch else " (or ccx fresh --launch)"))
+    if a.launch:
+        if not sys.stdin.isatty():
+            out["launch"] = "skipped: not in a terminal"
+        else:
+            _out(out)
+            return subprocess.call(cmd, cwd=root)
+    _out(out)
+    return 0
+
+
 def transcript_handoff(p, root: Path, agent: str, session: str | None = None,
                        max_chars: int | None = None, use_model: bool = True) -> tuple[Path, str] | None:
     """(session file, handoff text) assembled by code from `agent`'s newest main session in `root`."""
@@ -258,6 +291,15 @@ def cmd_ctx(a) -> int:
 
 
 def register(sub) -> None:
+    fr = sub.add_parser("fresh", help="hand this long conversation over to a fresh one of the same tool: the "
+                        "handoff comes from this conversation's own file; the next conversation here starts with it")
+    fr.add_argument("--as", dest="as_", choices=["claude", "codex"])
+    fr.add_argument("--session", help="a specific session id instead of the newest in this folder")
+    fr.add_argument("--note", help="a line from the person to add")
+    fr.add_argument("--no-model", action="store_true", help="code only, never a routed sub-agent reading the file")
+    fr.add_argument("--max-chars", type=int, help="size cap (default about one page)")
+    fr.add_argument("--launch", action="store_true", help="in a terminal: start the new conversation now")
+    fr.set_defaults(fn=cmd_fresh)
     ho = sub.add_parser("handoff", help="pass the baton to the other lead (what's done, decisions, next)")
     ho.add_argument("text", nargs="*", help="the handoff text (or --file); empty = write the template")
     ho.add_argument("--to", choices=[*DELEGATE_AGENTS, "any"], required=True)
