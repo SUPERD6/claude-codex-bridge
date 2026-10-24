@@ -209,6 +209,23 @@ python -m pytest -q tests        # 或 python -m unittest discover -s tests
 - DeepSeek 文档：Claude Code 用 `ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic` 加密钥；ccx 用 `ANTHROPIC_API_KEY` 加 `--bare` 传入，调用方自己的 Claude 登录不会被发到 DeepSeek（2026-10-24）；闲时半价；价格（高峰）deepseek-flash 输入 $0.30 / 缓存 $0.006 / 输出 $1.20，deepseek-v4-pro $1.32 / $0.044 / $3.96（每百万 token）
 - Gemini 价格（ai.google.dev/pricing）：3.5-flash-lite $0.30 / $0.03 / $2.50，3.8-flash $0.75 / $0.075 / $3.75（到 2026-12-31），3.1-pro-preview $2.00 / $0.20 / $12.00
 
+## 同类项目对比
+
+2026-10-24 查看（星数和日期来自 GitHub API，会变）。细节、来源和哪些还没确认：
+[docs/research/landscape.zh.md](docs/research/landscape.zh.md)。
+
+| 项目 | 做什么 | 星数 · 最近推送 · 许可证 | 和 ccx 的区别 |
+|---|---|---|---|
+| [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) | OpenAI 官方的 Claude Code 插件（2026-03-30）：让 Codex 审查、接活、把会话转给 Codex、管后台任务 | 3.45 万 · 2026-07 · Apache-2.0 | 只做 Claude → Codex，不选模型、不记花费。ccx 两个方向都做，另有按成本选模型、账本和主智能体成本。两者可以一起用。 |
+| [PAL MCP](https://github.com/BeehiveInnovations/pal-mcp-server)（`clink`） | MCP 服务器，把多家模型接进一个 CLI；`clink` 能启动另一个 CLI 当子智能体 | 1.18 万 · 2025-12 · Apache-2.0 | PAL 用 API key 接更多模型和工具；ccx 用两个 CLI 的订阅额度，按成功率和成本选，并用实际结果校准。 |
+| [CCB](https://github.com/SeemSeam/claude_codex_bridge)（`SeemSeam/claude_codex_bridge`） | 可见的多智能体终端工作区，支持 16 类 CLI，代理间有消息队列，可随时接管 | 3,595 · 2026-10 · AGPL-3.0 | CCB 重在一起看、一起指挥多个代理；ccx 是无界面的派活工具，重在成本。名字相近，但是不同的项目。 |
+| [sendbird/cc-plugin-codex](https://github.com/sendbird/cc-plugin-codex) | 跑在 Codex 里调 Claude Code 的插件（官方插件的反方向） | 226 · 2026-10 · Apache-2.0 | 只做 Codex → Claude。 |
+| [umum-ai](https://github.com/umum-ai/claude-codex-bridge) / [Jayden-X-L](https://github.com/Jayden-X-L/claude-codex-bridge) 的 `claude-codex-bridge` | 在 Claude 里调 Codex 并可中途追加指令 / 双向互相审查 | 10 / 16 · 2026 · MIT | 各做一部分（插话、审查），不选模型、不记账。 |
+| [claude-codex-memory-sync](https://github.com/DaizeDong/claude-codex-memory-sync)、[mycelium](https://github.com/conradomateu/mycelium)、[memorize](https://github.com/shakystar/memorize) | 在工具之间同步技能、指令、MCP 和记忆 | 1–31 · 2026 · MIT | 只管配置和记忆；ccx 的共享记忆是为派活服务的。 |
+
+ccx 没有的：可见的分屏界面、任务运行中追加指令、多家模型共识、把整段对话搬进 Codex。ccx 还欠的：省了多少还没实测
+（见本页开头）。
+
 ## 常见问题
 
 **多一个智能体，不是更费 token 吗？** 只有很小的任务会，这时 ccx 会直接让你自己做（`delegated: false`）。其余的子智能体用比主智能体便宜的模型、精简启动；`ccx report` 用你自己的运行算出差多少，大约每 10 个任务里会有 1 个让主智能体自己做，用来实测。

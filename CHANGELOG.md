@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+- Research on similar projects (proposals J8–J10), docs only: `docs/research/landscape.md` / `.zh.md` covers OpenAI's
+  official codex-plugin-cc (facts with sources, overlap, a coexistence plan that is not implemented yet, tests still to
+  run), a comparison of similar projects (also a new "Similar projects" section in both READMEs) and eight name options
+  checked against GitHub and PyPI for the user to choose from. Nothing is renamed.
 - STATUS is one page (proposal J6): what is going on now, the next three items and a short "how sure we are";
   the old 24 KB page moved to `docs/STATUS-archive.md` / `.zh.md` as it stood. AGENTS.md no longer tells every
   agent to read it first, only when it needs to know where things stand — anything read at start-up is re-read
