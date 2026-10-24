@@ -1,0 +1,276 @@
+"""What the lead re-reads every turn, part by part (proposal J1), and the turns where its prompt cache broke
+(J2). Both read only the tools' own session files; no model calls.
+
+J1. Every turn re-sends the same prefix: system prompt, tool definitions (MCP servers' included), instruction
+files, the skill list, what the start hook printed. A cache read costs about a tenth of input, but it is paid on
+every turn, so a 10k-token MCP server nobody uses here is ~10k tokens × every turn. Claude Code (desktop and recent
+CLI) logs the request shape and the start-up attachments; Codex logs its base instructions, tools and AGENTS.md.
+Sizes are estimated from the text and scaled to the first turn's measured token count; what can't be attributed
+is shown as the rest.
+
+J2. Cache reads are cheap; a turn that has to write the whole conversation into the cache again is not. Such a
+turn is found by its cache writes (Claude) or uncached input (Codex) jumping, and the likely cause is named: idle
+longer than the cache lives, a model switch, the conversation compacted, an instruction file edited, the tool list
+changed — else unknown."""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+CLAUDE_TTL_MIN = 5          # default prompt-cache lifetime when the log doesn't say (Claude Code asks for 1 h)
+CODEX_TTL_MIN = 10          # OpenAI keeps cached prefixes for roughly 5–10 minutes of inactivity
+BREAK_MIN = 20_000          # a re-written prefix smaller than this is not worth reporting
+BIG_PART = 2_000            # parts above this get advice
+
+
+def est_tokens(text: str) -> float:
+    """Rough tokens: ~4 ASCII characters per token, ~1 token per other character (CJK)."""
+    a = sum(1 for c in text if ord(c) < 128)
+    return a / 4 + (len(text) - a)
+
+
+def _price_read(p, agent: str, model: str, tokens: float) -> float:
+    from . import learn
+    return learn.price_usd(p, agent, model or "", {"cached_input_tokens": int(tokens)}) or 0.0
+
+
+def _lines(path: Path) -> list[dict]:
+    out = []
+    try:
+        for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            try:
+                out.append(json.loads(line))
+            except ValueError:
+                continue
+    except OSError:
+        pass
+    return out
+
+
+def _mcp_server(tool_name: str) -> str | None:
+    if not tool_name.startswith("mcp__"):
+        return None
+    return tool_name.split("__")[1] if tool_name.count("__") >= 2 else tool_name
+
+
+# ---------------------------------------------------------------- J1
+def _claude_parts(evs: list[dict]) -> tuple[list[dict], int | None, str]:
+    parts: dict[str, float] = {}
+    measured, model, shape_seen = None, "", False
+    for e in evs:
+        t = e.get("type")
+        if t == "api-request-shape" and not shape_seen:
+            shape_seen = True
+            sh = e.get("shape") or {}
+            parts["system prompt"] = sum(est_tokens(x.get("text", "")) for x in sh.get("system") or [])
+            for tool in sh.get("tools") or []:
+                srv = _mcp_server(str(tool.get("name", "")))
+                key = f"MCP server {srv} (tool definitions)" if srv else "built-in tool definitions"
+                parts[key] = parts.get(key, 0) + est_tokens(json.dumps(tool, ensure_ascii=False))
+        elif t == "attachment" and measured is None:
+            a = e.get("attachment") or {}
+            at = a.get("type")
+            if at == "instructions":
+                for f in a.get("files") or []:
+                    parts[f"instruction file {f.get('path')}"] = est_tokens(f.get("content") or "")
+            elif at == "skill_listing":
+                parts["skill list"] = parts.get("skill list", 0) + est_tokens(a.get("content") or "")
+            elif at == "mcp_instructions_delta":
+                parts["MCP server instructions"] = parts.get("MCP server instructions", 0) + \
+                    est_tokens("\n".join(a.get("addedBlocks") or []))
+            elif at == "agent_listing_delta":
+                parts["sub-agent type list"] = est_tokens("\n".join(a.get("addedLines") or []))
+            elif at == "deferred_tools_delta":
+                parts["deferred tool names"] = est_tokens(" ".join(a.get("addedNames") or []))
+            elif at == "hook_additional_context":
+                parts["start hook output"] = parts.get("start hook output", 0) + \
+                    est_tokens("\n".join(map(str, a.get("content") or [])))
+        elif t == "assistant" and measured is None and not e.get("isSidechain"):
+            u = (e.get("message") or {}).get("usage") or {}
+            if u:
+                measured = int(u.get("input_tokens", 0) or 0) + int(u.get("cache_creation_input_tokens", 0) or 0) \
+                    + int(u.get("cache_read_input_tokens", 0) or 0)
+                model = (e.get("message") or {}).get("model") or ""
+    if not shape_seen:
+        parts["system prompt + tool definitions (not in this log)"] = 0.0
+    return [{"part": k, "est": v} for k, v in parts.items()], measured, model
+
+
+def _codex_parts(evs: list[dict]) -> tuple[list[dict], int | None, str]:
+    parts: dict[str, float] = {}
+    measured, model = None, ""
+    for e in evs:
+        pl = e.get("payload") or {}
+        t = e.get("type")
+        if t == "session_meta":
+            parts["system prompt (base instructions)"] = est_tokens(str(pl.get("base_instructions") or ""))
+        elif t == "turn_context" and not model:
+            model = pl.get("model") or ""
+        elif t == "response_item" and pl.get("type") == "additional_tools" and measured is None:
+            for ns in pl.get("tools") or []:
+                name = ns.get("name") or "functions"
+                for tool in ns.get("tools") or [ns]:
+                    srv = _mcp_server(str(tool.get("name", ""))) or (name if name.startswith("mcp") else None)
+                    key = f"MCP server {srv} (tool definitions)" if srv else "built-in tool definitions"
+                    parts[key] = parts.get(key, 0) + est_tokens(json.dumps(tool, ensure_ascii=False))
+        elif t == "response_item" and pl.get("type") == "message" and pl.get("role") == "developer" \
+                and measured is None:
+            text = "".join(c.get("text", "") for c in pl.get("content") or [] if isinstance(c, dict))
+            parts["developer messages (permissions, environment)"] = \
+                parts.get("developer messages (permissions, environment)", 0) + est_tokens(text)
+        elif t == "world_state" and measured is None:
+            am = ((pl.get("state") or {}).get("agents_md")) or {}
+            if am.get("text"):
+                parts[f"instruction file AGENTS.md ({am.get('directory')})"] = est_tokens(am["text"])
+        elif t == "event_msg" and pl.get("type") == "token_count" and measured is None:
+            last = ((pl.get("info") or {}).get("last_token_usage")) or {}
+            if last.get("input_tokens"):
+                measured = int(last["input_tokens"])
+    return [{"part": k, "est": v} for k, v in parts.items()], measured, model
+
+
+def breakdown(p, agent: str, path: Path) -> dict:
+    evs = _lines(path)
+    parts, measured, model = (_claude_parts if agent == "claude" else _codex_parts)(evs)
+    est = sum(x["est"] for x in parts)
+    scale = measured / est if measured and est > measured else 1.0
+    for x in parts:
+        x["tokens"] = int(round(x["est"] * scale))
+        del x["est"]
+    if measured:
+        rest = measured - sum(x["tokens"] for x in parts)
+        if rest > 0:
+            parts.append({"part": "the first message and everything else", "tokens": rest})
+    parts.sort(key=lambda x: -x["tokens"])
+    total = measured or sum(x["tokens"] for x in parts)
+    for x in parts:
+        x["share"] = round(x["tokens"] / total, 3) if total else None
+        x["usd_per_100_turns"] = round(100 * _price_read(p, agent, model, x["tokens"]), 3)
+    return {"agent": agent, "session_file": str(path), "model": model, "first_turn_tokens": measured,
+            "estimated": True, "parts": parts, "advice": _advice(parts)}
+
+
+def _advice(parts: list[dict]) -> list[str]:
+    out = []
+    for x in parts:
+        if x["tokens"] < BIG_PART:
+            continue
+        cost = f"~{x['tokens']:,} tokens every turn (≈ ${x['usd_per_100_turns']:.2f} per 100 turns)"
+        if x["part"].startswith("MCP server"):
+            out.append(f"{x['part']}: {cost}. If this project doesn't use it, turn that server off here.")
+        elif x["part"].startswith("instruction file"):
+            out.append(f"{x['part']}: {cost}. Keep it to what every turn needs; move the rest to files read "
+                       f"on demand.")
+        elif x["part"] == "skill list":
+            out.append(f"skill list: {cost}. Link only the skills you use (layout.skills_include).")
+        elif x["part"] == "start hook output":
+            out.append(f"start hook output: {cost}. A shorter start-up note is cheaper on every turn.")
+    return out
+
+
+# ---------------------------------------------------------------- J2
+def _claude_breaks(evs: list[dict]) -> tuple[list[dict], str]:
+    breaks, prev, model, ttl = [], None, "", CLAUDE_TTL_MIN
+    pending: list[str] = []
+    shape = None
+    seen = set()
+    for e in evs:
+        t = e.get("type")
+        if t == "api-request":
+            for c in e.get("cacheControl") or []:
+                v = (c.get("value") or {}).get("ttl")
+                if v == "1h":
+                    ttl = 60
+            if shape and e.get("shapeHash") and e.get("shapeHash") != shape:
+                pending.append("the tool list changed")
+            shape = e.get("shapeHash") or shape
+        elif t == "system" and (e.get("subtype") == "compact_boundary" or e.get("isCompactSummary")):
+            pending.append("the conversation was compacted")
+        elif t == "user" and e.get("isCompactSummary"):
+            pending.append("the conversation was compacted")
+        elif t == "attachment":
+            a = e.get("attachment") or {}
+            if a.get("type") == "edited_text_file" and str(a.get("filename") or a.get("path") or "").lower() \
+                    .endswith(("claude.md", "agents.md")):
+                pending.append("an instruction file was edited")
+        elif t == "assistant" and not e.get("isSidechain"):
+            m = e.get("message") or {}
+            u = m.get("usage") or {}
+            if not u or m.get("id") in seen or m.get("model") == "<synthetic>":   # an error the CLI wrote itself
+                continue
+            seen.add(m.get("id"))
+            from .usage import _ts
+            ts = _ts(e.get("timestamp"))
+            w = int(u.get("cache_creation_input_tokens", 0) or 0)
+            r = int(u.get("cache_read_input_tokens", 0) or 0)
+            if prev and w >= BREAK_MIN and w > 0.3 * (w + r):
+                why = []
+                gap = (ts - prev[0]) / 60 if ts and prev[0] else 0
+                if gap > ttl:
+                    why.append(f"idle {gap:.0f} min (the cache lives {ttl} min)")
+                if prev[1] and m.get("model") and m.get("model") != prev[1]:
+                    why.append(f"model switched {prev[1]} → {m.get('model')}")
+                why += [x for x in dict.fromkeys(pending) if x != "the tool list changed"] or \
+                    [x for x in dict.fromkeys(pending)]
+                breaks.append({"ts": e.get("timestamp"), "rewritten_tokens": w, "read_tokens": r,
+                               "model": m.get("model"), "why": why or ["unknown"]})
+            prev = (ts, m.get("model"))
+            model = m.get("model") or model
+            pending = []
+    return breaks, model
+
+
+def _codex_breaks(evs: list[dict]) -> tuple[list[dict], str]:
+    breaks, prev_ts, model, prev_model, pending = [], None, "", "", []
+    from .usage import _ts
+    for e in evs:
+        pl = e.get("payload") or {}
+        t = e.get("type")
+        if t == "turn_context":
+            model = pl.get("model") or model
+        elif t == "compacted":
+            pending.append("the conversation was compacted")
+        elif t == "event_msg" and pl.get("type") == "token_count":
+            last = ((pl.get("info") or {}).get("last_token_usage")) or {}
+            inp, cached = int(last.get("input_tokens", 0) or 0), int(last.get("cached_input_tokens", 0) or 0)
+            if not inp:
+                continue
+            ts = _ts(e.get("timestamp"))
+            fresh = inp - cached
+            if prev_ts is not None and fresh >= BREAK_MIN and fresh > 0.5 * inp:
+                why = []
+                gap = (ts - prev_ts) / 60 if ts else 0
+                if gap > CODEX_TTL_MIN:
+                    why.append(f"idle {gap:.0f} min (cached prefixes last about {CODEX_TTL_MIN} min)")
+                if prev_model and model != prev_model:
+                    why.append(f"model switched {prev_model} → {model}")
+                why += list(dict.fromkeys(pending))
+                breaks.append({"ts": e.get("timestamp"), "rewritten_tokens": fresh, "read_tokens": cached,
+                               "model": model, "why": why or ["unknown"]})
+            prev_ts, prev_model, pending = ts, model, []
+    return breaks, model
+
+
+def cache_breaks(p, agent: str, path: Path) -> dict:
+    from . import learn
+    evs = _lines(path)
+    breaks, model = (_claude_breaks if agent == "claude" else _codex_breaks)(evs)
+    extra = 0.0
+    for b in breaks:
+        m = b.get("model") or model
+        if agent == "claude":
+            full = learn.price_usd(p, agent, m, {"cache_write_tokens": b["rewritten_tokens"]}) or 0.0
+        else:
+            full = learn.price_usd(p, agent, m, {"input_tokens": b["rewritten_tokens"]}) or 0.0
+        b["extra_usd"] = round(full - _price_read(p, agent, m, b["rewritten_tokens"]), 4)
+        extra += b["extra_usd"]
+    causes: dict[str, int] = {}
+    for b in breaks:
+        for w in b["why"]:
+            key = w.split(" (")[0] if w.startswith("idle") else w.split(" → ")[0]
+            key = "idle longer than the cache lives" if key.startswith("idle") else key
+            causes[key] = causes.get(key, 0) + 1
+    return {"agent": agent, "session_file": str(path), "breaks": breaks, "extra_usd": round(extra, 4),
+            "causes": causes,
+            "note": ("a break re-writes the whole conversation into the cache; reads are ~0.1× input, writes "
+                     "1.25–2× (Claude) or full input (Codex)")}

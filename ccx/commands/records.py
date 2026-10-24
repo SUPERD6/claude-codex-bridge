@@ -6,7 +6,7 @@ from pathlib import Path
 from .. import ledger, report
 from ..config import SETTINGS, load_config, paths, set_setting
 from ..delegate import compact, undo
-from .common import _out
+from .common import _out, lead_session_id
 
 
 def cmd_report(a) -> int:
@@ -95,6 +95,17 @@ def cmd_lead(a) -> int:
     import sys
     from .. import context
     p = paths()
+    if a.breakdown or a.cache:
+        from .. import leadcost, ledger
+        from ..transcript import find_session
+        agent = a.as_ or ("codex" if lead_session_id("codex") and not lead_session_id("claude") else "claude")
+        exclude = {s for r in ledger.rows(p) if not r.get("type") for s in r.get("sessions", [])}
+        f = find_session(agent, Path.cwd(), exclude, a.session)
+        if not f:
+            _out({"error": f"no {agent} lead session found for {Path.cwd()} (give --session ID or --as)"})
+            return 3
+        _out(leadcost.breakdown(p, agent, f) if a.breakdown else leadcost.cache_breaks(p, agent, f))
+        return 0
     if a.hint:
         try:
             data = json.loads(sys.stdin.read() or "{}") if not sys.stdin.isatty() else {}
@@ -133,7 +144,41 @@ def cmd_trial(a) -> int:
     return 0
 
 
+def cmd_sum(a) -> int:
+    """Run a command and print only what matters of its output (J3); the full output stays in .ccx/sum/."""
+    import subprocess
+    from .. import summarize
+    from ..config import ccx_argv
+    argv = [x for x in a.argv if x != "--"]
+    if not argv:
+        raise ValueError("usage: ccx sum [options] -- <command> [args...]")
+    res = summarize.run(argv, Path.cwd(), a.kind, a.max_chars, a.shell)
+    print(summarize.header(res, argv))
+    print(res["text"])
+    if a.ask:
+        brief = (f"Read the file {res['log']} (output of `{' '.join(argv)}`, exit {res['exit']}). Answer: {a.ask}\n"
+                 "Quote only the few lines that matter. Do not run the command again and do not edit anything.")
+        r = subprocess.run([*ccx_argv(), "run", "--mode", "read", "--kind", "read", "--b", "2", "--no-ab", brief],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace")
+        try:
+            import json
+            got = json.loads(r.stdout)
+            print(f"\n[ccx sum --ask → {got.get('agent')} {got.get('model')}, run {got.get('run_id')}]\n"
+                  f"{got.get('summary') or got.get('advice') or r.stdout[-1500:]}")
+        except ValueError:
+            print("\n[ccx sum --ask failed]\n" + (r.stdout + r.stderr)[-1500:])
+    return res["exit"]
+
+
 def register(sub) -> None:
+    sm = sub.add_parser("sum", help="run a command and show only what matters of its output (tests: failures; "
+                        "diffs: per file; logs: errors); the full output is kept in .ccx/sum/")
+    sm.add_argument("--kind", choices=["auto", "test", "diff", "log"], default="auto")
+    sm.add_argument("--max-chars", type=int, default=2000)
+    sm.add_argument("--shell", action="store_true", help="run through the shell (pipes, globs)")
+    sm.add_argument("--ask", help="too long still: a cheap routed model answers this from the saved output")
+    sm.add_argument("argv", nargs="+", help="-- then the command")
+    sm.set_defaults(fn=cmd_sum)
     tr = sub.add_parser("trial", help="a formal comparison over a week: half the delegable tasks done by the lead "
                         "itself, half delegated, measured the same way")
     trs = tr.add_subparsers(dest="trial_cmd", required=True)
@@ -153,6 +198,11 @@ def register(sub) -> None:
     ld.add_argument("--hint", action="store_true", help="for a per-turn hook: read the hook's JSON on stdin and "
                     "print one line only when this conversation is long (at most once every 20 turns)")
     ld.add_argument("--as", dest="as_", choices=["claude", "codex"])
+    ld.add_argument("--breakdown", action="store_true", help="what every turn re-reads, part by part (system "
+                    "prompt, tools, each MCP server, instruction files, skill list, hook output), with advice")
+    ld.add_argument("--cache", action="store_true", help="turns where the prompt cache broke, the likely cause "
+                    "and what it cost")
+    ld.add_argument("--session", help="with --breakdown/--cache: a session id (default: the newest here)")
     ld.set_defaults(fn=cmd_lead)
     ar = sub.add_parser("archive", help="archive sub-agent sessions so they don't clutter the apps' history "
                         "(dry run unless --apply)")
