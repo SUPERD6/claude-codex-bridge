@@ -300,7 +300,7 @@ hand-edit Codex's config, so they stay; harmless, and the user can delete those 
 local\temp\ccx-…']` sections.
 
 **Not checked:** "switch to the other side when a real quota runs out" waits for a quota that runs out by itself;
-the new per-turn Claude hook only shows in a newly opened conversation, not looked at here.
+the new per-turn Claude hook fired in this very conversation once installed ("This conversation re-reads about 528k tokens every turn …").
 
 ## 6. Limits
 - **Tasks too small and easy:** both arms always right, so correctness and rework could not differ (0 follow-ups, 0

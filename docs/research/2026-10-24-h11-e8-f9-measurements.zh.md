@@ -275,7 +275,7 @@ H13 让 ccx 在没人判定时自己记“大概对”（`soft`）。如果检�
 
 **顺带发现**：Codex 会给它运行过的每个目录写一条 `[projects.'…'] trust_level = "trusted"`，这次评测的临时目录留下了约 25 条（`…\Temp\ccx-h11-*`、`ccx-f9-*`、`ccx-e8-*`）。按项目规则不手改 Codex 的配置，没有清理；不影响使用，用户想清理可以删掉这些 `[projects.'c:\users\…\appdata\local\temp\ccx-…']` 段落。
 
-**没验证的**：“真实额度用完后换另一边”按约定只在额度自然快用完时做，这次没做；Claude 端新加的每轮提示 hook 要在新开的会话里才看得到效果，这次没看。
+**没验证的**：“真实额度用完后换另一边”按约定只在额度自然快用完时做，这次没做；Claude 端新加的每轮提示 hook 装上后已在本会话实际触发（“This conversation re-reads about 528k tokens every turn …”）。
 
 ## 6. 局限
 
