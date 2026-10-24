@@ -178,5 +178,26 @@ class TestCommand(Env):
         self.assertNotIn("Someone else's work", text)
 
 
+class TestFresh(Env):
+    def test_fresh_hands_over_to_the_same_tool(self):
+        """J4: a long Claude conversation hands over to a fresh Claude conversation, which sees it once."""
+        slug = re.sub(r"[^A-Za-z0-9]", "-", str(self.work.resolve()))
+        _w(self.home_claude / "projects" / slug / "abc.jsonl", claude_events())
+        out = json.loads(self.ccx("fresh", "--as", "claude", "--no-model", "--note", "start with the docs").stdout)
+        self.assertIn('claude "Continue the work', out["next"])
+        doc = (self.work / ".ccx" / "handoff.md").read_text(encoding="utf-8")
+        self.assertIn("from=claude to=claude", doc)
+        self.assertIn("start with the docs", doc)
+        first = self.ccx("mem", "delta", "--as", "claude").stdout
+        self.assertIn("[ccx handoff to you from claude]", first)
+        self.assertNotIn("handoff to you", self.ccx("mem", "delta", "--as", "claude").stdout)   # once
+        self.assertNotIn("handoff to you", self.ccx("mem", "delta", "--as", "codex").stdout)    # not for codex
+
+    def test_hint_points_at_fresh(self):
+        from ccx import context
+        self.assertIn("ccx fresh", context.advice({"agent": "claude", "turns": 40, "last_turn_tokens": 300_000,
+                                                   "usd_per_turn": 0.1}))
+
+
 if __name__ == "__main__":
     unittest.main()

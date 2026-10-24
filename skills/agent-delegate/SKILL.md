@@ -76,6 +76,9 @@ remaining task. The other side's next session start shows it once.
 "交接给 X" / "hand over to X": you can still write → the command above. The old lead can't (quota out, crashed,
 window closed) → `ccx handoff --from-transcript <old lead> --to <X>`: built from its session file by code. Whoever
 takes over checks its claims (files exist, tests pass) before trusting them.
+Your own conversation got long (the per-turn hint says so) and the next piece is new work: ask the person, then
+`ccx fresh` — the handoff comes from this conversation's file and a new conversation of the same tool here starts
+with it.
 
 ## 6. Memory
 

@@ -23,13 +23,14 @@ turn re-reads ~220k tokens):
 | J6 this page down to one page | ✅ PR #10 |
 | J0 baseline, H11 first batch, E8 both ways, F9 on/off, J7 | PR #6 ([report](research/2026-10-24-h11-e8-f9-measurements.md)): lead median 352k tokens / $0.11 a request (7 days), ~55k fixed per request; delegating saved 1 lead request per small task only when the lead trusted the check; F9 started no sub-agents; J7 switch in, no overturn data yet |
 | J8–J10 official codex-plugin-cc, similar projects, name options (docs only, [landscape](research/landscape.md)) | ✅ PR #4; coexistence plan not implemented or tested; the name waits for the user |
-| I1–I4 adapters per agent, vendor decides "another", fallback and reviewers from data | this change — new interface: `ccx.agents.get(name)` → `Adapter` (build/parse, vendor, support, tested_version, capabilities()); `ccx.agents.vendor()`, `others()`; `ccx agents` lists them as JSON |
+| I1–I4 adapters per agent, vendor decides "another", fallback and reviewers from data | ✅ PR #11 — new interface: `ccx.agents.get(name)` → `Adapter` (build/parse, vendor, support, tested_version, capabilities()); `ccx.agents.vendor()`, `others()`; `ccx agents` lists them as JSON |
+| J4 one step to a fresh conversation (`ccx fresh`) | ✅ PR #12 |
 
 ## Next three
 
-1. F10–F14 on the new adapters; then J4, J5, J11.
-2. J4 one-step handover to a fresh conversation, J5 a model suggestion for the lead itself; J0 on real sessions
-   (`scripts/eval/j0_baseline.py real --days 7`) a week after J1–J6, against the baseline in PR #6.
+1. F10–F14 on the new adapters; then J5 and J11 (J4: PR #12).
+2. J0 on real sessions (`scripts/eval/j0_baseline.py real --days 7`) a week after J1–J6, against the baseline in
+   PR #6; spot-check 5 probable verdicts a week so J7 has an overturn rate.
 3. Then the rest of the unified order: H5–H7 + I6 shared memory, H3–H4 + I7 `ccx discuss`, H8–H9, G1 UI (PR #7)
    + `ccx stop`, I5, H1–H2, H12, H14–H16, I8, and the open-source release.
 

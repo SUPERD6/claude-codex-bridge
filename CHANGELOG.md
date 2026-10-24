@@ -1,6 +1,11 @@
 # Changelog
 
 ## Unreleased
+- One step to a fresh conversation (proposal J4): `ccx fresh [--as claude|codex] [--note ...] [--launch]` writes the
+  handoff from this conversation's own session file (as `ccx handoff --from-transcript` does) addressed to the same
+  tool, and says how to open the new conversation; `--launch` starts it in a terminal. A new conversation of the
+  same tool in this folder now sees a handoff addressed to it (before, a handoff was never shown to the tool that
+  wrote it). The H10 per-turn hint now says: ask the person, then `ccx fresh`.
 - One adapter per agent CLI (proposals I1–I4). `ccx/agents/<name>.py` answers the same questions for Codex, Claude
   Code and Gemini CLI: how to run it headless and parse the result, where its sessions live, how to check its
   login, its instruction file and start hook, how permissions are given, its vendor, official or community

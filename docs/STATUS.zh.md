@@ -18,12 +18,13 @@
 | J6 这一页压到一页 | ✅ PR #10 |
 | J0 基线、H11 第一批、E8 两向交接、F9 开/关、J7 | PR #6（[报告](research/2026-10-24-h11-e8-f9-measurements.zh.md)）：主智能体每次请求中位数 35.2 万 token / $0.11（7 天），每次约 5.5 万固定开销；只有主智能体信 ccx 的 check 时，派活才每个小任务少 1 次请求；F9 没启动过子智能体；J7 开关已加，还没有推翻数据 |
 | J8–J10 官方 codex-plugin-cc 共存、同类项目、改名备选（只改文档，[调研](research/landscape.zh.md)） | ✅ PR #4；共存方案未实现、未实测；改名等用户拍板 |
-| I1–I4 适配器按家收拢、按厂商判断“另一家”、额度换边和审查者按数据选 | 本次改动——新接口：`ccx.agents.get(名字)` → `Adapter`（build/parse、vendor、support、tested_version、capabilities()）；`ccx.agents.vendor()`、`others()`；`ccx agents` 以 JSON 列出 |
+| I1–I4 适配器按家收拢、按厂商判断“另一家”、额度换边和审查者按数据选 | ✅ PR #11——新接口：`ccx.agents.get(名字)` → `Adapter`（build/parse、vendor、support、tested_version、capabilities()）；`ccx.agents.vendor()`、`others()`；`ccx agents` 以 JSON 列出 |
+| J4 一键换新会话（`ccx fresh`） | ✅ PR #12 |
 
 ## 接下来三件
 
-1. 在新适配器上做 F10–F14；然后 J4、J5、J11。
-2. J4 一键换新会话、J5 给主智能体自己的档位建议；J1–J6 合并一周后用 `scripts/eval/j0_baseline.py real --days 7` 对比 PR #6 里的真实会话基线。
+1. 在新适配器上做 F10–F14；然后 J5、J11（J4：PR #12）。
+2. J1–J6 合并一周后用 `scripts/eval/j0_baseline.py real --days 7` 对比 PR #6 里的真实会话基线；每周抽查 5 条自动判定，J7 才有推翻比例。
 3. 然后是统一顺序里剩下的：H5–H7 + I6 共享记忆、H3–H4 + I7 `ccx discuss`、H8–H9、G1 界面（PR #7）+ `ccx stop`、I5、H1–H2、H12、H14–H16、I8，最后开源发布。
 
 ## 把握程度（简版）
