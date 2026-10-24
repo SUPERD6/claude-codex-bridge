@@ -220,6 +220,14 @@ def cmd_task(a) -> int:
 
 
 def cmd_verify(a) -> int:
+    if a.sweep:
+        from ..delegate import soft_verdicts
+        done = soft_verdicts(paths(), a.after_h)
+        _out({"recorded": done, "note": "probable verdicts from the evidence (soft); `ccx verify RUN --ok 0|1` "
+              "overrides any of them"} if done else {"recorded": [], "note": "nothing old enough with clear evidence"})
+        return 0
+    if a.ok is None:
+        raise ValueError("give --ok 1 or --ok 0 (or --sweep)")
     if a.builtin:
         from ..delegate import verify_builtin
         if a.b is None:
@@ -228,7 +236,7 @@ def cmd_verify(a) -> int:
         return 0
     if not a.run_id:
         raise ValueError("give a run id, or --builtin <rung> --b <b> for work your own sub-agent did")
-    _out(verify(paths(), a.run_id, bool(a.ok), a.note))
+    _out(verify(paths(), a.run_id, bool(a.ok), a.note, a.reason or ""))
     return 0
 
 
@@ -432,8 +440,14 @@ def register(sub) -> None:
     se.set_defaults(fn=cmd_send)
     v = sub.add_parser("verify", help="record your verdict on a run (calibrates routing and splitting)")
     v.add_argument("run_id", nargs="?")
-    v.add_argument("--ok", type=int, choices=[0, 1], required=True)
+    v.add_argument("--ok", type=int, choices=[0, 1])
     v.add_argument("--note", default="", help="why (kept with the verdict)")
+    v.add_argument("--reason", choices=["unfinished", "wrong", "overreach", "other"],
+                   help="with --ok 0: what was wrong (not finished / done wrong / changed what it shouldn't / other)")
+    v.add_argument("--sweep", action="store_true", help="record 'probably right' for finished runs nobody judged "
+                   "whose check or self-check passed and review (if any) passed, and 'wrong' for undone ones; also "
+                   "runs quietly at session start. Your own verdict always overrides these")
+    v.add_argument("--after-h", type=float, default=12.0, help="with --sweep: only runs at least this old (hours)")
     v.add_argument("--builtin", metavar="RUNG", help="work your own built-in sub-agent did, e.g. claude-builtin:haiku:low")
     v.add_argument("--b", type=float, help="with --builtin: the difficulty ccx route used")
     v.add_argument("--agent-id", help="with --builtin: the sub-agent's id, so its real cost is read and learned")

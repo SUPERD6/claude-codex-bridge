@@ -132,6 +132,7 @@ ccx verify <run_id> --ok 1|0 [--note "说明"]  # 主智能体验收结论：校
 ccx resume <run_id> "追问"          # 在同一个子会话里继续；中断后也用它接着做
 ccx task status | resume <任务>     # 长任务：一条命令接着做中断的那一步（额度用完时自动换另一边）
 ccx handoff --by claude --to codex "做完了什么/定了什么/接下来做什么" [--next "任务5" ...]   # 换主智能体接力
+ccx verify <run_id> --ok 0 --reason wrong     # 你的判断（没人判断的，12 小时后按证据自动记“大概率对/错”）
 ccx handoff --from-transcript codex --to claude   # 原主智能体写不了（额度用完）：从它的会话文件生成交接
                                                   # （先用代码提取；格式认不出时交给自动选出的子智能体整理，--no-model 不用模型）
 ccx undo <run_id> [--apply]         # 撤回某次可写运行改动的文件（新建的文件挪到一边，不删除）
