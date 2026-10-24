@@ -23,6 +23,7 @@ turn re-reads ~220k tokens):
 | J6 this page down to one page | ✅ PR #10 |
 | J8–J10 official codex-plugin-cc, similar projects, name options (docs only, [landscape](research/landscape.md)) | ✅ PR #4; coexistence plan not implemented or tested; the name waits for the user |
 | I1–I4 adapters per agent, vendor decides "another", fallback and reviewers from data | done on `feat/i1-adapters`, held by J13 until the H11/J0 numbers are in |
+| J5 a model for the lead itself (`ccx lead --suggest`, a line in `ccx report`) | this change |
 
 ## Next three
 

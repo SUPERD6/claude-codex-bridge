@@ -95,7 +95,7 @@ def cmd_lead(a) -> int:
     import sys
     from .. import context
     p = paths()
-    if a.breakdown or a.cache:
+    if a.breakdown or a.cache or a.suggest:
         from .. import leadcost, ledger
         from ..transcript import find_session
         agent = a.as_ or ("codex" if lead_session_id("codex") and not lead_session_id("claude") else "claude")
@@ -104,7 +104,8 @@ def cmd_lead(a) -> int:
         if not f:
             _out({"error": f"no {agent} lead session found for {Path.cwd()} (give --session ID or --as)"})
             return 3
-        _out(leadcost.breakdown(p, agent, f) if a.breakdown else leadcost.cache_breaks(p, agent, f))
+        _out(leadcost.breakdown(p, agent, f) if a.breakdown else leadcost.cache_breaks(p, agent, f) if a.cache
+             else leadcost.suggest(p, agent, f))
         return 0
     if a.hint:
         try:
@@ -202,7 +203,9 @@ def register(sub) -> None:
                     "prompt, tools, each MCP server, instruction files, skill list, hook output), with advice")
     ld.add_argument("--cache", action="store_true", help="turns where the prompt cache broke, the likely cause "
                     "and what it cost")
-    ld.add_argument("--session", help="with --breakdown/--cache: a session id (default: the newest here)")
+    ld.add_argument("--suggest", action="store_true", help="a model for the lead itself from what the recent "
+                    "turns did, with the saving per 100 turns and how soon a switch pays back")
+    ld.add_argument("--session", help="with --breakdown/--cache/--suggest: a session id (default: the newest here)")
     ld.set_defaults(fn=cmd_lead)
     ar = sub.add_parser("archive", help="archive sub-agent sessions so they don't clutter the apps' history "
                         "(dry run unless --apply)")

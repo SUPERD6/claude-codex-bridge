@@ -63,6 +63,41 @@ class TestClaude(Env):
         self.assertEqual(c["causes"]["idle longer than the cache lives"], 1)
 
 
+class TestSuggest(Env):
+    def turns(self, tool, path_or_cmd, model="claude-opus-5-5", n=10):
+        rows = []
+        for i in range(n):
+            inp = {"command": path_or_cmd} if tool == "Bash" else {"file_path": path_or_cmd}
+            rows.append({"type": "assistant", "message": {"id": f"m{i}", "model": model, "content": [
+                {"type": "text", "text": "ok"}],
+                "usage": {"input_tokens": 5, "cache_read_input_tokens": 200_000, "output_tokens": 300}}})
+            rows.append({"type": "assistant", "message": {"id": f"m{i}", "model": model, "content": [   # same reply
+                {"type": "tool_use", "name": tool, "input": inp}],
+                "usage": {"input_tokens": 5, "cache_read_input_tokens": 200_000, "output_tokens": 300}}})
+        return write(self.work / f"{tool}-{n}.jsonl", rows)
+
+    def test_docs_work_suggests_one_rung_down(self):
+        s = leadcost.suggest(Paths(self.hub), "claude", self.turns("Edit", "docs/README.md"))
+        self.assertEqual(s["work"], {"docs": 10})
+        self.assertEqual(s["context_tokens"], 200_005)
+        self.assertEqual(s["suggestion"], "sonnet")
+        self.assertGreater(s["saving_per_100_turns"], 0)
+        self.assertGreater(s["payback_turns"], 1)
+
+    def test_code_work_stays_and_shell_writes_count_as_code(self):
+        s = leadcost.suggest(Paths(self.hub), "claude", self.turns("Bash", "sed -i 's/a/b/' ccx/x.py"))
+        self.assertEqual(s["work"], {"code": 10})
+        self.assertIsNone(s["suggestion"])
+        self.assertIn("stay on opus", s["why"])
+        r = leadcost.suggest(Paths(self.hub), "claude", self.turns("Bash", "git status"))
+        self.assertEqual(r["work"], {"read": 10})
+
+    def test_cheapest_already(self):
+        s = leadcost.suggest(Paths(self.hub), "claude", self.turns("Edit", "a.md", model="claude-haiku-5-5"))
+        self.assertIsNone(s["suggestion"])
+        self.assertIn("cheapest", s["note"])
+
+
 class TestCodex(Env):
     def test_breakdown_and_breaks(self):
         def tc(ts, inp, cached):
