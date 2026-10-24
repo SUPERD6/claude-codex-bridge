@@ -1,6 +1,12 @@
 # Changelog
 
 ## Unreleased
+- `ccx/delegate.py` split by job (proposal J11), behaviour unchanged: `prompts.py` (what a sub-agent is told),
+  `plan.py` (which rungs a run tries, budget and provider checks, the fallback to another vendor), `workspace.py`
+  (worktree, ccx's re-run of the check, the snapshot and `ccx undo`), `verdicts.py` (`ccx verify`, built-in
+  verdicts, probable verdicts), `review.py` gains the review step itself, the Codex accounting helpers move to
+  `ccx/agents/codex.py` and writing a run record to `ledger.py`. `delegate.py` (988 → 547 lines) keeps the run loop
+  and re-exports the old names, so `from ccx.delegate import ...` still works.
 - One adapter per agent CLI (proposals I1–I4). `ccx/agents/<name>.py` answers the same questions for Codex, Claude
   Code and Gemini CLI: how to run it headless and parse the result, where its sessions live, how to check its
   login, its instruction file and start hook, how permissions are given, its vendor, official or community

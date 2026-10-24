@@ -23,6 +23,7 @@ turn re-reads ~220k tokens):
 | J6 this page down to one page | ✅ PR #10 |
 | J8–J10 official codex-plugin-cc, similar projects, name options (docs only, [landscape](research/landscape.md)) | ✅ PR #4; coexistence plan not implemented or tested; the name waits for the user |
 | I1–I4 adapters per agent, vendor decides "another", fallback and reviewers from data | this change — new interface: `ccx.agents.get(name)` → `Adapter` (build/parse, vendor, support, tested_version, capabilities()); `ccx.agents.vendor()`, `others()`; `ccx agents` lists them as JSON |
+| J11 `ccx/delegate.py` split by job, behaviour unchanged | this change |
 
 ## Next three
 

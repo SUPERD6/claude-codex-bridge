@@ -18,6 +18,7 @@
 | J6 这一页压到一页 | ✅ PR #10 |
 | J8–J10 官方 codex-plugin-cc 共存、同类项目、改名备选（只改文档，[调研](research/landscape.zh.md)） | ✅ PR #4；共存方案未实现、未实测；改名等用户拍板 |
 | I1–I4 适配器按家收拢、按厂商判断“另一家”、额度换边和审查者按数据选 | 本次改动——新接口：`ccx.agents.get(名字)` → `Adapter`（build/parse、vendor、support、tested_version、capabilities()）；`ccx.agents.vendor()`、`others()`；`ccx agents` 以 JSON 列出 |
+| J11 按职责拆 `ccx/delegate.py`，行为不变 | 本次改动 |
 
 ## 接下来三件
 

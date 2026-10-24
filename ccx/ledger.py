@@ -6,8 +6,10 @@ routing can be tuned from real numbers instead of guesses.
 from __future__ import annotations
 
 import json
+import os
 import time
 from collections import defaultdict
+from pathlib import Path
 
 from .config import Paths
 
@@ -129,7 +131,7 @@ def repair(p: Paths, apply: bool = False) -> dict:
     import os
     import time
     from . import learn
-    from .delegate import _codex_growth, _codex_total
+    from .agents.codex import _codex_growth, _codex_total
     recs = []
     for f in sorted(p.runs.glob("*/run.json")) if p.runs.exists() else []:
         try:
@@ -190,3 +192,9 @@ def repair(p: Paths, apply: bool = False) -> dict:
         os.replace(tmp, p.ledger)
         out["ledger_backup"] = str(bak)
     return out
+
+
+def write_record(run_dir: Path, record: dict) -> None:
+    tmp = run_dir / "run.json.tmp"
+    tmp.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, run_dir / "run.json")      # ccx's own file: atomic replace is fine here
