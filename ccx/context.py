@@ -47,11 +47,9 @@ def sessions(p, hours: float = 24.0) -> list[dict]:
 def advice(s: dict, threshold: int = THRESHOLD) -> str:
     if s["last_turn_tokens"] < threshold:
         return ""
-    k = s["last_turn_tokens"] / 1000
-    return (f"[ccx] This conversation re-reads about {k:,.0f}k tokens every turn (≈ ${s['usd_per_turn']:.3f} a turn, "
-            f"{s['turns']} turns so far). Cheaper from here: send big reads (many files, logs, research) to a "
-            f"sub-agent and take back only its conclusion; and if what comes next is a new piece of work, hand over "
-            f"to a fresh conversation (`ccx handoff --by {s['agent']} --to {s['agent']} \"...\"`).")
+    from .lang import say
+    return say("hint_context", k=f"{s['last_turn_tokens'] / 1000:,.0f}", usd=f"{s['usd_per_turn']:.3f}",
+               turns=s["turns"], agent=s["agent"])
 
 
 def _last_turn_claude(transcript: Path) -> tuple[dict, str, int] | None:
