@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+- Research on similar projects (proposals J8–J10), docs only: `docs/research/landscape.md` / `.zh.md` covers OpenAI's
+  official codex-plugin-cc (facts with sources, overlap, a coexistence plan that is not implemented yet, tests still to
+  run), a comparison of similar projects (also a new "Similar projects" section in both READMEs) and eight name options
+  checked against GitHub and PyPI for the user to choose from. Nothing is renamed.
 - The lead's own context (proposal H10). Almost all spend is the lead re-reading its whole conversation every turn
   (here: sub-agents $0.34 in 30 days; the median lead turn re-reads ~220k tokens, ~$0.06, over ~19k turns). `ccx lead`
   lists recent lead conversations: turns, what the last and the largest turn read, cost per turn, advice. `ccx sync`
