@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+- Renamed to **relayline** (was `claude-codex-bridge`): the GitHub repo, the package name in `pyproject.toml`, the
+  install command (`pipx install git+https://github.com/SUPERD6/relayline`), and the links in the README, website,
+  CONTRIBUTING and issue templates. The `ccx` command and the `ccx/` package are unchanged; GitHub redirects the old
+  URL. The README now opens by saying how it differs from CCB and from OpenAI's codex-plugin-cc.
 - Handoffs are no longer lost between parallel sessions: each one has its own file in `.ccx/handoffs/` (`handoff.md`
   is only the latest), and session start lists every handoff to you not seen yet — the newest whole or summarised,
   the others one line each with their file. `ccx fresh` points the new conversation at its own handoff file.
