@@ -21,11 +21,11 @@ turn re-reads ~220k tokens):
 | J1 + J2 what a turn re-reads, where the cache broke (`ccx lead --breakdown`, `--cache`) | ✅ PR #8 |
 | J3 long output cut down before the lead reads it (`ccx sum`) | ✅ PR #9 |
 | J6 this page down to one page | this change |
-| I1–I4 adapters per agent, vendor decides "another", fallback and reviewers from data | done on `feat/i1-adapters`, held by J13 until the H11/J0 numbers are in |
+| I1–I4 adapters per agent, vendor decides "another", fallback and reviewers from data | this change — new interface: `ccx.agents.get(name)` → `Adapter` (build/parse, vendor, support, tested_version, capabilities()); `ccx.agents.vendor()`, `others()`; `ccx agents` lists them as JSON |
 
 ## Next three
 
-1. With the J0 baseline and the first H11 numbers in: decide on I1–I4 (ready) and F10–F14.
+1. F10–F14 on the new adapters; then J4, J5, J11.
 2. J4 one-step handover to a fresh conversation, J5 a model suggestion for the lead itself, J7 how often probable
    verdicts get overturned (with the eval session's numbers).
 3. Then the rest of the unified order: H5–H7 + I6 shared memory, H3–H4 + I7 `ccx discuss`, H8–H9, G1 UI (PR #7)
