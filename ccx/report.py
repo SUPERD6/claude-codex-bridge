@@ -144,6 +144,10 @@ def summarize(p: Paths, data: dict) -> dict:
     sub_ae = sum(by_stream[s]["ae"] for s in STREAMS if s[1] == "sub")
     lead_ae = sum(by_stream[s]["ae"] for s in STREAMS if s[1] == "lead")
     nsub = len(run_rows)
+    # the lead's own turns (H10): every turn re-reads the whole conversation, so this is where most spend goes
+    from .context import turn_tokens
+    lead_turns = sorted((turn_tokens(e["usage"]), e["ae"]) for e in data["events"] if e["role"] == "lead")
+    mid = lead_turns[len(lead_turns) // 2] if lead_turns else None
 
     # A/B: measured self-runs vs delegated runs of similar difficulty
     ab = []
@@ -193,7 +197,9 @@ def summarize(p: Paths, data: dict) -> dict:
                    "cache_read_share": round(cached / tot_in, 3) if tot_in else None,
                    "saving": round(sum(savings), 4) if savings else None,
                    "saving_ci95": [round(x, 4) for x in (_bootstrap(savings) or ())] or None,
-                   "saving_n": len(savings), "quota_stops": limit_hits},
+                   "saving_n": len(savings), "quota_stops": limit_hits,
+                   "lead_turns": len(lead_turns), "lead_turn_tokens_median": mid[0] if mid else None,
+                   "lead_turn_ae_median": round(mid[1], 4) if mid else None},
         "streams": [{"agent": s[0], "role": s[1], "label": STREAM_LABEL[s], "ae": round(v["ae"], 5),
                      "events": v["n"], **{k: v[k] for k, _ in BUCKETS}} for s, v in by_stream.items()],
         "days_series": [{"day": d, **{f"{a}:{r}": round(v[(a, r)], 5) for a, r in STREAMS}}
@@ -348,6 +354,10 @@ def render_html(s: dict) -> str:
         ("Estimated saving", _usd(t["saving"]), saving_note),
         ("Success rate", "–" if t["done_rate"] is None else f"{t['done_rate'] * 100:.0f}%",
          f"{t['verified']} judged by you or the lead · {t.get('soft_verified', 0)} probable (auto)"),
+        ("Lead cost per turn", "–" if not t.get("lead_turn_tokens_median") else
+         f"≈{t['lead_turn_tokens_median'] / 1000:,.0f}k tokens",
+         f"median of {t.get('lead_turns', 0)} turns · ≈ {_usd(t.get('lead_turn_ae_median'))} a turn · shorter "
+         f"conversations cost less (`ccx lead`)"),
         ("Cache-read share", "–" if t["cache_read_share"] is None else f"{t['cache_read_share'] * 100:.0f}%",
          "of all input tokens"),
         ("Codex credits", f"{t['codex_credits']:,}", f"AE$ × {CREDITS_PER_USD} · quota stops {t['quota_stops']}"),

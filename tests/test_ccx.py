@@ -354,6 +354,7 @@ class TestSync(Env):
         # hooks
         st = json.loads((self.home_claude / "settings.json").read_text(encoding="utf-8"))
         self.assertIn("mem delta --as claude", st["hooks"]["SessionStart"][0]["hooks"][0]["command"])
+        self.assertIn("lead --hint --as claude", st["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"])
         conf = (self.home_codex / "config.toml").read_text(encoding="utf-8")
         self.assertIn(TOML_BEGIN, conf)
         parsed = tomllib.loads(conf)

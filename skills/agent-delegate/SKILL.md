@@ -12,6 +12,9 @@ if it is not on PATH, resolve this skill directory to the bridge checkout and ru
 **Keep your own side cheap.** Delegating needs this skill and the brief, nothing else: don't open the
 project's README, STATUS, handoff or docs just to delegate. The brief names files; the sub-agent reads them
 (and `.ccx/context.md`) itself. Only if you can't find the ccx command, run `ccx -h` / `ccx run -h`.
+Your own context is the biggest cost: every turn re-reads the whole conversation. Send big reads (many files, long
+logs, research) out read-only and take back the conclusion; when the conversation is long and the next piece is
+new work, hand over to a fresh one (section 5). `ccx lead` shows what a turn costs you now.
 
 ## 1. Decide who and with what
 

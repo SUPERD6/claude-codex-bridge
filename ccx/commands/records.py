@@ -88,7 +88,43 @@ def cmd_stats(a) -> int:
     return 0
 
 
+def cmd_lead(a) -> int:
+    """How much the lead's own conversations re-read every turn (H10); --hint: one line for the next turn, from a
+    hook, or nothing."""
+    import json
+    import sys
+    from .. import context
+    p = paths()
+    if a.hint:
+        try:
+            data = json.loads(sys.stdin.read() or "{}") if not sys.stdin.isatty() else {}
+        except ValueError:
+            data = {}
+        try:
+            text = context.hint(p, a.as_ or "claude", data, a.threshold)
+        except Exception:  # noqa: BLE001 — a hook must never break the lead's turn
+            text = ""
+        if text:
+            print(text)
+        return 0
+    rows = context.sessions(p, a.hours)
+    for r in rows:
+        r["advice"] = context.advice(r, a.threshold) or None
+    _out({"sessions": rows[: a.limit], "threshold_tokens": a.threshold,
+          "note": "each turn re-reads the whole conversation; a shorter lead conversation is the biggest saving"})
+    return 0
+
+
 def register(sub) -> None:
+    ld = sub.add_parser("lead", help="how many tokens each turn of your lead conversations re-reads, and when a "
+                        "fresh conversation would be cheaper")
+    ld.add_argument("--hours", type=float, default=24.0)
+    ld.add_argument("--limit", type=int, default=10)
+    ld.add_argument("--threshold", type=int, default=150_000, help="tokens a turn reads before advising")
+    ld.add_argument("--hint", action="store_true", help="for a per-turn hook: read the hook's JSON on stdin and "
+                    "print one line only when this conversation is long (at most once every 20 turns)")
+    ld.add_argument("--as", dest="as_", choices=["claude", "codex"])
+    ld.set_defaults(fn=cmd_lead)
     ar = sub.add_parser("archive", help="archive sub-agent sessions so they don't clutter the apps' history "
                         "(dry run unless --apply)")
     ar.add_argument("run_ids", nargs="*", help="default: every finished run")

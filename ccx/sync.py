@@ -146,6 +146,20 @@ def sync_hooks(p: Paths, plan: Plan) -> None:
             mine[0]["command"] = cmd
             text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
             plan.do(f"update SessionStart hook command in {sj}", lambda: _write(sj, text))
+        # per turn: one line when this conversation re-reads a lot (H10); prints nothing otherwise
+        hcmd = ccx_command("lead", "--hint", "--as", "claude")
+        turns = data.setdefault("hooks", {}).setdefault("UserPromptSubmit", [])
+        have = [h for g in turns for h in g.get("hooks", []) if "lead --hint" in h.get("command", "")
+                and "ccx" in h.get("command", "")]
+        if not have:
+            turns.append({"hooks": [{"type": "command", "command": hcmd, "timeout": 5}]})
+            text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+            plan.do(f"add UserPromptSubmit hook to {sj} (a one-line hint when the conversation gets long)",
+                    lambda: _write(sj, text))
+        elif have[0]["command"] != hcmd:
+            have[0]["command"] = hcmd
+            text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+            plan.do(f"update UserPromptSubmit hook command in {sj}", lambda: _write(sj, text))
 
     # Codex: config.toml inline [[hooks.SessionStart]] in a marked block
     ct = codex_home() / "config.toml"
@@ -379,17 +393,21 @@ def uninstall(p: Paths, apply: bool) -> Plan:
             data = json.loads(sj.read_text(encoding="utf-8") or "{}")
         except json.JSONDecodeError:
             data = None
-        groups = (data or {}).get("hooks", {}).get("SessionStart", [])
-        keep = [g for g in groups if not any("ccx" in h.get("command", "") and "mem delta" in h.get("command", "")
-                                             for h in g.get("hooks", []))]
-        if data is not None and len(keep) != len(groups):
-            data["hooks"]["SessionStart"] = keep
-            if not keep:
-                del data["hooks"]["SessionStart"]
+        changed = []
+        for event, marker in (("SessionStart", "mem delta"), ("UserPromptSubmit", "lead --hint")):
+            groups = (data or {}).get("hooks", {}).get(event, [])
+            keep = [g for g in groups if not any("ccx" in h.get("command", "") and marker in h.get("command", "")
+                                                 for h in g.get("hooks", []))]
+            if data is not None and len(keep) != len(groups):
+                data["hooks"][event] = keep
+                if not keep:
+                    del data["hooks"][event]
+                changed.append(event)
+        if changed:
             if not data["hooks"]:
                 del data["hooks"]
             text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
-            plan.do(f"remove ccx SessionStart hook from {sj}", lambda: _write(sj, text))
+            plan.do(f"remove ccx {' and '.join(changed)} hook(s) from {sj}", lambda: _write(sj, text))
     ct = codex_home() / "config.toml"
     if ct.exists():
         old = ct.read_text(encoding="utf-8")
