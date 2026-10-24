@@ -32,6 +32,9 @@ def _slim(record: dict) -> dict:
     slim["rungs"] = [a.get("rung") for a in record["attempts"]]
     slim["sessions"] = sorted({a["session_id"] for a in record["attempts"] if a.get("session_id")})
     slim["b"] = (record.get("route") or {}).get("b")
+    for k in ("trial", "bucket"):                    # H11: which half of a formal comparison this run is in
+        if (record.get("route") or {}).get(k):
+            slim[k] = record["route"][k]
     ae = [a["ae_usd"] for a in record["attempts"] if a.get("ae_usd") is not None]
     slim["ae_usd"] = round(sum(ae), 6) if ae else None
     by: dict[str, float] = {}

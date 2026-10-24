@@ -77,6 +77,7 @@ def claude_events(since: float, exclude: set[str], home: Path | None = None) -> 
             key = m.get("id") or e.get("uuid")
             msgs[key] = {"ts": t, "agent": "claude", "role": "builtin" if builtin else "lead",
                          "session": f.stem if builtin else sid,
+                         **({"parent": f.parent.parent.name} if builtin and f.parent.name == "subagents" else {}),
                          "model": m.get("model") or e.get("requestedModel") or "?",
                          "usage": usage_dict(fresh=u.get("input_tokens", 0) or 0,
                                              write=u.get("cache_creation_input_tokens", 0) or 0,
@@ -183,6 +184,7 @@ def codex_events(since: float, exclude: set[str], home: Path | None = None) -> t
                 if t is None or t < since or sid in exclude or parent in exclude:
                     continue                      # a ccx sub-session's own children are counted with its run
                 out.append({"ts": t, "agent": "codex", "role": "builtin" if parent else "lead", "session": sid,
+                            **({"parent": parent} if parent else {}),
                             "model": model,
                             "usage": usage_dict(fresh=max(0, d["input_tokens"] - d["cached_input_tokens"]),
                                                 cached=d["cached_input_tokens"], out=d["output_tokens"])})
@@ -257,14 +259,15 @@ def lead_events(since: float, exclude: set[str]) -> tuple[list[dict], list[dict]
     return ce + xe, quota
 
 
-def window_usage(agent: str, start: float, end: float | None, exclude: set[str]) -> dict:
-    """Sum of one agent's lead usage between two timestamps (used for A/B self-run samples)."""
+def window_usage(agent: str, start: float, end: float | None, exclude: set[str], session: str | None = None) -> dict:
+    """Sum of one agent's lead usage between two timestamps (used for A/B self-run samples); only that lead
+    conversation when `session` is known."""
     end = end or time.time()
     evs = claude_events(start, exclude) if agent == "claude" else codex_events(start, exclude)[0]
     tot = usage_dict()
     models: dict[str, int] = {}
     for e in evs:
-        if start <= e["ts"] <= end:
+        if start <= e["ts"] <= end and (not session or session in (e.get("session"), e.get("parent"))):
             for k, v in e["usage"].items():
                 tot[k] += v
             models[e["model"]] = models.get(e["model"], 0) + 1

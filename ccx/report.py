@@ -91,6 +91,15 @@ def collect(p: Paths, days: int = 30, include_lead: bool = True) -> dict:
             "lead_seen": include_lead}
 
 
+def _trial(p: Paths) -> dict | None:
+    from . import trial
+    try:
+        s = trial.summarize(p)
+    except Exception:  # noqa: BLE001 — the dashboard must render without it
+        return None
+    return s if s.get("trial") else None
+
+
 def _bootstrap(values: list[float], n: int = 1000, seed: int = 7) -> tuple[float, float] | None:
     if len(values) < 3:
         return None
@@ -205,7 +214,7 @@ def summarize(p: Paths, data: dict) -> dict:
         "days_series": [{"day": d, **{f"{a}:{r}": round(v[(a, r)], 5) for a, r in STREAMS}}
                         for d, v in sorted(by_day.items())],
         "runs": sorted(run_rows, key=lambda r: r["run_id"], reverse=True),
-        "ab": ab, "quota": list(quota.values()), "compare": compare,
+        "ab": ab, "trial": _trial(p), "quota": list(quota.values()), "compare": compare,
     }
 
 
@@ -398,6 +407,24 @@ def render_html(s: dict) -> str:
                              for a in s["ab"])
                    + '</table></div><p class="note">Measured samples; the estimated saving above assumes equal token '
                      'counts — this table is how that assumption is checked.</p></div>')
+    tr = s.get("trial")
+    if tr:
+        a, d = tr["arms"]["self"], tr["arms"]["delegated"]
+        rows_t = [("tasks", str(a["n"]), str(d["n"])),
+                  ("lead tokens per task", _num(a["lead_tokens_mean"]), _num(d["lead_tokens_mean"])),
+                  ("lead AE$ per task", _usd(a["lead_usd_mean"]), _usd(d["lead_usd_mean"])),
+                  ("sub-agent AE$ per task", _usd(a["sub_usd_mean"]), _usd(d["sub_usd_mean"])),
+                  ("total AE$ per task", _usd(a["total_usd_mean"]), _usd(d["total_usd_mean"])),
+                  ("minutes per task", _esc(a["minutes_mean"]), _esc(d["minutes_mean"])),
+                  ("held up", "–" if a["ok_rate"] is None else f'{a["ok_rate"]:.0%}',
+                   "–" if d["ok_rate"] is None else f'{d["ok_rate"]:.0%}')]
+        ab_html += (f'<div class="card"><h2>Formal comparison {_esc(tr["trial"]["id"])} — lead itself vs delegated'
+                    f'{"" if not tr["running"] else " (running)"}</h2><div class="scroll"><table class="tbl"><tr><th></th>'
+                    '<th class="r">lead did it itself</th><th class="r">delegated with ccx</th></tr>'
+                    + "".join(f'<tr><td>{n}</td><td class="r">{x}</td><td class="r">{y}</td></tr>' for n, x, y in rows_t)
+                    + f'</table></div><p class="note">{_esc(tr.get("note") or "")} Both halves measure the lead '
+                      'conversation in the task window; delegated runs add the sub-agent and 10 minutes for checking '
+                      'the result.</p></div>')
     cmp_html = ""
     if len(s.get("compare", [])) > 1:
         cmp_html = ('<div class="card"><h2>Cost per task: built-in sub-agents vs ccx sub-agents</h2>'
