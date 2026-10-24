@@ -56,12 +56,22 @@ H12, H14–H16, I8, then the open-source release. Each step: a branch, tests, a 
 - **CI.** Jobs have not started since 2026-10-24 (GitHub: payments / spending limit; private-repo minutes, macOS
   10x). The workflow now runs a small set on push and the full matrix on tags/PRs/by hand (`cdfc13a`); it runs
   again once minutes reset or billing is sorted (the user's account). Unlimited once the repo is public.
-- **E8 acceptance.** Hand over for real once each way (Claude → Codex, Codex → Claude); the new lead should say
-  where things stand and what's next from the handoff alone.
+- **H11 first batch (2026-10-24, [report](research/2026-10-24-h11-e8-f9-measurements.md), `scripts/eval/`).** 14 paired small tasks,
+  lead does it vs lead delegates to Codex luna/low, all correct both ways. A sonnet lead made one request fewer
+  per task (3 → 2, 6/6, p = 0.031); a haiku lead re-checked and saved none (total $ ×2.3). Delegating was ~16 s
+  slower. For a real lead (~219k tokens per request): ~$0.04 saved per small task if it trusts ccx's check
+  (extrapolated). Next: a week of daily batches with medium tasks + `defaults.ab_self_rate` (report section 7).
+- **E8 acceptance — done (2026-10-24, same report).** Controlled handovers both ways right 3/3 (incl. a lead killed
+  mid-work); the real long session → Codex was wrong until two `--from-transcript` fixes (worktree session lookup,
+  desktop plan updates). Open: plan in plain text not found; results not carried; one shared `handoff.md`; a real
+  Codex *desktop* → Claude handover.
 - **F9.** Live check (2026-10-24, 4 runs, the same splittable task, luna/low): all done and checked, $0.0034–0.0057
   each; luna never started sub-agents, on or off, so there is nothing to compare yet. Found: codex-cli 0.164 offers
   its multi_agent v2 tools even with both features disabled, so `--no-subagents` now also says the rule in the
   brief (`0124e0a`). The `agents.*` keys were accepted without error; their effect is unseen (no child started).
+  On/off again (2026-10-24, 5 runs incl. one brief that explicitly asks for sub-agents): 0 started, checked in the
+  session files too. codex-cli 0.164 tells the model not to spawn unless explicitly asked; slim Claude sub-agents
+  have no Agent tool. Next: try gpt-6.1-sol/medium when quota allows, then document what "on" really means.
 - **Proposal G** (`ccx ui`, a local live view): mock-up first, for approval.
 - **Open from the plan:** `lang` (en/zh) for the strings ccx injects; Gemini CLI never run live; `ccx uninstall
   --apply` never run; the Codex desktop side of the SessionStart hook (needs a new desktop conversation).
