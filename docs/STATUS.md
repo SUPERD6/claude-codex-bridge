@@ -1,6 +1,6 @@
 # Status and next steps
 
-English · [中文](STATUS.zh.md) · updated 2026-10-24 · version 0.4.0 · 201 tests
+English · [中文](STATUS.zh.md) · updated 2026-10-24 · version 0.4.0 · 226 tests
 
 This is the working list for whoever continues the project (person or agent). It says what is done, how sure we
 are that it works, and what to do next, in order. Keep it current: when an item is done, move it to "Done" with
@@ -33,6 +33,7 @@ fake CLIs · **none** = not run anywhere yet.
 | Adapters | Codex, Claude Code, DeepSeek (provider; 10/10 calibration tasks) | **real** |
 | | Gemini CLI | none |
 | Built-in sub-agents (F9) | on by default, ≤ 3, routed model, $2 cap | Codex `agents.*` keys: see the F9 note below |
+| Live page (G1) | `ccx ui`: read-only page, live tokens, heartbeat exit, `--export`, `ui.lang` | **real** server and page on Windows (Edge, a hub of real ccx runs on the fake CLIs; read-only once on the real hub); macOS/Linux browsers: none |
 | Packaging | wheel + clean-venv smoke, `install.ps1`, CI | **real**; CI not running since 2026-10-24 (Actions minutes, see 2) |
 
 Measured on the real machine (second two-way test, tiny read-only task):
@@ -46,7 +47,7 @@ Measured on the real machine (second two-way test, tiny read-only task):
 ### Now (2026-10-24, after v0.4.0): the unified order of proposals F10–F14, G, H, I
 1 H13 verdicts without asking — ✅ PR #2 · 2 H10 keep the lead's context small — in progress (`feat/h10-lead-context`) · 3 H11 a week-long comparison (with the E8 two-way handover and F9 on/off checks) · 4 I1–I4 adapters for
 many vendors · 5 F10–F14 fewer limits on built-in sub-agents · 6 H5–H7 + I6 shared memory in use · 7 H3–H4 + I7
-`ccx discuss` · 8 H8–H9 collaboration patterns · 9 G1 UI + `ccx stop` + `lang`, I5 more model sources · 10 H1–H2,
+`ccx discuss` · 8 H8–H9 collaboration patterns · 9 G1 UI + `lang` — PR `feat-g1-ui` (`ccx stop` waits for the adapter refactor), I5 more model sources · 10 H1–H2,
 H12, H14–H16, I8, then the open-source release. Each step: a branch, tests, a PR in Chinese, CI green, merge.
 
 ### Before (2026-10-24, v0.4.0)
@@ -62,8 +63,10 @@ H12, H14–H16, I8, then the open-source release. Each step: a branch, tests, a 
   each; luna never started sub-agents, on or off, so there is nothing to compare yet. Found: codex-cli 0.164 offers
   its multi_agent v2 tools even with both features disabled, so `--no-subagents` now also says the rule in the
   brief (`0124e0a`). The `agents.*` keys were accepted without error; their effect is unseen (no child started).
-- **Proposal G** (`ccx ui`, a local live view): mock-up first, for approval.
-- **Open from the plan:** `lang` (en/zh) for the strings ccx injects; Gemini CLI never run live; `ccx uninstall
+- **Proposal G** (`ccx ui`, a local live view): G1 built (mock-up v5/v6 approved): read-only page, buttons show
+  the command to copy. Next: `ccx stop <run_id>` (needs the child's pid in the run record; after the adapter
+  refactor), then G2's buttons that run commands, once G1 has been used for a while.
+- **Open from the plan:** Gemini CLI never run live; `ccx uninstall
   --apply` never run; the Codex desktop side of the SessionStart hook (needs a new desktop conversation).
 - Not pursued for now: Artificial Analysis (`AA_API_KEY`; the plugin stays in the hub, unused).
 
@@ -218,7 +221,7 @@ H12, H14–H16, I8, then the open-source release. Each step: a branch, tests, a 
 ### P2 — before v1.0 (open source)
 
 10. Contributing guide + adapter template; a fake-data sample dashboard in `docs/`; issue templates.
-11. Optional `lang` setting (en/zh) for the few strings ccx injects into sessions.
+11. ~~Optional `lang` setting (en/zh) for the few strings ccx injects into sessions.~~ Done with G1 (`ui.lang`).
 12. Version tags (could not be pushed from the cloud session); squash history into one clean commit before making
     the repo public; final check that no personal data is in any file.
 
@@ -239,6 +242,7 @@ H12, H14–H16, I8, then the open-source release. Each step: a branch, tests, a 
 
 ## 4. Done recently
 
+- 2026-10-24 — G1 `ccx ui` (read-only live page) and `ui.lang` (PR `feat-g1-ui`).
 - 2026-10-23 `75c9e54` — start-up priors by mode; `8ea4e8e` — lead stays cheap when delegating, long handoffs summarised; `ce4195a` — `ccx repair` (4 runs, AE$ 0.0321 → 0.0162).
 - 2026-10-23 `27b8bf3` — **v0.3.0** released (tag + GitHub release).
 - 2026-10-23 `f42939e` — five small fixes: `send --list` without a TTY, lead session by caller, archive a shared session once, uninstall hub links + restore backups, `skills install` dry run by default.
