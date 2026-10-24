@@ -314,7 +314,7 @@ class TestStartupAndHeartbeat(AdapterEnv):
     def test_claude_slim_start(self):
         self.j("run", "--from", "codex", "--to", "claude", "--tier", "T2", "x")
         a = self.argv()
-        self.assertEqual(a[a.index("--tools") + 1], "Read,Grep,Glob,Edit,Write,Bash")
+        self.assertEqual(a[a.index("--tools") + 1], "Read,Grep,Glob,Edit,Write,Bash,Agent")   # F12: its own sub-agents
         self.assertIn("--exclude-dynamic-system-prompt-sections", a)
         self.assertIn("--strict-mcp-config", a)                  # no MCP tool schemas by default
         self.assertNotIn("--disable-slash-commands", a)          # shared skills stay available

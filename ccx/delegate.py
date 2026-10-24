@@ -23,7 +23,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import learn, ledger
+from . import learn, ledger, subagents
 from .config import DELEGATE_AGENTS, Paths, load_config, provider_of
 from .runners import BUILDERS, execute, usage_dict
 # split out by job (J11); re-exported so `from ccx.delegate import ...` keeps working
@@ -67,6 +67,9 @@ class Request:
     mode_source: str = "explicit"   # explicit | inferred | default (ccx/modes.py)
     mode_why: str = ""
     allow_subagents: bool = True    # the sub-agent may use its own sub-agents (one level, counted, capped: F9)
+    subagents: str = "auto"         # auto | off | N: how many of its own at once (F10; auto = the tool's default)
+    budget_usd: float | None = None # this piece's spending cap for its own sub-agents (F11; else [subagents] max_usd)
+    parallel: bool | None = None    # say "use sub-agents for the independent parts" (F14; None = when the brief lists parts)
     lead_session: str | None = None # the lead conversation this run belongs to (for auto-continue)
     review: str = "auto"            # independent review by another vendor's cheap model: auto | on | off (F1)
     risk: str | None = None         # low | visible | critical (from the routing rubric): visible+ is reviewed
@@ -91,12 +94,15 @@ def _project_context(cwd: Path) -> Path | None:
     return None
 
 
-def claude_slim_flags(cfg: dict, mode: str, mcp: bool | None = None) -> list[str]:
+def claude_slim_flags(cfg: dict, mode: str, mcp: bool | None = None, agent_tool: bool = False) -> list[str]:
     """Shrink a headless Claude start: fewer tool definitions, no MCP tool schemas unless wanted, and a
-    system prompt that doesn't change per folder (so the prompt cache is reused across runs and projects)."""
+    system prompt that doesn't change per folder (so the prompt cache is reused across runs and projects).
+    `agent_tool`: a write run may use Claude's own sub-agents (F12; their spend is read while it runs)."""
     c = cfg.get("claude_subagent") or {}
     out = []
     tools = c.get("tools_read" if mode == "read" else "tools_write")
+    if tools and agent_tool and mode != "read" and "Agent" not in tools.split(","):
+        tools += ",Agent"
     if tools:
         out += ["--tools", tools]
     if c.get("exclude_dynamic", True):
@@ -145,25 +151,32 @@ HOST_AUTH = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", 
              "USE_LOCAL_OAUTH", "USE_STAGING_OAUTH")
 
 
-def _spend_watch(p: Paths, cfg: dict, cli: str, spec: dict, record: dict, since: float):
-    """While a Codex sub-agent runs, what its own sub-agents have spent; a reason to stop once over the cap
-    (`[subagents] max_usd`, default $2 API-equivalent per attempt)."""
-    if cli != "codex":
+def _spend_watch(p: Paths, cfg: dict, cli: str, spec: dict, record: dict, since: float,
+                 budget: float | None = None, cwd: Path | None = None):
+    """While a sub-agent runs, what its own sub-agents have spent; a reason to stop once over the cap: this
+    piece's budget, else `[subagents] max_usd` (default $2 API-equivalent per attempt). Codex: its child session
+    files; Claude: <session>/subagents/*.jsonl (F12)."""
+    if cli not in ("codex", "claude"):
         return None
-    cap = float((cfg.get("subagents") or {}).get("max_usd", 2.0))
+    cap = subagents.cap_usd(budget, cfg)
+    where = "--budget" if budget is not None else "[subagents] max_usd"
 
     def check():
         sid = record.get("session_id")
         if not sid:
             return None
-        from .usage import codex_children
         usd = 0.0
-        for tot in codex_children(sid, since - 5).values():
-            usd += learn.price_usd(p, "codex", spec["model"], usage_dict(
-                fresh=max(0, tot["input"] - tot["cached"]), cached=tot["cached"], out=tot["output"])) or 0.0
+        if cli == "codex":
+            from .usage import codex_children
+            for tot in codex_children(sid, since - 5).values():
+                usd += learn.price_usd(p, "codex", spec["model"], usage_dict(
+                    fresh=max(0, tot["input"] - tot["cached"]), cached=tot["cached"], out=tot["output"])) or 0.0
+        else:
+            for c in subagents.claude_children(sid, cwd or Path.cwd()):
+                usd += learn.price_usd(p, "claude", c["model"] or spec["model"], c["usage"]) or 0.0
         if usd > cap:
-            return (f"stopped: its own sub-agents spent ${usd:.2f} (cap ${cap:.2f}, [subagents] max_usd); "
-                    f"split the work with `ccx q` instead")
+            return (f"stopped: its own sub-agents spent ${usd:.2f} (cap ${cap:.2f}, {where}); add budget and "
+                    f"continue with `ccx resume {record['run_id']} --budget <usd>`, or split it with `ccx q`")
         return None
     return check
 
@@ -189,6 +202,8 @@ def _child_env(to: str, run_id: str, extra: dict | None = None, provider: bool =
 def run(req: Request, p: Paths) -> dict:
     cfg = load_config(p)
     depth_guard(cfg)
+    if req.subagents == "off":
+        req.allow_subagents = False
     escalate = cfg["defaults"].get("auto_escalate", True) if req.escalate is None else req.escalate
     max_esc = int(cfg["defaults"].get("max_escalations", 1)) if escalate else 0
     timeout = int(cfg["defaults"].get("timeout_sec", 1800))
@@ -235,14 +250,17 @@ def run(req: Request, p: Paths) -> dict:
         # --ignore-user-config (checked 2026-10-24), so the rule has to be said; the spend watchdog stays as backstop
         mode_text += "; do not start sub-agents of your own (no spawn_agent / Agent tool)"
     selfcheck = SELFCHECK_CMD.format(check=req.check) if req.check else SELFCHECK
+    brief = req.brief.strip()
+    if req.allow_subagents and (req.parallel or (req.parallel is None and subagents.has_parts(brief))):
+        brief += "\n\n" + subagents.PARALLEL          # F14: the explicit request Codex's own instructions wait for
     if cont:
-        first_prompt = CONTINUE.format(run_id=run_id, caller=req.caller, cwd=cwd, brief=req.brief.strip(),
+        first_prompt = CONTINUE.format(run_id=run_id, caller=req.caller, cwd=cwd, brief=brief,
                                        mode_text=mode_text, selfcheck=selfcheck)
     elif prev:
         first_prompt = FOLLOWUP.format(run_id=run_id, brief=req.brief)
     else:
         first_prompt = PROMPT.format(
-            run_id=run_id, caller=req.caller, cwd=cwd, brief=req.brief.strip(),
+            run_id=run_id, caller=req.caller, cwd=cwd, brief=brief,
             mode_text=mode_text, selfcheck=selfcheck,
             context_line=f"Project context (read first): {ctx}\n" if ctx else "",
             memory_line=(f"User background index (open only if the task needs it): {p.memory_index}\n"
@@ -309,7 +327,7 @@ def run(req: Request, p: Paths) -> dict:
             resume_id = req.fork_lead
             perm += ["--fork-session"]
         elif cli == "claude":
-            perm += claude_slim_flags(cfg, req.mode, req.mcp)
+            perm += claude_slim_flags(cfg, req.mode, req.mcp, agent_tool=req.allow_subagents and not extra)
         if req.ephemeral:
             perm += {"claude": ["--no-session-persistence"], "codex": ["--ephemeral"]}.get(cli, [])
         if not req.allow_subagents:
@@ -319,12 +337,16 @@ def run(req: Request, p: Paths) -> dict:
             elif forking:
                 perm += ["--disallowed-tools", "Agent"]
         elif cli == "codex":
-            # its own sub-agents run on the rung routing picked, a few at a time (config keys from the Codex config
-            # reference, read 2026-10-24); their tokens are added to this attempt and watched against a cap
-            sub = cfg.get("subagents") or {}
-            perm += ["-c", f"agents.max_concurrent_threads_per_session={int(sub.get('max_threads', 3))}",
-                     "-c", f'agents.default_subagent_model="{spec["model"]}"',
-                     "-c", f'agents.default_subagent_reasoning_effort="{spec["effort"]}"']
+            # F10/F13: how many at once and which model stay Codex's own choice; ccx narrows them only when the
+            # lead gave a number or quota is tight (config keys from the Codex config reference, read 2026-10-24).
+            # Their tokens are added to this attempt and watched against the cap either way.
+            from .leadcost import LADDER
+            sp = subagents.plan("codex", spec["model"], req.subagents, learn.known_quota(None, p), LADDER)
+            record.setdefault("subagent_plan", sp)
+            if sp["threads"]:
+                perm += ["-c", f"agents.max_concurrent_threads_per_session={sp['threads']}"]
+            if sp["model"]:
+                perm += ["-c", f'agents.default_subagent_model="{sp["model"]}"']
         if extra and cli == "claude":
             # --bare: auth is strictly ANTHROPIC_API_KEY, OAuth and keychain are never read (claude 2.1.309 --help),
             # so the caller's Claude login can't reach the provider's server
@@ -335,7 +357,8 @@ def run(req: Request, p: Paths) -> dict:
         hb = _Heartbeat(p, cwd, req.task if req.step else None, cli)
         try:
             oc, so, se = execute(cli, inv, timeout, _child_env(cli, run_id, extra, provider=bool(extra)),
-                                 on_session=on_session, watch=_spend_watch(p, cfg, cli, spec, record, t0)
+                                 on_session=on_session, watch=_spend_watch(p, cfg, cli, spec, record, t0,
+                                                                           req.budget_usd, cwd)
                                  if req.allow_subagents else None,
                                  watch_every=float((cfg.get("subagents") or {}).get("watch_every_sec", 20)))
         finally:

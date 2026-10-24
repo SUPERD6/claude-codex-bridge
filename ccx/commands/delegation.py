@@ -18,6 +18,7 @@ from ..runners import find_bin
 from .common import (_brief, _caller, _out, _routing_args, _spec_from_args, _target, find_continuable,
     apply_mode, find_seat, installed_agents, lead_session_id, parse_quota, provider_agents, resolve)
 from .install import tier_spec_safe
+from ..subagents import parse_spec as subagents_spec
 
 
 def cmd_ab(a) -> int:
@@ -93,7 +94,9 @@ def cmd_run(a) -> int:
                   label=f"seat:{a.seat}" if a.seat else (a.label or ""),
                   fallback=not a.no_fallback, task=a.task, step=a.step, mcp=True if a.mcp else None,
                   lead_session=lead, resume_run=prev, continued=bool(prev), fork_lead=fork,
-                  allow_subagents=not a.no_subagents, check=a.check, review=a.review, risk=a.risk, **kw)
+                  allow_subagents=not a.no_subagents, check=a.check, review=a.review, risk=a.risk,
+                  subagents="off" if a.no_subagents else subagents_spec(a.subagents), budget_usd=a.budget,
+                  parallel=True if a.parallel else None, **kw)
     rec = run(req, p)
     res = compact(rec)
     if prev:
@@ -252,7 +255,7 @@ def cmd_resume(a) -> int:
     p = paths()
     req = Request(to="codex", brief=_brief(a), tier=a.tier, resume_run=a.run_id,
                   caller=_caller(a.caller), escalate=False if a.no_escalate else None,
-                  model=a.model, effort=a.effort)
+                  model=a.model, effort=a.effort, budget_usd=a.budget)
     rec = run(req, p)
     _out(compact(rec))
     return 0 if rec["ok"] else 2
@@ -406,9 +409,16 @@ def register(sub) -> None:
                    "kept for a week and reused by the next --seat NAME task here; --new starts it over")
     r.add_argument("--check", metavar="CMD", help="acceptance command (e.g. 'python -m pytest -q tests/test_x.py'): "
                    "the sub-agent runs it before finishing, then ccx runs it again; a failure counts as a failure")
-    r.add_argument("--allow-subagents", action="store_true", help="(default now) the sub-agent may use its own "
-                   "sub-agents: one level, counted, stopped over [subagents] max_usd")
-    r.add_argument("--no-subagents", action="store_true", help="the sub-agent may not start its own sub-agents")
+    r.add_argument("--allow-subagents", action="store_true", help="(the default) the sub-agent may use its own "
+                   "sub-agents: one level, counted, stopped over the budget")
+    r.add_argument("--no-subagents", action="store_true", help="the sub-agent may not start its own sub-agents "
+                   "(same as --subagents off)")
+    r.add_argument("--subagents", default="auto", metavar="auto|off|N", help="how many of its own at once: auto = "
+                   "the tool's default, fewer when quota is tight (default); off; or a number")
+    r.add_argument("--budget", type=float, metavar="USD", help="spending cap for its own sub-agents on this piece "
+                   "(default [subagents] max_usd, $2); over it the run stops and can go on with ccx resume --budget")
+    r.add_argument("--parallel", action="store_true", help="tell it explicitly to use sub-agents for independent "
+                   "parts (done by itself when the brief lists 3 or more items)")
     r.add_argument("--review", choices=["auto", "on", "off"], default="auto", help="independent review of the diff "
                    "by another vendor's cheap model: auto = only when --risk is visible/critical, the sub-agent is "
                    "unsure, or its claimed files don't match the diff (default); on = every write run; off")
@@ -466,6 +476,8 @@ def register(sub) -> None:
     rs.add_argument("--no-escalate", action="store_true")
     rs.add_argument("--model")
     rs.add_argument("--effort")
+    rs.add_argument("--budget", type=float, metavar="USD", help="a new spending cap for its own sub-agents (after "
+                    "an over_budget stop)")
     rs.set_defaults(fn=cmd_resume)
     b = sub.add_parser("batch", help="run independent tasks in parallel from plan.json")
     b.add_argument("plan")

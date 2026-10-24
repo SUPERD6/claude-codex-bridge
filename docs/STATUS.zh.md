@@ -23,11 +23,12 @@
 | I1–I4 适配器按家收拢、按厂商判断“另一家”、额度换边和审查者按数据选 | ✅ PR #11——新接口：`ccx.agents.get(名字)` → `Adapter`（build/parse、vendor、support、tested_version、capabilities()）；`ccx.agents.vendor()`、`others()`；`ccx agents` 以 JSON 列出 |
 | J4 一键换新会话（`ccx fresh`） | ✅ PR #12 |
 | J5 给主智能体自己的档位建议（`ccx lead --suggest`、看板一行） | ✅ PR #13 |
-| J11 按职责拆 `ccx/delegate.py`，行为不变 | 本次改动 |
+| J11 按职责拆 `ccx/delegate.py`，行为不变 | ✅ PR #14 |
+| F10–F14 自带子智能体：按花费和额度限制、Claude 给 Agent 工具、有独立部分时明确要求用子智能体 | 本次改动——上限还没被真实运行触发过（子智能体很少启动：PR #6） |
 
 ## 接下来三件
 
-1. 在新适配器上做 F10–F14（按 PR #6 的实测缩小范围）；J11 是本次改动。
+1. H5–H7 + I6 共享记忆用起来（F10–F14 之后）。
 2. J1–J6 合并一周后用 `scripts/eval/j0_baseline.py real --days 7` 对比 PR #6 里的真实会话基线；每周抽查 5 条自动判定，J7 才有推翻比例。
 3. 然后是统一顺序里剩下的：H5–H7 + I6 共享记忆、H3–H4 + I7 `ccx discuss`、H8–H9、`ccx stop`、I5、H1–H2、H12、H14–H16、I8，最后开源发布。
 
