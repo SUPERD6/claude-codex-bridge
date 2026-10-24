@@ -32,6 +32,7 @@ def cmd_handoff(a) -> int:
     out = project.handoff(root, by, a.to, text)
     if src:
         out["from_transcript"] = str(src[0])
+        out["suggested_notes"] = _suggest_quietly(a.from_transcript, src[0])
     if a.next:
         p = paths()
         cp = learn.module(p, "checkpoint")
@@ -46,6 +47,15 @@ def cmd_handoff(a) -> int:
         out["note"] = f"empty template written: fill in {out['handoff']} before switching"
     _out(out)
     return 0
+
+
+def _suggest_quietly(agent: str, path: Path) -> int:
+    """H5: when work is handed over, gather notes worth keeping for the person to accept; never fails the handoff."""
+    try:
+        from .. import memsuggest
+        return len(memsuggest.from_session(paths(), agent, Path(path)))
+    except Exception:  # noqa: BLE001
+        return 0
 
 
 FRESH_PROMPT = "Continue the work described in the handoff at {file} (it was shown at start-up)."
@@ -68,6 +78,7 @@ def cmd_fresh(a) -> int:
         raise ValueError(f"no {agent} session file found for {root} (give --session ID)")
     text = src[1] + (f"\n\n## Note from the person\n{a.note}" if a.note else "")
     out = project.handoff(root, agent, agent, text)
+    out["suggested_notes"] = _suggest_quietly(agent, src[0])
     # its own file, not .ccx/handoff.md: a parallel session may write a newer one before the new conversation starts
     prompt = FRESH_PROMPT.format(file=Path(out["handoff"]).relative_to(root).as_posix())
     cmd = [*bin_argv(agent), prompt]              # both CLIs take the first prompt as an argument
@@ -183,19 +194,35 @@ def cmd_mem(a) -> int:
     elif a.mem_cmd == "verify":
         _out(memory.verify(p, a.seq, by=_caller(None)))
     elif a.mem_cmd == "search":
-        _out({"hits": memory.search(p, a.words)})
+        hits = memory.search(p, a.words)
+        memory.mark_used(p, [h["seq"] for h in hits if h.get("seq")])
+        _out({"hits": hits})
     elif a.mem_cmd == "stale":
-        _out({"stale": memory.stale(p), "next": "check each: `ccx mem verify N`, or replace: "
-                                                "`ccx mem add \"...\" --supersedes N`"})
+        _out({"stale": memory.stale(p), "unused": memory.unused(p),
+              "next": "check each: `ccx mem verify N`, or replace: `ccx mem add \"...\" --supersedes N`; notes "
+                      f"nobody used for {memory.UNUSED_DAYS} days can go at the next `ccx mem compact`"})
     elif a.mem_cmd == "delta":
         if os.environ.get("CCX_ROLE") == "subagent":
             return 0          # sub-agents get their context from the brief, not memory deltas
         from .. import project
-        parts = [memory.format_delta(memory.delta(p, a.as_, advance=not a.peek))]
+        root = project.find_root()
+        shown: list[int] = []
+        parts = [memory.format_delta(memory.delta(p, a.as_, advance=not a.peek),
+                                     project=(root or Path.cwd()).name, shown=shown)]
+        if not a.peek:
+            memory.mark_used(p, shown)
         old = memory.stale(p)
         if old:
             from ..lang import say
             parts.append(say("hint_mem_stale", p, n=len(old), days=memory.STALE_DAYS))
+        try:                           # H5: suggested notes wait for the person's yes or no
+            from .. import memsuggest
+            from ..lang import say
+            n_sug = len(memsuggest.pending(p))
+            if n_sug:
+                parts.append(say("hint_mem_suggest", p, n=n_sug))
+        except Exception:  # noqa: BLE001 — never break session start
+            pass
         root = project.find_root()
         if root:
             parts.append(project.pending_handoff(root, a.as_, advance=not a.peek))
@@ -242,6 +269,27 @@ def cmd_mem(a) -> int:
             print("\n# journal (not yet compacted)")
             for e in es:
                 print(f"- #{e['seq']} ({e['by']}, {e['topic']}): {e['text']}")
+    elif a.mem_cmd == "suggest":
+        from .. import learn as lrn, ledger, memsuggest, project
+        from ..transcript import find_session
+        root = project.find_root() or lrn.cp_root(Path.cwd())
+        agent = a.from_transcript or _caller(None)
+        if agent not in ("claude", "codex"):
+            raise ValueError("say whose session: --from-transcript claude|codex")
+        exclude = {s for r in ledger.rows(p) if not r.get("type") for s in r.get("sessions", [])}
+        f = find_session(agent, Path.cwd(), exclude, a.session) or find_session(agent, root, exclude, a.session)
+        if not f:
+            raise ValueError(f"no {agent} session file found here (give --session ID)")
+        added = memsuggest.from_session(p, agent, f, a.max)
+        _out({"added": added, "pending": len(memsuggest.pending(p)),
+              "next": "each one: `ccx mem accept N` (optionally --text \"...\") or `ccx mem reject N`; nothing is "
+                      "written to shared memory before that"})
+    elif a.mem_cmd == "suggestions":
+        from .. import memsuggest
+        _out({"pending": memsuggest.pending(p)})
+    elif a.mem_cmd in ("accept", "reject"):
+        from .. import memsuggest
+        _out(memsuggest.decide(p, a.id, a.mem_cmd == "accept", getattr(a, "text", None), getattr(a, "topic", None)))
     elif a.mem_cmd == "status":
         _out({"snapshot": str(p.memory_index), "snapshot_seq": memory.snapshot_seq(p),
               "snapshot_bytes": p.memory_index.stat().st_size if p.memory_index.exists() else 0,
@@ -369,6 +417,18 @@ def register(sub) -> None:
     msub.add_parser("show")
     msub.add_parser("status")
     msub.add_parser("compact")
+    sg = msub.add_parser("suggest", help="gather notes worth keeping from a lead session (the person's preferences, "
+                         "decisions, pitfalls); nothing is written until you accept")
+    sg.add_argument("--from-transcript", choices=["claude", "codex"])
+    sg.add_argument("--session", help="a session id instead of the newest here")
+    sg.add_argument("--max", type=int, default=6)
+    msub.add_parser("suggestions", help="suggested notes waiting for your yes or no")
+    acc = msub.add_parser("accept", help="write suggested note #N to shared memory (with its source)")
+    acc.add_argument("id", type=int)
+    acc.add_argument("--text", help="your wording instead")
+    acc.add_argument("--topic")
+    rej = msub.add_parser("reject", help="drop suggested note #N")
+    rej.add_argument("id", type=int)
     m.set_defaults(fn=cmd_mem)
     c = sub.add_parser("ctx", help="per-project context file read by every sub-agent")
     csub = c.add_subparsers(dest="ctx_cmd", required=True)
