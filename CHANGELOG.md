@@ -7,6 +7,13 @@
   verdicts, probable verdicts), `review.py` gains the review step itself, the Codex accounting helpers move to
   `ccx/agents/codex.py` and writing a run record to `ledger.py`. `delegate.py` (988 → 547 lines) keeps the run loop
   and re-exports the old names, so `from ccx.delegate import ...` still works.
+- A model for the lead itself (proposal J5): `ccx lead --suggest` reads the last 30 turns of this conversation
+  (Claude Code), sorts them into code edits, doc edits, reading/running and talk (files changed through the shell
+  count as code), and compares what a turn costs at this context size on each model. When code is under a fifth of
+  the turns it suggests one rung down, with the saving per 100 turns and how many turns pay back the one cache
+  rewrite a switch costs; otherwise it says to stay. `ccx report` adds what the same lead turns would have cost one
+  rung down. Here: 7 days of lead turns $1,204 AE, one rung down $952 less; this conversation (~440k tokens a turn,
+  half its recent turns editing code) is told to stay on opus.
 - One step to a fresh conversation (proposal J4): `ccx fresh [--as claude|codex] [--note ...] [--launch]` writes the
   handoff from this conversation's own session file (as `ccx handoff --from-transcript` does) addressed to the same
   tool, and says how to open the new conversation; `--launch` starts it in a terminal. A new conversation of the
