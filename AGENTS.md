@@ -3,9 +3,10 @@
 `ccx` lets Claude Code and Codex (and Gemini CLI) be each other's lead / sub-agent, with shared skills, MCP,
 incremental memory, resumable runs and token accounting. Python 3.11+, standard library only.
 
-**Start here:** read `docs/STATUS.md` (what is done, how sure we are, the prioritized next steps), then
-`.ccx/handoff.md` if it exists (personal, local notes from the previous session). Keep docs/STATUS.md and
-docs/STATUS.zh.md up to date as you finish or discover items.
+**When you need to know where things stand** (picking the next item, not for a small fix): `docs/STATUS.md` is one
+page (now, next three, how sure we are); history is in `docs/STATUS-archive.md`, changes in CHANGELOG.md.
+`.ccx/handoff.md`, if it exists, is the previous session's local notes. Don't read these up front for an unrelated
+task: whatever you read is re-read on every later turn. Keep STATUS one page (EN + ZH) when you finish an item.
 
 ## Layout
 - `ccx/` — the CLI (`python ccx.py -h`): `cli.py` (parser + `main`), `commands/` (one module per command group,
@@ -17,7 +18,7 @@ docs/STATUS.zh.md up to date as you finish or discover items.
 - `skills/` — standalone skills: `agent-delegate`, `task-routing`, `task-split`, `task-checkpoint`.
 - `config/tiers.toml` — defaults (tiers, permissions, slim start-up, sessions, providers).
 - `tests/` — fake CLIs in `tests/fakes/`; never call real CLIs in tests.
-- `docs/` — DESIGN, DECISIONS (bilingual table), STATUS (progress + next steps), research.
+- `docs/` — DESIGN, DECISIONS (bilingual table), STATUS (one page) + STATUS-archive, research.
 
 ## Rules
 - Run `python -m pytest -q tests` before every commit; all must pass (CI: Linux/Windows/macOS × 3.11–3.13).
