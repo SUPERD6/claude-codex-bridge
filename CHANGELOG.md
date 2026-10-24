@@ -19,6 +19,15 @@
   the lines stay English. Not switched: the checkpoint skill's own output, sub-agent briefs (they stay English).
 - `scripts/ui_demo.py`: a throwaway hub of real ccx runs on the stand-in CLIs, to try the page; the fake Codex can
   now write a growing session file while it hangs (`FAKE_HANG_S`).
+- A formal comparison over a week (proposal H11). `ccx trial start [--days 7] [--rate 0.5]` puts about half of the
+  delegable tasks on the lead's side ("do this one yourself", closed with `ccx ab done`) and delegates the rest,
+  balanced per kind of work and difficulty. Both halves are measured the same way: the lead conversation the task
+  belongs to (and its own built-in helpers) in the task's window, plus the sub-agent's spend and ten minutes for
+  checking a delegated result; unjudged runs don't count as having held up. `ccx trial report [--markdown]` and a
+  card in `ccx report`; fewer than 10 tasks a half is shown but not called a result. Usage events now carry the
+  built-in helper's parent conversation, and self-run samples count only their own conversation.
+- Read-only sub-tasks are told their shell still works: in a real E8 run gpt-6-luna/low once answered that it had
+  no tool to read the file it was asked to read.
 - The lead's own context (proposal H10). Almost all spend is the lead re-reading its whole conversation every turn
   (here: sub-agents $0.34 in 30 days; the median lead turn re-reads ~220k tokens, ~$0.06, over ~19k turns). `ccx lead`
   lists recent lead conversations: turns, what the last and the largest turn read, cost per turn, advice. `ccx sync`

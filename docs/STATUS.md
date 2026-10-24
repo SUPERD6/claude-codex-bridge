@@ -1,6 +1,6 @@
 # Status and next steps
 
-English · [中文](STATUS.zh.md) · updated 2026-10-24 · version 0.4.0 · 226 tests
+English · [中文](STATUS.zh.md) · updated 2026-10-24 · version 0.4.0 · 229 tests
 
 This is the working list for whoever continues the project (person or agent). It says what is done, how sure we
 are that it works, and what to do next, in order. Keep it current: when an item is done, move it to "Done" with
@@ -45,7 +45,7 @@ Measured on the real machine (second two-way test, tiny read-only task):
 ## 2. Next steps, in order
 
 ### Now (2026-10-24, after v0.4.0): the unified order of proposals F10–F14, G, H, I
-1 H13 verdicts without asking — ✅ PR #2 · 2 H10 keep the lead's context small — in progress (`feat/h10-lead-context`) · 3 H11 a week-long comparison (with the E8 two-way handover and F9 on/off checks) · 4 I1–I4 adapters for
+1 H13 verdicts without asking — ✅ PR #2 · 2 H10 keep the lead's context small — ✅ PR #3 · 3 H11 a week-long comparison — tool ✅ (`ccx trial`, `feat/h11-trial`), the week of data itself is being collected by the eval session (with the E8 two-way handover and F9 on/off checks) · 4 I1–I4 adapters for
 many vendors · 5 F10–F14 fewer limits on built-in sub-agents · 6 H5–H7 + I6 shared memory in use · 7 H3–H4 + I7
 `ccx discuss` · 8 H8–H9 collaboration patterns · 9 G1 UI + `lang` — PR `feat-g1-ui` (`ccx stop` waits for the adapter refactor), I5 more model sources · 10 H1–H2,
 H12, H14–H16, I8, then the open-source release. Each step: a branch, tests, a PR in Chinese, CI green, merge.
@@ -243,6 +243,10 @@ H12, H14–H16, I8, then the open-source release. Each step: a branch, tests, a 
 ## 4. Done recently
 
 - 2026-10-24 — G1 `ccx ui` (read-only live page) and `ui.lang` (PR `feat-g1-ui`).
+- 2026-10-24 H11 tool: `ccx trial` (balanced halves, both measured the same way). Quick real E8 runs on this machine:
+  Claude → Codex 2 of 3 right (gpt-6-luna/low once said read-only meant no shell — wording fixed), Codex → Claude
+  (handover from a headless `codex exec` lead, `--session` needed) 1 of 1 right with haiku/low.
+
 - 2026-10-23 `75c9e54` — start-up priors by mode; `8ea4e8e` — lead stays cheap when delegating, long handoffs summarised; `ce4195a` — `ccx repair` (4 runs, AE$ 0.0321 → 0.0162).
 - 2026-10-23 `27b8bf3` — **v0.3.0** released (tag + GitHub release).
 - 2026-10-23 `f42939e` — five small fixes: `send --list` without a TTY, lead session by caller, archive a shared session once, uninstall hub links + restore backups, `skills install` dry run by default.

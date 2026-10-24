@@ -242,13 +242,23 @@ def resolve(spec: dict, caller: str, p, cfg: dict) -> tuple[dict | None, dict]:
         if pk.get("advice") and not spec.get("force"):
             route["advice"] = pk["advice"]
             return None, route
+        from .. import trial
         rate = float(os.environ.get("CCX_AB_RATE") or cfg["defaults"].get("ab_self_rate", 0) or 0)
-        if (rate > 0 and caller in AGENTS and not spec.get("force") and not spec.get("no_ab")
-                and random.random() < rate):
-            route["ab"] = _ab_open(p, caller, route["b"], pk["rung"], spec.get("brief", ""))
-            route["advice"] = ("ab-sample: do this one yourself (randomly chosen ~"
-                               f"{rate:.0%} of tasks, to measure what delegating saves), then run "
-                               f"`ccx ab done {route['ab']} --ok 1|0`. Opt out: --no-ab")
+        tr = trial.active(p) if caller in AGENTS and not spec.get("force") and not spec.get("no_ab") else None
+        if tr:                                # H11: a formal comparison is running: balanced halves
+            route.update(trial=tr["id"], bucket=trial.bucket(route["kind"], route["b"]))
+            self_run = trial.assign(p, tr, route["kind"], route["b"]) == "self"
+        else:
+            self_run = (rate > 0 and caller in AGENTS and not spec.get("force") and not spec.get("no_ab")
+                        and random.random() < rate)
+        if self_run:
+            route["ab"] = _ab_open(p, caller, route["b"], pk["rung"], spec.get("brief", ""),
+                                   **({"trial": tr["id"], "bucket": route["bucket"], "kind": route["kind"],
+                                       "lead_session": lead_session_id(caller)} if tr else {}))
+            why = (f"the {tr['id']} comparison puts about {tr['rate']:.0%} of tasks on your side" if tr else
+                   f"randomly chosen ~{rate:.0%} of tasks")
+            route["advice"] = (f"ab-sample: do this one yourself ({why}, to measure what delegating saves), then "
+                               f"run `ccx ab done {route['ab']} --ok 1|0`. Opt out: --no-ab")
             return None, route
         return {"to": pk["agent"], "model": pk["model"], "effort": pk["effort"], "tier": "auto",
                 "route": route}, route
@@ -264,12 +274,13 @@ def resolve(spec: dict, caller: str, p, cfg: dict) -> tuple[dict | None, dict]:
     return {"to": _target(to, caller), "tier": tier, "route": route}, route
 
 
-def _ab_open(p, caller: str, b: float, rung: str, brief: str) -> str:
+def _ab_open(p, caller: str, b: float, rung: str, brief: str, **extra) -> str:
     ab_id = time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:4]
     d = p.state / "ab"
     d.mkdir(parents=True, exist_ok=True)
     (d / f"{ab_id}.json").write_text(json.dumps({"id": ab_id, "caller": caller, "b": b, "would_route": rung,
-                                                 "brief_chars": len(brief), "ts": time.time()}), encoding="utf-8")
+                                                 "brief_chars": len(brief), "ts": time.time(), **extra}),
+                                     encoding="utf-8")
     return ab_id
 
 
