@@ -56,6 +56,12 @@ ccx run --to codex --mode read "用三行总结 README.md"
 
 设计说明：[docs/DESIGN.zh.md](docs/DESIGN.zh.md) · 进度：[docs/STATUS.zh.md](docs/STATUS.zh.md) · 决策记录：[docs/DECISIONS.md](docs/DECISIONS.md) · 变更：[CHANGELOG.md](CHANGELOG.md)
 
+## 实时看：`ccx ui`
+
+`ccx ui` 在本机打开一个只读页面：有什么等你处理（红框 = 要你拍板，橙框 = 要你 review）、谁在干什么（每个智能体一列，新加的自动多一列）、额度按现在的速度够不够。点任何一块，右边显示原因、依据和可以复制的 `ccx` 命令。它只读 ccx 和两个工具本来就写下的文件，不调用任何模型；只监听 127.0.0.1，页面关掉一分钟后自己退出。`ccx ui --export 快照.html` 生成静态副本；`ccx config set ui.lang zh|en` 选语言。
+
+<img alt="ccx ui：一件任务画成组织图，每个干活的一列，右边是为什么要你拍板" src="docs/assets/ui/task-zh.png" width="100%">
+
 ## 它怎么工作（一个例子）
 
 你在 Claude Code 里说："把 `loader.py` 支持自定义分隔符，并补测试。"
@@ -145,6 +151,8 @@ ccx plan size --minutes 240 --rung codex:gpt-6.1-sol:medium   # 大任务拆几�
 ccx show <run_id> [--full]          # 默认只显示压缩结果
 ccx stats [--summary]               # 按 agent×级别统计；--summary 给出花费、省了多少、缓存占比
 ccx report [--days 30] [--publish]  # 看板网页（离线单文件）；--publish 提交到你的私有用量仓库
+ccx ui [--project 文件夹] [--no-open] [--export 文件]   # 本机只读实时页面（127.0.0.1，不调用模型）
+ccx config set ui.lang zh          # ccx ui 和 ccx 写进会话的提示用中文
 ccx config set defaults.tradeoff 0.3   # 省钱↔快 的旋钮：save / balanced / fast，或 0..1
 ccx ab done <id> --ok 1             # 结束一次 A/B 抽样（主智能体自己做的那 10%）
 ccx run "任务" --to gemini --tier T2                       # 派给 Gemini CLI

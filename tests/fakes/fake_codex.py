@@ -57,7 +57,23 @@ if os.environ.get("FAKE_BIG_CHILD") and os.environ.get("CODEX_HOME"):
             "type": "token_count", "info": {"total_token_usage": {"input_tokens": 50_000_000, "cached_input_tokens": 0,
                                                                   "output_tokens": 1_000_000}}}}) + "\n")
 if mode == "hang":
-    time.sleep(30)
+    # FAKE_HANG_S: how long; with CODEX_HOME its session file grows every 2 s, like a live Codex (for ccx ui)
+    end = time.time() + float(os.environ.get("FAKE_HANG_S") or 30)
+    live = os.path.join(os.environ["CODEX_HOME"], "sessions", time.strftime("%Y/%m/%d"),
+                        f"rollout-{time.strftime('%Y-%m-%dT%H-%M-%S')}-{tid}.jsonl") if os.environ.get("CODEX_HOME") else None
+    n = 0
+    while time.time() < end:
+        if live:
+            n += 1
+            os.makedirs(os.path.dirname(live), exist_ok=True)
+            with open(live, "a", encoding="utf-8") as fh:
+                if n == 1:              # a headless run's session file, as codex exec writes it
+                    fh.write(json.dumps({"type": "session_meta", "payload": {"id": tid, "originator": "codex_exec"}}) + "\n")
+                fh.write(json.dumps({"timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "type": "event_msg",
+                                     "payload": {"type": "token_count", "info": {"total_token_usage": {
+                                         "input_tokens": 3000 * n, "cached_input_tokens": 1000 * n,
+                                         "output_tokens": 120 * n}}}}) + "\n")
+        time.sleep(min(2.0, max(0.0, end - time.time())))
 if mode == "auth":
     print(json.dumps({"type": "error", "message": "unexpected status 401 Unauthorized"}))
     print(json.dumps({"type": "turn.failed", "error": {"message": "401 Unauthorized"}}))
