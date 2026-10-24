@@ -17,8 +17,8 @@ ccx = "ccx.cli:main"
 [tool.setuptools]
 # config/, skills/ and hub-seed/ stay at the top of the repo (the hub links to skills/ in a clone) and ship
 # inside the package as data: ccx/_config, ccx/_skills, ccx/_hubseed (see ccx.config.data_dir).
-packages = ["ccx", "ccx.commands", "ccx._config", "ccx._skills", "ccx._hubseed"]
-package-dir = { "ccx" = "ccx", "ccx.commands" = "ccx/commands", "ccx._config" = "config", "ccx._skills" = "skills", "ccx._hubseed" = "hub-seed" }
+packages = ["ccx", "ccx.commands", "ccx.agents", "ccx._config", "ccx._skills", "ccx._hubseed"]
+package-dir = { "ccx" = "ccx", "ccx.commands" = "ccx/commands", "ccx.agents" = "ccx/agents", "ccx._config" = "config", "ccx._skills" = "skills", "ccx._hubseed" = "hub-seed" }
 
 [tool.setuptools.package-data]
 "ccx._config" = ["*.toml", "*.json"]

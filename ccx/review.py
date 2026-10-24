@@ -123,7 +123,7 @@ def reviewers(cfg: dict, worker: str, installed, p=None) -> list[tuple[str, str,
     rungs = [by.get(worker)] + [v for k, v in by.items() if k != worker]
     if p is not None:
         from . import learn
-        for agent in others(worker, cfg):
+        for agent in filter(installed, others(worker, cfg, only_installed=False)):
             try:
                 rungs.append(learn.pick(p, REVIEW_B, [agent], "save", mode="read", kind="read")["rung"])
             except Exception:  # noqa: BLE001 — no routing data for it: the pinned ones still apply
