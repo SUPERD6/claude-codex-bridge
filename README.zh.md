@@ -63,7 +63,7 @@ ccx run --to codex --mode read "用三行总结 README.md"
 | 只凭交接，接手方能说对“做到哪、下一步”吗？ | 受控场景 3/3 说对（含中途被杀）；真实长会话第一次说错（计划读成了过期状态），修好后说对。 | 真实会话只有 1 个 |
 | 精简启动一个 Claude 子智能体 | 每次请求的固定上下文 4.6 万 → **1.36 万** token | 单次实测 |
 | 记账和 Codex 自己的周额度对照 | 每 1% 额度折算 **$2.8–4.4**，4 个时段都稳定 | 4 个时段 |
-| 测试 | 260 个，Linux、Windows、macOS × Python 3.11–3.13 | 只证明逻辑，不证明真机 |
+| 测试 | 267 个，Linux、Windows、macOS × Python 3.11–3.13 | 只证明逻辑，不证明真机 |
 
 设计说明：[docs/DESIGN.zh.md](docs/DESIGN.zh.md) · 进度：[docs/STATUS.zh.md](docs/STATUS.zh.md) · 决策记录：[docs/DECISIONS.md](docs/DECISIONS.md) · 变更：[CHANGELOG.md](CHANGELOG.md)
 
