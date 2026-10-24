@@ -1,44 +1,52 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 540" width="1200" height="540" role="img" aria-labelledby="t d">
-  <title id="t">How ccx connects Claude Code, Codex, your hub and the project</title>
-  <desc id="d">Either tool leads; ccx routes a brief to the other tool, runs it headless and returns a JSON result. A session-start hook brings new memory, handoffs and unfinished tasks from your personal hub; skills and MCP are linked into both tools; the project's .ccx folder holds context, journal, inbox, handoff, checkpoints and undo snapshots.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" role="img" aria-labelledby="t d">
+  <title id="t">How ccx connects the agent CLIs, your hub, the project and the local page</title>
+  <desc id="d">Claude Code, Codex and Gemini CLI each connect to ccx; any of them can lead and hand a brief to another, which runs headless and returns JSON. ccx routes, reruns the check, asks another vendor to review, records verdicts and costs. Below: the personal layer (your hub: memory, skills, MCP, ledger), the project layer (.ccx: context, journal, handoffs, checkpoints, undo snapshots) and ccx ui, a local read-only page.</desc>
   <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
     <path d="M0 0 L10 5 L0 10 z" fill="#8b95a3"/></marker></defs>
-  <rect width="1200" height="540" rx="16" fill="#f6f7f9"/>
-  <rect x="40" y="40" width="290" height="150" rx="10" fill="#ffffff" stroke="#d8dce3"/>
-  <rect x="40" y="40" width="6" height="150" rx="3" fill="#b4690e"/>
+  <rect width="1200" height="660" rx="16" fill="#f6f7f9"/>
+  <rect x="40" y="40" width="350" height="130" rx="10" fill="#ffffff" stroke="#d8dce3"/>
+  <rect x="40" y="40" width="6" height="130" rx="3" fill="#b4690e"/>
   <text x="62" y="72" font-size="19" font-weight="600" fill="#1c2129" font-family="-apple-system,&quot;Segoe UI&quot;,Helvetica,Arial,sans-serif">Claude Code</text>
-  <text x="62" y="100" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">lead or sub-agent</text>
-  <text x="62" y="124" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">terminal / desktop app</text>
-  <rect x="870" y="40" width="290" height="150" rx="10" fill="#ffffff" stroke="#d8dce3"/>
-  <rect x="870" y="40" width="6" height="150" rx="3" fill="#0f7c80"/>
-  <text x="892" y="72" font-size="19" font-weight="600" fill="#1c2129" font-family="-apple-system,&quot;Segoe UI&quot;,Helvetica,Arial,sans-serif">Codex</text>
-  <text x="892" y="100" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">lead or sub-agent</text>
-  <text x="892" y="124" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">Gemini CLI: optional</text>
-  <rect x="450" y="40" width="300" height="150" rx="10" fill="#ffffff" stroke="#d8dce3"/>
-  <text x="472" y="72" font-size="19" font-weight="600" fill="#1c2129" font-family="-apple-system,&quot;Segoe UI&quot;,Helvetica,Arial,sans-serif">ccx</text>
-  <text x="472" y="100" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">route → agent:model:effort</text>
-  <text x="472" y="124" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">run → headless, JSON back</text>
-  <text x="472" y="148" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">verify → routing learns</text>
-  <text x="472" y="172" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">writes the ledger</text>
-  <rect x="40" y="300" width="520" height="200" rx="10" fill="#ffffff" stroke="#d8dce3"/>
-  <text x="62" y="332" font-size="19" font-weight="600" fill="#1c2129" font-family="-apple-system,&quot;Segoe UI&quot;,Helvetica,Arial,sans-serif">Your hub · personal, never in the repo</text>
-  <text x="62" y="360" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">memory snapshot + journal</text>
-  <text x="62" y="384" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">skills · MCP registry</text>
-  <text x="62" y="408" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">ledger · learned estimates</text>
-  <text x="62" y="432" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">settings · archived sessions</text>
-  <rect x="640" y="300" width="520" height="200" rx="10" fill="#ffffff" stroke="#d8dce3"/>
-  <text x="662" y="332" font-size="19" font-weight="600" fill="#1c2129" font-family="-apple-system,&quot;Segoe UI&quot;,Helvetica,Arial,sans-serif">Project · &lt;project&gt;/.ccx/</text>
-  <text x="662" y="360" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">context.md — every sub-agent reads it</text>
-  <text x="662" y="384" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">journal · inbox · handoff</text>
-  <text x="662" y="408" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">tasks/ — checkpoints for resuming</text>
-  <text x="662" y="432" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">read by whichever agent works here</text>
-  <path d="M330 100 H 448" stroke="#8b95a3" stroke-width="2" fill="none" marker-end="url(#a)"/>
-  <text x="389" y="90" font-size="14" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace" text-anchor="middle">brief</text>
-  <path d="M750 90 H 868" stroke="#8b95a3" stroke-width="2" fill="none" marker-end="url(#a)"/>
-  <text x="809" y="80" font-size="14" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace" text-anchor="middle">run</text>
-  <path d="M868 140 H 752" stroke="#8b95a3" stroke-width="2" fill="none" marker-end="url(#a)"/>
-  <text x="809" y="162" font-size="14" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace" text-anchor="middle">JSON</text>
-  <path d="M185 298 V 192" stroke="#8b95a3" stroke-width="2" fill="none" marker-end="url(#a)"/>
-  <path d="M420 298 V 245 H 1015 V 192" stroke="#8b95a3" stroke-width="2" fill="none" marker-end="url(#a)"/>
-  <text x="718" y="236" font-size="14" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace" text-anchor="middle">to both tools: session-start hook · skills · MCP</text>
+  <text x="62" y="100" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">lead or worker</text>
+  <text x="62" y="124" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">DeepSeek through it: optional</text>
+  <rect x="425" y="40" width="350" height="130" rx="10" fill="#ffffff" stroke="#d8dce3"/>
+  <rect x="425" y="40" width="6" height="130" rx="3" fill="#0f7c80"/>
+  <text x="447" y="72" font-size="19" font-weight="600" fill="#1c2129" font-family="-apple-system,&quot;Segoe UI&quot;,Helvetica,Arial,sans-serif">Codex</text>
+  <text x="447" y="100" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">lead or worker</text>
+  <text x="447" y="124" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">terminal / desktop app</text>
+  <rect x="810" y="40" width="350" height="130" rx="10" fill="#ffffff" stroke="#d8dce3"/>
+  <rect x="810" y="40" width="6" height="130" rx="3" fill="#6e4fc4"/>
+  <text x="832" y="72" font-size="19" font-weight="600" fill="#1c2129" font-family="-apple-system,&quot;Segoe UI&quot;,Helvetica,Arial,sans-serif">Gemini CLI</text>
+  <text x="832" y="100" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">worker (adapter; not run live)</text>
+  <text x="832" y="124" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">one adapter per CLI</text>
+  <rect x="200" y="250" width="800" height="150" rx="10" fill="#ffffff" stroke="#d8dce3"/>
+  <text x="222" y="282" font-size="19" font-weight="600" fill="#1c2129" font-family="-apple-system,&quot;Segoe UI&quot;,Helvetica,Arial,sans-serif">ccx</text>
+  <text x="222" y="310" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">route → agent:model:effort · or “do it yourself”</text>
+  <text x="222" y="334" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">run → headless, JSON back · check rerun · other-vendor review</text>
+  <text x="222" y="358" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">verify / auto verdicts → routing learns · ledger · ccx lead</text>
+  <rect x="40" y="480" width="350" height="140" rx="10" fill="#ffffff" stroke="#d8dce3"/>
+  <text x="62" y="512" font-size="19" font-weight="600" fill="#1c2129" font-family="-apple-system,&quot;Segoe UI&quot;,Helvetica,Arial,sans-serif">Personal layer · your hub</text>
+  <text x="62" y="540" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">memory snapshot + journal</text>
+  <text x="62" y="564" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">skills · MCP registry</text>
+  <text x="62" y="588" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">ledger · learned estimates</text>
+  <rect x="425" y="480" width="350" height="140" rx="10" fill="#ffffff" stroke="#d8dce3"/>
+  <text x="447" y="512" font-size="19" font-weight="600" fill="#1c2129" font-family="-apple-system,&quot;Segoe UI&quot;,Helvetica,Arial,sans-serif">Project layer · .ccx/</text>
+  <text x="447" y="540" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">context.md · journal · inbox</text>
+  <text x="447" y="564" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">handoffs · checkpoints</text>
+  <text x="447" y="588" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">undo snapshots · queue</text>
+  <rect x="810" y="480" width="350" height="140" rx="10" fill="#ffffff" stroke="#d8dce3"/>
+  <text x="832" y="512" font-size="19" font-weight="600" fill="#1c2129" font-family="-apple-system,&quot;Segoe UI&quot;,Helvetica,Arial,sans-serif">ccx ui · local page</text>
+  <text x="832" y="540" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">127.0.0.1, read-only, no model</text>
+  <text x="832" y="564" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">what waits for you · who works</text>
+  <text x="832" y="588" font-size="15" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace">quota at this pace</text>
+  <path d="M215 172 V 248" stroke="#8b95a3" stroke-width="2" fill="none" marker-end="url(#a)" marker-start="url(#a)"/>
+  <path d="M600 172 V 248" stroke="#8b95a3" stroke-width="2" fill="none" marker-end="url(#a)" marker-start="url(#a)"/>
+  <path d="M985 172 V 248" stroke="#8b95a3" stroke-width="2" fill="none" marker-end="url(#a)" marker-start="url(#a)"/>
+  <text x="600" y="215" font-size="14" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace" text-anchor="middle" dx="110">brief ↓ · JSON ↑</text>
+  <path d="M300 402 V 478" stroke="#8b95a3" stroke-width="2" fill="none" marker-end="url(#a)" marker-start="url(#a)"/>
+  <path d="M600 402 V 478" stroke="#8b95a3" stroke-width="2" fill="none" marker-end="url(#a)" marker-start="url(#a)"/>
+  <path d="M900 402 V 478" stroke="#8b95a3" stroke-width="2" fill="none" marker-end="url(#a)"/>
+  <text x="450" y="436" font-size="14" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace" text-anchor="middle">session-start hook:</text>
+  <text x="450" y="456" font-size="14" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace" text-anchor="middle">new memory · handoffs</text>
+  <text x="900" y="445" font-size="14" fill="#5b6573" font-family="ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace" dx="12">reads files only</text>
 </svg>
