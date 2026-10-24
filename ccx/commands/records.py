@@ -6,7 +6,7 @@ from pathlib import Path
 from .. import ledger, report
 from ..config import SETTINGS, load_config, paths, set_setting
 from ..delegate import compact, undo
-from .common import _out
+from .common import _out, lead_session_id
 
 
 def cmd_report(a) -> int:
@@ -95,6 +95,17 @@ def cmd_lead(a) -> int:
     import sys
     from .. import context
     p = paths()
+    if a.breakdown or a.cache:
+        from .. import leadcost, ledger
+        from ..transcript import find_session
+        agent = a.as_ or ("codex" if lead_session_id("codex") and not lead_session_id("claude") else "claude")
+        exclude = {s for r in ledger.rows(p) if not r.get("type") for s in r.get("sessions", [])}
+        f = find_session(agent, Path.cwd(), exclude, a.session)
+        if not f:
+            _out({"error": f"no {agent} lead session found for {Path.cwd()} (give --session ID or --as)"})
+            return 3
+        _out(leadcost.breakdown(p, agent, f) if a.breakdown else leadcost.cache_breaks(p, agent, f))
+        return 0
     if a.hint:
         try:
             data = json.loads(sys.stdin.read() or "{}") if not sys.stdin.isatty() else {}
@@ -153,6 +164,11 @@ def register(sub) -> None:
     ld.add_argument("--hint", action="store_true", help="for a per-turn hook: read the hook's JSON on stdin and "
                     "print one line only when this conversation is long (at most once every 20 turns)")
     ld.add_argument("--as", dest="as_", choices=["claude", "codex"])
+    ld.add_argument("--breakdown", action="store_true", help="what every turn re-reads, part by part (system "
+                    "prompt, tools, each MCP server, instruction files, skill list, hook output), with advice")
+    ld.add_argument("--cache", action="store_true", help="turns where the prompt cache broke, the likely cause "
+                    "and what it cost")
+    ld.add_argument("--session", help="with --breakdown/--cache: a session id (default: the newest here)")
     ld.set_defaults(fn=cmd_lead)
     ar = sub.add_parser("archive", help="archive sub-agent sessions so they don't clutter the apps' history "
                         "(dry run unless --apply)")
