@@ -299,6 +299,23 @@ CLIs work on your machine.** Run `ccx selftest` there; the acceptance list is in
   - 3.8-flash $0.75 / $0.075 / $3.75 (until 2026-12-31);
   - 3.1-pro-preview $2.00 / $0.20 / $12.00.
 
+## Similar projects
+
+Checked 2026-10-24 (stars and dates from the GitHub API; they change). Details, sources and what is unconfirmed:
+[docs/research/landscape.md](docs/research/landscape.md).
+
+| Project | What it does | Stars · last push · license | How ccx differs |
+|---|---|---|---|
+| [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) | OpenAI's official Claude Code plugin (2026-03-30): Codex reviews, delegated tasks, moving a session to Codex, background jobs | 34.5k · 2026-07 · Apache-2.0 | It is Claude → Codex only and doesn't pick models or record cost. ccx works both ways and adds model choice by cost, a ledger and the lead's own cost. They can be used side by side. |
+| [PAL MCP](https://github.com/BeehiveInnovations/pal-mcp-server) (`clink`) | An MCP server bringing many model providers into one CLI; `clink` starts another CLI as a sub-agent | 11.8k · 2025-12 · Apache-2.0 | PAL offers more models and tools via API keys; ccx uses the two CLIs' subscriptions, picks by success odds and cost, and calibrates on real outcomes. |
+| [CCB](https://github.com/SeemSeam/claude_codex_bridge) (`SeemSeam/claude_codex_bridge`) | A visible multi-agent terminal workspace for 16 CLI families, with message queues and take-over | 3.6k · 2026-10 · AGPL-3.0 | CCB is about watching and steering agents together; ccx is headless delegation focused on cost. A different project despite the similar name. |
+| [sendbird/cc-plugin-codex](https://github.com/sendbird/cc-plugin-codex) | A Codex plugin that calls Claude Code (the reverse of the official plugin) | 226 · 2026-10 · Apache-2.0 | Codex → Claude only. |
+| [umum-ai](https://github.com/umum-ai/claude-codex-bridge) / [Jayden-X-L](https://github.com/Jayden-X-L/claude-codex-bridge) `claude-codex-bridge` | Codex from Claude with mid-run instructions / two-way review loops | 10 / 16 · 2026 · MIT | Each focuses on one part (steering, review); no model choice or accounting. |
+| [claude-codex-memory-sync](https://github.com/DaizeDong/claude-codex-memory-sync), [mycelium](https://github.com/conradomateu/mycelium), [memorize](https://github.com/shakystar/memorize) | Sync skills, instructions, MCP and memory between the tools | 1–31 · 2026 · MIT | Config and memory only; in ccx shared memory supports delegation. |
+
+What ccx doesn't have: a visible split-screen view, instructions added mid-run, multi-provider consensus, moving a whole
+conversation into Codex. What it is still missing: measured savings (see the top of this page).
+
 ## Questions
 
 **Doesn't a second agent cost more tokens?** Only for tiny tasks, and then ccx tells you to do them yourself
