@@ -20,7 +20,8 @@ turn re-reads ~220k tokens):
 | H11 week-long comparison: the tool (`ccx trial`) | ✅ PR #5 — the week of data is collected by the eval session (PR #6, with J0, E8, F9) |
 | J1 + J2 what a turn re-reads, where the cache broke (`ccx lead --breakdown`, `--cache`) | ✅ PR #8 |
 | J3 long output cut down before the lead reads it (`ccx sum`) | ✅ PR #9 |
-| J6 this page down to one page | this change |
+| J6 this page down to one page | ✅ PR #10 |
+| J8–J10 official codex-plugin-cc, similar projects, name options (docs only, [landscape](research/landscape.md)) | ✅ PR #4; coexistence plan not implemented or tested; the name waits for the user |
 | I1–I4 adapters per agent, vendor decides "another", fallback and reviewers from data | this change — new interface: `ccx.agents.get(name)` → `Adapter` (build/parse, vendor, support, tested_version, capabilities()); `ccx.agents.vendor()`, `others()`; `ccx agents` lists them as JSON |
 
 ## Next three
