@@ -43,7 +43,14 @@ Measured on the real machine (second two-way test, tiny read-only task):
 
 ## 2. Next steps, in order
 
-### Now (2026-10-24, v0.4.0)
+### Now (2026-10-24, after v0.4.0): the unified order of proposals F10–F14, G, H, I
+1 H13 verdicts without asking — in progress (branch `feat/h13-auto-verdicts`) · 2 H10 keep the lead's context
+small · 3 H11 a week-long comparison (with the E8 two-way handover and F9 on/off checks) · 4 I1–I4 adapters for
+many vendors · 5 F10–F14 fewer limits on built-in sub-agents · 6 H5–H7 + I6 shared memory in use · 7 H3–H4 + I7
+`ccx discuss` · 8 H8–H9 collaboration patterns · 9 G1 UI + `ccx stop` + `lang`, I5 more model sources · 10 H1–H2,
+H12, H14–H16, I8, then the open-source release. Each step: a branch, tests, a PR in Chinese, CI green, merge.
+
+### Before (2026-10-24, v0.4.0)
 - **Real use with verdicts.** 34 real runs in the ledger, only 2 `ccx verify` verdicts. Routing calibration, the
   learned lead bias (E11), `refit` and the "how much was saved" report all wait on these. Run `ccx verify` after
   each delegated task; read `ccx report` after two weeks.

@@ -144,6 +144,11 @@ def cmd_mem(a) -> int:
         if out:
             print(out)
         if not a.peek:
+            try:                       # quiet: probable verdicts for runs nobody judged (H13); never blocks the start
+                from ..delegate import soft_verdicts
+                soft_verdicts(p)
+            except Exception:  # noqa: BLE001
+                pass
             try:                       # quiet housekeeping: old finished sub-sessions out of the apps' history
                 from .. import archive as arc
                 arc.auto(p)

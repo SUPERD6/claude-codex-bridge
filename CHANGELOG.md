@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+- Verdicts without asking (proposal H13). A finished run nobody judged for 12 h gets a probable verdict from the
+  evidence: right when ccx's check passed or the sub-agent self-checked, the independent review (if any) passed, and
+  it was neither undone nor sent back; runs without such evidence wait for a person. `ccx undo --apply` records the
+  run as wrong. Verdicts drawn this way are marked `soft`, kept apart in `ccx stats` / `ccx report` ("judged by you
+  or the lead · N probable"), feed routing only where nothing was learned yet, and any `ccx verify` overrides them.
+  `ccx verify --ok 0 --reason unfinished|wrong|overreach|other` records what was wrong; the report counts reasons.
+  Runs quietly at session start; `ccx verify --sweep [--after-h H]` by hand.
+
 ## 0.4.0 — 2026-10-24 (routing from public benchmarks and total cost, quota by pace, work queue, reviews, handoff from the session file)
 - Highlights: proposals E and F, the F1 live trial and the fixes below; 201 tests. Details per item follow.
 - Review: `auto` also reviews code changes of 50+ changed lines (`[review] min_lines`, docs not counted).

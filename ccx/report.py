@@ -55,7 +55,12 @@ def collect(p: Paths, days: int = 30, include_lead: bool = True) -> dict:
     cfg = load_config(p)
     rows = [r for r in ledger.rows(p) if (r.get("ts") or 0) >= since]
     runs = [r for r in rows if not r.get("type")]
-    verdicts = {r["run_id"]: r["ok"] for r in rows if r.get("type") == "verify"}
+    verdicts = {r["run_id"]: r["ok"] for r in rows if r.get("type") == "verify"}      # the last one wins
+    soft = {r["run_id"]: bool(r.get("soft")) for r in rows if r.get("type") == "verify"}
+    reasons: dict[str, int] = {}
+    for r in rows:
+        if r.get("type") == "verify" and not r.get("ok") and r.get("reason"):
+            reasons[r["reason"]] = reasons.get(r["reason"], 0) + 1
     selfruns = [r for r in rows if r.get("type") == "selfrun"]
     sub_sessions = {s for r in ledger.rows(p) if not r.get("type") for s in r.get("sessions", [])}
     lead_ev, quota = usage.lead_events(since, sub_sessions) if include_lead else ([], [])
@@ -81,7 +86,7 @@ def collect(p: Paths, days: int = 30, include_lead: bool = True) -> dict:
     for e in lead_ev:
         e["ae"] = _ae(p, e["agent"], e["model"], e["usage"], ts=e.get("ts"))
         events.append(e)
-    return {"since": since, "days": days, "events": events, "runs": runs, "verdicts": verdicts,
+    return {"since": since, "days": days, "events": events, "runs": runs, "verdicts": verdicts, "soft": soft, "reasons": reasons,
             "selfruns": selfruns, "quota": quota, "lead_models": cfg.get("lead", {}),
             "lead_seen": include_lead}
 
@@ -180,7 +185,10 @@ def summarize(p: Paths, data: dict) -> dict:
                    "codex_credits": round(sum(by_stream[s]["ae"] for s in STREAMS if s[0] == "codex")
                                           * CREDITS_PER_USD, 1),
                    "runs": nsub, "done_rate": round(done / nsub, 3) if nsub else None,
-                   "verified": len([r for r in run_rows if r["verdict"] is not None]),
+                   "verified": len([r for r in run_rows if r["verdict"] is not None
+                                    and not data["soft"].get(r["run_id"])]),
+                   "soft_verified": len([r for r in run_rows if data["soft"].get(r["run_id"])]),
+                   "reasons": data["reasons"],
                    "cps": round(sub_ae / done, 5) if done else None,
                    "cache_read_share": round(cached / tot_in, 3) if tot_in else None,
                    "saving": round(sum(savings), 4) if savings else None,
@@ -339,7 +347,7 @@ def render_html(s: dict) -> str:
         ("Sub-agent spend", _usd(t["sub_ae"]), f"{t['runs']} run{'' if t['runs'] == 1 else 's'} · cost/success {_usd(t['cps'])}"),
         ("Estimated saving", _usd(t["saving"]), saving_note),
         ("Success rate", "–" if t["done_rate"] is None else f"{t['done_rate'] * 100:.0f}%",
-         f"{t['verified']} verified by the lead"),
+         f"{t['verified']} judged by you or the lead · {t.get('soft_verified', 0)} probable (auto)"),
         ("Cache-read share", "–" if t["cache_read_share"] is None else f"{t['cache_read_share'] * 100:.0f}%",
          "of all input tokens"),
         ("Codex credits", f"{t['codex_credits']:,}", f"AE$ × {CREDITS_PER_USD} · quota stops {t['quota_stops']}"),

@@ -57,9 +57,10 @@ for the same artifact; run affected checks when missing, stale or contradicted.
 `verification: not-run` = unverified — say so. A `review` field is that independent review: `pass` (its notes
 are optional reading) or `issues` with `file:line`; after one fix round, `kind: review_failed` is yours to decide.
 Then give your verdict:
-`ccx verify <run_id> --ok 1|0 [--note "..."]` — this calibrates routing (and splitting, if `--minutes` was
-given) and closes the checkpoint step. Without it only definite failures and self-checked successes
-are learned.
+`ccx verify <run_id> --ok 1|0 [--reason unfinished|wrong|overreach|other] [--note "..."]` — this calibrates
+routing (and splitting, if `--minutes` was given) and closes the checkpoint step. Runs nobody judges get a
+probable verdict after 12 h when ccx's check or the self-check and the review passed (`ccx undo --apply` counts as
+wrong); your verdict always overrides it, so give one whenever you actually looked.
 `ccx show <id> --full` only when the compact result is not enough.
 
 ## 5. Switching leads
