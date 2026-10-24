@@ -6,6 +6,17 @@
   block back where it was, not at the end (Codex keeps hook trust by position, so moved hooks ask for trust again);
   uninstall now says how to put everything back (`ccx sync --apply`, `ccx skills install --replace --apply`,
   `ccx doctor` — sync alone does not bring back ccx's skills).
+- A sub-agent's own sub-agents, limited by spend and quota rather than head count (proposals F10–F14, narrowed
+  by the PR #6 measurements). F10: Codex's concurrency and F13: its sub-agent model are no longer forced to 3 and
+  the parent's rung; ccx sets them only when quota is tight (1 at a time, one rung down) or snug (2), or when the
+  lead says `--subagents N|off`. F11: the spend cap is the piece's budget (`--budget`, a queue item's remaining
+  share), else `[subagents] max_usd`; a run over it stops as `over_budget` and `ccx resume RUN --budget X` goes on.
+  F12: Claude write sub-runs get the Agent tool, because their sub-agents' spend shows while they run (stream
+  events and `<session>/subagents/*.jsonl`, checked live with Claude Code 2.1.309); the watchdog reads it, and a
+  Claude result is now counted from `modelUsage` — `usage` covered only the main conversation's last request
+  (11.6k vs 19.9k cache-write tokens with one sub-agent), so sub-agent tokens were missed. F14: a brief listing
+  3+ parts (or `--parallel`) explicitly asks for sub-agents on the independent parts. Docs now say that with
+  codex-cli 0.164 + gpt-6-luna/low sub-agents were not started even when asked, so these limits are untested live.
 - `ccx/delegate.py` split by job (proposal J11), behaviour unchanged: `prompts.py` (what a sub-agent is told),
   `plan.py` (which rungs a run tries, budget and provider checks, the fallback to another vendor), `workspace.py`
   (worktree, ccx's re-run of the check, the snapshot and `ccx undo`), `verdicts.py` (`ccx verify`, built-in

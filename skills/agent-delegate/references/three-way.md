@@ -31,15 +31,26 @@ they become children (at most 3 levels, each with a share of the parent's `--bud
 rest, and the parent is done when they all are. You decide per piece whether it needs a check or a review; the
 models are picked by routing. `ccx q budget <usd>` stops the whole queue at a spend.
 
-## Sub-agents and their own sub-agents (one level, counted, capped)
+## Sub-agents and their own sub-agents (limits on spend and quota, not on head count)
 
-A ccx sub-agent may use its own sub-agents (Codex's multi_agent; a forked Claude's Agent tool): sometimes the tool
-splits a piece better from the inside. ccx keeps them in bounds: Codex's children run on the rung routing picked
-(`agents.default_subagent_model` / `_reasoning_effort`), at most 3 at a time (`[subagents] max_threads`); their
-tokens are added to the run; and a watchdog stops the run once they have spent `[subagents] max_usd` (default $2).
-Deeper splits go through the queue (`SPLIT:` → `ccx q`), so every level is routed, recorded and checked.
-`--no-subagents` turns them off for a run. Not yet verified live: the Codex config keys (from its config
-reference, 2026-10-24) and whether a forked Claude's result already counts its Agent-tool children.
+A ccx sub-agent may use its own sub-agents (Codex's multi_agent; Claude's Agent tool, given to write runs):
+sometimes the tool splits a piece better from the inside. How many run at once and which model they use stay the
+tool's own choice; ccx sets only the edges:
+
+- **Spend.** A watchdog adds up what they spend while the run goes (Codex: its child session files; Claude:
+  `<session>/subagents/*.jsonl`) and stops the run over the piece's budget — `--budget USD`, a queue item's share,
+  else `[subagents] max_usd` ($2). The run ends as `over_budget`; `ccx resume RUN --budget X` goes on.
+- **Quota.** When a subscription is projected over its limit at this pace, Codex's children are held to 1 at a
+  time and one model rung down; when it is snug (≥ 80 %), 2. `--subagents N` sets a number, `off` none.
+- **Asking.** A brief that lists 3 or more parts (or `--parallel`) tells the sub-agent explicitly to use
+  sub-agents for the independent parts — the words Codex's own instructions wait for.
+- **Counting.** Their tokens are added to the run (Claude's result now counts the whole session, sub-agents
+  included).
+
+What has been seen live (2026-10-24): codex-cli 0.164 tells its model not to start sub-agents unless the user,
+AGENTS.md or a skill explicitly asks, and gpt-6-luna/low started none in 5 runs, even when asked; until this change
+a slim Claude sub-run had no Agent tool at all. So "on by default" has meant "rarely used", and none of the limits
+above has been hit by a real run yet. Deeper splits go through the queue (`SPLIT:` → `ccx q`).
 
 ## DeepSeek: pay per token, for simple pieces
 

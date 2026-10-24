@@ -88,9 +88,8 @@ class TestDelegation(Env):
         self.assertIn("--output-schema", c["argv"])
         self.assertEqual(c["depth"], "1")
         self.assertIn("Do only this task", c["prompt"])
-        self.assertNotIn("--disable", c["argv"])                       # its own sub-agents are allowed (F9)...
-        self.assertIn("agents.max_concurrent_threads_per_session=3", c["argv"])   # ...a few at a time,
-        self.assertIn('agents.default_subagent_model="gpt-6-luna"', c["argv"])    # on the routed model
+        self.assertNotIn("--disable", c["argv"])                       # its own sub-agents are allowed (F9),
+        self.assertFalse(any(x.startswith("agents.") for x in c["argv"]))  # how many and which model: Codex's (F10, F13)
 
     def test_no_subagents_turns_codex_multi_agent_off(self):
         self.ccx("run", "--from", "claude", "--to", "codex", "--tier", "T1", "--no-subagents", "x")
