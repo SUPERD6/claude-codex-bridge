@@ -48,7 +48,7 @@ def cmd_handoff(a) -> int:
     return 0
 
 
-FRESH_PROMPT = "Continue the work described in the handoff at .ccx/handoff.md (it was shown at start-up)."
+FRESH_PROMPT = "Continue the work described in the handoff at {file} (it was shown at start-up)."
 
 
 def cmd_fresh(a) -> int:
@@ -68,10 +68,12 @@ def cmd_fresh(a) -> int:
         raise ValueError(f"no {agent} session file found for {root} (give --session ID)")
     text = src[1] + (f"\n\n## Note from the person\n{a.note}" if a.note else "")
     out = project.handoff(root, agent, agent, text)
-    cmd = [*bin_argv(agent), FRESH_PROMPT]        # both CLIs take the first prompt as an argument
+    # its own file, not .ccx/handoff.md: a parallel session may write a newer one before the new conversation starts
+    prompt = FRESH_PROMPT.format(file=Path(out["handoff"]).relative_to(root).as_posix())
+    cmd = [*bin_argv(agent), prompt]              # both CLIs take the first prompt as an argument
     out.update(from_transcript=str(src[0]),
                next=f"open a new {agent} conversation in {root}: its start shows the handoff. In a terminal: "
-                    f"{agent} \"{FRESH_PROMPT}\"" + ("" if a.launch else " (or ccx fresh --launch)"))
+                    f"{agent} \"{prompt}\"" + ("" if a.launch else " (or ccx fresh --launch)"))
     if a.launch:
         if not sys.stdin.isatty():
             out["launch"] = "skipped: not in a terminal"
