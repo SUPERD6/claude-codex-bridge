@@ -183,6 +183,7 @@ ccx verify <run_id> --ok 1|0 [--note "..."]   # the lead's verdict: calibrates r
 ccx resume <run_id> "follow-up"       # same sub-session; also how an interrupted run continues
 ccx task status | resume <task>       # long tasks: one command continues the interrupted step (hands off on quota)
 ccx handoff --by claude --to codex "what's done / decided / next" [--next "task 5" ...]   # switch leads
+ccx lead                                     # what each turn of your lead conversations re-reads and costs
 ccx verify <run_id> --ok 0 --reason wrong     # your verdict (unjudged runs get a probable one after 12 h)
 ccx handoff --from-transcript codex --to claude   # the old lead can't write it (quota out): built from its session file
                                                   # (by code; a format the code can't read goes to a routed sub-agent, --no-model to skip)

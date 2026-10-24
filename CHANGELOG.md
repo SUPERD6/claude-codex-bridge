@@ -1,6 +1,13 @@
 # Changelog
 
 ## Unreleased
+- The lead's own context (proposal H10). Almost all spend is the lead re-reading its whole conversation every turn
+  (here: sub-agents $0.34 in 30 days; the median lead turn re-reads ~220k tokens, ~$0.06, over ~19k turns). `ccx lead`
+  lists recent lead conversations: turns, what the last and the largest turn read, cost per turn, advice. `ccx sync`
+  adds a Claude Code UserPromptSubmit hook (`ccx lead --hint`) that prints one line when a conversation re-reads more
+  than 150k tokens a turn (at most once per 20 turns, never fails the turn); `ccx uninstall` removes it. Codex: no
+  per-turn hook yet. `ccx report` shows "Lead cost per turn"; agent-delegate says to send big reads out and hand a
+  long conversation over to a fresh one.
 - Verdicts without asking (proposal H13). A finished run nobody judged for 12 h gets a probable verdict from the
   evidence: right when ccx's check passed or the sub-agent self-checked, the independent review (if any) passed, and
   it was neither undone nor sent back; runs without such evidence wait for a person. `ccx undo --apply` records the
