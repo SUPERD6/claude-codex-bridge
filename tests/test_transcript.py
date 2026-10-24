@@ -1,6 +1,7 @@
 """E8: a handoff assembled by code from the outgoing lead's session file (fake transcripts, no real CLIs)."""
 import json
 import re
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -8,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ccx import transcript  # noqa: E402
-from test_ccx import Env  # noqa: E402
+from test_ccx import ROOT, Env  # noqa: E402
 
 SECRET = "sk-" + "a1B2" * 8
 
@@ -86,6 +87,16 @@ class TestRead(unittest.TestCase):
         self.assertEqual(d["failed"][0]["cmd"], "python -m unittest")
         self.assertEqual(d["final"], "Steps renamed; docs next.")                    # sidechain ignored
 
+    def test_claude_plan_deltas(self):
+        # the desktop app's plan tool sends the whole list once, then only changes (seen live, 2026-10-24)
+        plan = lambda inp: {"type": "assistant", "message": {"content": [  # noqa: E731
+            {"type": "tool_use", "id": "p", "name": "mcp__ccd_turn__update_plan", "input": inp}]}}
+        items = [{"content": s, "status": "pending"} for s in ("read", "build", "test", "ship")]
+        items[0]["status"] = "in_progress"
+        ev = [plan({"items": items}), plan({"advance": True}), plan({"advance": True}), plan({"done": [4], "start": 3})]
+        d = transcript.read_claude(_w(self.t / "p.jsonl", ev))
+        self.assertEqual([s["status"] for s in d["plan"]], ["completed", "completed", "in_progress", "completed"])
+
     def test_build_redacts_and_caps(self):
         f = _w(self.t / "r.jsonl", codex_events("/w"))
         text = transcript.build(transcript.read_codex(f), self.t, f, unfinished="task-1: 2/4 steps")
@@ -145,6 +156,26 @@ class TestCommand(Env):
         r = self.ccx("handoff", "--from-transcript", "codex", "--to", "claude")
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("no codex session file", r.stderr + r.stdout)
+
+    def test_worktree_inside_the_main_checkout(self):
+        # Claude Code's .claude/worktrees/<name> sits inside the main checkout: the project layer (.ccx) is the
+        # main checkout's, but the lead's session is filed under the worktree's own folder (seen live, 2026-10-24).
+        subprocess.run(["git", "init", "-q"], cwd=self.work, check=True)
+        self.assertEqual(self.ccx("project", "init").returncode, 0)
+        wt = self.work / ".claude" / "worktrees" / "wt1"
+        wt.mkdir(parents=True)
+        slug = lambda d: re.sub(r"[^A-Za-z0-9]", "-", str(d.resolve()))  # noqa: E731
+        _w(self.home_claude / "projects" / slug(self.work) / "other.jsonl",
+           [{"type": "user", "message": {"content": "Someone else's work in the main checkout."}}])
+        _w(self.home_claude / "projects" / slug(wt) / "mine.jsonl", claude_events())
+        r = subprocess.run([sys.executable, str(ROOT / "ccx.py"), "handoff", "--from-transcript", "claude", "--to",
+                            "codex", "--no-model"], cwd=wt, env=self.env, capture_output=True, text=True,
+                           encoding="utf-8")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("mine.jsonl", json.loads(r.stdout)["from_transcript"])
+        text = (self.work / ".ccx" / "handoff.md").read_text(encoding="utf-8")
+        self.assertIn("Rename the setup wizard", text)
+        self.assertNotIn("Someone else's work", text)
 
 
 class TestFresh(Env):

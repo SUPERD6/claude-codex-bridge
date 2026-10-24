@@ -130,11 +130,35 @@ def read_claude(path: Path) -> dict:
                     d["files"].append(inp["file_path"])
                 elif name == "TodoWrite" and isinstance(inp.get("todos"), list):
                     d["plan"] = [{"step": t.get("content"), "status": t.get("status")} for t in inp["todos"]]
-                elif name.endswith("update_plan") and isinstance(inp.get("items"), list):
-                    d["plan"] = [{"step": t.get("content"), "status": t.get("status")} for t in inp["items"]]
+                elif name.endswith("update_plan"):
+                    _plan_update(d["plan"], inp)
                 elif name == "Bash":
                     bash[c.get("id")] = inp.get("command") or ""
     return d
+
+
+def _plan_update(plan: list[dict], inp: dict) -> None:
+    """The desktop app's plan tool: a whole list (`items`), or a change to the last one: `advance` (finish the
+    step in progress, start the next pending one), `done` (1-based steps finished), `start` (step now in progress)."""
+    if isinstance(inp.get("items"), list):
+        plan[:] = [{"step": t.get("content"), "status": t.get("status")} for t in inp["items"]]
+        return
+    if inp.get("advance"):
+        cur = next((s for s in plan if s["status"] == "in_progress"), None)
+        if cur:
+            cur["status"] = "completed"
+        nxt = next((s for s in plan if s["status"] == "pending"), None)
+        if nxt:
+            nxt["status"] = "in_progress"
+    for i in inp.get("done") or []:
+        if isinstance(i, int) and 0 < i <= len(plan):
+            plan[i - 1]["status"] = "completed"
+    i = inp.get("start")
+    if isinstance(i, int) and 0 < i <= len(plan):
+        for s in plan:
+            if s["status"] == "in_progress":
+                s["status"] = "pending"
+        plan[i - 1]["status"] = "in_progress"
 
 
 def _codex_sessions(home: Path) -> list[Path]:
