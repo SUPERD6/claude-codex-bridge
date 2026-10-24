@@ -16,7 +16,8 @@
 | J1 + J2 每轮重读什么、缓存在哪断了（`ccx lead --breakdown`、`--cache`） | ✅ PR #8 |
 | J3 大段输出先压缩再给主智能体（`ccx sum`） | ✅ PR #9 |
 | J6 这一页压到一页 | ✅ PR #10 |
-| J0 基线、H11 第一批、E8 两向交接、F9 开/关、J7 | PR #6（[报告](research/2026-10-24-h11-e8-f9-measurements.zh.md)）：主智能体每次请求中位数 35.2 万 token / $0.11（7 天），每次约 5.5 万固定开销；只有主智能体信 ccx 的 check 时，派活才每个小任务少 1 次请求；F9 没启动过子智能体；J7 开关已加，还没有推翻数据 |
+| J0 基线、H11 第一批、E8 两向交接、F9 开/关、J7 | ✅ PR #6（[报告](research/2026-10-24-h11-e8-f9-measurements.zh.md)）：主智能体每次请求中位数 35.2 万 token / $0.11（7 天），每次约 5.5 万固定开销；只有主智能体信 ccx 的 check 时，派活才每个小任务少 1 次请求；F9 没启动过子智能体；J7 开关已加，还没有推翻数据 |
+| 按那份报告修的：交接按文件存（并行会话不互相覆盖）、编号列表兜底计划、交接附这段对话的 ccx 运行、节省有实测就用实测否则标明是模型、agent-delegate 写明验收已过就别重跑 | ✅ PR #15 |
 | J8–J10 官方 codex-plugin-cc 共存、同类项目、改名备选（只改文档，[调研](research/landscape.zh.md)） | ✅ PR #4；共存方案未实现、未实测；改名等用户拍板 |
 | G1 `ccx ui`（本机只读实时页面）+ `ui.lang` | ✅ PR #7；`ccx stop` 接着做（适配器已合并） |
 | I1–I4 适配器按家收拢、按厂商判断“另一家”、额度换边和审查者按数据选 | ✅ PR #11——新接口：`ccx.agents.get(名字)` → `Adapter`（build/parse、vendor、support、tested_version、capabilities()）；`ccx.agents.vendor()`、`others()`；`ccx agents` 以 JSON 列出 |

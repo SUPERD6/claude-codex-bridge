@@ -19,7 +19,7 @@
       <a href="#how" class="hide-s">How it works</a>
       <a href="demo/" class="hide-s">Dashboard demo</a>
       <a href="#faq" class="hide-s">FAQ</a>
-      <a href="https://github.com/SUPERD6/claude-codex-bridge">GitHub</a>
+      <a href="https://github.com/SUPERD6/relayline">GitHub</a>
       <a href="zh/" hreflang="zh" lang="zh">中文</a>
       <button class="theme" type="button" aria-label="Switch light/dark" title="Switch light/dark">◐</button>
     </nav>
@@ -31,8 +31,8 @@
       <p class="sub">ccx routes every piece of work to the cheapest model likely to finish it, runs it in the other tool,
         has you check it, and records what it cost.</p>
       <div class="install">
-        <code>pipx install git+https://github.com/SUPERD6/claude-codex-bridge</code>
-        <button class="copy" type="button" data-copy="pipx install git+https://github.com/SUPERD6/claude-codex-bridge"
+        <code>pipx install git+https://github.com/SUPERD6/relayline</code>
+        <button class="copy" type="button" data-copy="pipx install git+https://github.com/SUPERD6/relayline"
                 data-done="Copied" data-fail="Select &amp; copy">Copy</button>
       </div>
       <p class="then">then <code>ccx setup</code> — it explains each step and asks before changing anything.</p>
@@ -96,12 +96,12 @@
     <h2>Questions</h2>
     <details><summary>Doesn't a second agent cost more tokens?</summary><p>Only for tiny tasks — then ccx tells you to do them yourself. Otherwise the sub-agent runs on a cheaper model than your lead and starts slim; the dashboard shows the difference from your own runs.</p></details>
     <details><summary>I'm on a subscription, not the API. Does this apply?</summary><p>Yes: costs are shown at API prices so runs are comparable, and the dashboard also shows how much of each tool's quota went where. When one tool runs out, the work moves to the other.</p></details>
-    <details><summary>Is it safe to let a sub-agent edit files?</summary><p>Edits stay in the task's folder, every write run is snapshotted for <code>ccx undo</code>, and <code>--mode read</code> or <code>--worktree</code> keep your tree untouched. See <a href="https://github.com/SUPERD6/claude-codex-bridge/blob/main/SECURITY.md">SECURITY.md</a>.</p></details>
+    <details><summary>Is it safe to let a sub-agent edit files?</summary><p>Edits stay in the task's folder, every write run is snapshotted for <code>ccx undo</code>, and <code>--mode read</code> or <code>--worktree</code> keep your tree untouched. See <a href="https://github.com/SUPERD6/relayline/blob/main/SECURITY.md">SECURITY.md</a>.</p></details>
     <details><summary>Which tools are supported?</summary><p>Claude Code and Codex CLI, tested on a real machine in both directions. Gemini CLI and DeepSeek-backed Claude Code are adapted but not yet run for real.</p></details>
   </section>
 
-  <footer><span>ccx · MIT</span><a href="https://github.com/SUPERD6/claude-codex-bridge">GitHub</a>
-    <a href="https://github.com/SUPERD6/claude-codex-bridge/blob/main/SECURITY.md">SECURITY.md</a><a href="zh/" lang="zh">中文</a>
+  <footer><span>ccx · MIT</span><a href="https://github.com/SUPERD6/relayline">GitHub</a>
+    <a href="https://github.com/SUPERD6/relayline/blob/main/SECURITY.md">SECURITY.md</a><a href="zh/" lang="zh">中文</a>
     <span>Not affiliated with Anthropic or OpenAI. Claude Code and Codex are their respective owners' products.</span></footer>
 </div>
 <script src="app.js"></script>

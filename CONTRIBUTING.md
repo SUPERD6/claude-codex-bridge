@@ -16,8 +16,8 @@ CLI checked against that CLI. Please keep it that way.
 ## Set up
 
 ```bash
-git clone https://github.com/SUPERD6/claude-codex-bridge
-cd claude-codex-bridge
+git clone https://github.com/SUPERD6/relayline
+cd relayline
 python -m pip install -e . pytest
 python -m pytest -q tests            # must pass before every commit
 ```

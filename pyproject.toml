@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "claude-codex-bridge"
+name = "relayline"
 version = "0.4.0"
 description = "Claude Code <-> Codex (and Gemini CLI) as lead/sub-agents: routing, shared skills/MCP/incremental memory, resumable runs, token accounting"
 readme = "README.md"
@@ -26,5 +26,5 @@ package-dir = { "ccx" = "ccx", "ccx.commands" = "ccx/commands", "ccx.agents" = "
 "ccx._skills" = ["**/*.md", "**/*.py", "**/*.toml", "**/*.json"]
 "ccx._hubseed" = ["**/*.md", "**/*.json"]
 
-# Install:   pipx install git+https://github.com/<owner>/claude-codex-bridge   (or from a clone: pipx install .)
+# Install:   pipx install git+https://github.com/<owner>/relayline   (or from a clone: pipx install .)
 # Develop:   python -m pip install -e <path-to-clone>   — a clone keeps using config/ and skills/ in place
