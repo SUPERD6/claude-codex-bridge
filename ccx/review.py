@@ -9,8 +9,14 @@ another vendor ([review] by in tiers.toml). Issues go back to the same sub-sessi
 reviewed again; still failing -> kind review_failed, for the lead to decide."""
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .config import Paths
+    from .delegate import Request
 
 MARK = "[ccx review"
 BRIEF = """{mark} of run {run_id}] Review a change another agent made. Do not edit anything.
@@ -160,3 +166,44 @@ def verdict(result: dict | None) -> dict:
     if v == "pass" and notes:
         out["notes"] = notes[:3]
     return out
+
+
+def review_run(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path, run_dir: Path) -> None:
+    """F1: maybe have another vendor's cheap model review this write run's diff; sets record["review"]."""
+    from .delegate import Request, run
+    from .runners import find_bin
+    import sys
+    rv = sys.modules[__name__]
+    rc = cfg.get("review") or {}
+    mode = req.review if req.review != "auto" else rc.get("mode", "auto")
+    first = req.resume_run if (req.resume_run and not req.continued) else None
+    undo = (p.runs / first / "undo.json") if first else (run_dir / "undo.json")
+    snap = json.loads(undo.read_text(encoding="utf-8")) if undo.exists() else None
+    actual, diff = rv.changes(cwd, snap)
+    res = record.get("result") or {}
+    why = rv.reason(mode, req.risk, res, res.get("files_changed") or [], actual, rv.code_lines(diff),
+                    int(rc.get("min_lines", 50)))
+    if not why:
+        return
+    cands = rv.reviewers(cfg, req.provider or req.to, find_bin, p)
+    if not cands:
+        record["review"] = {"verdict": "not-run", "reason": why, "error": "no reviewer from another vendor installed"}
+        return
+    text = rv.brief(record["run_id"], req.brief, res.get("summary", ""), diff, int(rc.get("max_diff_chars", 12000)),
+                    record.get("check"))
+    usd, tried = 0.0, []
+    for agent, model, effort in cands[:2]:
+        rev = run(Request(to=agent, model=model, effort=effort, tier="auto", mode="read", cwd=cwd, brief=text,
+                          caller="ccx-review", escalate=False, fallback=False, review="off", allow_subagents=False,
+                          ephemeral=True, label=f"review:{record['run_id']}"), p)
+        usd += sum(a.get("ae_usd") or 0 for a in rev.get("attempts", []))
+        tried.append(f"{agent}:{model}:{effort}")
+        v = rv.verdict(rev.get("result")) if rev.get("ok") else {"verdict": "not-run", "issues": [],
+                                                                 "summary": (rev.get("error") or "")[:300]}
+        if v["verdict"] != "not-run":
+            break
+    record["review"] = {**v, "reason": why, "by": tried[-1], "run_id": rev["run_id"], "usd": round(usd, 4)}
+    if len(tried) > 1:
+        record["review"]["tried"] = tried
+    if v["verdict"] == "issues":
+        record["kind"] = ("review_issues" if req.review_round < int(rc.get("fix_rounds", 1)) else "review_failed")

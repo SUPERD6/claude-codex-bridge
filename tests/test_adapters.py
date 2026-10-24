@@ -122,8 +122,11 @@ class TestBackgroundAndSend(AdapterEnv):
         self.assertEqual(out["state"], "started")
         f = self.hub / "ccx" / "runs" / out["run_id"] / "run.json"
         for _ in range(400):                 # up to 40 s: the detached process starts slowly under full-suite load
-            if f.exists() and json.loads(f.read_text())["state"] == "finished":
-                break
+            try:
+                if f.exists() and json.loads(f.read_text())["state"] == "finished":
+                    break
+            except (ValueError, OSError):    # caught mid-replace by the run writing it (Windows): look again
+                pass
             time.sleep(0.1)
         log = f.parent / "bg.log"
         why = (f.read_text() if f.exists() else "no run.json") + "\n" + (log.read_text() if log.exists() else "no bg.log")

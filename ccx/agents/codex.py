@@ -87,6 +87,45 @@ def parse_codex(stdout: str, stderr: str, rc: int, last_file: Path | None) -> Ou
     return out
 
 
+# ---- accounting for sub-runs (from delegate.py)
+# `codex exec resume` reports the session's running total in turn.completed, not the turn's own usage
+# (codex-cli 0.164, checked against the rollout's last_token_usage 2026-10-23). Count only the growth.
+def _codex_total(u: dict) -> dict:
+    return {"input": u.get("input_tokens", 0) + u.get("cached_input_tokens", 0),
+            "cached": u.get("cached_input_tokens", 0), "output": u.get("output_tokens", 0)}
+
+
+def _codex_growth(total: dict, before: dict) -> dict:
+    d = {k: max(0, total[k] - before.get(k, 0)) for k in total}
+    return usage_dict(fresh=max(0, d["input"] - d["cached"]), cached=d["cached"], out=d["output"])
+
+
+def _add_children(usage: dict, session: str, since: float, kids: dict) -> dict:
+    """Add what the session's own multi_agent children used since `since`: their tokens are not in its
+    turn.completed. `kids` keeps each child's counted total, so a resumed session counts only the growth."""
+    from ..usage import codex_children
+    try:
+        found = codex_children(session, since - 5)
+    except Exception:  # noqa: BLE001 — accounting must never break a run
+        return usage
+    out = dict(usage)
+    for child, tot in found.items():
+        g = _codex_growth(tot, kids.get(child, {}))
+        for k in ("input_tokens", "cached_input_tokens", "output_tokens"):
+            out[k] = out.get(k, 0) + g.get(k, 0)
+        kids[child] = tot
+    return out
+
+
+def _codex_seen(prev: dict | None) -> dict:
+    """Running totals of the Codex sessions an earlier run used (older records stored the total as usage)."""
+    seen = {}
+    for a in (prev or {}).get("attempts", []):
+        if a.get("agent") == "codex" and a.get("session_id") and a.get("usage"):
+            seen[a["session_id"]] = a.get("codex_total") or _codex_total(a["usage"])
+    return seen
+
+
 ADAPTER = Adapter(
     name="codex", vendor="openai", support="official", tested_version="0.164.0",
     build=codex_invocation, parse=parse_codex,
