@@ -192,8 +192,8 @@ def pending_handoff(root: Path, me: str, advance: bool = True) -> str:
         return ""
     doc = f.read_text(encoding="utf-8")
     m = re.match(r"<!-- ccx:handoff from=(\S+) to=(\S+) ts=(\S+) -->", doc)
-    if not m or m.group(1) == me or m.group(2) not in (me, "any"):
-        return ""
+    if not m or m.group(2) not in (me, "any") or (m.group(1) == me and m.group(2) == "any"):
+        return ""                 # to me (even from my own kind: a fresh conversation, J4), or to anyone but me
     seen_f = root / ".ccx" / "handoff.seen.json"
     try:
         seen = json.loads(seen_f.read_text(encoding="utf-8")) if seen_f.exists() else {}
