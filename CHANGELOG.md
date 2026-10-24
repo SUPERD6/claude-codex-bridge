@@ -1,6 +1,10 @@
 # Changelog
 
 ## Unreleased
+- STATUS is one page (proposal J6): what is going on now, the next three items and a short "how sure we are";
+  the old 24 KB page moved to `docs/STATUS-archive.md` / `.zh.md` as it stood. AGENTS.md no longer tells every
+  agent to read it first, only when it needs to know where things stand — anything read at start-up is re-read
+  on every later turn.
 - Long output cut down before the lead reads it (proposal J3): `ccx sum -- <command>` runs the command, keeps the
   full output in `.ccx/sum/` (git-ignored, last 20) and prints only what matters — for tests each failure's header,
   last frame and error line plus the summary; for diffs files changed with +/− counts and the first hunks; for logs
