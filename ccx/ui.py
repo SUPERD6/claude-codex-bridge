@@ -133,7 +133,10 @@ def project_root(cwd: str | None) -> Path | None:
     folder or a .git; else the folder itself. No subprocess, no writes."""
     if not cwd:
         return None
-    c = Path(cwd)
+    try:
+        c = Path(cwd).resolve()                     # one spelling per folder (Windows short names, symlinks)
+    except OSError:
+        c = Path(cwd)
     parts = c.parts
     if ".ccx-worktrees" in parts:                   # <parent>/.ccx-worktrees/<repo>/<run_id> (delegate.make_worktree)
         i = parts.index(".ccx-worktrees")
