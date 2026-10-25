@@ -1,6 +1,6 @@
 # Status
 
-English · [中文](STATUS.zh.md) · updated 2026-10-24 · version 0.4.0 · 254 tests
+English · [中文](STATUS.zh.md) · updated 2026-10-24 · version 0.4.0 · 274 tests
 
 One page on purpose: whatever an agent reads at start-up it re-reads on every later turn. Older notes, the full
 confidence table, acceptance checks and the done list are in [STATUS-archive.md](STATUS-archive.md); what changed
@@ -31,13 +31,14 @@ turn re-reads ~220k tokens):
 | J5 a model for the lead itself (`ccx lead --suggest`, a line in `ccx report`) | ✅ PR #13 |
 | J11 `ccx/delegate.py` split by job, behaviour unchanged | ✅ PR #14 |
 | F10–F14 own sub-agents: spend and quota limits, Agent tool for Claude, explicit "use sub-agents" for parts | ✅ PR #18 — limits not yet hit by a real run (sub-agents rarely start: PR #6) |
+| H5–H6 + I6 shared memory in use: suggested notes the person accepts, this project first, usage counts, notes in the brief for tools without a start hook | ✅ PR #21 — suggestions are heuristic; **H7 waits for the user**: open a new Codex desktop conversation in this project and send "ok", to confirm the start hook arrives |
 
 ## Next three
 
-1. H5–H7 + I6 shared memory in use (after F10–F14).
+1. H3–H4 + I7 `ccx discuss`, then H8–H9 ways of working.
 2. J0 on real sessions (`scripts/eval/j0_baseline.py real --days 7`) a week after J1–J6, against the baseline in
    PR #6; spot-check 5 probable verdicts a week so J7 has an overturn rate.
-3. Then the rest of the unified order: H5–H7 + I6 shared memory, H3–H4 + I7 `ccx discuss`, H8–H9, `ccx stop`, I5, H1–H2, H12, H14–H16, I8, and the open-source release.
+3. Then the rest of the unified order: H7 (the user's check above), `ccx stop`, I5, H1–H2, H12, H14–H16, I8, and the open-source release.
 
 ## How sure we are (short)
 
