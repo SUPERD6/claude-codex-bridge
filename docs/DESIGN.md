@@ -9,7 +9,7 @@ with `ccx init --hub <path>`.
 
 | Layer | Contents | Where |
 |---|---|---|
-| tool | ccx code, default config, four skills (agent-delegate, task-routing, task-split, task-checkpoint), tests | this repo |
+| tool | ccx code, default config, five skills (agent-delegate, task-routing, task-split, task-checkpoint, project-manager), tests | this repo |
 | personal (hub) | your skills, MCP registry, personal memory, ledger, learned estimates, settings, improvement log | the folder given to `ccx init --hub` (default `~/.ccx-hub`) |
 | project | background `context.md`, project journal, `inbox/`, resumable tasks `tasks/` | each project's `.ccx/` |
 

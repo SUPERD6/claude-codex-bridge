@@ -42,9 +42,9 @@ class TestManifests(unittest.TestCase):
         for event, args in (("SessionStart", "mem delta --as claude"), ("UserPromptSubmit", "turn --as claude")):
             self.assertEqual(cmds[event], f'sh "${{CLAUDE_PLUGIN_ROOT}}/bin/ccx" {args}')
 
-    def test_four_skills(self):
+    def test_five_skills(self):
         self.assertEqual(sorted(d.name for d in (ROOT / "skills").iterdir() if (d / "SKILL.md").exists()),
-                         ["agent-delegate", "task-checkpoint", "task-routing", "task-split"])
+                         ["agent-delegate", "project-manager", "task-checkpoint", "task-routing", "task-split"])
 
     def test_shim_keeps_lf(self):
         self.assertNotIn(b"\r\n", (ROOT / "bin" / "ccx").read_bytes())    # sh can't run a CRLF script
