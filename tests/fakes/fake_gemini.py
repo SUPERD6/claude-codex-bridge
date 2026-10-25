@@ -30,6 +30,8 @@ if mode == "quota":
 status = "blocked" if mode == "blocked" or (mode == "blocked_then_done" and not resuming) else "done"
 res = {"status": status, "summary": f"fake gemini {status}", "files_changed": [], "commands_run": [],
        "verification": "not-run", "open_questions": [], "next_step": ""}
+from fake_discuss import answer as _discuss  # noqa: E402
+res = _discuss(stdin, "gemini", log) or res
 text = "```json\n" + json.dumps(res) + "\n```"
 for i in range(0, len(text), 40):
     ev(type="message", role="assistant", content=text[i:i + 40], delta=True)
