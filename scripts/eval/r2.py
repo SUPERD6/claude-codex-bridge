@@ -211,8 +211,19 @@ def verify(hub: Path, run_id: str | None, ok: bool, note: str) -> str:
 
 # ------------------------------------------------------------------ units
 
-def _paths(u: dict, work: Path) -> tuple[Path, Path]:
+def _rmtree(d: Path) -> None:
+    """Remove a leftover folder of an interrupted unit (git's object files are read-only on Windows)."""
+    def onerror(fn, path, _exc):
+        os.chmod(path, 0o700)
+        fn(path)
+    if d.exists():
+        shutil.rmtree(d, onerror=onerror)
+
+
+def _paths(u: dict, work: Path, clean: bool = True) -> tuple[Path, Path]:
     key = f"{u['exp']}-{u['round']}-{u['task']}-{u['arm']}"
+    for d in (work / key, work / f"hub-{key}") if clean else ():
+        _rmtree(d)
     return work / key, work / f"hub-{key}"
 
 
@@ -361,7 +372,7 @@ def batch_unit(u: dict, a, work: Path, n: int) -> dict:
 
 def single_par(u: dict, a, work: Path, pick: list[str], flags: list[str]) -> dict:
     row = direct(u, a, work, pick, brief=PAR10["brief"], extra=flags)
-    repo, hub = _paths(u, work)
+    repo, hub = _paths(u, work, clean=False)
     sp = score_pieces(repo)
     row.update(**sp, ok=sp["n_ok"] == 10, conflicts=0, children=children(hub, row["run_ids"]))
     return row
