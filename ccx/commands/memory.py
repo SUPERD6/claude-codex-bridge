@@ -270,6 +270,12 @@ def cmd_mem(a) -> int:
                 arc.auto(p)
             except Exception:  # noqa: BLE001 — never break session start
                 pass
+            try:                       # the project catalog, rescanned in the background once a day
+                from .. import projects as pj
+                from ..config import load_config
+                pj.refresh_later(p, load_config(p))
+            except Exception:  # noqa: BLE001 — never break session start
+                pass
             if os.environ.get("CCX_NO_BENCH_REFRESH") != "1":
                 try:                   # weekly public benchmark data for routing, in the background
                     from .. import learn
