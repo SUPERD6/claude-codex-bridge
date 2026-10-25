@@ -1,0 +1,4252 @@
+{
+ "note": "seven-cores A/B round 1 (tag r1, seed 7); de-identified: no local paths or run ids. Plan: ../2026-10-24-seven-cores-plan.md",
+ "versions": {
+  "claude": "2.1.309",
+  "codex-cli": "0.164.0"
+ },
+ "summary": {
+  "deleg": {
+   "arms": [
+    "self",
+    "delegate"
+   ],
+   "pairs": 21,
+   "tasks": [
+    "cli-json",
+    "csvstats",
+    "duration",
+    "intervals",
+    "inventory",
+    "lru",
+    "slugify"
+   ],
+   "ok": {
+    "self": 21,
+    "delegate": 18
+   },
+   "ok_wilson": {
+    "self": [
+     0.845,
+     1.0
+    ],
+    "delegate": [
+     0.654,
+     0.95
+    ]
+   },
+   "ok_diff": -0.143,
+   "discordant": {
+    "only_self": 3,
+    "only_delegate": 0
+   },
+   "mcnemar_p": 0.25,
+   "ccx_said_ok_but_hidden_failed": 0,
+   "metrics": {
+    "total_usd": {
+     "n_pairs": 21,
+     "n_tasks": 7,
+     "A_median": 0.034399,
+     "B_median": 0.035139,
+     "diff_median": 0.000525,
+     "diff_mean": -0.001695,
+     "ratio_median": 1.015277,
+     "pair_ci95": [
+      -0.0011011000000000007,
+      0.0014868999999999993
+     ],
+     "pair_sign_p": 0.6636238098144531,
+     "task_diff_median": -2.9e-05,
+     "task_ci95": [
+      -0.002541500000000002,
+      0.0013283666666666684
+     ],
+     "task_sign_p": 1.0
+    },
+    "total_tokens": {
+     "n_pairs": 21,
+     "n_tasks": 7,
+     "A_median": 35637,
+     "B_median": 119010,
+     "diff_median": 83226,
+     "diff_mean": 85092.142857,
+     "ratio_median": 3.345891,
+     "pair_ci95": [
+      82537,
+      88943
+     ],
+     "pair_sign_p": 9.5367431640625e-07,
+     "task_diff_median": 84953.0,
+     "task_ci95": [
+      83798.66666666667,
+      86867.0
+     ],
+     "task_sign_p": 0.015625
+    },
+    "wall_s": {
+     "n_pairs": 21,
+     "n_tasks": 7,
+     "A_median": 10.9,
+     "B_median": 33.7,
+     "diff_median": 22.6,
+     "diff_mean": 23.47619,
+     "ratio_median": 3.247863,
+     "pair_ci95": [
+      21.5,
+      24.200000000000003
+     ],
+     "pair_sign_p": 9.5367431640625e-07,
+     "task_diff_median": 23.333333,
+     "task_ci95": [
+      22.26666666666667,
+      24.600000000000005
+     ],
+     "task_sign_p": 0.015625
+    },
+    "lead_requests": {
+     "n_pairs": 21,
+     "n_tasks": 7,
+     "A_median": 3,
+     "B_median": 2,
+     "diff_median": -1,
+     "diff_mean": -1.428571,
+     "ratio_median": 0.666667,
+     "pair_ci95": [
+      -1,
+      -1
+     ],
+     "pair_sign_p": 9.5367431640625e-07,
+     "task_diff_median": -1.0,
+     "task_ci95": [
+      -1.6666666666666667,
+      -1.0
+     ],
+     "task_sign_p": 0.015625
+    },
+    "lead_tokens": {
+     "n_pairs": 21,
+     "n_tasks": 7,
+     "A_median": 35637,
+     "B_median": 24319,
+     "diff_median": -11129,
+     "diff_mean": -16778.0,
+     "ratio_median": 0.686327,
+     "pair_ci95": [
+      -11398,
+      -11049
+     ],
+     "pair_sign_p": 9.5367431640625e-07,
+     "task_diff_median": -11235.666667,
+     "task_ci95": [
+      -19653.333333333332,
+      -11021.0
+     ],
+     "task_sign_p": 0.015625
+    },
+    "lead_usd": {
+     "n_pairs": 21,
+     "n_tasks": 7,
+     "A_median": 0.034399,
+     "B_median": 0.032307,
+     "diff_median": -0.001856,
+     "diff_mean": -0.004226,
+     "ratio_median": 0.945077,
+     "pair_ci95": [
+      -0.0036499000000000045,
+      -0.0014945999999999987
+     ],
+     "pair_sign_p": 0.00022125244140625,
+     "task_diff_median": -0.002864,
+     "task_ci95": [
+      -0.004736166666666666,
+      -0.001193966666666664
+     ],
+     "task_sign_p": 0.125
+    },
+    "lead_tokens_at_real_context": {
+     "n_pairs": 21,
+     "n_tasks": 7,
+     "A_median": 1055559,
+     "B_median": 703706,
+     "diff_median": -351853,
+     "diff_mean": -502647.142857,
+     "ratio_median": 0.666667,
+     "pair_ci95": [
+      -351853,
+      -351853
+     ],
+     "pair_sign_p": 9.5367431640625e-07,
+     "task_diff_median": -351853.0,
+     "task_ci95": [
+      -586421.6666666666,
+      -351853.0
+     ],
+     "task_sign_p": 0.015625
+    }
+   },
+   "did_not_delegate": 0,
+   "lead_edited_after_delegating": 0
+  },
+  "route": {
+   "arms": [
+    "fixed",
+    "routed"
+   ],
+   "pairs": 21,
+   "tasks": [
+    "cli-json",
+    "csvstats",
+    "duration",
+    "intervals",
+    "inventory",
+    "lru",
+    "slugify"
+   ],
+   "ok": {
+    "fixed": 21,
+    "routed": 21
+   },
+   "ok_wilson": {
+    "fixed": [
+     0.845,
+     1.0
+    ],
+    "routed": [
+     0.845,
+     1.0
+    ]
+   },
+   "ok_diff": 0.0,
+   "discordant": {
+    "only_fixed": 0,
+    "only_routed": 0
+   },
+   "mcnemar_p": null,
+   "ccx_said_ok_but_hidden_failed": 0,
+   "metrics": {
+    "total_usd": {
+     "n_pairs": 21,
+     "n_tasks": 7,
+     "A_median": 0.046181,
+     "B_median": 0.047493,
+     "diff_median": 0.001442,
+     "diff_mean": 0.001478,
+     "ratio_median": 1.032338,
+     "pair_ci95": [
+      0.0001840000000000036,
+      0.0032289999999999958
+     ],
+     "pair_sign_p": 0.0783538818359375,
+     "task_diff_median": 0.001004,
+     "task_ci95": [
+      -0.0014093333333333364,
+      0.003863999999999997
+     ],
+     "task_sign_p": 0.453125
+    },
+    "total_tokens": {
+     "n_pairs": 21,
+     "n_tasks": 7,
+     "A_median": 44288,
+     "B_median": 58560,
+     "diff_median": 14497,
+     "diff_mean": 6552.190476,
+     "ratio_median": 1.258324,
+     "pair_ci95": [
+      155,
+      15377
+     ],
+     "pair_sign_p": 0.02660369873046875,
+     "task_diff_median": 4997.0,
+     "task_ci95": [
+      -530.0,
+      15583.333333333334
+     ],
+     "task_sign_p": 0.453125
+    },
+    "wall_s": {
+     "n_pairs": 21,
+     "n_tasks": 7,
+     "A_median": 13.2,
+     "B_median": 21.8,
+     "diff_median": 9.0,
+     "diff_mean": 9.052381,
+     "ratio_median": 1.75,
+     "pair_ci95": [
+      7.699999999999999,
+      9.600000000000001
+     ],
+     "pair_sign_p": 9.5367431640625e-07,
+     "task_diff_median": 9.066667,
+     "task_ci95": [
+      8.033333333333333,
+      9.8
+     ],
+     "task_sign_p": 0.015625
+    }
+   },
+   "routed_rungs": [
+    "claude:sonnet:medium"
+   ],
+   "escalated": 0
+  },
+  "review": {
+   "arms": [
+    "noreview",
+    "review"
+   ],
+   "pairs": 21,
+   "tasks": [
+    "cli-json",
+    "csvstats",
+    "duration",
+    "intervals",
+    "inventory",
+    "lru",
+    "slugify"
+   ],
+   "ok": {
+    "noreview": 19,
+    "review": 18
+   },
+   "ok_wilson": {
+    "noreview": [
+     0.711,
+     0.973
+    ],
+    "review": [
+     0.654,
+     0.95
+    ]
+   },
+   "ok_diff": -0.048,
+   "discordant": {
+    "only_noreview": 1,
+    "only_review": 0
+   },
+   "mcnemar_p": 1.0,
+   "ccx_said_ok_but_hidden_failed": 5,
+   "metrics": {
+    "total_usd": {
+     "n_pairs": 21,
+     "n_tasks": 7,
+     "A_median": 0.002173,
+     "B_median": 0.080207,
+     "diff_median": 0.078041,
+     "diff_mean": 0.070644,
+     "ratio_median": 33.780365,
+     "pair_ci95": [
+      0.070508,
+      0.08335199999999998
+     ],
+     "pair_sign_p": 9.5367431640625e-07,
+     "task_diff_median": 0.073403,
+     "task_ci95": [
+      0.06370066666666667,
+      0.08734133333333334
+     ],
+     "task_sign_p": 0.015625
+    },
+    "total_tokens": {
+     "n_pairs": 21,
+     "n_tasks": 7,
+     "A_median": 94175,
+     "B_median": 233206,
+     "diff_median": 132858,
+     "diff_mean": 127952.809524,
+     "ratio_median": 2.250619,
+     "pair_ci95": [
+      104459,
+      149455
+     ],
+     "pair_sign_p": 9.5367431640625e-07,
+     "task_diff_median": 126075.333333,
+     "task_ci95": [
+      106007.0,
+      183113.0
+     ],
+     "task_sign_p": 0.015625
+    },
+    "wall_s": {
+     "n_pairs": 21,
+     "n_tasks": 7,
+     "A_median": 25.1,
+     "B_median": 85.5,
+     "diff_median": 60.4,
+     "diff_mean": 52.752381,
+     "ratio_median": 3.243243,
+     "pair_ci95": [
+      51.2,
+      62.99999999999999
+     ],
+     "pair_sign_p": 9.5367431640625e-07,
+     "task_diff_median": 52.8,
+     "task_ci95": [
+      46.699999999999996,
+      64.06666666666666
+     ],
+     "task_sign_p": 0.015625
+    }
+   },
+   "review_verdicts": {
+    "pass": 21
+   },
+   "first_review_found_issues": 15,
+   "fix_round_turned_fail_into_pass": 0
+  },
+  "memory": {
+   "arms": [
+    "nomem",
+    "mem"
+   ],
+   "pairs": 9,
+   "tasks": [
+    "mem-errors",
+    "mem-log",
+    "mem-money"
+   ],
+   "ok": {
+    "nomem": 0,
+    "mem": 9
+   },
+   "ok_wilson": {
+    "nomem": [
+     0.0,
+     0.299
+    ],
+    "mem": [
+     0.701,
+     1.0
+    ]
+   },
+   "ok_diff": 1.0,
+   "discordant": {
+    "only_nomem": 0,
+    "only_mem": 9
+   },
+   "mcnemar_p": 0.00390625,
+   "ccx_said_ok_but_hidden_failed": 9,
+   "metrics": {
+    "total_usd": {
+     "n_pairs": 9,
+     "n_tasks": 3,
+     "A_median": 0.001945,
+     "B_median": 0.002499,
+     "diff_median": 0.000723,
+     "diff_mean": 0.000683,
+     "ratio_median": 1.407095,
+     "pair_ci95": [
+      -0.0001330000000000001,
+      0.0020340000000000002
+     ],
+     "pair_sign_p": 0.1796875,
+     "task_diff_median": 0.000756,
+     "task_ci95": [
+      0.0004583333333333334,
+      0.0008343333333333333
+     ],
+     "task_sign_p": 0.25
+    },
+    "total_tokens": {
+     "n_pairs": 9,
+     "n_tasks": 3,
+     "A_median": 93157,
+     "B_median": 112960,
+     "diff_median": 18940,
+     "diff_mean": 33059.222222,
+     "ratio_median": 1.203313,
+     "pair_ci95": [
+      -756,
+      90020
+     ],
+     "pair_sign_p": 0.1796875,
+     "task_diff_median": 42837.333333,
+     "task_ci95": [
+      9532.666666666666,
+      46807.666666666664
+     ],
+     "task_sign_p": 0.25
+    },
+    "wall_s": {
+     "n_pairs": 9,
+     "n_tasks": 3,
+     "A_median": 23.5,
+     "B_median": 27.6,
+     "diff_median": 2.4,
+     "diff_mean": 2.3,
+     "ratio_median": 1.102128,
+     "pair_ci95": [
+      -1.6999999999999993,
+      5.100000000000001
+     ],
+     "pair_sign_p": 0.1796875,
+     "task_diff_median": 1.966667,
+     "task_ci95": [
+      -0.39999999999999974,
+      5.333333333333333
+     ],
+     "task_sign_p": 1.0
+    }
+   }
+  },
+  "primary_holm": {
+   "memory": {
+    "metric": "ok",
+    "p": 0.00390625,
+    "p_holm": 0.015625
+   },
+   "route": {
+    "metric": "total_usd",
+    "p": 0.453125,
+    "p_holm": 1.0
+   },
+   "deleg": {
+    "metric": "total_usd",
+    "p": 1.0,
+    "p_holm": 1.0
+   },
+   "review": {
+    "metric": "ok",
+    "p": 1.0,
+    "p_holm": 1.0
+   }
+  },
+  "spend_usd": 5.1636,
+  "units": 144
+ },
+ "units": [
+  {
+   "exp": "deleg",
+   "round": 1,
+   "task": "slugify",
+   "arm": "delegate",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.034015,
+   "tokens": 116748,
+   "wall_s": 31.6,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.002979,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 2,
+    "context_tokens": 23504,
+    "output_tokens": 403,
+    "usd": 0.031035999999999998
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 1,
+   "task": "slugify",
+   "arm": "self",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.028632,
+   "tokens": 34211,
+   "wall_s": 8.4,
+   "rungs": null,
+   "kinds": null,
+   "sub_usd": 0.0,
+   "review_usd": 0.0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 3,
+    "context_tokens": 33917,
+    "output_tokens": 294,
+    "usd": 0.0286316
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 1,
+   "task": "lru",
+   "arm": "delegate",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.03446,
+   "tokens": 138667,
+   "wall_s": 36.1,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.002527,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 2,
+    "context_tokens": 23703,
+    "output_tokens": 442,
+    "usd": 0.0319334
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 1,
+   "task": "lru",
+   "arm": "self",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.033789,
+   "tokens": 35180,
+   "wall_s": 10.3,
+   "rungs": null,
+   "kinds": null,
+   "sub_usd": 0.0,
+   "review_usd": 0.0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 3,
+    "context_tokens": 34545,
+    "output_tokens": 635,
+    "usd": 0.0337892
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 1,
+   "task": "csvstats",
+   "arm": "self",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.035884,
+   "tokens": 35448,
+   "wall_s": 12.3,
+   "rungs": null,
+   "kinds": null,
+   "sub_usd": 0.0,
+   "review_usd": 0.0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 3,
+    "context_tokens": 34638,
+    "output_tokens": 810,
+    "usd": 0.0358839
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 1,
+   "task": "csvstats",
+   "arm": "delegate",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.035526,
+   "tokens": 125235,
+   "wall_s": 32.4,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.003292,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 2,
+    "context_tokens": 23887,
+    "output_tokens": 432,
+    "usd": 0.032234
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 1,
+   "task": "cli-json",
+   "arm": "self",
+   "slot": 0,
+   "ok": true,
+   "pytest": "3 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.045667,
+   "tokens": 61103,
+   "wall_s": 14.7,
+   "rungs": null,
+   "kinds": null,
+   "sub_usd": 0.0,
+   "review_usd": 0.0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 5,
+    "context_tokens": 59924,
+    "output_tokens": 1179,
+    "usd": 0.045666899999999996
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 1,
+   "task": "cli-json",
+   "arm": "delegate",
+   "slot": 1,
+   "ok": true,
+   "pytest": "3 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.034309,
+   "tokens": 117672,
+   "wall_s": 35.2,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.002002,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 2,
+    "context_tokens": 23690,
+    "output_tokens": 490,
+    "usd": 0.032306800000000004
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 1,
+   "task": "inventory",
+   "arm": "delegate",
+   "slot": 0,
+   "ok": false,
+   "pytest": "1 failed, 5 passed in 0.11s",
+   "ccx_ok": null,
+   "usd": 0.037265,
+   "tokens": 205009,
+   "wall_s": 54.2,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.005329,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 2,
+    "context_tokens": 23872,
+    "output_tokens": 402,
+    "usd": 0.031936400000000004
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 1,
+   "task": "inventory",
+   "arm": "self",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.048386,
+   "tokens": 62575,
+   "wall_s": 16.3,
+   "rungs": null,
+   "kinds": null,
+   "sub_usd": 0.0,
+   "review_usd": 0.0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 5,
+    "context_tokens": 61254,
+    "output_tokens": 1321,
+    "usd": 0.048386
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 1,
+   "task": "intervals",
+   "arm": "delegate",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.033827,
+   "tokens": 123542,
+   "wall_s": 33.2,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.003156,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 2,
+    "context_tokens": 23548,
+    "output_tokens": 375,
+    "usd": 0.030670700000000002
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 1,
+   "task": "intervals",
+   "arm": "self",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.033577,
+   "tokens": 35234,
+   "wall_s": 10.0,
+   "rungs": null,
+   "kinds": null,
+   "sub_usd": 0.0,
+   "review_usd": 0.0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 3,
+    "context_tokens": 34649,
+    "output_tokens": 585,
+    "usd": 0.0335765
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 1,
+   "task": "duration",
+   "arm": "self",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.033802,
+   "tokens": 35210,
+   "wall_s": 12.6,
+   "rungs": null,
+   "kinds": null,
+   "sub_usd": 0.0,
+   "review_usd": 0.0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 3,
+    "context_tokens": 34576,
+    "output_tokens": 634,
+    "usd": 0.0338018
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 1,
+   "task": "duration",
+   "arm": "delegate",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.033372,
+   "tokens": 117488,
+   "wall_s": 33.7,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.001988,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 2,
+    "context_tokens": 23709,
+    "output_tokens": 394,
+    "usd": 0.031383799999999996
+   }
+  },
+  {
+   "exp": "route",
+   "round": 1,
+   "task": "cli-json",
+   "arm": "routed",
+   "slot": 0,
+   "ok": true,
+   "pytest": "3 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.052027,
+   "tokens": 58796,
+   "wall_s": 21.8,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.052027,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 1,
+   "task": "cli-json",
+   "arm": "fixed",
+   "slot": 1,
+   "ok": true,
+   "pytest": "3 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.058234,
+   "tokens": 89341,
+   "wall_s": 18.2,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.058234,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 1,
+   "task": "csvstats",
+   "arm": "routed",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.058011,
+   "tokens": 74996,
+   "wall_s": 29.8,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.058011,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 1,
+   "task": "csvstats",
+   "arm": "fixed",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.049896,
+   "tokens": 58516,
+   "wall_s": 15.9,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.049896,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 1,
+   "task": "inventory",
+   "arm": "routed",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.055708,
+   "tokens": 75507,
+   "wall_s": 23.9,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.055708,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 1,
+   "task": "inventory",
+   "arm": "fixed",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.054946,
+   "tokens": 60006,
+   "wall_s": 16.1,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.054946,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 1,
+   "task": "lru",
+   "arm": "routed",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.044105,
+   "tokens": 43771,
+   "wall_s": 24.7,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.044105,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 1,
+   "task": "lru",
+   "arm": "fixed",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.044144,
+   "tokens": 43731,
+   "wall_s": 12.0,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.044144,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 1,
+   "task": "intervals",
+   "arm": "fixed",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.041437,
+   "tokens": 43274,
+   "wall_s": 11.1,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.041437,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 1,
+   "task": "intervals",
+   "arm": "routed",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.045314,
+   "tokens": 57823,
+   "wall_s": 20.7,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.045314,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 1,
+   "task": "duration",
+   "arm": "fixed",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.041279,
+   "tokens": 43159,
+   "wall_s": 11.7,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.041279,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 1,
+   "task": "duration",
+   "arm": "routed",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.043048,
+   "tokens": 43444,
+   "wall_s": 20.7,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.043048,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 1,
+   "task": "slugify",
+   "arm": "fixed",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.040473,
+   "tokens": 43066,
+   "wall_s": 10.9,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.040473,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 1,
+   "task": "slugify",
+   "arm": "routed",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.041275,
+   "tokens": 43237,
+   "wall_s": 18.3,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.041275,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 1,
+   "task": "cli-json",
+   "arm": "noreview",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.002119,
+   "tokens": 99926,
+   "wall_s": 26.0,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.002119,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 1,
+   "task": "cli-json",
+   "arm": "review",
+   "slot": 1,
+   "ok": true,
+   "pytest": "3 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.073778,
+   "tokens": 204385,
+   "wall_s": 77.2,
+   "rungs": [
+    "codex:gpt-6-luna:low",
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "review_issues",
+    "ok"
+   ],
+   "sub_usd": 0.002982,
+   "review_usd": 0.070796,
+   "review_verdict": "pass",
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 1,
+   "task": "intervals",
+   "arm": "review",
+   "slot": 0,
+   "ok": true,
+   "pytest": "6 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.078367,
+   "tokens": 210712,
+   "wall_s": 86.0,
+   "rungs": [
+    "codex:gpt-6-luna:low",
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "review_issues",
+    "ok"
+   ],
+   "sub_usd": 0.003244,
+   "review_usd": 0.075123,
+   "review_verdict": "pass",
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 1,
+   "task": "intervals",
+   "arm": "noreview",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.001986,
+   "tokens": 93624,
+   "wall_s": 24.6,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.001986,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 1,
+   "task": "duration",
+   "arm": "noreview",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.003116,
+   "tokens": 93675,
+   "wall_s": 27.4,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.003116,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 1,
+   "task": "duration",
+   "arm": "review",
+   "slot": 1,
+   "ok": true,
+   "pytest": "12 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.086081,
+   "tokens": 205252,
+   "wall_s": 87.9,
+   "rungs": [
+    "codex:gpt-6-luna:low",
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "review_issues",
+    "ok"
+   ],
+   "sub_usd": 0.004098,
+   "review_usd": 0.081983,
+   "review_verdict": "pass",
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 1,
+   "task": "lru",
+   "arm": "review",
+   "slot": 0,
+   "ok": true,
+   "pytest": "7 passed in 0.02s",
+   "ccx_ok": true,
+   "usd": 0.087052,
+   "tokens": 270981,
+   "wall_s": 92.9,
+   "rungs": [
+    "codex:gpt-6-luna:low",
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "review_issues",
+    "ok"
+   ],
+   "sub_usd": 0.004438,
+   "review_usd": 0.082614,
+   "review_verdict": "pass",
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 1,
+   "task": "lru",
+   "arm": "noreview",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.002577,
+   "tokens": 121647,
+   "wall_s": 28.6,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.002577,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 1,
+   "task": "slugify",
+   "arm": "noreview",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.002861,
+   "tokens": 92485,
+   "wall_s": 22.8,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.002861,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 1,
+   "task": "slugify",
+   "arm": "review",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.046806,
+   "tokens": 138455,
+   "wall_s": 42.1,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.002089,
+   "review_usd": 0.044717,
+   "review_verdict": "pass",
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 1,
+   "task": "inventory",
+   "arm": "noreview",
+   "slot": 0,
+   "ok": false,
+   "pytest": "1 failed, 1 passed in 0.09s",
+   "ccx_ok": true,
+   "usd": 0.00208,
+   "tokens": 81021,
+   "wall_s": 24.9,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.00208,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 1,
+   "task": "inventory",
+   "arm": "review",
+   "slot": 1,
+   "ok": false,
+   "pytest": "1 failed, 6 passed in 0.10s",
+   "ccx_ok": true,
+   "usd": 0.094671,
+   "tokens": 244233,
+   "wall_s": 89.6,
+   "rungs": [
+    "codex:gpt-6-luna:low",
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "review_issues",
+    "ok"
+   ],
+   "sub_usd": 0.003543,
+   "review_usd": 0.091128,
+   "review_verdict": "pass",
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 1,
+   "task": "csvstats",
+   "arm": "review",
+   "slot": 0,
+   "ok": true,
+   "pytest": "5 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.097411,
+   "tokens": 449606,
+   "wall_s": 130.2,
+   "rungs": [
+    "codex:gpt-6-luna:low",
+    "codex:gpt-6-luna:low",
+    "codex:gpt-6-luna:high"
+   ],
+   "kinds": [
+    "review_issues",
+    "ok"
+   ],
+   "sub_usd": 0.011889,
+   "review_usd": 0.085522,
+   "review_verdict": "pass",
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 1,
+   "task": "csvstats",
+   "arm": "noreview",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.003716,
+   "tokens": 94175,
+   "wall_s": 25.5,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.003716,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "memory",
+   "round": 1,
+   "task": "mem-errors",
+   "arm": "mem",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.004221,
+   "tokens": 132763,
+   "wall_s": 29.0,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.004221,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "memory",
+   "round": 1,
+   "task": "mem-errors",
+   "arm": "nomem",
+   "slot": 1,
+   "ok": false,
+   "pytest": "1 failed, 1 passed in 0.10s",
+   "ccx_ok": true,
+   "usd": 0.00196,
+   "tokens": 93515,
+   "wall_s": 26.3,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.00196,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "memory",
+   "round": 1,
+   "task": "mem-log",
+   "arm": "mem",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.003236,
+   "tokens": 112097,
+   "wall_s": 25.9,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.003236,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "memory",
+   "round": 1,
+   "task": "mem-log",
+   "arm": "nomem",
+   "slot": 1,
+   "ok": false,
+   "pytest": "1 failed, 1 passed in 0.09s",
+   "ccx_ok": true,
+   "usd": 0.00188,
+   "tokens": 93157,
+   "wall_s": 23.5,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.00188,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "memory",
+   "round": 1,
+   "task": "mem-money",
+   "arm": "mem",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.004102,
+   "tokens": 171840,
+   "wall_s": 30.6,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.004102,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "memory",
+   "round": 1,
+   "task": "mem-money",
+   "arm": "nomem",
+   "slot": 1,
+   "ok": false,
+   "pytest": "1 failed, 1 passed in 0.09s",
+   "ccx_ok": true,
+   "usd": 0.002661,
+   "tokens": 73789,
+   "wall_s": 20.1,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.002661,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "deleg",
+   "round": 2,
+   "task": "slugify",
+   "arm": "self",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.033432,
+   "tokens": 35341,
+   "wall_s": 9.7,
+   "rungs": null,
+   "kinds": null,
+   "sub_usd": 0.0,
+   "review_usd": 0.0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 3,
+    "context_tokens": 34761,
+    "output_tokens": 580,
+    "usd": 0.0334324
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 2,
+   "task": "slugify",
+   "arm": "delegate",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.03402,
+   "tokens": 124235,
+   "wall_s": 32.3,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.002109,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 2,
+    "context_tokens": 23842,
+    "output_tokens": 420,
+    "usd": 0.031910600000000004
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 2,
+   "task": "lru",
+   "arm": "self",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.034778,
+   "tokens": 35703,
+   "wall_s": 10.3,
+   "rungs": null,
+   "kinds": null,
+   "sub_usd": 0.0,
+   "review_usd": 0.0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 3,
+    "context_tokens": 35038,
+    "output_tokens": 665,
+    "usd": 0.0347781
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 2,
+   "task": "lru",
+   "arm": "delegate",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.036458,
+   "tokens": 119010,
+   "wall_s": 34.8,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.003175,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 2,
+    "context_tokens": 24070,
+    "output_tokens": 493,
+    "usd": 0.0332835
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 2,
+   "task": "duration",
+   "arm": "self",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.033531,
+   "tokens": 35358,
+   "wall_s": 10.9,
+   "rungs": null,
+   "kinds": null,
+   "sub_usd": 0.0,
+   "review_usd": 0.0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 3,
+    "context_tokens": 34756,
+    "output_tokens": 602,
+    "usd": 0.033531
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 2,
+   "task": "duration",
+   "arm": "delegate",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.035148,
+   "tokens": 118304,
+   "wall_s": 35.1,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.002017,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 2,
+    "context_tokens": 23940,
+    "output_tokens": 511,
+    "usd": 0.0331307
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 2,
+   "task": "inventory",
+   "arm": "self",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.049953,
+   "tokens": 63345,
+   "wall_s": 15.2,
+   "rungs": null,
+   "kinds": null,
+   "sub_usd": 0.0,
+   "review_usd": 0.0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 5,
+    "context_tokens": 61944,
+    "output_tokens": 1401,
+    "usd": 0.04995310000000001
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 2,
+   "task": "inventory",
+   "arm": "delegate",
+   "slot": 1,
+   "ok": false,
+   "pytest": "1 failed, 6 passed in 0.10s",
+   "ccx_ok": null,
+   "usd": 0.035629,
+   "tokens": 127630,
+   "wall_s": 36.9,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.00259,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 2,
+    "context_tokens": 24098,
+    "output_tokens": 455,
+    "usd": 0.0330389
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 2,
+   "task": "cli-json",
+   "arm": "self",
+   "slot": 0,
+   "ok": true,
+   "pytest": "3 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.03404,
+   "tokens": 35515,
+   "wall_s": 10.8,
+   "rungs": null,
+   "kinds": null,
+   "sub_usd": 0.0,
+   "review_usd": 0.0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 3,
+    "context_tokens": 34890,
+    "output_tokens": 625,
+    "usd": 0.0340396
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 2,
+   "task": "cli-json",
+   "arm": "delegate",
+   "slot": 1,
+   "ok": true,
+   "pytest": "3 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.036286,
+   "tokens": 138084,
+   "wall_s": 38.2,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.002314,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 2,
+    "context_tokens": 24019,
+    "output_tokens": 562,
+    "usd": 0.0339723
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 2,
+   "task": "csvstats",
+   "arm": "delegate",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.036378,
+   "tokens": 118990,
+   "wall_s": 33.3,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.003181,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 2,
+    "context_tokens": 24109,
+    "output_tokens": 475,
+    "usd": 0.0331971
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 2,
+   "task": "csvstats",
+   "arm": "self",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.035007,
+   "tokens": 35764,
+   "wall_s": 10.0,
+   "rungs": null,
+   "kinds": null,
+   "sub_usd": 0.0,
+   "review_usd": 0.0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 3,
+    "context_tokens": 35097,
+    "output_tokens": 667,
+    "usd": 0.0350068
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 2,
+   "task": "intervals",
+   "arm": "self",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.035759,
+   "tokens": 35683,
+   "wall_s": 11.1,
+   "rungs": null,
+   "kinds": null,
+   "sub_usd": 0.0,
+   "review_usd": 0.0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 3,
+    "context_tokens": 34916,
+    "output_tokens": 767,
+    "usd": 0.0357586
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 2,
+   "task": "intervals",
+   "arm": "delegate",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.03423,
+   "tokens": 124626,
+   "wall_s": 31.6,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.002153,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 2,
+    "context_tokens": 23835,
+    "output_tokens": 434,
+    "usd": 0.0320772
+   }
+  },
+  {
+   "exp": "route",
+   "round": 2,
+   "task": "cli-json",
+   "arm": "fixed",
+   "slot": 0,
+   "ok": true,
+   "pytest": "3 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.052796,
+   "tokens": 59220,
+   "wall_s": 15.1,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.052796,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 2,
+   "task": "cli-json",
+   "arm": "routed",
+   "slot": 1,
+   "ok": true,
+   "pytest": "3 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.052533,
+   "tokens": 59160,
+   "wall_s": 21.7,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.052533,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 2,
+   "task": "duration",
+   "arm": "fixed",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.041353,
+   "tokens": 43329,
+   "wall_s": 11.2,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.041353,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 2,
+   "task": "duration",
+   "arm": "routed",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.047493,
+   "tokens": 58668,
+   "wall_s": 24.2,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.047493,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 2,
+   "task": "lru",
+   "arm": "fixed",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.044592,
+   "tokens": 44062,
+   "wall_s": 11.6,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.044592,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 2,
+   "task": "lru",
+   "arm": "routed",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.046034,
+   "tokens": 58154,
+   "wall_s": 20.3,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.046034,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 2,
+   "task": "slugify",
+   "arm": "fixed",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.040619,
+   "tokens": 43318,
+   "wall_s": 10.5,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.040619,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 2,
+   "task": "slugify",
+   "arm": "routed",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.041404,
+   "tokens": 43473,
+   "wall_s": 18.2,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.041404,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 2,
+   "task": "csvstats",
+   "arm": "fixed",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.046181,
+   "tokens": 44288,
+   "wall_s": 13.2,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.046181,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 2,
+   "task": "csvstats",
+   "arm": "routed",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.052383,
+   "tokens": 59665,
+   "wall_s": 23.6,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.052383,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 2,
+   "task": "inventory",
+   "arm": "fixed",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.055698,
+   "tokens": 60414,
+   "wall_s": 15.2,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.055698,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 2,
+   "task": "inventory",
+   "arm": "routed",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.055882,
+   "tokens": 75915,
+   "wall_s": 22.8,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.055882,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 2,
+   "task": "intervals",
+   "arm": "routed",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.047595,
+   "tokens": 58560,
+   "wall_s": 21.0,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.047595,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 2,
+   "task": "intervals",
+   "arm": "fixed",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.043109,
+   "tokens": 43758,
+   "wall_s": 11.0,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.043109,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 2,
+   "task": "cli-json",
+   "arm": "review",
+   "slot": 0,
+   "ok": true,
+   "pytest": "3 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.073569,
+   "tokens": 234558,
+   "wall_s": 79.6,
+   "rungs": [
+    "codex:gpt-6-luna:low",
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "review_issues",
+    "ok"
+   ],
+   "sub_usd": 0.003342,
+   "review_usd": 0.070227,
+   "review_verdict": "pass",
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 2,
+   "task": "cli-json",
+   "arm": "noreview",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.003061,
+   "tokens": 93649,
+   "wall_s": 24.4,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.003061,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 2,
+   "task": "duration",
+   "arm": "review",
+   "slot": 0,
+   "ok": true,
+   "pytest": "12 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.081187,
+   "tokens": 246585,
+   "wall_s": 85.5,
+   "rungs": [
+    "codex:gpt-6-luna:low",
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "review_issues",
+    "ok"
+   ],
+   "sub_usd": 0.003711,
+   "review_usd": 0.077476,
+   "review_verdict": "pass",
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 2,
+   "task": "duration",
+   "arm": "noreview",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.002002,
+   "tokens": 93909,
+   "wall_s": 25.1,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.002002,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 2,
+   "task": "csvstats",
+   "arm": "review",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.043703,
+   "tokens": 132825,
+   "wall_s": 44.2,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.002059,
+   "review_usd": 0.041644,
+   "review_verdict": "pass",
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 2,
+   "task": "csvstats",
+   "arm": "noreview",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.002275,
+   "tokens": 101458,
+   "wall_s": 26.3,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.002275,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 2,
+   "task": "slugify",
+   "arm": "noreview",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.001629,
+   "tokens": 74093,
+   "wall_s": 22.2,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.001629,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 2,
+   "task": "slugify",
+   "arm": "review",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.036228,
+   "tokens": 117822,
+   "wall_s": 41.0,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.001906,
+   "review_usd": 0.034322,
+   "review_verdict": "pass",
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 2,
+   "task": "lru",
+   "arm": "noreview",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.002582,
+   "tokens": 122109,
+   "wall_s": 27.6,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.002582,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 2,
+   "task": "lru",
+   "arm": "review",
+   "slot": 1,
+   "ok": true,
+   "pytest": "7 passed in 0.02s",
+   "ccx_ok": true,
+   "usd": 0.096976,
+   "tokens": 378915,
+   "wall_s": 122.7,
+   "rungs": [
+    "codex:gpt-6-luna:low",
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "review_issues",
+    "ok"
+   ],
+   "sub_usd": 0.006754,
+   "review_usd": 0.090222,
+   "review_verdict": "pass",
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 2,
+   "task": "intervals",
+   "arm": "noreview",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.002173,
+   "tokens": 100489,
+   "wall_s": 25.9,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.002173,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 2,
+   "task": "intervals",
+   "arm": "review",
+   "slot": 1,
+   "ok": true,
+   "pytest": "7 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.079056,
+   "tokens": 244522,
+   "wall_s": 84.0,
+   "rungs": [
+    "codex:gpt-6-luna:low",
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "review_issues",
+    "ok"
+   ],
+   "sub_usd": 0.003533,
+   "review_usd": 0.075523,
+   "review_verdict": "pass",
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 2,
+   "task": "inventory",
+   "arm": "noreview",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.002311,
+   "tokens": 101668,
+   "wall_s": 29.2,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.002311,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 2,
+   "task": "inventory",
+   "arm": "review",
+   "slot": 1,
+   "ok": false,
+   "pytest": "1 failed, 6 passed in 0.10s",
+   "ccx_ok": true,
+   "usd": 0.089111,
+   "tokens": 218925,
+   "wall_s": 91.0,
+   "rungs": [
+    "codex:gpt-6-luna:low",
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "review_issues",
+    "ok"
+   ],
+   "sub_usd": 0.003442,
+   "review_usd": 0.085669,
+   "review_verdict": "pass",
+   "lead": null
+  },
+  {
+   "exp": "memory",
+   "round": 2,
+   "task": "mem-errors",
+   "arm": "mem",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.002253,
+   "tokens": 112960,
+   "wall_s": 27.7,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.002253,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "memory",
+   "round": 2,
+   "task": "mem-errors",
+   "arm": "nomem",
+   "slot": 1,
+   "ok": false,
+   "pytest": "1 failed, 1 passed in 0.10s",
+   "ccx_ok": true,
+   "usd": 0.004045,
+   "tokens": 113716,
+   "wall_s": 29.9,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.004045,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "memory",
+   "round": 2,
+   "task": "mem-money",
+   "arm": "mem",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.001916,
+   "tokens": 93784,
+   "wall_s": 23.7,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.001916,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "memory",
+   "round": 2,
+   "task": "mem-money",
+   "arm": "nomem",
+   "slot": 1,
+   "ok": false,
+   "pytest": "1 failed, 1 passed in 0.09s",
+   "ccx_ok": true,
+   "usd": 0.001813,
+   "tokens": 92349,
+   "wall_s": 23.3,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.001813,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "memory",
+   "round": 2,
+   "task": "mem-log",
+   "arm": "mem",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.001929,
+   "tokens": 94378,
+   "wall_s": 24.0,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.001929,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "memory",
+   "round": 2,
+   "task": "mem-log",
+   "arm": "nomem",
+   "slot": 1,
+   "ok": false,
+   "pytest": "1 failed, 1 passed in 0.09s",
+   "ccx_ok": true,
+   "usd": 0.001777,
+   "tokens": 79274,
+   "wall_s": 21.1,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.001777,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "deleg",
+   "round": 3,
+   "task": "lru",
+   "arm": "self",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.034079,
+   "tokens": 35653,
+   "wall_s": 10.9,
+   "rungs": null,
+   "kinds": null,
+   "sub_usd": 0.0,
+   "review_usd": 0.0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 3,
+    "context_tokens": 35064,
+    "output_tokens": 589,
+    "usd": 0.0340792
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 3,
+   "task": "lru",
+   "arm": "delegate",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.035713,
+   "tokens": 100255,
+   "wall_s": 31.2,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.001865,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 2,
+    "context_tokens": 24123,
+    "output_tokens": 529,
+    "usd": 0.0338477
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 3,
+   "task": "cli-json",
+   "arm": "self",
+   "slot": 0,
+   "ok": true,
+   "pytest": "3 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.034361,
+   "tokens": 35637,
+   "wall_s": 10.3,
+   "rungs": null,
+   "kinds": null,
+   "sub_usd": 0.0,
+   "review_usd": 0.0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 3,
+    "context_tokens": 35002,
+    "output_tokens": 635,
+    "usd": 0.0343614
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 3,
+   "task": "cli-json",
+   "arm": "delegate",
+   "slot": 1,
+   "ok": true,
+   "pytest": "3 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.035848,
+   "tokens": 137100,
+   "wall_s": 36.2,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.002268,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 2,
+    "context_tokens": 24006,
+    "output_tokens": 528,
+    "usd": 0.0335803
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 3,
+   "task": "intervals",
+   "arm": "self",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.038811,
+   "tokens": 47782,
+   "wall_s": 11.7,
+   "rungs": null,
+   "kinds": null,
+   "sub_usd": 0.0,
+   "review_usd": 0.0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 4,
+    "context_tokens": 46914,
+    "output_tokens": 868,
+    "usd": 0.038810700000000004
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 3,
+   "task": "intervals",
+   "arm": "delegate",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.034161,
+   "tokens": 118279,
+   "wall_s": 38.0,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.00201,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 2,
+    "context_tokens": 23843,
+    "output_tokens": 439,
+    "usd": 0.032151400000000004
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 3,
+   "task": "duration",
+   "arm": "self",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.034399,
+   "tokens": 35466,
+   "wall_s": 11.4,
+   "rungs": null,
+   "kinds": null,
+   "sub_usd": 0.0,
+   "review_usd": 0.0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 3,
+    "context_tokens": 34790,
+    "output_tokens": 676,
+    "usd": 0.0343992
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 3,
+   "task": "duration",
+   "arm": "delegate",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.034925,
+   "tokens": 125101,
+   "wall_s": 32.9,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.002218,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 2,
+    "context_tokens": 23954,
+    "output_tokens": 463,
+    "usd": 0.0327067
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 3,
+   "task": "inventory",
+   "arm": "delegate",
+   "slot": 0,
+   "ok": false,
+   "pytest": "1 failed, 1 passed in 0.10s",
+   "ccx_ok": null,
+   "usd": 0.036559,
+   "tokens": 118707,
+   "wall_s": 34.5,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.002038,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 2,
+    "context_tokens": 24166,
+    "output_tokens": 578,
+    "usd": 0.034521399999999994
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 3,
+   "task": "inventory",
+   "arm": "self",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.049246,
+   "tokens": 63055,
+   "wall_s": 14.9,
+   "rungs": null,
+   "kinds": null,
+   "sub_usd": 0.0,
+   "review_usd": 0.0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 5,
+    "context_tokens": 61687,
+    "output_tokens": 1368,
+    "usd": 0.049246399999999996
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 3,
+   "task": "csvstats",
+   "arm": "delegate",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.035139,
+   "tokens": 118664,
+   "wall_s": 33.2,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.00203,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 2,
+    "context_tokens": 24084,
+    "output_tokens": 477,
+    "usd": 0.0331093
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 3,
+   "task": "csvstats",
+   "arm": "self",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.03624,
+   "tokens": 35959,
+   "wall_s": 11.5,
+   "rungs": null,
+   "kinds": null,
+   "sub_usd": 0.0,
+   "review_usd": 0.0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 3,
+    "context_tokens": 35193,
+    "output_tokens": 766,
+    "usd": 0.0362404
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 3,
+   "task": "slugify",
+   "arm": "delegate",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.0341,
+   "tokens": 117546,
+   "wall_s": 30.4,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.001907,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 2,
+    "context_tokens": 23880,
+    "output_tokens": 435,
+    "usd": 0.0321931
+   }
+  },
+  {
+   "exp": "deleg",
+   "round": 3,
+   "task": "slugify",
+   "arm": "self",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": null,
+   "usd": 0.029591,
+   "tokens": 34735,
+   "wall_s": 8.7,
+   "rungs": null,
+   "kinds": null,
+   "sub_usd": 0.0,
+   "review_usd": 0.0,
+   "review_verdict": null,
+   "lead": {
+    "model": "sonnet",
+    "requests": 3,
+    "context_tokens": 34414,
+    "output_tokens": 321,
+    "usd": 0.0295909
+   }
+  },
+  {
+   "exp": "route",
+   "round": 3,
+   "task": "intervals",
+   "arm": "fixed",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.042825,
+   "tokens": 43736,
+   "wall_s": 11.1,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.042825,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 3,
+   "task": "intervals",
+   "arm": "routed",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.046054,
+   "tokens": 58233,
+   "wall_s": 20.6,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.046054,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 3,
+   "task": "duration",
+   "arm": "fixed",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.048098,
+   "tokens": 58286,
+   "wall_s": 13.2,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.048098,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 3,
+   "task": "duration",
+   "arm": "routed",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.044006,
+   "tokens": 57653,
+   "wall_s": 20.6,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.044006,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 3,
+   "task": "inventory",
+   "arm": "routed",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.056385,
+   "tokens": 75973,
+   "wall_s": 23.6,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.056385,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 3,
+   "task": "inventory",
+   "arm": "fixed",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.054318,
+   "tokens": 60225,
+   "wall_s": 14.0,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.054318,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 3,
+   "task": "slugify",
+   "arm": "routed",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.04095,
+   "tokens": 43331,
+   "wall_s": 19.9,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.04095,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 3,
+   "task": "slugify",
+   "arm": "fixed",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.040998,
+   "tokens": 43345,
+   "wall_s": 10.9,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.040998,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 3,
+   "task": "cli-json",
+   "arm": "fixed",
+   "slot": 0,
+   "ok": true,
+   "pytest": "3 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.051582,
+   "tokens": 59053,
+   "wall_s": 14.2,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.051582,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 3,
+   "task": "cli-json",
+   "arm": "routed",
+   "slot": 1,
+   "ok": true,
+   "pytest": "3 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.053824,
+   "tokens": 74475,
+   "wall_s": 22.7,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.053824,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 3,
+   "task": "csvstats",
+   "arm": "routed",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.058438,
+   "tokens": 75500,
+   "wall_s": 27.1,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.058438,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 3,
+   "task": "csvstats",
+   "arm": "fixed",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.050274,
+   "tokens": 58889,
+   "wall_s": 14.8,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.050274,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 3,
+   "task": "lru",
+   "arm": "routed",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.044327,
+   "tokens": 43959,
+   "wall_s": 22.0,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.044327,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "route",
+   "round": 3,
+   "task": "lru",
+   "arm": "fixed",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.052897,
+   "tokens": 59681,
+   "wall_s": 16.2,
+   "rungs": [
+    "claude:sonnet:medium"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.052897,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 3,
+   "task": "lru",
+   "arm": "noreview",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.002227,
+   "tokens": 100806,
+   "wall_s": 25.1,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.002227,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 3,
+   "task": "lru",
+   "arm": "review",
+   "slot": 1,
+   "ok": true,
+   "pytest": "6 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.085579,
+   "tokens": 250263,
+   "wall_s": 88.1,
+   "rungs": [
+    "codex:gpt-6-luna:low",
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "review_issues",
+    "ok"
+   ],
+   "sub_usd": 0.003936,
+   "review_usd": 0.081643,
+   "review_verdict": "pass",
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 3,
+   "task": "cli-json",
+   "arm": "noreview",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.002166,
+   "tokens": 100348,
+   "wall_s": 24.3,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.002166,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 3,
+   "task": "cli-json",
+   "arm": "review",
+   "slot": 1,
+   "ok": true,
+   "pytest": "3 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.080207,
+   "tokens": 233206,
+   "wall_s": 76.3,
+   "rungs": [
+    "codex:gpt-6-luna:low",
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "review_issues",
+    "ok"
+   ],
+   "sub_usd": 0.005389,
+   "review_usd": 0.074818,
+   "review_verdict": "pass",
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 3,
+   "task": "intervals",
+   "arm": "review",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.039984,
+   "tokens": 157249,
+   "wall_s": 45.7,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.003565,
+   "review_usd": 0.036419,
+   "review_verdict": "pass",
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 3,
+   "task": "intervals",
+   "arm": "noreview",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.002146,
+   "tokens": 100349,
+   "wall_s": 25.1,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.002146,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 3,
+   "task": "slugify",
+   "arm": "review",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.037284,
+   "tokens": 117848,
+   "wall_s": 44.6,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.001885,
+   "review_usd": 0.035399,
+   "review_verdict": "pass",
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 3,
+   "task": "slugify",
+   "arm": "noreview",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.001871,
+   "tokens": 92941,
+   "wall_s": 23.3,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.001871,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 3,
+   "task": "csvstats",
+   "arm": "review",
+   "slot": 0,
+   "ok": true,
+   "pytest": "6 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.096092,
+   "tokens": 257175,
+   "wall_s": 94.5,
+   "rungs": [
+    "codex:gpt-6-luna:low",
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "review_issues",
+    "ok"
+   ],
+   "sub_usd": 0.00392,
+   "review_usd": 0.092172,
+   "review_verdict": "pass",
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 3,
+   "task": "csvstats",
+   "arm": "noreview",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.002079,
+   "tokens": 94634,
+   "wall_s": 26.6,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.002079,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 3,
+   "task": "duration",
+   "arm": "review",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.044755,
+   "tokens": 170748,
+   "wall_s": 47.8,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.003125,
+   "review_usd": 0.04163,
+   "review_verdict": "pass",
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 3,
+   "task": "duration",
+   "arm": "noreview",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.00203,
+   "tokens": 93705,
+   "wall_s": 23.9,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.00203,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 3,
+   "task": "inventory",
+   "arm": "review",
+   "slot": 0,
+   "ok": false,
+   "pytest": "1 failed, 6 passed in 0.10s",
+   "ccx_ok": true,
+   "usd": 0.086241,
+   "tokens": 243327,
+   "wall_s": 90.7,
+   "rungs": [
+    "codex:gpt-6-luna:low",
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "review_issues",
+    "ok"
+   ],
+   "sub_usd": 0.003997,
+   "review_usd": 0.082244,
+   "review_verdict": "pass",
+   "lead": null
+  },
+  {
+   "exp": "review",
+   "round": 3,
+   "task": "inventory",
+   "arm": "noreview",
+   "slot": 1,
+   "ok": false,
+   "pytest": "1 failed, 1 passed in 0.10s",
+   "ccx_ok": true,
+   "usd": 0.003608,
+   "tokens": 93872,
+   "wall_s": 25.0,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.003608,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "memory",
+   "round": 3,
+   "task": "mem-log",
+   "arm": "nomem",
+   "slot": 0,
+   "ok": false,
+   "pytest": "1 failed, 1 passed in 0.09s",
+   "ccx_ok": true,
+   "usd": 0.002053,
+   "tokens": 99506,
+   "wall_s": 24.8,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.002053,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "memory",
+   "round": 3,
+   "task": "mem-log",
+   "arm": "mem",
+   "slot": 1,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.00192,
+   "tokens": 94060,
+   "wall_s": 25.4,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.00192,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "memory",
+   "round": 3,
+   "task": "mem-errors",
+   "arm": "mem",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.003979,
+   "tokens": 183453,
+   "wall_s": 27.6,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.003979,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "memory",
+   "round": 3,
+   "task": "mem-errors",
+   "arm": "nomem",
+   "slot": 1,
+   "ok": false,
+   "pytest": "1 failed, 1 passed in 0.09s",
+   "ccx_ok": true,
+   "usd": 0.001945,
+   "tokens": 93433,
+   "wall_s": 29.3,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.001945,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "memory",
+   "round": 3,
+   "task": "mem-money",
+   "arm": "mem",
+   "slot": 0,
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "ccx_ok": true,
+   "usd": 0.002499,
+   "tokens": 133081,
+   "wall_s": 27.8,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.002499,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  },
+  {
+   "exp": "memory",
+   "round": 3,
+   "task": "mem-money",
+   "arm": "nomem",
+   "slot": 1,
+   "ok": false,
+   "pytest": "1 failed, 1 passed in 0.09s",
+   "ccx_ok": true,
+   "usd": 0.001776,
+   "tokens": 92144,
+   "wall_s": 22.7,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "kinds": [
+    "ok"
+   ],
+   "sub_usd": 0.001776,
+   "review_usd": 0,
+   "review_verdict": null,
+   "lead": null
+  }
+ ],
+ "functional": [
+  {
+   "check": "undo",
+   "sandbox": null,
+   "ok": true,
+   "hidden_ok": null,
+   "hidden_ok_after_kill": null,
+   "hidden_ok_after_resume": null,
+   "killed": null,
+   "killed_after_s": null,
+   "restored": true,
+   "changed_by_run": [
+    "textutil.py"
+   ],
+   "kinds": null,
+   "budget": null,
+   "ae_usd": null,
+   "wall_s": null
+  },
+  {
+   "check": "budget-claude",
+   "sandbox": null,
+   "ok": false,
+   "hidden_ok": true,
+   "hidden_ok_after_kill": null,
+   "hidden_ok_after_resume": null,
+   "killed": null,
+   "killed_after_s": null,
+   "restored": null,
+   "changed_by_run": null,
+   "kinds": [
+    "ok"
+   ],
+   "budget": 0.0001,
+   "ae_usd": 0.006734,
+   "wall_s": 25.3
+  },
+  {
+   "check": "budget-codex",
+   "sandbox": null,
+   "ok": true,
+   "hidden_ok": true,
+   "hidden_ok_after_kill": null,
+   "hidden_ok_after_resume": null,
+   "killed": null,
+   "killed_after_s": null,
+   "restored": null,
+   "changed_by_run": null,
+   "kinds": [
+    "over_budget"
+   ],
+   "budget": 0.0001,
+   "ae_usd": 0.001643,
+   "wall_s": 29.5
+  },
+  {
+   "check": "codex-lead",
+   "sandbox": "workspace-write+network",
+   "ok": false,
+   "hidden_ok": false,
+   "hidden_ok_after_kill": null,
+   "hidden_ok_after_resume": null,
+   "killed": null,
+   "killed_after_s": null,
+   "restored": null,
+   "changed_by_run": null,
+   "kinds": null,
+   "budget": null,
+   "ae_usd": null,
+   "wall_s": 13.7,
+   "sub_runs": []
+  },
+  {
+   "check": "codex-lead",
+   "sandbox": "workspace-write+network",
+   "ok": false,
+   "hidden_ok": false,
+   "hidden_ok_after_kill": null,
+   "hidden_ok_after_resume": null,
+   "killed": null,
+   "killed_after_s": null,
+   "restored": null,
+   "changed_by_run": null,
+   "kinds": null,
+   "budget": null,
+   "ae_usd": null,
+   "wall_s": 13.4,
+   "sub_runs": []
+  },
+  {
+   "check": "codex-lead",
+   "sandbox": "config",
+   "ok": true,
+   "hidden_ok": true,
+   "hidden_ok_after_kill": null,
+   "hidden_ok_after_resume": null,
+   "killed": null,
+   "killed_after_s": null,
+   "restored": null,
+   "changed_by_run": null,
+   "kinds": null,
+   "budget": null,
+   "ae_usd": null,
+   "wall_s": 68.1,
+   "sub_runs": [
+    {
+     "caller": "codex",
+     "to": "claude",
+     "rungs": [
+      "claude:haiku:low"
+     ],
+     "ok": true,
+     "ae_usd": 0.003872
+    },
+    {
+     "caller": "codex",
+     "to": "claude",
+     "rungs": [
+      "claude:haiku:low"
+     ],
+     "ok": true,
+     "ae_usd": 0.003821
+    }
+   ]
+  },
+  {
+   "check": "resume",
+   "sandbox": null,
+   "ok": false,
+   "hidden_ok": null,
+   "hidden_ok_after_kill": true,
+   "hidden_ok_after_resume": true,
+   "killed": true,
+   "killed_after_s": 37.3,
+   "restored": null,
+   "changed_by_run": null,
+   "kinds": null,
+   "budget": null,
+   "ae_usd": null,
+   "wall_s": null
+  },
+  {
+   "check": "resume",
+   "sandbox": null,
+   "ok": false,
+   "hidden_ok": null,
+   "hidden_ok_after_kill": false,
+   "hidden_ok_after_resume": false,
+   "killed": true,
+   "killed_after_s": 12.1,
+   "restored": null,
+   "changed_by_run": null,
+   "kinds": null,
+   "budget": null,
+   "ae_usd": null,
+   "wall_s": null
+  },
+  {
+   "check": "resume",
+   "sandbox": null,
+   "ok": false,
+   "hidden_ok": null,
+   "hidden_ok_after_kill": false,
+   "hidden_ok_after_resume": false,
+   "killed": true,
+   "killed_after_s": 42.4,
+   "restored": null,
+   "changed_by_run": null,
+   "kinds": null,
+   "budget": null,
+   "ae_usd": null,
+   "wall_s": null
+  }
+ ],
+ "discuss": {
+  "roles": {
+   "proposer": "codex",
+   "critic": "claude",
+   "judge": "codex"
+  },
+  "rounds": 3,
+  "agreed": true,
+  "judge_independent": false,
+  "usd": 0.283029,
+  "dry_run_usd_max_est": 0.036,
+  "turns": [
+   {
+    "round": 1,
+    "role": "proposer",
+    "agent": "codex",
+    "model": "gpt-6.1-sol",
+    "usd": 0.065827
+   },
+   {
+    "round": 1,
+    "role": "critic",
+    "agent": "claude",
+    "model": "sonnet",
+    "usd": 0.047316
+   },
+   {
+    "round": 2,
+    "role": "proposer",
+    "agent": "codex",
+    "model": "gpt-6.1-sol",
+    "usd": 0.059653
+   },
+   {
+    "round": 2,
+    "role": "critic",
+    "agent": "claude",
+    "model": "sonnet",
+    "usd": 0.050003
+   },
+   {
+    "round": 2,
+    "role": "judge",
+    "agent": "codex",
+    "model": "gpt-6.1-sol",
+    "usd": 0.06023
+   }
+  ]
+ }
+}
