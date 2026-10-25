@@ -25,7 +25,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import agents, learn, ledger, recover, subagents
+from . import agents, context_share, learn, ledger, recover, subagents
 from .config import DELEGATE_AGENTS, Paths, load_config, provider_of
 from .runners import BUILDERS, Outcome, execute, usage_dict
 # split out by job (J11); re-exported so `from ccx.delegate import ...` keeps working
@@ -77,6 +77,7 @@ class Request:
     review: str = "auto"            # independent review by another vendor's cheap model: auto | on | off (F1)
     risk: str | None = None         # low | visible | critical (from the routing rubric): visible+ is reviewed
     review_round: int = 0           # 1 = this run fixes what a review found
+    share_context: str | None = None  # auto | on | off: the lead's recent work, from its session file (context_share)
 
 
 def depth_guard(cfg: dict) -> None:
@@ -313,6 +314,15 @@ def run(req: Request, p: Paths) -> dict:
     brief = req.brief.strip()
     if req.allow_subagents and (req.parallel or (req.parallel is None and subagents.has_parts(brief))):
         brief += "\n\n" + subagents.PARALLEL          # F14: the explicit request Codex's own instructions wait for
+    shared, shared_meta = "", None
+    if (not prev or cont) and not req.fork_lead and context_share.wanted(req.share_context, cfg, req.mode):
+        try:
+            shared, shared_meta = context_share.for_run(p, cfg, req.caller, req.lead_session, req.cwd.resolve())
+        except Exception as x:  # noqa: BLE001 — background for the sub-agent, never a reason to fail the run
+            shared, shared_meta = "", {"source": None, "why": f"error: {x}"}
+        if shared:
+            (run_dir / "shared-context.md").write_text(shared, encoding="utf-8")
+            brief += "\n\n" + shared
     if cont:
         first_prompt = CONTINUE.format(run_id=run_id, caller=req.caller, cwd=cwd, brief=brief,
                                        mode_text=mode_text, selfcheck=selfcheck)
@@ -351,6 +361,7 @@ def run(req: Request, p: Paths) -> dict:
         "continue_depth": (int(prev.get("continue_depth", 0)) + 1) if cont else 0,
         "forked_from_lead": bool(req.fork_lead), "ephemeral": req.ephemeral,
         "mode_source": req.mode_source, "mode_why": req.mode_why, "check_cmd": req.check,
+        "shared_context": shared_meta,
     }
     _write_record(run_dir, record)          # visible to `ccx show` at once (background runs, crashes)
     if req.mode == "write" and (not prev or cont):

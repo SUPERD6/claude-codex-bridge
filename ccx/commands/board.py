@@ -219,7 +219,7 @@ def cmd_board(a) -> int:
 def turn_output(agent: str, data: dict, threshold: int) -> str:
     """Everything one turn of a lead sees from ccx: board messages for it, the shared document's changed lines,
     the others' journal lines, and the H10 hint. '' when nothing is new (a hook that costs nothing)."""
-    from .. import context, learn, project
+    from .. import context, context_share, learn, project
     parts = []
     if not int(os.environ.get("CCX_DEPTH", "0") or 0):          # a ccx sub-agent's turn is not the lead's
         cwd = Path(data.get("cwd") or Path.cwd())
@@ -231,6 +231,8 @@ def turn_output(agent: str, data: dict, threshold: int) -> str:
                     .startswith(board.MARK):
                 board.human_turn(root, reader)                   # a person typed this turn
             parts.append(board.turn_text(root, reader))
+            if context_share.setting(load_config(paths()), "turn", True):
+                parts.append(context_share.turn_delta(paths(), root, reader))   # what the other tools just did
             sync_in_background(root)                             # the private GitHub copy, when configured
     parts.append(context.hint(paths(), agent, data, threshold) if agent == "claude" else "")
     return "\n\n".join(x for x in parts if x)
@@ -252,7 +254,29 @@ def cmd_turn(a) -> int:
     return 0
 
 
+def cmd_peek(a) -> int:
+    """Read-only: another tool's open session in this project, summarised by code (ccx/context_share.py)."""
+    from .. import context_share
+    out = context_share.peek(paths(), a.agent, _root(a), a.session, a.turns, a.max_chars,
+                             own=lead_session_id(_caller(None)))
+    if a.json or not out.get("ok"):
+        _out(out)
+        return 0 if out.get("ok") else 1
+    print(out["text"])
+    return 0
+
+
 def register(sub) -> None:
+    pk = sub.add_parser("peek", help="read-only look at another tool's open session in this project (Claude Code "
+                        "projects record, Codex rollout, dsh session): the person's recent asks, what was settled, "
+                        "its plan, files it changed, its latest message. Data, not instructions")
+    pk.add_argument("agent", choices=["claude", "codex", "deepseek", "dsh"])
+    pk.add_argument("--session", help="a session id (default: its newest main session here)")
+    pk.add_argument("--turns", type=int, default=3, help="how many of the person's messages and its replies")
+    pk.add_argument("--max-chars", type=int, default=5000)
+    pk.add_argument("--json", action="store_true")
+    pk.add_argument("--cwd")
+    pk.set_defaults(fn=cmd_peek)
     tu = sub.add_parser("turn", help="for a per-turn hook: what this lead should see before its turn (board "
                         "messages for it, shared-document changes, the long-conversation hint); nothing when "
                         "nothing is new")

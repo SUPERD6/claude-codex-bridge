@@ -177,6 +177,16 @@ def _codex_sessions(home: Path) -> list[Path]:
         if (home / "sessions").exists() else []
 
 
+def _resolved(cwd) -> str:
+    """A recorded folder as `here` is written: Windows may record a short 8.3 name (C:\\Users\\RUNNER~1\\...)."""
+    if not cwd:
+        return ""
+    try:
+        return str(Path(cwd).resolve()).lower().rstrip("\\/")
+    except OSError:
+        return str(cwd).lower().rstrip("\\/")
+
+
 def find_session(agent: str, root: Path, exclude: set[str], session: str | None = None,
                  codex_home: Path | None = None, claude_home: Path | None = None) -> Path | None:
     """The newest main session of `agent` in this project folder (not a ccx sub-run, not a sub-agent)."""
@@ -193,7 +203,7 @@ def find_session(agent: str, root: Path, exclude: set[str], session: str | None 
             except (OSError, ValueError):
                 continue
             sid = meta.get("id") or meta.get("session_id")
-            if session or (str(meta.get("cwd") or "").lower().rstrip("\\/") == here
+            if session or (_resolved(meta.get("cwd")) == here
                            and meta.get("originator") != "codex_exec" and not codex_parent(meta)
                            and sid not in exclude):
                 return f

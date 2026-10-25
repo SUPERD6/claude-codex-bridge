@@ -103,7 +103,7 @@ def cmd_run(a) -> int:
                   lead_session=lead, resume_run=prev, continued=bool(prev), fork_lead=fork,
                   allow_subagents=not a.no_subagents, check=a.check, review=a.review, risk=a.risk,
                   subagents="off" if a.no_subagents else subagents_spec(a.subagents), budget_usd=a.budget,
-                  parallel=True if a.parallel else None, **kw)
+                  parallel=True if a.parallel else None, share_context=a.context, **kw)
     rec = run(req, p)
     res = compact(rec)
     if prev:
@@ -533,6 +533,10 @@ def register(sub) -> None:
     r.add_argument("--no-escalate", action="store_true")
     r.add_argument("--no-fallback", action="store_true", help="on quota/rate limit, stop instead of "
                    "retrying on the other agent")
+    r.add_argument("--context", choices=["auto", "on", "off"], help="shared work context: attach what your "
+                   "conversation has been about lately (the person's recent asks, what was settled, your plan, files "
+                   "you changed), read by code from your session file. auto = write tasks only (default, "
+                   "[shared_context] run)")
     r.add_argument("--label")
     r.set_defaults(fn=cmd_run)
     ak = sub.add_parser("ask", help="quick read-only second opinion from the other agent (low effort)")

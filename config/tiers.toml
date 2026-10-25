@@ -112,6 +112,14 @@ max_machine_turns = 6
 # ccx 检查它是私人的、不是项目本身的仓库；对话板同步到该仓库的一个 issue，最多每 10 分钟拉一次。
 github = ""
 
+[shared_context]
+# 共享工作上下文（docs/shared-context.zh.md）：ccx 用代码从组长会话记录里摘“最近在聊什么”，不调模型。
+# 派活时附上：auto = 只给可写任务；on = 所有任务；off = 不附（ccx run --context 每次可改）。
+run = "auto"
+max_chars = 5000          # 约 1.2k token
+# 每轮 hook（ccx turn）里加一行“另一家刚做了什么”；false = 关
+turn = true
+
 [review]
 # 独立审查（提案 F1）：子任务改完文件后，由另一家的便宜模型对照任务说明审一遍改动，只回“通过 / 有问题 + 在哪”。
 # auto = 只在 --risk visible/critical、代码改动 ≥ min_lines 行、子智能体自己说没把握（open_questions）、或它说改的文件和实际改动对不上时审；
