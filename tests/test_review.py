@@ -81,6 +81,20 @@ class TestReason(unittest.TestCase):
         notes = review.verdict({"summary": "REVIEW: issues", "open_questions": ["[note] Unicode names"]})
         self.assertEqual((notes["verdict"], notes["issues"], notes["notes"]), ("pass", [], ["[note] Unicode names"]))
 
+    def test_verdict_without_the_review_line(self):
+        # round 2 of the seven-cores A/B: haiku wrote its summary in Chinese and named the real bug as [must]
+        zh = review.verdict({"summary": "检查了三项要求：low_stock 返回的是 Item 对象", "open_questions":
+                             ["[must] inventory/report.py:1-3 — returns Item objects, the task asks for SKUs",
+                              "[note] no test for remove_stock"]})
+        self.assertEqual((zh["verdict"], zh["format"], len(zh["issues"])), ("issues", "lenient", 1))
+        ok = review.verdict({"summary": "都符合要求", "open_questions": ["[note] style"]})
+        self.assertEqual((ok["verdict"], ok["format"]), ("pass", "lenient"))
+        self.assertEqual(review.verdict({"summary": "**REVIEW：issues** x", "open_questions": ["[must] a"]})["verdict"],
+                         "issues")
+        self.assertEqual(review.verdict({"summary": "`REVIEW: pass`"})["verdict"], "pass")
+        self.assertEqual(review.verdict({"summary": "no idea", "open_questions": ["something"]})["verdict"], "unclear")
+        self.assertEqual(review.verdict({"summary": "REVIEW: passing thoughts"})["verdict"], "unclear")
+
     def test_brief_says_what_ccx_ran(self):
         b = review.brief("r1", "task", "did it", "+x", 100, {"cmd": "make test", "passed": True, "exit": 0})
         self.assertIn("`make test` after the change: passed", b)

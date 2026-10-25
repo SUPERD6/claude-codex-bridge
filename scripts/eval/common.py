@@ -160,7 +160,9 @@ def append_jsonl(f: Path, row: dict) -> None:
 def read_jsonl(f: Path) -> list[dict]:
     if not f.exists():
         return []
-    return [json.loads(x) for x in f.read_text(encoding="utf-8").splitlines() if x.strip()]
+    # split on "\n" only: str.splitlines() also breaks at U+2028, \x1c and the like, which json.dumps(...,
+    # ensure_ascii=False) leaves unescaped inside strings (a reviewer's note had one: round 2, 10/25)
+    return [json.loads(x) for x in f.read_text(encoding="utf-8").split("\n") if x.strip()]
 
 
 def spent(rows: list[dict]) -> float:
