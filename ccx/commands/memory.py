@@ -248,6 +248,14 @@ def cmd_mem(a) -> int:
                 parts.append(say("hint_waiting", p, n=n))
         except Exception:  # noqa: BLE001 — never break session start
             pass
+        try:                           # the project catalog: a project named without a path -> `ccx where`
+            from .. import projects as pj
+            from ..lang import say
+            n = len(pj.load(p).get("projects") or [])
+            if n:
+                parts.append(say("hint_projects", p, n=n))
+        except Exception:  # noqa: BLE001 — never break session start
+            pass
         out = "\n\n".join(x for x in parts if x)
         if out:
             print(out)

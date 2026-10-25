@@ -81,6 +81,7 @@
     "hint_mem_suggest": "[ccx 共享记忆：有 {n} 条建议记下的事等你决定，先看这 {k} 条（规则只是粗筛，要你把关）：\n{items}\n同意 `ccx mem accept N`，不要 `ccx mem reject N`；全部：`ccx mem suggestions --all`]",
     "hint_mem_stale": "[ccx 共享记忆：{n} 条笔记 {days}+ 天没核对过，当作“待核对”：`ccx mem stale`]",
     "hint_waiting": "[ccx：{n} 件派出去的活等你处理（确认结果或拍板）—— `ccx ui` 打开看]",
+    "hint_projects": "[ccx：用户说到某个项目却没给路径时，先 `ccx where \"原话\"`（{n} 个项目，不花钱）]",
     "hint_context": "[ccx] 这个对话每一轮都要重读约 {k}k token（约 ${usd} 一轮，已 {turns} 轮）。往后更省的做法：大段阅读（很多文件、日志、调研）交给子智能体，只拿回结论；如果接下来是新的一件事，换一个新对话接着做：先问一下用户，再运行 `ccx fresh`（它从这个对话的文件写好交接；在这个文件夹里开的新对话会从它开始）。"
   },
   "en": {
@@ -165,6 +166,7 @@
     "hint_mem_suggest": "[ccx shared memory: {n} suggested note(s) wait for your yes or no; the first {k} (the rules only sift, you judge):\n{items}\n`ccx mem accept N` or `ccx mem reject N`; all of them: `ccx mem suggestions --all`]",
     "hint_mem_stale": "[ccx shared memory: {n} note(s) not checked for {days}+ days — treat them as 'to check': `ccx mem stale`]",
     "hint_waiting": "[ccx: {n} delegated piece(s) wait for you (a verdict or a decision) — `ccx ui` to see them]",
+    "hint_projects": "[ccx: when the person names a project without a path, run `ccx where \"their words\"` first ({n} projects, free)]",
     "hint_context": "[ccx] This conversation re-reads about {k}k tokens every turn (≈ ${usd} a turn, {turns} turns so far). Cheaper from here: send big reads (many files, logs, research) to a sub-agent and take back only its conclusion; and if what comes next is a new piece of work, hand over to a fresh conversation: ask the person, then run `ccx fresh` (it writes the handoff from this conversation's file; a new conversation in this folder starts with it)."
   }
 }
