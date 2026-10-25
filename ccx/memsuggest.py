@@ -1,0 +1,128 @@
+"""Notes worth keeping, gathered when a piece of work ends or is handed over (proposal H5): what the person asked to
+be done a certain way, decisions the lead stated, pitfalls it ran into. Code only, from the lead's own session file;
+nothing is written to shared memory until the person says yes (`ccx mem accept`). Each suggestion carries its
+source, so the note can be checked later (E7)."""
+from __future__ import annotations
+
+import json
+import re
+import time
+from pathlib import Path
+
+from .config import Paths
+
+PREFERENCE = re.compile(r"\b(always|never|from now on|prefer|please (?:use|keep|write)|don'?t|do not|instead of|"
+                        r"make sure)\b|以后|不要|别再|总是|一律|默认|记住|优先|不用|改成|统一|每次", re.I)
+DECISION = re.compile(r"\b(decided|decision|we(?:'ll| will) use|chose|going with|settled on)\b|决定|改为|采用|定下|结论[:：]",
+                      re.I)
+PITFALL = re.compile(r"\b(turned out|gotcha|pitfall|found that|careful|the cause was|root cause)\b|注意|坑|原来|发现|根因",
+                     re.I)
+MAX_TEXT = 220
+
+
+def _file(p: Paths) -> Path:
+    return p.state / "mem-suggestions.json"
+
+
+def load(p: Paths) -> list[dict]:
+    try:
+        return json.loads(_file(p).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+
+
+def _save(p: Paths, items: list[dict]) -> None:
+    _file(p).parent.mkdir(parents=True, exist_ok=True)
+    _file(p).write_text(json.dumps(items, ensure_ascii=False, indent=1), encoding="utf-8")
+
+
+def _norm(t: str) -> str:
+    return re.sub(r"\W+", " ", t.lower()).strip()
+
+
+def _sentences(text: str) -> list[str]:
+    parts = re.split(r"(?<=[.!?;])\s+|(?<=[。！？；])\s*|\n+", text or "")   # "a.txt" is not a sentence end
+    out = [s.strip(" -*•\t") for s in parts]
+    # a note is one short statement: not a question, not a lead-in to a list, not a whole paragraph
+    return [s for s in out if 8 <= len(s) <= 160 and not s.endswith((":", "：", "?", "？"))]
+
+
+def _clip(s: str) -> str:
+    from .transcript import redact
+    s = redact(" ".join(s.split()))
+    return s if len(s) <= MAX_TEXT else s[: MAX_TEXT - 1] + "…"
+
+
+def gather(d: dict, path: Path, limit: int = 8) -> list[dict]:
+    """Candidates from a session read by transcript.read_claude / read_codex: the person's words first."""
+    src = f"{d.get('agent')} session {d.get('session') or path.stem} ({path.name})"
+    out: list[dict] = []
+    for u in d.get("users") or []:
+        for s in _sentences(u):
+            if PREFERENCE.search(s):
+                out.append({"kind": "preference", "text": _clip(s), "by": "user", "source": src})
+    for t in d.get("texts") or []:
+        for s in _sentences(t):
+            if DECISION.search(s):
+                out.append({"kind": "decision", "text": _clip(s), "by": d.get("agent"), "source": src})
+            elif PITFALL.search(s):
+                out.append({"kind": "pitfall", "text": _clip(s), "by": d.get("agent"), "source": src})
+    seen, uniq = set(), []
+    for c in out:
+        k = _norm(c["text"])
+        if k and k not in seen:
+            seen.add(k)
+            uniq.append(c)
+    order = {"preference": 0, "decision": 1, "pitfall": 2}
+    uniq.sort(key=lambda c: order[c["kind"]])
+    return uniq[:limit]
+
+
+def add(p: Paths, cands: list[dict]) -> list[dict]:
+    """Keep the new ones (not already a note or a suggestion); returns what was added."""
+    from . import memory
+    items = load(p)
+    known = {_norm(i["text"]) for i in items} | {_norm(e["text"]) for e in memory.entries(p)}
+    nxt = max((i["id"] for i in items), default=0) + 1
+    added = []
+    for c in cands:
+        if _norm(c["text"]) in known:
+            continue
+        known.add(_norm(c["text"]))
+        item = {"id": nxt, "ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "status": "pending", **c}
+        items.append(item)
+        added.append(item)
+        nxt += 1
+    _save(p, items)
+    return added
+
+
+def pending(p: Paths) -> list[dict]:
+    return [i for i in load(p) if i["status"] == "pending"]
+
+
+def decide(p: Paths, sid: int, accept: bool, text: str | None = None, topic: str | None = None) -> dict:
+    """The person's answer. Accepting writes the note (with its source) to shared memory."""
+    from . import memory
+    items = load(p)
+    it = next((i for i in items if i["id"] == sid), None)
+    if it is None:
+        raise ValueError(f"no suggestion #{sid}")
+    if it["status"] != "pending":
+        raise ValueError(f"suggestion #{sid} is already {it['status']}")
+    out = {"id": sid}
+    if accept:
+        note = memory.add(p, text or it["text"], "user", topic or it["kind"], source=it["source"])
+        it["status"], it["note"] = "accepted", note.get("seq")
+        out["note"] = note
+    else:
+        it["status"] = "rejected"
+    out["status"] = it["status"]
+    _save(p, items)
+    return out
+
+
+def from_session(p: Paths, agent: str, path: Path, limit: int = 8) -> list[dict]:
+    from .transcript import read_claude, read_codex
+    d = (read_claude if agent == "claude" else read_codex)(path)
+    return add(p, gather(d, path, limit))

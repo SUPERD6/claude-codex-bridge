@@ -94,6 +94,24 @@ def _project_context(cwd: Path) -> Path | None:
     return None
 
 
+def _brief_notes(p: Paths, cfg: dict, to: str, brief: str, cwd: Path) -> str:
+    """I6: a tool with no start hook never sees shared memory on its own, so its brief carries the few notes the
+    task is about. Tools with a hook skip this (their sub-agent runs read the background index if needed)."""
+    from . import agents, memory
+    name = (provider_of(cfg, to) or {}).get("agent", to)
+    try:
+        if agents.get(name).start_hook:
+            return ""
+        notes = memory.for_brief(p, brief, project=cwd.name)
+    except (KeyError, OSError, ValueError):
+        return ""
+    if not notes:
+        return ""
+    memory.mark_used(p, [e["seq"] for e in notes])
+    return "Shared notes that may bear on this task (facts recorded earlier; check before relying on them):\n" + \
+        "".join(f"- #{e['seq']} ({e.get('topic')}): {e['text']}\n" for e in notes)
+
+
 def claude_slim_flags(cfg: dict, mode: str, mcp: bool | None = None, agent_tool: bool = False) -> list[str]:
     """Shrink a headless Claude start: fewer tool definitions, no MCP tool schemas unless wanted, and a
     system prompt that doesn't change per folder (so the prompt cache is reused across runs and projects).
@@ -264,7 +282,7 @@ def run(req: Request, p: Paths) -> dict:
             mode_text=mode_text, selfcheck=selfcheck,
             context_line=f"Project context (read first): {ctx}\n" if ctx else "",
             memory_line=(f"User background index (open only if the task needs it): {p.memory_index}\n"
-                         if p.memory_index.exists() else ""),
+                         if p.memory_index.exists() else "") + _brief_notes(p, cfg, req.to, brief, req.cwd.resolve()),
         )
     (run_dir / "prompt.md").write_text(first_prompt, encoding="utf-8")
 

@@ -1,6 +1,16 @@
 # Changelog
 
 ## Unreleased
+- Shared memory in use (proposals H5, H6, I6). H5: `ccx mem suggest [--from-transcript claude|codex]` gathers
+  notes worth keeping from a lead session (what the person asked to be done a certain way, decisions, pitfalls,
+  each with its source); `ccx fresh` and `ccx handoff --from-transcript` gather them too; the session start says
+  how many wait; nothing is written until `ccx mem accept N [--text ...]` (or `ccx mem reject N`). The gathering is
+  heuristic and lets ordinary sentences through, which is why the person decides. H6: this project's notes come
+  first at session start; each note counts how often it is shown or found (`mem search`), and `ccx mem stale` also
+  lists notes nobody used for 60 days. I6: a tool with no start hook (Gemini CLI) gets up to 4 notes that share
+  words with the task in its brief (~300 tokens at most, none when nothing matches); `ccx sync` writes the memory
+  block into the context file of every tool that can lead (from the adapters, not a fixed pair), naming the hub
+  original.
 - `ccx uninstall --apply` run once for real (J12, report section 5c), and three things it found fixed: tool files
   keep their own line endings (an LF `config.toml` came back CRLF); after uninstall, `ccx sync` puts the Codex hook
   block back where it was, not at the end (Codex keeps hook trust by position, so moved hooks ask for trust again);

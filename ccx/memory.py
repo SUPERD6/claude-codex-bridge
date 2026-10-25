@@ -225,13 +225,23 @@ def delta(p: Paths, me: str, advance: bool = True) -> list[dict]:
         return new
 
 
-def format_delta(new: list[dict], budget: int = DELTA_CHARS) -> str:
-    """Newest first, within ~600 tokens; replaced notes say which one they replace."""
+def relevant(e: dict, project: str | None) -> bool:
+    """A note about this project (its name in the topic, source or text) — H6: these come first."""
+    if not project:
+        return False
+    pj = project.lower()
+    return any(pj in str(e.get(k) or "").lower() for k in ("topic", "source", "text"))
+
+
+def format_delta(new: list[dict], budget: int = DELTA_CHARS, project: str | None = None,
+                 shown: list[int] | None = None) -> str:
+    """This project's notes first, then newest first, within ~600 tokens; replaced notes say which one they
+    replace. The seqs actually shown are appended to `shown` (usage counts, H6)."""
     if not new:
         return ""
     gone = {e.get("supersedes") for e in new if e.get("supersedes")}
     lines, used, left = ["[ccx shared memory: new since your last session]"], 0, 0
-    for e in sorted((e for e in new if e["seq"] not in gone), key=lambda e: -e["seq"]):
+    for e in sorted((e for e in new if e["seq"] not in gone), key=lambda e: (not relevant(e, project), -e["seq"])):
         extra = f" (replaces #{e['supersedes']})" if e.get("supersedes") else ""
         src = f" [source: {e['source']}]" if e.get("source") else ""
         line = f"- #{e['seq']} ({e['by']}, {e['topic']}){extra}: {e['text']}{src}"
@@ -240,9 +250,80 @@ def format_delta(new: list[dict], budget: int = DELTA_CHARS) -> str:
             continue
         lines.append(line)
         used += len(line)
+        if shown is not None:
+            shown.append(e["seq"])
     if left:
         lines.append(f"- … {left} more: `ccx mem search <words>` or `ccx mem show`")
     return "\n".join(lines)
+
+
+BRIEF_NOTES = 4
+BRIEF_CHARS = 1200          # ~300 tokens: what a brief may spend on notes for a tool with no start hook
+
+
+def _words(text: str) -> set[str]:
+    """Latin words of 3+ letters and CJK pairs: enough to tell which notes a task is about."""
+    t = (text or "").lower()
+    out = set(re.findall(r"[a-z0-9_][a-z0-9_.-]{2,}", t))
+    for run in re.findall(r"[一-鿿]{2,}", t):
+        out.update(run[i:i + 2] for i in range(len(run) - 1))
+    return out
+
+
+def for_brief(p: Paths, brief: str, project: str | None = None, k: int = BRIEF_NOTES,
+              budget: int = BRIEF_CHARS) -> list[dict]:
+    """I6: the few notes a task is about (shared words; this project's notes win ties), for a sub-agent whose tool
+    has no start hook to show memory. No shared word, no note: an unrelated note costs tokens and helps nothing."""
+    bw = _words(brief)
+    scored = []
+    for e in live_entries(p):
+        n = len(bw & _words(f"{e.get('topic') or ''} {e['text']}"))
+        if n:
+            scored.append((n + (1 if relevant(e, project) else 0), e["seq"], e))
+    out, used = [], 0
+    for _n, _s, e in sorted(scored, key=lambda x: (-x[0], -x[1]))[:k]:
+        if used + len(e["text"]) > budget:
+            continue
+        out.append(e)
+        used += len(e["text"])
+    return out
+
+
+UNUSED_DAYS = 60
+
+
+def mark_used(p: Paths, seqs: list[int]) -> None:
+    """A note was shown at a session start or found by a search (H6: how often each one is used)."""
+    if not seqs:
+        return
+    ts = time.strftime("%Y-%m-%dT%H:%M:%S")
+    with _lock(p):
+        with open(_meta(p), "a", encoding="utf-8") as f:
+            for s in sorted(set(seqs)):
+                f.write(json.dumps({"ev": "used", "seq": s, "ts": ts}) + "\n")
+
+
+def usage(p: Paths) -> dict[int, dict]:
+    """seq -> {"n": times used, "last": when}."""
+    out: dict[int, dict] = {}
+    try:
+        for line in _meta(p).read_text(encoding="utf-8").splitlines():
+            ev = json.loads(line)
+            if ev.get("ev") == "used":
+                u = out.setdefault(ev["seq"], {"n": 0, "last": ""})
+                u["n"] += 1
+                u["last"] = max(u["last"], ev["ts"])
+    except (OSError, ValueError):
+        pass
+    return out
+
+
+def unused(p: Paths, days: int = UNUSED_DAYS) -> list[dict]:
+    """Notes older than `days` that nobody was shown, found or checked in that time: candidates to clean up."""
+    cutoff = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(time.time() - days * 86400))
+    us, va = usage(p), verified_at(p)
+    return [{**e, "used": us.get(e["seq"], {}).get("n", 0)} for e in live_entries(p)
+            if (e.get("ts") or "") < cutoff and max(us.get(e["seq"], {}).get("last", ""), va.get(e["seq"]) or "") < cutoff]
 
 
 def _split_notes(text: str) -> tuple[str, dict[str, list[str]], str]:

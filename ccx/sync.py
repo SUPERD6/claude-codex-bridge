@@ -97,13 +97,29 @@ def claude_memory_block(p: Paths) -> str:
             "- 把子任务派给 Codex：按 agent-delegate 技能做。")
 
 
-def codex_memory_block(p: Paths) -> str:
+def lead_memory_block(p: Paths, agent: str) -> str:
+    """For a lead whose context file can't @import: the snapshot inlined, naming the hub original (I6)."""
     snap = p.memory_index.read_text(encoding="utf-8") if p.memory_index.exists() else ""
+    other = "Claude" if agent == "codex" else "其他工具"
+    worker = "Claude Code" if agent == "codex" else "另一家"
     return ("## 共享记忆与协作（ccx，自动生成，勿手改；原件 "
             f"{p.memory_index.as_posix()}）\n"
             f"- ccx 命令：`{ccx_command()}`（下文简写 ccx）\n"
-            "- 学到长期有效、Claude 也该知道的事实/偏好：`ccx mem add \"一句话\" --by codex`\n"
-            "- 把子任务派给 Claude Code：按 agent-delegate 技能做。\n\n" + snap.strip())
+            f"- 学到长期有效、{other} 也该知道的事实/偏好：`ccx mem add \"一句话\" --by {agent}`\n"
+            f"- 把子任务派给 {worker}：按 agent-delegate 技能做。\n\n" + snap.strip())
+
+
+def codex_memory_block(p: Paths) -> str:
+    return lead_memory_block(p, "codex")
+
+
+IMPORTS = {"claude"}       # context files that load `@path` themselves, so the block points at the live original
+
+
+def memory_targets() -> list[tuple[str, Path]]:
+    """(agent, its context file) for every tool that can sit in the lead's chair (I6: from the adapters)."""
+    from . import agents
+    return [(ad.name, ad.home() / ad.context_file) for ad in agents.all_adapters() if ad.can_lead and ad.home]
 
 
 def sync_memory(p: Paths, plan: Plan) -> None:
@@ -118,19 +134,15 @@ def sync_memory(p: Paths, plan: Plan) -> None:
         return
     if not p.memory_index.exists():
         plan.do(f"create shared memory snapshot {p.memory_index}", lambda: memory.ensure(p))
-    cm = claude_home() / "CLAUDE.md"
-    old = cm.read_text(encoding="utf-8") if cm.exists() else ""
-    new = upsert_block(old, "memory", claude_memory_block(p))
-    if new != old:
-        plan.do(f"update managed block in {cm}", lambda: _write(cm, new))
-    am = codex_home() / "AGENTS.md"
-    old = am.read_text(encoding="utf-8") if am.exists() else ""
-    # snapshot may not exist yet in dry-run; render what it will be
-    body = codex_memory_block(p) if p.memory_index.exists() else codex_memory_block(p) + \
-        "\n" + memory.SNAPSHOT_TEMPLATE
-    new = upsert_block(old, "memory", body)
-    if new != old:
-        plan.do(f"update managed block in {am}", lambda: _write(am, new))
+    for agent, cf in memory_targets():
+        if agent in IMPORTS:
+            body = claude_memory_block(p)
+        else:      # snapshot may not exist yet in dry-run; render what it will be
+            body = lead_memory_block(p, agent) + ("" if p.memory_index.exists() else "\n" + memory.SNAPSHOT_TEMPLATE)
+        old = cf.read_text(encoding="utf-8") if cf.exists() else ""
+        new = upsert_block(old, "memory", body)
+        if new != old:
+            plan.do(f"update managed block in {cf}", lambda cf=cf, new=new: _write(cf, new))
 
 
 # ------------------------------------------------------------ hooks
@@ -443,7 +455,7 @@ def uninstall(p: Paths, apply: bool) -> Plan:
                     _anchor_file(p).parent.mkdir(parents=True, exist_ok=True)
                     _anchor_file(p).write_text(after, encoding="utf-8")
             plan.do(f"remove ccx hook block from {ct}", remove)
-    for f in (claude_home() / "CLAUDE.md", codex_home() / "AGENTS.md"):
+    for _agent, f in memory_targets():
         if f.exists():
             old = f.read_text(encoding="utf-8")
             b, e = BEGIN.format(id="memory"), END.format(id="memory")

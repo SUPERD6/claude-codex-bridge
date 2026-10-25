@@ -350,6 +350,9 @@ class TestSync(Env):
         agents = (self.home_codex / "AGENTS.md").read_text(encoding="utf-8")
         self.assertTrue(agents.startswith("# my rules"))
         self.assertIn("Shared memory", agents)
+        self.assertIn(p.memory_index.as_posix(), agents)                 # names the hub original (I6)
+        from ccx.sync import memory_targets
+        self.assertEqual({a for a, _ in memory_targets()}, {"claude", "codex"})   # leads only: not gemini
         # hooks
         st = json.loads((self.home_claude / "settings.json").read_text(encoding="utf-8"))
         self.assertIn("mem delta --as claude", st["hooks"]["SessionStart"][0]["hooks"][0]["command"])

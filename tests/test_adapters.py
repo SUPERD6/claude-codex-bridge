@@ -40,6 +40,20 @@ class TestGemini(AdapterEnv):
         self.assertEqual(c2["argv"][c2["argv"].index("--resume") + 1], sid)
         self.assertEqual(out2["agent"], "gemini")
 
+    def test_brief_carries_related_notes_without_a_start_hook(self):
+        from ccx import memory
+        from ccx.config import Paths
+        p = Paths(self.hub)
+        rel = memory.add(p, "the parser tests need the fixtures folder", "codex", topic="parser")
+        memory.add(p, "billing exports run on Fridays", "claude")
+        self.j("run", "--from", "claude", "--to", "gemini", "--tier", "T2", "--mode", "read", "fix the parser tests")
+        prompt = self.calls()[-1]["prompt"]
+        self.assertIn(f"#{rel['seq']} (parser)", prompt)
+        self.assertNotIn("billing", prompt)                          # no shared word, not sent
+        self.assertEqual(memory.usage(p)[rel["seq"]]["n"], 1)
+        self.j("run", "--from", "claude", "--to", "codex", "--tier", "T2", "--mode", "read", "fix the parser tests")
+        self.assertNotIn("Shared notes", self.calls()[-1]["prompt"])  # codex has a start hook
+
     def test_escalates_flash_to_pro(self):
         out = self.j("run", "--from", "claude", "--to", "gemini", "--tier", "T2", "x",
                      env={"FAKE_STATUS": "blocked_then_done"})
