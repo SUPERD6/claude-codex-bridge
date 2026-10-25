@@ -214,6 +214,7 @@ ccx mem compact                     # 把日志合并进快照
 ccx ctx init | add "…" | show       # 项目背景文件
 ccx config set projects.roots "目录;目录" ; ccx projects scan   # 本机项目目录（只存在 hub，不进仓库）
 ccx projects | projects show <名字>        # 列出项目 / 看一个：路径、简介、先读的规则、最近在做什么
+ccx where "改一下那个桌宠"               # 一句话说的是哪个项目：只有一个明显的才直接给，否则列候选和理由
 ccx sync [--apply] [--only skills,memory,hooks,mcp]
 ccx doctor
 ```

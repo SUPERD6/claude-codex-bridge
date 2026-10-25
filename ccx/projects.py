@@ -14,6 +14,7 @@ package name, Chinese names in titles), rule files, state files (STATUS, handoff
 last activity, and what was done lately (latest commit subjects, project journal lines)."""
 from __future__ import annotations
 
+import difflib
 import json
 import os
 import re
@@ -405,3 +406,127 @@ def brief_row(e: dict) -> dict:
     return {"name": e["name"], "summary": (e.get("summary") or "")[:90],
             "last_active": time.strftime("%Y-%m-%d", time.localtime(e["last_active"])) if e.get("last_active")
             else ""}
+
+
+# ---- finding a project from one sentence ("改一下那个桌宠", "the harness PR") ----
+
+# words that say what to do, not which project
+STOP_EN = {"the", "a", "an", "that", "this", "my", "our", "one", "fix", "change", "update", "edit", "open", "look",
+           "at", "in", "on", "of", "for", "to", "and", "or", "project", "repo", "pr", "prs", "issue", "please", "can",
+           "you", "it", "with", "about", "work", "go", "let", "lets", "some", "new", "old", "again", "do", "make",
+           "bug", "bugs", "thing", "stuff"}
+STOP_ZH = ("帮我", "改一下", "改改", "修一下", "修改", "看一下", "看看", "那个", "这个", "一下", "项目", "仓库", "里面",
+           "里的", "上的", "继续", "接着", "处理", "弄一下", "我的", "我们", "的", "了", "吧", "呢", "把", "给", "再",
+           "那个", "这个", "问题", "东西", "部分")
+VERB_ZH = "改修看做弄查跑开写"
+# where a word was found, and how much that says (an exact name says most)
+WEIGHTS = (("name", 10), ("alias", 8), ("path", 5), ("keyword", 5), ("topic", 4), ("summary", 3), ("recent", 3))
+
+
+def _terms(text: str) -> list[str]:
+    """English/latin words and Chinese pieces of the sentence that can name a project."""
+    t = text.casefold()
+    words = [w for w in re.findall(r"[a-z0-9][a-z0-9._+-]*[a-z0-9]|[a-z0-9]", t)
+             if w not in STOP_EN and len(w) >= 2]
+    out = list(dict.fromkeys(words))
+    for run in CJK.findall(t):
+        for s in STOP_ZH:
+            run = run.replace(s, " ")
+        for piece in run.split():
+            if len(piece) > 2 and piece[0] in VERB_ZH:
+                piece = piece[1:]       # "改桌宠" -> "桌宠"
+            if len(piece) >= 2 and piece not in out:
+                out.append(piece)
+    return out
+
+
+def _fields(e: dict) -> dict[str, list[str]]:
+    parts = [x for x in re.split(r"[\\/]", e["path"]) if x][-3:-1]
+    return {"name": [e["name"]], "alias": e.get("aliases") or [], "path": parts,
+            "keyword": e.get("keywords") or [], "topic": e.get("topics") or [], "summary": [e.get("summary") or ""],
+            "recent": (e.get("recent") or []) + (e.get("journal") or [])}
+
+
+def _bigrams(s: str) -> list[str]:
+    return [s[i:i + 2] for i in range(len(s) - 1)] or [s]
+
+
+def _hit(term: str, texts: list[str]) -> tuple[float, str]:
+    """How well `term` is found in these texts (1 = as it is, less = in part), and the text it was found in."""
+    best, where = 0.0, ""
+    cjk = bool(CJK.fullmatch(term))
+    for raw in texts:
+        t = raw.casefold()
+        if not t:
+            continue
+        if term in t:
+            q = 1.0
+        elif cjk and len(term) > 2:
+            grams = _bigrams(term)
+            frac = sum(g in t for g in grams) / len(grams)
+            q = 0.8 * frac if frac >= 0.5 else 0.0
+        elif not cjk and len(term) >= 4:
+            q = max((difflib.SequenceMatcher(None, term, w).ratio() for w in re.split(r"[^a-z0-9]+", t)
+                     if len(w) >= 4), default=0.0)
+            q = 0.7 * q if q >= 0.8 else 0.0
+        else:
+            q = 0.0
+        if q > best:
+            best, where = q, raw
+    return best, where
+
+
+def _score(e: dict, terms: list[str]) -> tuple[float, list[str]]:
+    fields = _fields(e)
+    total, why = 0.0, []
+    for term in terms:
+        best, said = 0.0, ""
+        for field, w in WEIGHTS:
+            q, text = _hit(term, fields[field])
+            if q and w * q > best:
+                exact = field in ("name", "alias") and text.casefold() == term
+                best = w * q + (2 if exact else 0)
+                said = f"{field} {text[:60]!r} has {term!r}"
+        if not best and CJK.fullmatch(term) and len(term) > 2:
+            # the pieces of a longer Chinese phrase found in different places ("月球" in a title, "短片" in the summary)
+            grams = _bigrams(term)
+            got = [max((w for field, w in WEIGHTS if any(g in t.casefold() for t in fields[field])), default=0)
+                   for g in grams]
+            if sum(1 for x in got if x) * 2 >= len(grams):
+                best = 0.8 * sum(got) / len(grams)
+                said = f"parts of {term!r}: " + ", ".join(g for g, x in zip(grams, got) if x)
+        if best:
+            total += best
+            why.append(said)
+    return total, why
+
+
+def where(cat: dict, text: str, limit: int = 5) -> dict:
+    """Candidates for the project a sentence is about, best first: score, confidence 0..1 and why. `pick` is set
+    only when one candidate is clearly ahead; otherwise the person (or the lead) chooses."""
+    terms = _terms(text)
+    rows = []
+    now = time.time()
+    for e in cat.get("projects") or []:
+        s, why = _score(e, terms)
+        if s <= 0:
+            continue
+        if e.get("last_active") and now - e["last_active"] < 7 * 86400:
+            s += 0.5                    # a tie goes to what was worked on this week
+        rows.append((s, e, why))
+    rows.sort(key=lambda r: (-r[0], -(r[1].get("last_active") or 0)))
+
+    def confidence(s: float, why: list[str]) -> float:
+        # how strongly the words it matched point at it (12 = an exact name), less when words matched nothing
+        n = max(1, len(why))
+        return round(min(1.0, s / (12.0 * n)) * (n / max(1, len(terms))) ** 0.5, 2)
+    cands = [{"name": e["name"], "path": e["path"], "score": round(s, 1), "confidence": confidence(s, why),
+              "why": why, "summary": (e.get("summary") or "")[:90]} for s, e, why in rows[:limit]]
+    pick = None
+    if cands:
+        first, second = cands[0], (cands[1] if len(cands) > 1 else None)
+        clear = second is None or first["score"] >= 1.5 * second["score"]
+        # alone and found in a title or keyword (5+) is enough; with rivals it needs a clear lead and confidence
+        if clear and (first["confidence"] >= 0.4 or (second is None and first["score"] >= 5)):
+            pick = first["name"]
+    return {"query": text, "terms": terms, "pick": pick, "candidates": cands}
