@@ -18,6 +18,9 @@ def _own_hub(tmp_path, monkeypatch):
         d.mkdir()
         monkeypatch.setenv(var, str(d))
     monkeypatch.setenv("CCX_CONFIG", str(tmp_path / "user-config.toml"))
+    # sessions.archive = after_run would end most runs with a `codex archive` call; the tests that are about it
+    # switch it back on (tests/test_archive_after_run.py)
+    monkeypatch.setenv("CCX_NO_AUTO_ARCHIVE", "1")
     for var in ("CCX_DEPTH", "CCX_ROLE", "CCX_RUN_ID", "CCX_PARENT_RUN"):     # never inherit a live ccx run
         monkeypatch.delenv(var, raising=False)
     for var in ("CCX_LEAD", "DSH_SESSION_ID", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_SIMPLE"):   # nor a lead's identity

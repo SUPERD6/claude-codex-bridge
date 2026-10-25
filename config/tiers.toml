@@ -89,8 +89,14 @@ mcp = false              # false = 不加载 MCP 工具定义（--strict-mcp-con
 skills = true            # false = 不加载技能列表（--disable-slash-commands）；T1 这类 lean 档位总是关闭
 
 [sessions]
-# 子智能体会话结束超过这么多小时，下次开局时自动归档（Codex：codex archive；Claude：把记录挪到 ccx-archive，可恢复）。
-# 比“自动续接”的 1 小时窗口长，所以还可能接新任务的会话不会被归档。0 = 不自动归档。
+# 子智能体会话什么时候归档（Codex：codex archive；Claude：把记录挪到 ccx-archive，可恢复）：
+# after_run = 结果确定就马上归档（做完且验收过：--check 通过或它自己检查过；或已经 ccx verify 判过对错）。
+#             还可能续跑的不归档：额度/超时/被停/被杀/blocked/验收失败；--seat 岗位、讨论、审查也不动。
+#             之后 ccx resume 或 1 小时内自动续接到它时，ccx 先把它取回来（codex unarchive / 挪回记录）。
+# hours     = 只在开局时归档结束超过 auto_archive_hours 小时的（旧做法）
+# off       = 不自动归档
+archive = "after_run"
+# after_run 和 hours 下：开局时还会把结束超过这么多小时的会话补归档。0 = 不按小时补归档。
 auto_archive_hours = 2
 
 [board]

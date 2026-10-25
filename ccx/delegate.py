@@ -264,6 +264,12 @@ def run(req: Request, p: Paths) -> dict:
     timeout = int(cfg["defaults"].get("timeout_sec", 1800))
 
     prev = ledger.load_run(p, req.resume_run) if req.resume_run else None
+    if prev and prev.get("session_id"):
+        try:                               # archived after its run (or by hand): put it back before continuing it
+            from . import archive
+            archive.bring_back(p, prev["session_id"])
+        except Exception:  # noqa: BLE001 — the resume itself then says what is wrong
+            pass
     cont = bool(prev and req.continued)      # new task, old session: keep the new task's own settings
     if cont:
         req.to = prev["to"]
@@ -658,6 +664,11 @@ def run(req: Request, p: Paths) -> dict:
         return closed
     _write_record(run_dir, record)
     ledger.append(p, record)
+    try:                                   # sessions.archive = after_run: a final result's session leaves the apps' lists
+        from . import archive
+        record["archived"] = bool(archive.after_run(p, record))
+    except Exception:  # noqa: BLE001 — housekeeping never fails the work
+        pass
     if record.get("kind") == "review_issues" and record.get("session_id"):
         # hand the problems back to the same sub-session once; its fix is reviewed again (review_round 1)
         issues = "\n".join(f"- {x}" for x in record["review"]["issues"]) or record["review"]["summary"]
