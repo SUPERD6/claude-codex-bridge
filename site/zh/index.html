@@ -56,12 +56,12 @@
     </div>
   </section>
 
-  <p class="wip"><b>仍在开发中（v0.4）。</b>两个方向每天在一台 Windows 电脑上真实使用；省不省钱第一批实测是“看情况”（见下方）；队列、worktree、额度换边只有模拟测试；Gemini CLI 没真跑过；两个模型多轮讨论（<code>ccx discuss</code>）还没做。详见 <a href="https://github.com/SUPERD6/relayline/blob/main/docs/STATUS.zh.md">STATUS</a>。</p>
+  <p class="wip"><b>仍在开发中（v0.4）。</b>两个方向每天在一台 Windows 电脑上真实使用；省不省钱第一批实测是“看情况”（见下方）；队列、worktree、额度换边只有模拟测试；Gemini CLI 没真跑过。详见 <a href="https://github.com/SUPERD6/relayline/blob/main/docs/STATUS.zh.md">STATUS</a>。</p>
 
   <h2 id="seven">七件事</h2>
   <section class="feat four">
     <div><h3>1 · 互为主子</h3><p>Claude Code 和 Codex 谁当主都行；Gemini CLI、通过 Claude Code 用的 DeepSeek 可以接活。每家一个适配器，<code>ccx agents</code> 列出能力和测过的版本。</p></div>
-    <div><h3>2 · 两个模型直接对话</h3><p><code>ccx ask</code> 问另一家第二意见，<code>ccx resume</code> 在同一个子会话追问，<code>ccx send</code> 发消息进正在跑的 Codex 会话。多轮讨论还没做。</p></div>
+    <div><h3>2 · 两个模型直接对话</h3><p><code>ccx ask</code> 问另一家第二意见，<code>ccx resume</code> 在同一个子会话追问，<code>ccx send</code> 发消息进正在跑的 Codex 会话；<code>ccx discuss</code> 让 2–3 家不同厂商讨论选错代价高的决定（目前只有模拟测试）。</p></div>
     <div><h3>3 · 共享记忆</h3><p>个人层（hub）和项目层（<code>.ccx/</code>）；开局只推对方新写的几行；<code>ccx handoff</code> 换主接力，<code>ccx fresh</code> 换新对话。</p></div>
     <div><h3>4 · 分工合作</h3><p>5 个问题打出难度 → 选智能体、模型、强度；自己做更划算或该先拆就直说。<code>ccx batch</code>、<code>ccx q</code> 并行，断了能续。</p></div>
     <div><h3>5 · 省和高效</h3><p>子智能体精简启动；<code>ccx lead</code>（<code>--breakdown</code> / <code>--cache</code> / <code>--suggest</code>）看主智能体每轮重读什么；<code>ccx sum</code> 压缩大段输出。</p></div>

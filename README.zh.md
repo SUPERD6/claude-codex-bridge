@@ -29,7 +29,7 @@ ccx run --to codex --mode read "用三行总结 README.md"
 > **仍在开发中（v0.4，2026 年 10 月）。** 每天在一台 Windows 电脑上真实使用，两个方向、终端和桌面端都跑通了。
 > - **省没省钱，第一批实测结论是“看情况”**（见下一节）：只在主智能体信 ccx 的验收结果时，小任务才省；一周的正式对比（`ccx trial`）还在收集。选模型的初始参数还没校准。
 > - **只用模拟命令行测过的：** 待办队列（`ccx q`）、长期岗位、worktree 和 `ccx batch`、真实额度用完时换另一边。Gemini CLI 从没真跑过。macOS 和 Linux 只在 CI 里跑过。
-> - **还没做的：** 两个模型多轮讨论（`ccx discuss`）、`ccx stop`、更完整的共享记忆（见 [STATUS](docs/STATUS.zh.md)“接下来”）。网站还没发布。
+> - **还没做的：** `ccx stop`、更完整的共享记忆（见 [STATUS](docs/STATUS.zh.md)“接下来”）。网站还没发布。
 >
 > 旧记录（CHANGELOG、docs/STATUS）里早期的提交号指的是公开前压缩掉的私有历史。哪些功能验证过、怎么验证的，见 [STATUS](docs/STATUS.zh.md)。
 
@@ -38,7 +38,7 @@ ccx run --to codex --mode read "用三行总结 README.md"
 | | 做什么 | 现在的状态 |
 |---|---|---|
 | **1. 互为主子** | Claude Code 当主、Codex 干活，或者反过来；Gemini CLI、DeepSeek（通过 Claude Code）可以接活。每家一个适配器，`ccx agents` 列出每家能做什么、测过哪个版本、官方还是社区。 | 两个方向真机跑通；Gemini 只有模拟测试 |
-| **2. 两个模型直接对话** | `ccx ask` 让另一家快速给个第二意见；`ccx resume` 在同一个子会话里追问；`ccx send` 把消息发进正在运行的 Codex 会话。 | 这三个真机可用；多轮讨论 `ccx discuss` 还没做 |
+| **2. 两个模型直接对话** | `ccx ask` 让另一家快速给个第二意见；`ccx resume` 在同一个子会话里追问；`ccx send` 把消息发进正在运行的 Codex 会话；`ccx discuss` 让 2–3 家不同厂商的模型把选错代价高的决定讨论清楚（出方案、挑错、裁判，最多 3 轮），在 `ccx ui` 里显示成对话。 | 前三个真机可用；`ccx discuss` 只有模拟测试 |
 | **3. 共享记忆** | 个人层（你的 hub：记忆、技能、MCP、账本）和项目层（`.ccx/`：背景、日志、交接、断点）。开局 hook 只推对方新写的几行；`ccx handoff` 换主智能体接力，`ccx fresh` 把长对话交给同一工具的新对话。 | 真机可用；更完整的共享记忆在做 |
 | **4. 分工合作** | 5 个问题打出难度 → 选智能体、模型、强度并给出成功率；算下来自己做更划算或该先拆，就直接说不派。`ccx batch` / `ccx q` 并行，长任务断了 `ccx task resume` 接着做。 | 选模型真机可用，但先验没校准；队列只有模拟测试 |
 | **5. 省和高效** | 子智能体精简启动；`ccx lead` 看主智能体每轮重读多少（`--breakdown` 拆开看、`--cache` 找缓存断在哪、`--suggest` 给主智能体自己的档位建议）；`ccx sum` 只把大段输出里要紧的给主智能体。 | 工具都在；省多少取决于主智能体怎么用（见实测） |
@@ -168,6 +168,7 @@ ccx sum -- python -m pytest -q               # 跑命令，只给主智能体看
 ccx fresh [--launch]                         # 长对话交给同一工具的新对话：从这段对话的文件生成交接
 ccx trial start | stop | report              # 一周正式对比：一半可派的活主智能体自己做，一半派出去，同样口径量
 ccx agents                                   # 每家命令行：厂商、能做什么、测过的版本、官方还是社区
+ccx discuss "问题" [--dry-run]              # 2-3 家不同厂商讨论选错代价高的决定：出方案、挑错、裁判
 ccx verify <run_id> --ok 0 --reason wrong     # 你的判断（没人判断的，12 小时后按证据自动记“大概率对/错”）
 ccx handoff --from-transcript codex --to claude   # 原主智能体写不了（额度用完）：从它的会话文件生成交接
                                                   # （先用代码提取；格式认不出时交给自动选出的子智能体整理，--no-model 不用模型）
@@ -277,7 +278,7 @@ ccx 没有的：可见的分屏界面、任务运行中追加指令、多家模�
 
 **支持哪些工具？** Claude Code 和 Codex CLI 可以当主也可以当子，两个方向都在真机上测过。通过 Claude Code 用 DeepSeek 已在真实任务上校准过，只当子智能体；Gemini CLI 已经适配（社区维护），只当子智能体，还没真跑过。每家一个适配器（`ccx/agents/`），`ccx agents` 列出各自的能力；加一家的方法见 [CONTRIBUTING.zh.md](CONTRIBUTING.zh.md)。
 
-**两个模型能直接讨论吗？** 现在能做的是单向的：`ccx ask` 问一次第二意见，`ccx resume` 在同一个子会话里追问，`ccx send` 发消息进正在运行的 Codex 会话。两边多轮来回的 `ccx discuss` 还没做。
+**两个模型能直接讨论吗？** 现在能做的是单向的：`ccx ask` 问一次第二意见，`ccx resume` 在同一个子会话里追问，`ccx send` 发消息进正在运行的 Codex 会话。选错代价高的决定可以用 `ccx discuss`：不同厂商的模型最多讨论 3 轮（一家出方案、一家挑错、一家裁判），轮与轮之间只传要点；组长开之前会先问你。
 
 ## 安全
 
