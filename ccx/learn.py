@@ -362,7 +362,7 @@ def checkpoint(p: Paths, cwd: Path, *args: str) -> None:
 def cp_root(cwd: Path) -> Path:
     import subprocess
     r = subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], cwd=cwd,
-                       capture_output=True, text=True, stdin=subprocess.DEVNULL)
+                       capture_output=True, text=True, encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL)
     if r.returncode == 0 and r.stdout.strip():
         return Path(r.stdout.strip()).parent
     return cwd
