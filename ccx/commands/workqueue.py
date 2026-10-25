@@ -59,7 +59,7 @@ def cmd_q(a) -> int:
 
 def restored(old_run: str, rec: dict) -> str:
     """How an interrupted piece came back (OpenRig's taxonomy): resumed | fresh | decide | failed."""
-    if rec.get("kind") in ("quota", "auth", "needs_write", "over_budget", "user_stopped"):
+    if rec.get("kind") in ("quota", "auth", "needs_write", "over_budget", "user_stopped", "interrupted"):
         return "decide"                 # something only the user or the lead can settle
     if not rec.get("ok") or rec.get("kind") in ("check_failed", "timeout", "error"):
         return "failed"

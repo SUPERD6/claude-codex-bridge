@@ -19,12 +19,13 @@ from __future__ import annotations
 import json
 import os
 import socket
+import threading
 import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import agents, learn, ledger, subagents
+from . import agents, learn, ledger, recover, subagents
 from .config import DELEGATE_AGENTS, Paths, load_config, provider_of
 from .runners import BUILDERS, Outcome, execute, usage_dict
 # split out by job (J11); re-exported so `from ccx.delegate import ...` keeps working
@@ -340,6 +341,18 @@ def run(req: Request, p: Paths) -> dict:
         record.update(pid=pid, ccx_pid=os.getpid(), host=socket.gethostname(), child=Path(inv.argv[0]).name)
         _write_record(run_dir, record)
 
+    beat = threading.Event()        # heartbeat: where the pid can't be checked (another machine), a stale one tells
+
+    def _beat():
+        while True:
+            try:
+                (run_dir / "beat").write_text(str(time.time()), encoding="utf-8")
+            except OSError:
+                pass
+            if beat.wait(float(os.environ.get("CCX_BEAT_SEC", "60"))):
+                return
+    threading.Thread(target=_beat, daemon=True).start()
+
     while i < len(plan):
         if stop_file.exists():                    # stopped between attempts: start nothing more
             oc = Outcome(ok=False, kind="user_stopped", error="stopped by `ccx stop`") if not (oc and oc.ok) else oc
@@ -397,6 +410,10 @@ def run(req: Request, p: Paths) -> dict:
         inv = BUILDERS[cli](model=spec["model"], effort=spec["effort"], perm=perm, cwd=cwd,
                            prompt=prompt, run_dir=run_dir, resume_id=resume_id, lean=spec["lean"])
         t0 = time.time()
+        # the attempt in flight: if this process dies, `ccx stop` / the sweep turn it into an attempt (ccx/recover.py)
+        record["current"] = {"n": len(record["attempts"]), "agent": to, "cli": cli, "tier": spec.get("tier"),
+                             "rung": spec["rung"], "model": spec["model"], "effort": spec["effort"], "t0": t0,
+                             "before": seen.get(resume_id) if cli == "codex" else None}
         hb = _Heartbeat(p, cwd, req.task if req.step else None, cli)
         try:
             env = {**extra, **(run_env(req.mode) if run_env else {})}
@@ -406,9 +423,22 @@ def run(req: Request, p: Paths) -> dict:
                                  if req.allow_subagents else None,
                                  watch_every=float((cfg.get("subagents") or {}).get("watch_every_sec", 20)),
                                  on_start=on_start, stop_file=stop_file)
+        except BaseException:
+            # Ctrl+C or a crash in ccx itself (execute has killed the tree): count what was spent, keep it resumable
+            hb.close()
+            beat.set()
+            try:
+                recover.close_dead(p, run_id, "killed", "interrupted",
+                                   f"ccx itself was interrupted; continue with `ccx resume {run_id}`", "run")
+            except Exception:  # noqa: BLE001 — never hide the original exception
+                pass
+            raise
         finally:
             hb.close()
         dt = round(time.time() - t0, 1)
+        if oc.kind in ("timeout", "over_budget", "user_stopped") and not any((oc.usage or {}).values()):
+            # killed before its final usage line: read back what it spent (Claude's stream, Codex's session file)
+            oc.usage = recover.partial_usage(cli, oc.session_id or session, so, cwd) or oc.usage
         n = len(record["attempts"])
         (run_dir / f"events.{n}.log").write_text(so, encoding="utf-8")
         if cli == "claude" and not extra and "rate_limit_event" in so:
@@ -559,6 +589,8 @@ def run(req: Request, p: Paths) -> dict:
             record["learned"] = "auto" if (record.get("route") or {}).get("b") is not None else None
         except Exception:  # noqa: BLE001 — learning is best effort
             pass
+    beat.set()
+    record.pop("current", None)
     if not ledger.claim_final(run_dir, "run"):
         # `ccx stop` found this process gone and closed the run already: its record and ledger row stand
         return ledger.load_run(p, run_id)
@@ -614,7 +646,7 @@ def compact(record: dict) -> dict:
         if record["kind"] == "needs_write":
             out["hint"] = ("read-only run: the sub-agent says it needs to edit files (see summary). If you agree, "
                            f"run it again with --mode write")
-        if record["kind"] in ("quota", "timeout", "user_stopped"):
+        if record["kind"] in ("quota", "timeout", "user_stopped", "interrupted"):
             why = "ccx stop" if record["kind"] == "user_stopped" else record["kind"]
             out["hint"] = f"stopped by {why}; continue later with `ccx resume {record['run_id']}`"
             ra = last.get("retry_after")

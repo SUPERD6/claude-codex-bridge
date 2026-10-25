@@ -312,7 +312,7 @@ def record_outcomes(p: Paths, record: dict, final_ok: bool) -> list[dict]:
     first_p = None
     for i, a in enumerate(atts):
         if a.get("kind") in ("quota", "auth", "timeout", "model", "policy", "needs_write", "split", "over_budget",
-                             "user_stopped"):
+                             "user_stopped", "killed", "interrupted"):
             continue                      # not the model's fault: says nothing about ability
         rung = f"{a['agent']}:{a['model']}:{a['effort']}"
         ok = final_ok if i == len(atts) - 1 else False
