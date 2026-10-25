@@ -92,7 +92,8 @@ def pick(p: Paths, b: float, agents: list[str], tradeoff: str, verifiable: bool 
     return {"rung": x["rung"], "agent": agent, "model": model, "effort": effort,
             "ladder": x.get("escalates_to", []), "p": round(x["p"], 3),
             "chain_p": round(x.get("chain_success", x["p"]), 3), "advice": res.get("advice"),
-            "stale": res.get("stale"), "b": b, "tradeoff": tradeoff}
+            "stale": res.get("stale"), "b": b, "tradeoff": tradeoff,
+            "expected_usd": None if x.get("expected_usd") is None else round(x["expected_usd"], 4)}
 
 
 def known_quota(given: dict | None = None, p: Paths | None = None) -> dict:

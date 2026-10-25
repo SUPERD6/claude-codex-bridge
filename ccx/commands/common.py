@@ -322,7 +322,7 @@ def resolve(spec: dict, caller: str, p, cfg: dict) -> tuple[dict | None, dict]:
                         kind=spec.get("kind"), quota=spec.get("quota"), risk=spec.get("risk"))
         route["kind"] = learn.task_kind(spec.get("mode"), spec.get("kind"))
         route.update(source="task-routing", rung=pk["rung"], ladder=pk["ladder"], p=pk["p"],
-                     chain_p=pk["chain_p"])
+                     chain_p=pk["chain_p"], expected_usd=pk.get("expected_usd"))
         if pk.get("stale"):
             route["stale"] = pk["stale"]
         if pk.get("advice") and not spec.get("force"):

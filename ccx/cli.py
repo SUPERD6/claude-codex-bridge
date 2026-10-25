@@ -19,7 +19,7 @@ GROUPS = (
     ("Memory and context", ("mem", "ctx", "project", "handoff", "fresh", "inbox", "skills")),
     ("Accounting and reports", ("stats", "report", "show", "quota", "lead", "trial", "ab", "bench")),
     ("Maintenance and advanced", ("task", "send", "plan", "batch", "route", "propose", "way", "discuss", "q",
-                                  "turn", "sum", "undo", "archive", "config", "improve", "selftest", "sync",
+                                  "turn", "sum", "undo", "archive", "config", "autonomy", "improve", "selftest", "sync",
                                   "init", "uninstall", "agents", "repair")),
 )
 

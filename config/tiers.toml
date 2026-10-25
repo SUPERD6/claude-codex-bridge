@@ -120,6 +120,20 @@ max_chars = 5000          # 约 1.2k token
 # 每轮 hook（ccx turn）里加一行“另一家刚做了什么”；false = 关
 turn = true
 
+[autonomy]
+# 总管自动档位（K4，docs/DECISIONS.md）：总管用 ccx run --project（或带 --autonomy）派活时按档位行事。
+# L0 = 只给建议：说打算派什么、怎么派、预计花多少，不派；
+# L1 = 只读的活自己派；可能改文件的先停下，等人点头后带 --approved 再派（默认）；
+# L2 = 读写都自己派；改动在 --worktree 里、--check 过了、另一家审查 pass、改动小，并且这个项目允许合并时，
+#      把那条分支合进项目当前的工作分支。受保护的分支（下面的 protected 和 origin 的默认分支）永远不自动合并。
+# 按项目改：ccx autonomy set L2 --project 名字 [--auto-merge on]（存在本机 hub）；
+# 项目自己的 .ccx/autonomy.toml 里写 level = "L0" 只能把档位调低，不能调高。单次：ccx run --autonomy L0。
+# 无论哪一档都要问人：外发、合进主分支、花钱超上限（daily_usd、--budget、ccx way --risk critical、ccx discuss）、科研审批。
+level = "L1"
+max_lines = 80          # L2 自动合并的上限：改动行数（加 + 删，含新文件）
+max_files = 5           # 和文件数
+protected = ["main", "master", "trunk", "release/*"]
+
 [review]
 # 独立审查（提案 F1）：子任务改完文件后，由另一家的便宜模型对照任务说明审一遍改动，只回“通过 / 有问题 + 在哪”。
 # auto = 只在 --risk visible/critical、代码改动 ≥ min_lines 行、子智能体自己说没把握（open_questions）、或它说改的文件和实际改动对不上时审；
