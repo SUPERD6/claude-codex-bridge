@@ -37,6 +37,7 @@ from urllib.parse import urlsplit
 from . import agents
 from . import queue as wq
 from .config import Paths, claude_home, codex_home, load_config
+from .ledger import is_eval
 from .usage import _ts
 
 STATIC = Path(__file__).resolve().parent / "ui_static"
@@ -1021,7 +1022,8 @@ def export(p: Paths, out: Path, project: Path | None = None, days: float = 7) ->
 
 
 def waiting(p: Paths, days: float = 7) -> int:
-    """How many recent runs wait for the person (for the session-start line). Run records only: cheap."""
+    """How many recent runs wait for the person (for the session-start line), evaluation runs left out. Run records
+    only: cheap."""
     now = time.time()
     rd = Reader(p)
     verdicts = rd.lines(p.ledger, _verdict_rows, {}) if p.ledger.exists() else {}
@@ -1035,6 +1037,8 @@ def waiting(p: Paths, days: float = 7) -> int:
         rec = rd.json_file(f)
         if not isinstance(rec, dict) or rec.get("ephemeral") or str(rec.get("label") or "").startswith(INTERNAL):
             continue
+        if is_eval({**rec, "no_ab": (rec.get("route") or {}).get("no_ab")}):
+            continue                                 # an evaluation's run (eval-*, --no-ab): nobody waits on it
         if rec.get("state") == "running" or not rec.get("run_id"):
             continue
         if _act(rec, verdicts.get(rec["run_id"]), now, None):
