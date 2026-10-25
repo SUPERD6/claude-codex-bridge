@@ -11,6 +11,7 @@ reviewed again; still failing -> kind review_failed, for the lead to decide."""
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -186,17 +187,30 @@ def brief(run_id: str, task: str, summary: str, diff: str, max_chars: int, check
                         diff=diff[:max_chars] or "(empty)", cut=cut, check=ran)
 
 
+_PREFIX = re.compile(r"^[\s*_`#>]*review\s*[:：]?\s*[*_`]*\s*(pass|issues)\b", re.I)
+
+
 def verdict(result: dict | None) -> dict:
     r = result or {}
     s = (r.get("summary") or "").strip()
-    v = "issues" if s.upper().startswith("REVIEW: ISSUES") else "pass" if s.upper().startswith("REVIEW: PASS") \
-        else "unclear"
+    m = _PREFIX.match(s)
+    v = m.group(1).lower() if m else "unclear"
     items = [str(x)[:300] for x in (r.get("open_questions") or [])]
     must = [x for x in items if x.lstrip().lower().startswith("[must]")]
     notes = [x for x in items if x not in must]
+    lenient = False
+    if v == "unclear" and items:
+        # no `REVIEW: ...` line (e.g. the summary written in another language, round 2 of the seven-cores A/B:
+        # haiku named the real bug as [must] and the run was left unfixed): the tagged items still say it
+        if must:
+            v, lenient = "issues", True
+        elif all(x.lstrip().lower().startswith("[note]") for x in notes):
+            v, lenient = "pass", True
     if v == "issues" and not must and notes and any(x.lstrip().lower().startswith("[note]") for x in notes):
         v = "pass"                    # only notes: nothing that makes the change wrong, so no fix round
     out = {"verdict": v, "issues": (must or ([] if v == "pass" else notes))[:8], "summary": s[:400]}
+    if lenient:
+        out["format"] = "lenient"
     if v == "pass" and notes:
         out["notes"] = notes[:3]
     return out
