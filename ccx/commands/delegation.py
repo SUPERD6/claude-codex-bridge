@@ -168,6 +168,22 @@ def _run_records(p):
             continue
 
 
+def _restart_step(p, a, root: Path, step: dict, last: dict, brief: str) -> int:
+    f = p.runs / last["run_id"] / "brief.md"
+    own = f.read_text(encoding="utf-8") if f.exists() else step["title"]
+    text = (f"{own}\n\n(An earlier attempt at this step, run {last['run_id']}, was cut off before its session "
+            "started. Look at `git diff` for anything it already changed; do not redo finished work.)\n\n" + brief)
+    rung = (last.get("first_rung") or "").split(":")
+    model, effort = (rung[1], rung[2]) if len(rung) == 3 and rung[0] == last["to"] else (None, None)
+    req = Request(to=last["to"], brief=text, mode=last.get("mode") or "write", cwd=Path(last.get("cwd") or root),
+                  caller=_caller(a.caller), task=a.task, step=step["n"], label=f"{a.task}#{step['n']}",
+                  model=model, effort=effort, check=last.get("check_cmd"), provider=last.get("provider"))
+    rec = run(req, p)
+    _out(compact(rec) | {"restarted": last["run_id"], "why": "the earlier run was cut off before its session "
+                         "started, so there was nothing to resume"})
+    return 0 if rec["ok"] else 2
+
+
 def cmd_task(a) -> int:
     """Long tasks (task-checkpoint): status, or continue an interrupted one with a single command."""
     p = paths()
@@ -190,6 +206,13 @@ def cmd_task(a) -> int:
         runs = sorted((r for r in _run_records(p) if r.get("task") == a.task and r.get("step") == nxt["n"]
                        and r.get("session_id")), key=lambda r: r.get("ts") or 0)
     brief = (t.dir / "checkpoint.md").read_text(encoding="utf-8")
+    if not runs:
+        started = sorted((r for r in _run_records(p) if r.get("task") == a.task and r.get("step") == nxt["n"]),
+                         key=lambda r: r.get("ts") or 0)
+        if started:
+            # killed before its agent session began (seen in a real run, killed after 12 s): there is no session to
+            # resume, so start the step again from the person's brief instead of only printing advice
+            return _restart_step(p, a, root, nxt, started[-1], brief)
     if not runs:
         _out({"task": a.task, "step": nxt["n"], "title": nxt["title"], "delegated_before": False,
               "next": f"do step {nxt['n']} yourself, or: ccx run --task {a.task} --step {nxt['n']} \"...\"",
