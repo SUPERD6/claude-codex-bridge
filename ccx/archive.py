@@ -142,7 +142,9 @@ def dsh_mark(sid: str, archived: bool) -> tuple[bool, str]:
             pend.write_text(json.dumps(q, indent=1), encoding="utf-8")
         except OSError as e:
             return False, f"could not queue it in {pend}: {e}"
-        return True, "queued: the desktop app is open; written once it is closed"
+        # closing its window is not enough: it stays in the tray, still running (seen 2026-10-25)
+        return True, ("queued: the desktop app is running; written once it is quit (closing its window leaves it "
+                      "in the tray: quit it there)")
     dsh_flush()                            # anything still queued from when it was open goes in first
     return _dsh_write({sid} if archived else set(), set() if archived else {sid})
 
