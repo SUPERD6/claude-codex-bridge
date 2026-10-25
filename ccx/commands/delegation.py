@@ -52,7 +52,7 @@ def _background(argv: list[str], p) -> dict:
     log = p.runs / run_id / "bg.log"
     env = {**os.environ, "CCX_RUN_ID": run_id}
     args = [a for a in argv if a != "--bg"]
-    kw = {"creationflags": 0x00000008 | 0x00000200} if os.name == "nt" else {"start_new_session": True}
+    from ..winproc import BACKGROUND as kw   # hidden console: its git/codex/claude calls pop no windows
     with open(log, "w", encoding="utf-8") as lf:
         subprocess.Popen([*ccx_argv(), *args],
                          stdout=lf, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=env, cwd=os.getcwd(), **kw)

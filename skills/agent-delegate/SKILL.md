@@ -72,7 +72,8 @@ for the same artifact; run affected checks when missing, stale or contradicted.
 **When the result's `check` shows ccx ran your `--check` command and it passed, do not run it again yourself**:
 read `check` and the diff. Each extra lead turn re-reads your whole conversation; in the H11 trial (2026-10-24) a lead
 that re-ran the check saved nothing by delegating, one that trusted it saved a turn per task. Re-run only what the
-check does not cover.
+check does not cover. If `check` carries `weak`, that command has passed wrong work here before: read the change
+against the task, not only the check.
 `verification: not-run` = unverified — say so. A `review` field is that independent review: `pass` (its notes
 are optional reading) or `issues` with `file:line`; after one fix round, `kind: review_failed` is yours to decide.
 Then give your verdict:

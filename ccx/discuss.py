@@ -170,24 +170,76 @@ def brief(d: dict, role: str, part: str, turns: list[dict], rnd: int) -> str:
                         so_far=_so_far(turns), part=PART[part])
 
 
-def _avg_usd(p: Paths, agent: str) -> float | None:
+# One read-only discuss turn, as measured in discuss-r1 (2026-10-24; codex-cli 0.164.0, claude 2.1.309, 5 turns):
+# the CLI's own start-up prompt and tools dominate, the brief adds little. A CLI not measured yet gets the larger.
+TURN_TOKENS = {
+    "codex": {"input_tokens": 24000, "cached_input_tokens": 24000, "output_tokens": 900},
+    "claude": {"input_tokens": 0, "cache_write_tokens": 7500, "cache_write_1h_tokens": 7500,
+               "cached_input_tokens": 18000, "output_tokens": 1500},
+}
+DEFAULT_TURN = {"input_tokens": 24000, "cached_input_tokens": 24000, "output_tokens": 1500}
+CHARS_PER_TOKEN = 3.5
+TURN_CHARS = SUMMARY_CHARS + MAX_POINTS * POINT_CHARS    # what one turn adds to "So far" at most
+MEASURED = 20                                            # last discuss turns on the same rung that are averaged
+
+
+def rung(cfg: dict, agent: str, tier: str) -> tuple[str, str]:
+    """(model, effort) of `agent` at `tier`; a provider (deepseek, kimi ...) has no tier row: its own model."""
+    spec = ((cfg.get("tiers") or {}).get(tier) or {}).get(agent)
+    if spec:
+        return spec["model"], spec["effort"]
+    pv = (cfg.get("providers") or {}).get(agent) or {}
+    if pv.get("models"):
+        return pv["models"][-1], "low"
+    raise ValueError(f"tier {tier} has no model for {agent}")
+
+
+def _measured(p: Paths, agent: str, model: str, effort: str) -> list[float]:
+    """API-equivalent USD of earlier discuss turns on this very rung (agent:model:effort)."""
     from . import ledger
-    xs = [r["ae_usd"] for r in ledger.rows(p) if r.get("to") == agent and r.get("mode") == "read"
-          and r.get("ae_usd") is not None][-30:]
-    return sum(xs) / len(xs) if xs else None
+    want = f"{agent}:{model}:{effort}"
+    return [r["ae_usd"] for r in ledger.rows(p) if str(r.get("label") or "").startswith("discuss:")
+            and r.get("to") == agent and (r.get("rungs") or [None])[-1] == want
+            and r.get("ae_usd") is not None][-MEASURED:]
 
 
-def estimate(p: Paths, names: list[str], rounds: int) -> dict:
-    """What a discussion may cost: at most 2 calls a round plus the judge, priced at each agent's recent read runs."""
+def _modelled(p: Paths, cfg: dict, agent: str, model: str, chars: int) -> float | None:
+    """Start-up overhead + what the brief carries (question, context, points so far), at the model's price."""
+    from . import learn
+    cli = ((cfg.get("providers") or {}).get(agent) or {}).get("agent", agent)
+    u = dict(TURN_TOKENS.get(cli, DEFAULT_TURN))
+    u["input_tokens"] += int(chars / CHARS_PER_TOKEN)
+    return learn.price_usd(p, agent, model, u)
+
+
+def estimate(p: Paths, names: list[str], rounds: int, *, tier: str = "T2", cfg: dict | None = None,
+             question: str = "", context: str = "") -> dict:
+    """What a discussion may cost, turn by turn: price of each agent's model at `tier` x (start-up overhead +
+    question + the points passed so far), for the longest talk (every round, then the judge) and the shortest
+    (agreement in round 1). Earlier discuss turns on the same rung, when the ledger has some, replace the model."""
+    from .config import load_config
+    cfg = cfg or load_config(p)
     rl = roles(names)
-    calls = {rl["proposer"]: rounds, rl["critic"]: rounds}
-    calls[rl["judge"]] = calls.get(rl["judge"], 0) + 1
-    per = {a: _avg_usd(p, a) for a in calls}
-    known = all(v is not None for v in per.values())
-    return {"roles": rl, "calls_max": sum(calls.values()), "calls": calls,
-            "usd_max_est": round(sum(per[a] * n for a, n in calls.items()), 4) if known else None,
-            "basis": "average of each agent's last read-only runs (API-equivalent)" if known
-            else "no read-only runs recorded for some agent yet: cost unknown"}
+    seq = [r for _ in range(rounds) for r in ("proposer", "critic")] + ["judge"]
+    base = len(question) + min(len(context), 4000)
+    rungs = {a: rung(cfg, a, tier) for a in set(rl.values())}
+    seen = {a: _measured(p, a, *rungs[a]) for a in rungs}
+    usd, calls = [], {}
+    for k, role in enumerate(seq):
+        a = rl[role]
+        calls[a] = calls.get(a, 0) + 1
+        usd.append(sum(seen[a]) / len(seen[a]) if seen[a] else _modelled(p, cfg, a, rungs[a][0], base + k * TURN_CHARS))
+    short = [usd[0], usd[1], usd[-1]]
+    known = all(x is not None for x in usd)
+    missing = sorted({rl[r] for r, x in zip(seq, usd) if x is None})
+    return {"roles": rl, "tier": tier, "calls_max": len(seq), "calls": calls,
+            "models": {a: f"{m} {e}" for a, (m, e) in rungs.items()},
+            "usd_max_est": round(sum(usd), 4) if known else None,
+            "usd_min_est": round(sum(short), 4) if known else None,
+            "basis": {a: (f"measured: mean of {len(seen[a])} earlier discuss turn(s) on {a}:{m}:{e}" if seen[a]
+                          else f"modelled: start-up overhead + brief at {m}'s price") for a, (m, e) in rungs.items()}
+            | ({"unknown": f"no price for {', '.join(missing)}: add prices to its [providers] entry"} if missing
+               else {})}
 
 
 def run(p: Paths, question: str, names: list[str], *, rounds: int = MAX_ROUNDS, caller: str = "the lead",
@@ -198,10 +250,14 @@ def run(p: Paths, question: str, names: list[str], *, rounds: int = MAX_ROUNDS, 
         raise ValueError("empty question")
     cwd = (cwd or Path.cwd()).resolve()
     if runner is None:
+        from .config import load_config
         from .delegate import Request, run as delegate_run
+        cfg = load_config(p)
 
-        def runner(agent, text, label):
-            return delegate_run(Request(to=agent, brief=text, tier=tier, mode="read", cwd=cwd, caller="ccx-discuss",
+        def runner(agent, text, label):     # the rung named, so a provider (no tier row) runs on its own model
+            model, effort = rung(cfg, agent, tier)
+            return delegate_run(Request(to=agent, brief=text, tier=tier, model=model, effort=effort, mode="read",
+                                        cwd=cwd, caller="ccx-discuss",
                                         escalate=False, fallback=False, review="off", allow_subagents=False,
                                         ephemeral=True, label=label), p)
     did = time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:4]

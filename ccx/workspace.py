@@ -36,7 +36,23 @@ def run_check(cmd: str, cwd: Path, timeout: int = 900) -> dict:
         code, tail = r.returncode, (r.stdout + r.stderr)[-800:]
     except subprocess.TimeoutExpired:
         code, tail = -1, f"timed out after {timeout}s"
-    return {"cmd": cmd, "exit": code, "passed": code == 0, "seconds": round(time.time() - t0, 1), "tail": tail}
+    out = {"cmd": cmd, "exit": code, "passed": code == 0, "seconds": round(time.time() - t0, 1), "tail": tail}
+    if out["passed"]:
+        out.update(_check_doubt(cmd, cwd))
+    return out
+
+
+def _check_doubt(cmd: str, cwd: Path) -> dict:
+    """J7: when this command (here) passed work later judged wrong too often, say so with the result."""
+    try:
+        from .config import hub_dir
+        p = Paths(hub_dir())
+        g = ledger.check_trust(ledger.rows(p), p).get(ledger.check_key(cmd, str(cwd))[0])
+    except Exception:  # noqa: BLE001 — a note, never a reason for the run to fail
+        return {}
+    if not g or not g["weak"]:
+        return {}
+    return {"weak": f"{g['wrong']}/{g['judged']} passed but judged wrong", "note": ledger.WEAK_CHECK_NOTE}
 
 
 def _git(cwd: Path, *args: str) -> tuple[int, str]:

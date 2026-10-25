@@ -56,6 +56,8 @@ mechanism; the content stays on their own machine.
    agent.
    - A SessionStart hook prints only the other side's lines this side hasn't seen, plus unfinished tasks. If there is
      nothing new, it prints nothing.
+   - A sub-agent (any tool) gets no delta; its brief carries up to 4 notes that share words with the task
+     (`memory.for_brief`, ~300 tokens at most). No shared word, no note.
    - The project layer (`.ccx/`) works the same way. A file or email given to one side is archived by `ccx inbox`,
      and the other side reads one line about it.
 6. **Sync** (`ccx/sync.py`):

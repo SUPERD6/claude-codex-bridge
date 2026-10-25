@@ -22,6 +22,10 @@ def claude_invocation(*, model: str, effort: str, perm: list[str], cwd: Path, pr
         argv += ["--strict-mcp-config"]
     if lean and "--disable-slash-commands" not in argv:
         argv += ["--disable-slash-commands"]
+    if "--settings" not in argv:
+        # ultracode (standing dynamic workflows) is session-scoped, set by the desktop app or --settings; a
+        # sub-run must not inherit it or opt in through the keyword in a brief (checked against 2.1.309)
+        argv += ["--settings", json.dumps({"ultracode": False, "workflowKeywordTriggerEnabled": False})]
     if resume_id:
         argv += ["--resume", resume_id]
     return Invocation(argv, prompt, cwd, None)
