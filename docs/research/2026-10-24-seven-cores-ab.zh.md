@@ -142,14 +142,15 @@ McNemar p = 0.004（9 : 0），Holm 校正后 0.016。代价：每任务多约 $
 |---|---|---|---|
 | 1 | 会话开始前被杀，`task resume` 返回 0 却什么都不做 | 功能验收 resume（10 秒） | **已修**（#26） |
 | 2 | Codex 组长在 Windows `workspace-write` 沙箱里不能用 ccx | 功能验收 codex-lead | **已查明原因**：沙箱本身，只能 danger-full-access；`ccx doctor` 检查在 #28 |
-| 3 | 审查者被选成 claude sonnet medium，一次 $0.04–0.09，是 luna low 子任务的 20–40 倍；审查主要要求“补测试”，3 次都没抓住真 bug | (c) 组 | 没修。建议：审查者按价格选（haiku 失败后才换 sonnet），把“没测试”降为 `[note]`，让审查对照任务说明逐条核对返回值 |
+| 3 | 审查者被选成 claude sonnet medium，一次 $0.04–0.09，是 luna low 子任务的 20–40 倍；审查主要要求“补测试”，3 次都没抓住真 bug | (c) 组 | **已修**（#31）：先用另一家最便宜的一档（haiku low / luna low），sonnet 只作后备；逐条对照任务要求，“缺测试”降为 `[note]`。统筹会话在 inventory 上真机 3 次：haiku 每次都抓到“返回 Item、任务要 SKU”，修完 3/3 过，每次审查 $0.004–0.009。第 2 轮的审查组按新默认值重测 |
 | 4 | `ccx discuss` 预估花费低了约 8 倍；默认 T2 不看额度 | discuss | 没修。建议：预估按每轮实际要读的上下文算；额度紧时降档 |
 | 5 | 路由 `--to auto` 的开销约 8 秒/次 | (b) 组 | 没修，没查原因 |
-| 6 | `ccx run --to auto` 和 `ccx route` 对同样的说明给出不同档位（sonnet medium vs haiku low） | (b) 组试跑 | 没查 |
+| 6 | `ccx run --to auto` 和 `ccx route` 对同样的说明给出不同档位（sonnet medium vs haiku low） | (b) 组试跑 | 统筹会话复现不了（两边都给 sonnet medium），猜是当时 `ccx route` 没给 `--mode` |
 | 7 | 被杀的运行没有 attempt 记录，被杀前花的 token 不进账本 | resume | 没修 |
 | 8 | `ccx undo --apply` 把运行自动记成“错”，哪怕结果是对的，会进路由学习 | undo（我已改回 `--ok 1`） | 没修。建议：undo 只记“撤销”，不记对错，或问一句 |
-| 9 | 花费上限的提示把金额四舍五入成 “$0.00 (cap $0.00)” | budget | 没修（外观） |
-| 10 | Codex 组长成功派出后又重复派了一次 | codex-lead | 没修。可以在 agent-delegate 里写明“看到 run_id 和 check 就别再派” |
+| 9 | 花费上限的提示把金额四舍五入成 “$0.00 (cap $0.00)” | budget | **已修**（#32） |
+| 10 | Codex 组长成功派出后又重复派了一次 | codex-lead | **已修**（#32）：agent-delegate 写明拿到 run_id 就别再派同一件事 |
+| 12 | 指定模型、没给 `--minutes` 的运行没有难度 b，对错学不进路由：本轮 63 次 luna low 都没被路由学到（路由仍是 n = 0、p = 0.48） | 统筹会话 | #33（待合并）；统筹会话已把本轮 84 次这样的运行按脚本的 MINUTES 补记进本机路由状态，之后 5 分钟的小活在 save 下会选 luna low（0.94）。第 2 轮起脚本给每一臂都带 `--minutes` |
 | 11 | haiku low 有 Task 工具、也被明确要求并行，仍不开子智能体 | budget-claude | 没修；也说明 Claude 这边的上限还没被真正测过 |
 
 ## 5. 局限

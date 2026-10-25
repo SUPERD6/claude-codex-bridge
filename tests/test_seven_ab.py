@@ -85,6 +85,7 @@ class TestSchedule(unittest.TestCase):
             self.assertEqual(v[-1], t["brief"])
             self.assertIn("--no-ab", v)          # never a sample of the running H11 trial
             self.assertEqual(v[v.index("--check") + 1], seven_ab.ACCEPT)
+            self.assertEqual(v[v.index("--minutes") + 1], "15")      # every arm, so routing learns from it
 
 
 class TestRun(unittest.TestCase):

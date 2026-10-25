@@ -81,10 +81,12 @@ def unit_key(u: dict) -> str:
 
 def ccx_argv(exp: str, arm: str, task: dict, label: str, a, ccx: list[str]) -> list[str]:
     """The `ccx run` command line of a direct (no lead) unit."""
-    base = [*ccx, "run", "--mode", "write", "--new", "--no-ab", "--force", "--label", label, "--check", ACCEPT]
+    # --minutes on every arm: a run with an explicit model and no difficulty is not learned by routing (#33)
+    base = [*ccx, "run", "--mode", "write", "--new", "--no-ab", "--force", "--label", label, "--check", ACCEPT,
+            "--minutes", str(MINUTES.get(task["id"], 5))]
     cheap = ["--to", a.sub_to, "--model", a.sub_model, "--effort", a.sub_effort, "--no-escalate"]
     if exp == "route":
-        pick = (["--to", "auto", "--minutes", str(MINUTES.get(task["id"], 5))] if arm == "routed" else
+        pick = (["--to", "auto"] if arm == "routed" else
                 ["--to", a.fixed_to, "--model", a.fixed_model, "--effort", a.fixed_effort, "--no-escalate"])
         return [*base, *pick, "--review", "off", task["brief"]]
     if exp == "review":

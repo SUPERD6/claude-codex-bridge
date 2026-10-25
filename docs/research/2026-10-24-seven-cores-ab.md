@@ -142,14 +142,15 @@ Right conclusion; the critic's specific points changed the proposal. Problems: *
 |---|---|---|---|
 | 1 | killed before its session began, `task resume` returned 0 and did nothing | resume (10 s) | **fixed** (#26) |
 | 2 | a Codex lead in Windows `workspace-write` can't use ccx | codex-lead | **cause found**: the sandbox itself, only danger-full-access works; `ccx doctor` check in #28 |
-| 3 | the reviewer is picked as claude sonnet medium, $0.04–0.09 a review, 20–40× a luna low sub-agent; reviews mostly ask for tests and missed the real bug 3 times | (c) | not fixed. Suggest: pick the reviewer by price (sonnet only after haiku fails), make "untested" a `[note]`, have the review check return values item by item against the task |
+| 3 | the reviewer is picked as claude sonnet medium, $0.04–0.09 a review, 20–40× a luna low sub-agent; reviews mostly ask for tests and missed the real bug 3 times | (c) | **fixed** (#31): the other vendor's cheapest rung first (haiku low / luna low), sonnet only as fallback; the review checks the task's requirements item by item, "untested" is a `[note]`. The coordinating session ran inventory 3 times for real: haiku caught "returns Items, the task wants SKUs" every time, 3/3 passed after the fix, $0.004–0.009 per review. Round 2 re-measures the review comparison with the new defaults |
 | 4 | `ccx discuss` underestimates spend ~8×; the default T2 ignores quota | discuss | not fixed. Suggest: estimate from the context each turn will read; step down when quota is tight |
 | 5 | `--to auto` routing adds ~8 s per run | (b) | not fixed, not investigated |
-| 6 | `ccx run --to auto` and `ccx route` give different rungs for the same brief (sonnet medium vs haiku low) | (b) pilot | not investigated |
+| 6 | `ccx run --to auto` and `ccx route` give different rungs for the same brief (sonnet medium vs haiku low) | (b) pilot | the coordinating session could not reproduce it (both give sonnet medium); probably `ccx route` was run without `--mode` |
 | 7 | a killed run has no attempt record: what it spent before the kill is missing from the ledger | resume | not fixed |
 | 8 | `ccx undo --apply` records the run as wrong even when it was right, which feeds routing | undo (I set it back with `--ok 1`) | not fixed. Suggest: record "undone" without a verdict, or ask |
-| 9 | the spend-cap message rounds to "$0.00 (cap $0.00)" | budget | not fixed (cosmetic) |
-| 10 | a Codex lead delegated the same work twice after it had succeeded | codex-lead | not fixed; agent-delegate could say "once you have a run_id and a check, don't delegate again" |
+| 9 | the spend-cap message rounds to "$0.00 (cap $0.00)" | budget | **fixed** (#32) |
+| 10 | a Codex lead delegated the same work twice after it had succeeded | codex-lead | **fixed** (#32): agent-delegate says not to delegate the same work again once there is a run_id |
+| 12 | a run with an explicit model and no `--minutes` has no difficulty b, so routing doesn't learn from its verdict: none of this round's 63 luna low runs was learned (routing still n = 0, p = 0.48) | coordinating session | #33 (open); the coordinating session back-filled this round's 84 such runs into this machine's routing state with the script's MINUTES; afterwards a 5-minute task under save picks luna low (0.94). From round 2 the script passes `--minutes` on every arm |
 | 11 | haiku low with the Task tool and an explicit parallel request still starts no sub-agent | budget-claude | not fixed; the Claude-side cap is still untested |
 
 ## 5. Limitations
