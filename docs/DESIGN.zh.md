@@ -42,6 +42,7 @@
    - `ccx run --task --step` 会自动登记开始、会话 ID 和失败原因；`ccx verify` 把这一步标成完成。
 5. **增量记忆**（`ccx/memory.py`、`ccx/project.py`）：快照 + 追加日志 + 每个智能体一个游标。
    - 两边的 SessionStart hook 只输出对方新增、自己没见过的条目，还会提示未完成的任务；没有新内容就什么都不输出。
+   - 子智能体（不论哪个工具）不收增量；它的任务说明里附上最多 4 条和任务有共同词的记忆（`memory.for_brief`，最多约 300 token），没有共同词就不附。
    - 项目层（`.ccx/`）同理；用户交给一边的文件或邮件，经 `ccx inbox` 存档，另一边只多读一行。
 6. **同步**（`ccx/sync.py`）：
    - 技能只保留一份原件，另一边用目录链接（Windows 用 junction，其他系统用 symlink）；MCP 通过各自官方 CLI 注册。
