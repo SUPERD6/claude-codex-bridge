@@ -43,7 +43,17 @@ class Env(unittest.TestCase):
     def tearDown(self):
         os.environ.clear()
         os.environ.update(self._old)
-        self.tmp.cleanup()
+        import time
+        for i in range(40):
+            try:
+                self.tmp.cleanup()
+                return
+            except PermissionError:
+                # Windows: a background ccx (--bg) that just finished still holds the work folder as its cwd for a
+                # moment; the folder can't go until it has exited
+                if i == 39:
+                    raise
+                time.sleep(0.25)
 
     def ccx(self, *args, env=None, stdin=None):
         e = {**self.env, **(env or {})}
