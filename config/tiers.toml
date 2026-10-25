@@ -14,7 +14,9 @@ max_escalations = 1
 max_parallel = 3          # batch 并行上限
 max_depth = 1             # 子智能体不能再派子智能体，防止套娃烧 token
 timeout_sec = 1800
-tradeoff = "balanced"     # 省钱 save | 平衡 balanced | 快 fast，或 0..1 的旋钮（0 最省，1 最快）；ccx config set defaults.tradeoff 0.3
+tradeoff = "save"         # 省钱 save | 平衡 balanced | 快 fast，或 0..1 的旋钮（0 最省，1 最快）；ccx config set defaults.tradeoff 0.3
+# save：小活先用便宜模型，没做成（含 ccx 重跑 --check 没过）就自动升一档。2026-10-25 起默认；之前是 balanced，
+# 七核心 A/B（PR #30）里它在 5 分钟的小活上选 sonnet medium，比 luna low 贵约 10 倍，luna low 那时 55/63 做对。
 ab_self_rate = 0.1        # 约 10% 的可派任务让主智能体自己做，用来实测“到底省了多少”（0 = 关）
 
 [lead]                    # 主智能体平时用的模型，只用来估算“如果自己做要花多少”

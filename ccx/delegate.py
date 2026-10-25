@@ -331,7 +331,7 @@ def run(req: Request, p: Paths) -> dict:
     kids = dict((prev or {}).get("codex_children") or {})   # child sessions it spawned -> totals counted
     record["codex_children"] = kids
     prompt, i, fell_back, swaps, policy_retried = first_prompt, 0, False, 0, False
-    oc = None
+    oc, early_check = None, None
     while i < len(plan):
         spec = plan[i]
         to = spec["agent"]
@@ -473,6 +473,22 @@ def run(req: Request, p: Paths) -> dict:
                 prompt, session = first_prompt, None
                 i += 1
                 continue
+        if (req.check and oc.ok and status in ("done", "partial") and i + 1 < len(plan) and not oc.auth_problem):
+            # "done" but ccx's own run of the check fails: that is a failure too, so climb while a rung is left.
+            # Before, only blocked/failed escalated, and a cheap model that wrongly said done stopped there
+            # (needed once tradeoff = save picks cheap models first, 2026-10-25)
+            chk = run_check(req.check, cwd, int(cfg["defaults"].get("check_timeout_sec", 900)))
+            early_check = (len(record["attempts"]), chk)
+            if not chk["passed"]:
+                record["attempts"][-1]["kind"] = "check_failed"
+                _write_record(run_dir, record)
+                summary = f"you said done, but `{chk['cmd']}` failed (exit {chk['exit']}):\n{chk['tail'][-400:]}"
+                if plan[i + 1]["agent"] == to and session:
+                    prompt = ESCALATE.format(run_id=run_id, status="check_failed", summary=summary)
+                else:
+                    prompt, session = first_prompt, None
+                i += 1
+                continue
         stuck = (not oc.ok and oc.kind == "error") or status in ("blocked", "failed")
         if stuck and i + 1 < len(plan) and plan[i + 1]["agent"] == to and session and not oc.auth_problem:
             prompt = ESCALATE.format(run_id=run_id, status=status or "error",
@@ -491,7 +507,9 @@ def run(req: Request, p: Paths) -> dict:
                   auth_problem=oc.auth_problem, kind=oc.kind, state="finished")
     check_passed = None
     if req.check and oc.ok and status in ("done", "partial"):
-        record["check"] = run_check(req.check, cwd, int(cfg["defaults"].get("check_timeout_sec", 900)))
+        reuse = early_check and early_check[0] == len(record["attempts"])    # already run on this very attempt
+        record["check"] = early_check[1] if reuse else run_check(req.check, cwd,
+                                                                 int(cfg["defaults"].get("check_timeout_sec", 900)))
         check_passed = record["check"]["passed"]
         if not check_passed:
             # the sub-agent said it was done; the check says otherwise: that's a failure, and it is learned as one
