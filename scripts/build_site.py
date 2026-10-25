@@ -74,7 +74,7 @@ def sample_dashboard(out: Path) -> None:
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(ROOT / "_site"))
-    out = Path(ap.parse_args().out)
+    out = Path(ap.parse_args().out).resolve()   # absolute: ccx report runs in a temp folder (the Pages workflow passes "_site")
     if out.exists():
         shutil.rmtree(out)
     shutil.copytree(ROOT / "site", out)
