@@ -335,13 +335,18 @@ def claim_final(run_dir: Path, by: str) -> bool:
 def write_record(run_dir: Path, record: dict) -> None:
     tmp = run_dir / "run.json.tmp"
     tmp.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+    replace(tmp, run_dir / "run.json")      # ccx's own file: atomic replace is fine here
+
+
+def replace(tmp: Path, dst: Path) -> None:
+    """os.replace that waits up to 3 s for a reader. Windows refuses to replace a file another process has open for
+    reading (`ccx stop` / `ccx show` / the ui polling it) for that moment. Lost there, a run's final state stayed
+    `running` (CI, PR #37) and a background discussion's state write failed (CI, PR #67)."""
     for i in range(60):
         try:
-            os.replace(tmp, run_dir / "run.json")      # ccx's own file: atomic replace is fine here
+            os.replace(tmp, dst)
             return
         except PermissionError:
-            # Windows: replacing a file another process has open for reading (`ccx stop` / `ccx show` polling it)
-            # is refused for that moment. Lost here, a run's final state stayed `running` (seen in CI, PR #37)
             if i == 59:
                 raise
             time.sleep(0.05)
