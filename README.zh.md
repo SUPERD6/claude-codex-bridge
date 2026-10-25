@@ -16,7 +16,7 @@
 # relayline
 
 **让几个编码智能体互相当主智能体和子智能体：共享记忆、按难度分工、每块活有人验收、花了多少有账可查。**
-Claude Code 和 Codex 谁当主都行；Gemini CLI、通过 Claude Code 用的 DeepSeek 也能接活。命令是 `ccx`，只用 Python 标准库。
+Claude Code 和 Codex 谁当主都行；Gemini CLI 和 DeepSeek（经 Claude Code、经 Codex，或 DeepSeek 自己的 DeepSeek Harness）也能接活，几家较新的 API（Kimi、GLM、Qwen、OpenRouter）也能经 Claude Code 接活。命令是 `ccx`，只用 Python 标准库。
 
 ```bash
 pipx install git+https://github.com/SUPERD6/relayline
@@ -37,7 +37,7 @@ ccx run --to codex --mode read "用三行总结 README.md"
 
 | | 做什么 | 现在的状态 |
 |---|---|---|
-| **1. 互为主子** | Claude Code 当主、Codex 干活，或者反过来；Gemini CLI、DeepSeek（通过 Claude Code）可以接活。每家一个适配器，`ccx agents` 列出每家能做什么、测过哪个版本、官方还是社区。 | 两个方向真机跑通；Gemini 只有模拟测试 |
+| **1. 互为主子** | Claude Code 当主、Codex 干活，或者反过来；Gemini CLI、DeepSeek（经 Claude Code、经 Codex，或 DeepSeek Harness `dsh`）可以接活。每家一个适配器，`ccx agents` 列出每家能做什么、测过哪个版本、官方还是社区。 | 两个方向真机跑通；DeepSeek 经 Claude Code 和经 Codex 真跑过；Gemini 和 `dsh` 只有模拟测试 |
 | **2. 两个模型直接对话** | `ccx ask` 让另一家快速给个第二意见；`ccx resume` 在同一个子会话里追问；`ccx send` 把消息发进正在运行的 Codex 会话；`ccx discuss` 让 2–3 家不同厂商的模型把选错代价高的决定讨论清楚（出方案、挑错、裁判，最多 3 轮），在 `ccx ui` 里显示成对话。 | 前三个真机可用；`ccx discuss` 只有模拟测试 |
 | **3. 共享记忆** | 个人层（你的 hub：记忆、技能、MCP、账本）和项目层（`.ccx/`：背景、日志、交接、断点）。开局 hook 只推对方新写的几行；`ccx handoff` 换主智能体接力，`ccx fresh` 把长对话交给同一工具的新对话。 | 真机可用；更完整的共享记忆在做 |
 | **4. 分工合作** | 5 个问题打出难度 → 选智能体、模型、强度并给出成功率；算下来自己做更划算或该先拆，就直接说不派。`ccx batch` / `ccx q` 并行，长任务断了 `ccx task resume` 接着做。 | 选模型真机可用，但先验没校准；队列只有模拟测试 |
@@ -189,6 +189,9 @@ ccx config set defaults.tradeoff 0.3   # 省钱↔快 的旋钮：save / balance
 ccx ab done <id> --ok 1             # 结束一次 A/B 抽样（主智能体自己做的那 10%）
 ccx run "任务" --to gemini --tier T2                       # 派给 Gemini CLI
 ccx run "任务" --to deepseek      # 通过 Claude Code 用 DeepSeek flash（密钥放环境变量 DEEPSEEK_API_KEY），思考强度按难度选
+ccx run "任务" --provider deepseek-codex   # 同一个模型经 Codex（用 -c 设 model provider，密钥从环境变量读）
+ccx run "任务" --to dsh --tier T2          # DeepSeek 自己的智能体 DeepSeek Harness（无头模式）
+ccx run "任务" --provider glm              # 较新的 API 经 Claude Code：kimi、glm、qwen、openrouter（要有密钥）
 ccx run "任务" ... --bg             # 后台跑，马上返回 run_id；用 ccx show 查看
 ccx send --list | --thread <id> "消息"   # 发消息给正在运行的 Codex 桌面/交互会话
 ccx skills find pdf 表格             # 先在共享技能库里找，别重复写
@@ -215,6 +218,9 @@ ccx doctor
 | T4 | 关键/研究级 | gpt-6-astra · xhigh | opus · max | pro |
 
 Gemini 用的是 CLI 的别名，新型号出来不用改配置；Gemini CLI 没有推理强度参数。
+DeepSeek Harness（`--to dsh`）：T1–T3 用 deepseek-flash 的 low / high / max，T4 用 deepseek-v4-pro · max。
+
+**按 token 付费的智能体**（`[providers.*]` 里的各家和 `dsh`）花的是真钱，所以每家都有 `daily_usd` 上限（默认 $1）；环境变量里没有密钥的 provider 不参与任何选择（`ccx agents` 里看 `ready`）。没有价格的模型会被拒绝运行，因为它花了多少算不出来，上限就守不住。它们不会被自动拿来在额度用完时接班，也不会自己被选为审查者；自动选模型只考虑经 Claude Code 的 DeepSeek（有标定和价格），其余几家标定之前要用 `--provider` / `--to` 指定。
 
 ## 安全边界
 
@@ -239,13 +245,21 @@ python -m pytest -q tests        # 或 python -m unittest discover -s tests
 - **A/B 实测**：约 10% 本可以派的任务，随机让主智能体自己做（`defaults.ab_self_rate`，可设为 0 关掉），按同样难度对比实际花费，用来检验上面的估算。
 - 主智能体自己的用量从两边工具自带的会话记录里读（Claude `~/.claude/projects`，Codex `~/.codex/sessions`），子智能体的会话会排除，避免重复计算。
 
-## 已核对的外部事实（2026-10-22）
+## 已核对的外部事实（2026-10-22/24）
 
 - codex-cli 0.164.0 `exec --help`：`--json`、`-m`、`-c`、`--output-schema`、`-o`、`--ignore-user-config`、`--ephemeral`、`exec resume <id>`（resume 不接受 `-s`，所以沙箱统一用 `-c sandbox_mode=…`）；精简启动（`--ignore-user-config`）必须带上用户的 `windows.sandbox`，否则 Windows 上只读模式会拒绝所有命令
 - Claude Code 2.1.309 `--help`：`-p --output-format json|stream-json`（stream-json 必须加 `--verbose`）、`--model`、`--effort low..max`、`--json-schema`、`--resume`、`--strict-mcp-config`；实测：第一条事件带 session_id，最后的 result 事件带 `structured_output`、`usage`、`total_cost_usd`；`--resume` 报的是单次用量；默认参数无头启动约 4.6 万 token，写入 1 小时缓存；用 ccx 的精简参数约 2 万，一小时内再次启动（哪个项目都行）只新写入约 650–2000 token
 - OpenAI GPT-6 文档：`gpt-6-astra` / `gpt-6.1-sol` / `gpt-6-luna`；6.1-sol 的 effort 为 low/medium/high/xhigh/max
 - Codex hooks 文档：`[[hooks.SessionStart]]`，stdout 作为开发者上下文注入，新 hook 需要在 `/hooks` 里信任
 - Gemini CLI 0.65.0 `--help` 与内置源码：`-p`（无头，附加在 stdin 之后）、`-o stream-json`（init / message / tool_use / tool_result / error / result 事件）、`--approval-mode plan|auto_edit`、`--session-id`、`--resume <uuid>`、模型别名 `flash-lite / flash / pro`
+- DeepSeek Harness（`dsh`，github.com/deepseek-ai/deepseek-harness，标签 dsh-v0.2.1-rc.3，2026-10-24 读源码，本机未安装）：`dsh --profile headless "任务"`（或用 `-` 从 stdin 读）跑一个任务；`--json` 输出 session / status（step_end 带用量、turn_end 带结束原因）/ text / tool_call / tool_result / final / error 事件；`--session-id <id>` 续接。token 计数互不重叠（input 不含缓存命中）。rc.3 没有模型和权限参数：模型写在 `--patch` 覆盖文件里（`agent-default-model` 行），沙箱用 `DSH_PERMISSION_MODE`。基础配置默认会把会话日志随请求上传给 DeepSeek，ccx 跑它时关掉。
+- Codex 自定义 model provider（Codex 配置参考，2026-10-24 读）：`model_provider` 加 `[model_providers.<id>]`，字段 `base_url`、`env_key`、`wire_api`（只支持 `"responses"`）；`openai`、`ollama`、`lmstudio` 是保留名。DeepSeek 的 Codex 接入页用 `base_url = "https://api.deepseek.com/"`、`wire_api = "responses"`。codex-cli 0.164 实测：走自定义 provider 时 `apps` 和 `plugins` 会把所有连接器的工具定义整份发出去（“回复 OK”首请求 21.9 万输入 token，加 `--disable apps --disable plugins` 后 1 万），所以 ccx 经 provider 跑 Codex 时关掉这两项和 Codex 自带子智能体。Codex 会提示找不到 `deepseek-flash` 的模型元数据、改用默认元数据，但能跑完。
+- 较新的 API（Claude Code 用的 Anthropic 兼容端点，2026-10-24 读，都没真跑过）：
+  - Kimi：`https://api.moonshot.ai/anthropic`，`kimi-k3.1-pro`；价格表是网页脚本渲染的，没读到数字，所以在你写上价格之前 ccx 拒绝运行它；
+  - GLM（Z.ai）：`https://api.z.ai/api/anthropic`；GLM-5.3-Flash $0.15 / $0.03 / $0.50，GLM-5.3 $1.4 / $0.26 / $4.4；
+  - Qwen（阿里云百炼按量付费）：地址是 `https://{WorkspaceId}.<地域>.maas.aliyuncs.com/apps/anthropic`，所以 ccx 从 `DASHSCOPE_ANTHROPIC_BASE_URL` 读；qwen3.7-plus $0.4 / $1.6，qwen3.7-max $2.5 / $7.5（新加坡，没给缓存价，按输入价算）；
+  - OpenRouter：`https://openrouter.ai/api`；没有默认模型，要给 `--model` 和它的价格。
+  - 各家文档把密钥放在 `ANTHROPIC_AUTH_TOKEN`；ccx 用 `--bare` 跑 Claude Code，只认 `ANTHROPIC_API_KEY`（以 `x-api-key` 发送）。DeepSeek 接受这种方式，其他几家还没确认。
 - DeepSeek 文档：Claude Code 用 `ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic` 加密钥；ccx 用 `ANTHROPIC_API_KEY` 加 `--bare` 传入，调用方自己的 Claude 登录不会被发到 DeepSeek（2026-10-24）；闲时半价；价格（高峰）deepseek-flash 输入 $0.30 / 缓存 $0.006 / 输出 $1.20，deepseek-v4-pro $1.32 / $0.044 / $3.96（每百万 token）
 - Gemini 价格（ai.google.dev/pricing）：3.5-flash-lite $0.30 / $0.03 / $2.50，3.8-flash $0.75 / $0.075 / $3.75（到 2026-12-31），3.1-pro-preview $2.00 / $0.20 / $12.00
 
@@ -278,7 +292,7 @@ ccx 没有的：可见的分屏界面、任务运行中追加指令、多家模�
 
 **它操作的是聊天网页吗？** 不是。两边调用的都是工作模式（`codex exec`、`claude -p`），也就是你在终端里用的那个智能体，不是网页聊天。
 
-**支持哪些工具？** Claude Code 和 Codex CLI 可以当主也可以当子，两个方向都在真机上测过。通过 Claude Code 用 DeepSeek 已在真实任务上校准过，只当子智能体；Gemini CLI 已经适配（社区维护），只当子智能体，还没真跑过。每家一个适配器（`ccx/agents/`），`ccx agents` 列出各自的能力；加一家的方法见 [CONTRIBUTING.zh.md](CONTRIBUTING.zh.md)。
+**支持哪些工具？** Claude Code 和 Codex CLI 可以当主也可以当子，两个方向都在真机上测过。通过 Claude Code 用 DeepSeek 已在真实任务上校准过，只当子智能体；经 Codex 用 DeepSeek 真跑过（一个小的只读任务）。DeepSeek Harness（`dsh`）和 Gemini CLI 已经适配（社区维护），只当子智能体，还没真跑过。Kimi、GLM、Qwen、OpenRouter 已配置，没真跑过。每家一个适配器（`ccx/agents/`），`ccx agents` 列出各自的能力；加一家的方法见 [CONTRIBUTING.zh.md](CONTRIBUTING.zh.md)。
 
 **两个模型能直接讨论吗？** 现在能做的是单向的：`ccx ask` 问一次第二意见，`ccx resume` 在同一个子会话里追问，`ccx send` 发消息进正在运行的 Codex 会话。选错代价高的决定可以用 `ccx discuss`：不同厂商的模型最多讨论 3 轮（一家出方案、一家挑错、一家裁判），轮与轮之间只传要点；组长开之前会先问你。
 

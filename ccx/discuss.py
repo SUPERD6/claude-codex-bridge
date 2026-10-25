@@ -90,8 +90,8 @@ def participants(cfg: dict, wanted: list[str] | None, installed=None) -> list[st
     from . import agents
     if wanted:
         names = [w.strip() for w in wanted if w.strip()]
-    else:
-        names = (installed or agents.installed)()
+    else:       # pay-per-token agents (dsh) spend real money: only when named
+        names = [n for n in (installed or agents.installed)() if not agents.get(n).pay_per_token]
     out: list[str] = []
     for n in names:
         if n not in agents.NAMES and n not in (cfg.get("providers") or {}):

@@ -29,10 +29,13 @@ class Adapter:
     quota_readable: bool              # its subscription windows can be read
     live_cost: bool                   # ccx can see its built-in sub-agents' spend while a run is going
     turn_hook: bool                   # a per-turn hook exists (the H10 context hint)
+    pay_per_token: bool = False       # billed in real money per token (an API key, no subscription quota):
+                                      # never picked by a quota fallback or as a reviewer on its own
+    run_env: Callable | None = None   # (mode) -> extra environment for one run, e.g. read-only via a variable
 
     def capabilities(self) -> dict:
         return {k: getattr(self, k) for k in ("can_lead", "can_work", "can_resume", "builtin_subagents",
-                                              "quota_readable", "live_cost", "turn_hook")}
+                                              "quota_readable", "live_cost", "turn_hook", "pay_per_token")}
 
     def read_lead_events(self, since: float, exclude: set[str]) -> list[dict]:
         if not self.lead_events:

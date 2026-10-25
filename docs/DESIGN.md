@@ -22,14 +22,21 @@ mechanism; the content stays on their own machine.
    - Codex: `codex exec --json`;
    - Claude Code: `claude -p --output-format stream-json --verbose`;
    - Gemini CLI: `gemini -p -o stream-json`.
+   - DeepSeek Harness: `dsh --profile headless --patch <run>/dsh.patch.yml --json -` (model in the patch, sandbox in
+     `DSH_PERMISSION_MODE`).
 
    The sub-agent must answer in a JSON schema. The lead reads only that compact result; the full log stays on disk.
    - The session id is saved the moment it appears, so a crash or timeout can be continued with `ccx resume`.
    - Failures are classified ok / quota / auth / timeout / error:
      - quota or rate limit: one retry on the other agent;
      - `blocked` or `failed`: one rung up, in the same session.
-   - A *provider* is the same tool pointed at another API (e.g. DeepSeek through Claude Code). Keys come only from
-     the environment.
+   - A *provider* is the same tool pointed at another API (e.g. DeepSeek through Claude Code, or through Codex with a
+     `-c model_providers.<id>` override). Keys come only from the environment.
+   - DeepSeek is a vendor of its own, whichever route: `dsh`, `deepseek` and `deepseek-codex` all say vendor =
+     deepseek, so review and fallback treat them as "another vendor" from Claude and Codex, and `ccx report` counts
+     them as one DeepSeek stream.
+   - Pay-per-token agents (providers and `dsh`) have a `daily_usd` cap; a model with no known price is refused, and
+     they are never chosen as a quota fallback or reviewer unless pinned.
 2. **Model choice** (task-routing skill, wired in by `ccx/learn.py`):
    - A 5-item rubric gives a difficulty b. The IRT formula P = 1/(1+e^(−1.2(θ−b))) gives each agent:model:effort's
      success probability.

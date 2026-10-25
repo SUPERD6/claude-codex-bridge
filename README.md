@@ -16,8 +16,9 @@
 # relayline
 
 **Coding agents as each other's lead and sub-agent: shared memory, work split by difficulty, every piece checked,
-and a receipt for what it cost.** Claude Code or Codex can lead; Gemini CLI, and DeepSeek through Claude Code, can
-take work too. The command is `ccx`; Python standard library only.
+and a receipt for what it cost.** Claude Code or Codex can lead; Gemini CLI and DeepSeek (through Claude Code, through
+Codex, or DeepSeek's own DeepSeek Harness) can take work too, and so can a few smaller APIs (Kimi, GLM, Qwen,
+OpenRouter) through Claude Code. The command is `ccx`; Python standard library only.
 
 ```bash
 pipx install git+https://github.com/SUPERD6/relayline
@@ -45,7 +46,7 @@ ccx run --to codex --mode read "Summarise README.md in three lines"
 
 | | What | Where it stands |
 |---|---|---|
-| **1. Each other's lead and sub-agent** | Claude Code leads and Codex works, or the other way round; Gemini CLI and DeepSeek (through Claude Code) take work. One adapter per CLI; `ccx agents` lists what each can do, the version tested, official or community. | Both directions run for real; Gemini only with stand-ins |
+| **1. Each other's lead and sub-agent** | Claude Code leads and Codex works, or the other way round; Gemini CLI and DeepSeek (through Claude Code, Codex, or DeepSeek Harness `dsh`) take work. One adapter per CLI; `ccx agents` lists what each can do, the version tested, official or community. | Both directions run for real; DeepSeek through Claude Code and Codex for real; Gemini and `dsh` only with stand-ins |
 | **2. Two models talking directly** | `ccx ask` gets a quick second opinion from the other vendor; `ccx resume` follows up in the same sub-session; `ccx send` puts a message into a live Codex session; `ccx discuss` lets 2–3 models from different vendors talk a costly decision through (propose, find faults, judge; at most 3 rounds) and shows it as a conversation in `ccx ui`. | The first three work for real; `ccx discuss` only with stand-ins |
 | **3. Shared memory** | A personal layer (your hub: memory, skills, MCP, ledger) and a project layer (`.ccx/`: context, journal, handoffs, checkpoints). The session-start hook brings only the other side's new lines; `ccx handoff` passes the baton, `ccx fresh` moves a long conversation to a fresh one of the same tool. | Works for real; fuller shared memory in progress |
 | **4. Splitting the work** | A five-question difficulty score → agent, model, effort and the odds; when doing it yourself is cheaper, or the task should be split first, it says so instead of delegating. `ccx batch` / `ccx q` run pieces in parallel; `ccx task resume` continues a long task after a stop. | Routing works for real but priors are uncalibrated; the queue only with stand-ins |
@@ -217,6 +218,9 @@ ccx quota [--probe]                   # each subscription window projected to it
 ccx bench [refresh]                   # the public benchmark data routing uses, its age and credits
 ccx run "task" --to gemini --tier T2                         # Gemini CLI as the sub-agent
 ccx run "task" --to deepseek       # DeepSeek flash through Claude Code (key in DEEPSEEK_API_KEY), effort by difficulty
+ccx run "task" --provider deepseek-codex     # the same model through Codex (a model provider set with -c, key from env)
+ccx run "task" --to dsh --tier T2            # DeepSeek's own agent, DeepSeek Harness (headless profile)
+ccx run "task" --provider glm                # smaller APIs through Claude Code: kimi, glm, qwen, openrouter (key needed)
 ccx verify <run_id> --ok 1|0 [--note "..."]   # the lead's verdict: calibrates routing/splitting, closes the checkpoint step
 ccx resume <run_id> "follow-up"       # same sub-session; also how an interrupted run continues
 ccx task status | resume <task>       # long tasks: one command continues the interrupted step (hands off on quota)
@@ -274,6 +278,13 @@ and calibrates itself from real outcomes.
 | T4 | critical / research | gpt-6-astra · xhigh | opus · max | pro |
 
 Gemini uses the CLI's aliases, so new model releases need no config change. Gemini CLI has no effort flag.
+DeepSeek Harness (`--to dsh`): deepseek-flash at low / high / max for T1-T3, deepseek-v4-pro · max for T4.
+
+**Pay-per-token agents** (the providers in `[providers.*]` and `dsh`) spend real money, so each has a `daily_usd` cap
+(default $1); a provider whose key isn't in your environment takes part in nothing (`ccx agents` shows `ready`). A
+model without a known price is refused, since its spend couldn't be counted against the cap. They are never picked as
+a quota fallback or as a reviewer on their own; only DeepSeek through Claude Code is in automatic routing (it has
+calibration and prices), the others need `--provider` / `--to` until they are calibrated.
 
 ## Safety
 
@@ -281,6 +292,8 @@ Gemini uses the CLI's aliases, so new model releases need no config change. Gemi
   - Codex: `workspace-write` sandbox.
   - Claude: `acceptEdits` plus a tool allow-list; only git/python/pytest/npm/node commands are allowed.
   - Gemini: `auto_edit` approval mode.
+  - DeepSeek Harness: `DSH_PERMISSION_MODE=workspace-write` (`read-only` with `--mode read`); ccx also turns off its
+    default session-log upload to DeepSeek and its telemetry for these runs.
   - `--mode read` makes any of them analysis-only. Parallel writers go to separate git worktrees.
 - A sub-agent cannot delegate again (`CCX_DEPTH`).
 - `ccx sync` is a dry run unless `--apply`:
@@ -319,7 +332,7 @@ CLIs work on your machine.** Run `ccx selftest` there; the acceptance list is in
 - **The lead's own usage** is read from each tool's session logs (Claude `~/.claude/projects`, Codex
   `~/.codex/sessions`). Sub-agent sessions are excluded so nothing is counted twice.
 
-## External facts checked (2026-10-22/23)
+## External facts checked (2026-10-22/24)
 
 - **codex-cli 0.164.0** `exec --help`: `--json`, `-m`, `-c`, `--output-schema`, `-o`, `--ignore-user-config`, `--ephemeral`, `exec resume <id>`. A lean start (`--ignore-user-config`) must keep the user's `windows.sandbox`, or read-only rejects every command on Windows.
   `resume` takes no `-s`, so the sandbox is set with `-c sandbox_mode=…`.
@@ -342,6 +355,28 @@ CLIs work on your machine.** Run `ccx selftest` there; the acceptance list is in
   Peak prices per 1M tokens (input / cache hit / output), off-peak half:
   - deepseek-flash $0.30 / $0.006 / $1.20;
   - deepseek-v4-pro $1.32 / $0.044 / $3.96.
+- **DeepSeek Harness** (`dsh`, github.com/deepseek-ai/deepseek-harness, tag dsh-v0.2.1-rc.3, source read 2026-10-24,
+  not installed here): `dsh --profile headless "task"` (or `-` for stdin) runs one task; `--json` prints
+  session / status (step_end usage, turn_end reason) / text / tool_call / tool_result / final / error events;
+  `--session-id <id>` continues a session. Token counts are disjoint (input excludes cache reads). No model or
+  permission flag in rc.3: the model goes in a `--patch` overlay (`agent-default-model` row), the sandbox in
+  `DSH_PERMISSION_MODE`. The base profile uploads session logs with DeepSeek requests by default.
+- **Codex model providers** (Codex config reference, read 2026-10-24): `model_provider` + `[model_providers.<id>]`
+  with `base_url`, `env_key`, `wire_api` (only `"responses"`); `openai`, `ollama`, `lmstudio` are reserved. DeepSeek's
+  Codex page uses `base_url = "https://api.deepseek.com/"`, `wire_api = "responses"`. Measured with codex-cli 0.164:
+  through a custom provider, `apps` and `plugins` send every connector's tool list (219k input tokens for "reply OK",
+  10k with `--disable apps --disable plugins`), so ccx disables both, and Codex's own sub-agents, for provider runs.
+  Codex warns "Model metadata for `deepseek-flash` not found" and uses fallback metadata; the runs still finish.
+- **Smaller APIs** (Anthropic-compatible endpoints for Claude Code, read 2026-10-24; none run for real):
+  - Kimi: `https://api.moonshot.ai/anthropic`, `kimi-k3.1-pro`; prices not readable (the table is rendered by script),
+    so ccx refuses it until you add a price;
+  - GLM (Z.ai): `https://api.z.ai/api/anthropic`; GLM-5.3-Flash $0.15 / $0.03 / $0.50, GLM-5.3 $1.4 / $0.26 / $4.4;
+  - Qwen (Alibaba Model Studio, pay as you go): `https://{WorkspaceId}.<region>.maas.aliyuncs.com/apps/anthropic`, so
+    ccx reads it from `DASHSCOPE_ANTHROPIC_BASE_URL`; qwen3.7-plus $0.4 / $1.6, qwen3.7-max $2.5 / $7.5 (Singapore,
+    no cache price given: counted at the input price);
+  - OpenRouter: `https://openrouter.ai/api`; no default model, give `--model` and its price.
+  - Their pages set the key as `ANTHROPIC_AUTH_TOKEN`; ccx runs Claude Code with `--bare`, which reads only
+    `ANTHROPIC_API_KEY` (sent as `x-api-key`). DeepSeek accepts that; for the others it is not yet confirmed.
 - **Gemini pricing** (ai.google.dev/pricing), per 1M tokens (input / cached / output):
   - 3.5-flash-lite $0.30 / $0.03 / $2.50;
   - 3.8-flash $0.75 / $0.075 / $3.75 (until 2026-12-31);
@@ -388,8 +423,9 @@ must edit stops with `needs_write` and hands the decision back to you.
 you use in a terminal, not a web chat.
 
 **Which tools work?** Claude Code and Codex CLI can lead or work, tested on a real machine in both directions.
-DeepSeek through Claude Code is calibrated on real tasks and only works as a sub-agent; Gemini CLI is adapted
-(community-supported), only works as a sub-agent, and has not run for real yet. One adapter per CLI (`ccx/agents/`);
+DeepSeek through Claude Code is calibrated on real tasks and only works as a sub-agent; DeepSeek through Codex has run
+for real (one small read-only task). DeepSeek Harness (`dsh`) and Gemini CLI are adapted (community-supported), only
+work as sub-agents, and have not run for real yet. Kimi, GLM, Qwen and OpenRouter are configured, untested for real. One adapter per CLI (`ccx/agents/`);
 `ccx agents` lists what each can do; adding one is described in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 **Can two models discuss directly?** One way, for now: `ccx ask` for a second opinion, `ccx resume` to follow up in

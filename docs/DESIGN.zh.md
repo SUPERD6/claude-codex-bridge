@@ -24,7 +24,9 @@
    子智能体必须按 JSON schema 交回结果，主智能体只读这一段压缩结果，完整日志留在硬盘上。
    - 会话 ID 一出现就写盘，崩溃或超时后可以 `ccx resume`。
    - 失败分为 ok / quota / auth / timeout / error 五类：额度用完时换另一个智能体重试一次；`blocked` 或 `failed` 时在同一会话里升一档。
-   - “模型来源”（provider）＝同一个工具换一个 API，比如 DeepSeek 通过 Claude Code，密钥只从环境变量读取。
+   - “模型来源”（provider）＝同一个工具换一个 API，比如 DeepSeek 通过 Claude Code，或通过 Codex（用 `-c model_providers.<id>` 覆盖），密钥只从环境变量读取。
+   - DeepSeek 自成一家，不管走哪条路：`dsh`（DeepSeek Harness：`dsh --profile headless --patch <run>/dsh.patch.yml --json -`，模型写在 patch 里，沙箱用 `DSH_PERMISSION_MODE`）、`deepseek`、`deepseek-codex` 的厂商都是 deepseek，所以审查和换边把它们当成 Claude、Codex 之外的“另一家”，`ccx report` 把它们算成一条 DeepSeek 线。
+   - 按 token 付费的智能体（provider 和 `dsh`）有 `daily_usd` 上限；没有价格的模型拒绝运行；除非你在配置里指定，它们不会被选为额度用完时的接班者或审查者。
 2. **选模型**（技能 task-routing，`ccx/learn.py` 接入）：
    - 按 5 项打分得到难度 b，用 IRT 公式 P = 1/(1+e^(−1.2(θ−b))) 算每个“智能体:模型:强度”的成功率。
    - 按“每成功一次的花费”和级联规则挑出起点和升级路线。

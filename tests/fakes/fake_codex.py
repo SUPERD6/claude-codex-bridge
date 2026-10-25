@@ -17,7 +17,9 @@ log = os.environ.get("FAKE_LOG")
 if log:
     with open(log, "a", encoding="utf-8") as f:
         f.write(json.dumps({"agent": "codex", "argv": argv, "prompt": prompt,
-                            "depth": os.environ.get("CCX_DEPTH")}) + "\n")
+                            "depth": os.environ.get("CCX_DEPTH"),
+                            "deepseek_key": os.environ.get("DEEPSEEK_API_KEY"),
+                            "openai_key": bool(os.environ.get("OPENAI_API_KEY"))}) + "\n")
 
 if argv[:2] == ["login", "status"]:
     print("Logged in using ChatGPT"); sys.exit(0)
