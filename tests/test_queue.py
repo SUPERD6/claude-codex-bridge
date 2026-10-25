@@ -44,12 +44,28 @@ class TestQueue(AdapterEnv):
 
     def test_resume_puts_interrupted_items_back(self):
         a = self.q("add", "x", "--brief", "do x", "--minutes", "5")
-        self.q("run")
+        self.q("run", env={"FAKE_STATUS": "blocked"})                     # not finished
         from ccx import queue as wq
         wq.update(self.work, a["id"], status="doing")                    # as if the machine had stopped mid-run
         out = self.q("resume")
         self.assertEqual(out["results"][0]["status"], "done")
         self.assertEqual(out["restored"][a["id"]], "resumed")            # its own session was picked up again
+
+    def test_resume_does_not_redo_a_piece_that_had_finished(self):
+        # its run finished, but `q run` was killed before the queue heard (the item still says doing)
+        a = self.q("add", "x", "--brief", "do x", "--minutes", "5")
+        from ccx import queue as wq
+        wq.update(self.work, a["id"], status="doing")
+        r = self.ccx("run", "--from", "claude", "--to", "claude", "--label", f"q:{a['id']}", "--new", "--no-ab",
+                     "--force", "do x")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        n = len(self.calls())
+        out = self.q("resume")
+        self.assertEqual(out["restored"][a["id"]], "finished")
+        self.assertEqual(len(self.calls()), n)                           # nothing run again
+        item = self.q("ls")["items"][0]
+        self.assertEqual(item["status"], "done")
+        self.assertGreater(item["cost_usd"], 0)
 
     def test_failed_check_fails_the_item(self):
         self.q("add", "x", "--brief", "do x", "--minutes", "5", "--check", "python -c \"import sys; sys.exit(1)\"")
