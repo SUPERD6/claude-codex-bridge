@@ -78,7 +78,8 @@ class TestDiscuss(DiscussEnv):
     def test_dry_run_runs_nothing(self):
         out = self.j("discuss", "--with", "codex,claude,gemini", "--rounds", "2", "--dry-run", "x?")
         self.assertEqual(out["calls_max"], 5)
-        self.assertIsNone(out["usd_max_est"])                     # no read runs recorded yet
+        self.assertGreater(out["usd_max_est"], out["usd_min_est"])   # modelled: no discuss turns recorded yet
+        self.assertEqual(out["models"]["claude"], "sonnet medium")
         self.assertFalse(any("[ccx discuss" in (c.get("prompt") or "") for c in self.calls()))
 
     def test_show_list_and_the_page(self):
@@ -124,6 +125,68 @@ class TestUnits(unittest.TestCase):
             self.assertAlmostEqual(got["usd"], 0.03)
             with self.assertRaises(ValueError):
                 discuss.load(p, "../x")
+
+
+# discuss-r1 (2026-10-24, docs/research/2026-10-24-seven-cores-ab.md): codex proposed and judged, claude criticised,
+# T2, 3 rounds allowed, agreed in round 2 after 5 turns; it cost $0.283 while the old estimate said $0.036.
+R1_QUESTION = ("A Python function receives prices as strings like \"12.34\" and must return their total as an integer "
+               "number of cents. Which conversion should we use, and why?\n(A) int(float(p) * 100)\n"
+               "(B) round(float(p) * 100)\n(C) int(Decimal(p) * 100)\n(D) split the string at \".\" and parse the "
+               "integer and fractional parts\nConsider at least \"0.29\", \"1.005\", \"-3.10\" and inputs with "
+               "more than two decimals. Give one recommendation and what to do with inputs that have more than two "
+               "decimals.")
+R1_TURNS = [("codex", "gpt-6.1-sol:medium", 0.065827), ("claude", "sonnet:medium", 0.047316),
+            ("codex", "gpt-6.1-sol:medium", 0.059653), ("claude", "sonnet:medium", 0.050003),
+            ("codex", "gpt-6.1-sol:medium", 0.06023)]
+R1_USD = 0.283029
+
+
+class TestEstimate(unittest.TestCase):
+    def setUp(self):
+        import tempfile
+        self.tmp = tempfile.TemporaryDirectory()
+        self.p = Paths(Path(self.tmp.name))
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_replay_r1_within_two_times(self):
+        e = discuss.estimate(self.p, ["codex", "claude"], 3, tier="T2", question=R1_QUESTION)
+        self.assertEqual(e["calls_max"], 7)
+        self.assertEqual(e["models"], {"codex": "gpt-6.1-sol medium", "claude": "sonnet medium"})
+        self.assertTrue(all(v.startswith("modelled") for v in e["basis"].values()))
+        self.assertLessEqual(e["usd_min_est"], R1_USD)
+        for est in (e["usd_max_est"], e["usd_min_est"]):
+            self.assertTrue(0.5 <= R1_USD / est <= 2, (est, R1_USD))
+
+    def test_measured_turns_on_the_same_rung_win(self):
+        self.p.state.mkdir(parents=True)
+        with open(self.p.ledger, "w", encoding="utf-8") as f:
+            for i, (a, rung, usd) in enumerate(R1_TURNS):
+                f.write(json.dumps({"run_id": f"r{i}", "label": f"discuss:x:{i}", "to": a, "mode": "read",
+                                    "rungs": [f"{a}:{rung}"], "ae_usd": usd}) + "\n")
+            # cheap read runs elsewhere (the old basis) and another rung do not count
+            f.write(json.dumps({"run_id": "o", "label": "fix x", "to": "codex", "mode": "read",
+                                "rungs": ["codex:gpt-6.1-sol:medium"], "ae_usd": 0.001}) + "\n")
+        e = discuss.estimate(self.p, ["codex", "claude"], 3, tier="T2", question=R1_QUESTION)
+        self.assertIn("measured: mean of 3", e["basis"]["codex"])
+        codex, claude = (sum(u for a, _, u in R1_TURNS if a == n) / k for n, k in (("codex", 3), ("claude", 2)))
+        self.assertAlmostEqual(e["usd_max_est"], 4 * codex + 3 * claude, places=3)
+        self.assertTrue(0.5 <= R1_USD / e["usd_max_est"] <= 2)
+        t1 = discuss.estimate(self.p, ["codex", "claude"], 3, tier="T1", question=R1_QUESTION)
+        self.assertTrue(all(v.startswith("modelled") for v in t1["basis"].values()))
+        self.assertEqual(t1["models"], {"codex": "gpt-6-luna low", "claude": "haiku low"})
+        self.assertLess(t1["usd_max_est"], e["usd_max_est"] / 5)
+
+    def test_provider_has_its_own_model_and_unknown_price_is_said(self):
+        from ccx.config import load_config
+        cfg = load_config(self.p)
+        self.assertEqual(discuss.rung(cfg, "deepseek", "T1"), ("deepseek-flash", "low"))
+        e = discuss.estimate(self.p, ["codex", "claude", "kimi"], 1, tier="T1", cfg=cfg)
+        self.assertIsNone(e["usd_max_est"])                       # kimi has no price in the defaults
+        self.assertIn("kimi", e["basis"]["unknown"])
+        with self.assertRaises(ValueError):
+            discuss.rung(cfg, "nobody", "T1")
 
 
 if __name__ == "__main__":
