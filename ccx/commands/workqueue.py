@@ -36,6 +36,8 @@ def cmd_q(a) -> int:
                     minutes=a.minutes, mode=a.mode, kind=a.kind, to=a.to, budget_usd=a.budget)
         _out(it)
     elif a.q_cmd in ("ls", "tree"):
+        from ..recover import sweep
+        sweep(paths())                  # as `ccx stats` does: a run whose ccx was killed shows as interrupted
         q = wq.load(root)
         if a.q_cmd == "tree":
             print("\n".join(wq.tree(q)) or "(queue empty)")
@@ -55,6 +57,32 @@ def cmd_q(a) -> int:
     elif a.q_cmd in ("run", "resume"):
         return _run(a, root)
     return 0
+
+
+def _cost(rec: dict) -> float:
+    return sum(a.get("ae_usd") or 0 for a in rec.get("attempts", [])) + ((rec.get("review") or {}).get("usd") or 0)
+
+
+def item_runs(p, root: Path, it: dict) -> list[dict]:
+    """The ccx runs this item started since it last went 'doing' (label q:<id>, this project), oldest first: the
+    first run and a review's fix round. Found from the runs folder because the item hears of them only when
+    run() returns, which a killed `q run` never reaches."""
+    from .. import ledger
+    import time as _t
+    if not p.runs.exists():
+        return []
+    since = _t.strftime("%Y%m%d-%H%M%S", _t.localtime(float(it.get("updated") or it.get("added") or 0) - 5))
+    out = []
+    for d in sorted(p.runs.iterdir()):
+        if d.name < since or not (d / "run.json").exists():
+            continue
+        try:
+            rec = ledger.read_record(d / "run.json")
+            if rec.get("label") == f"q:{it['id']}" and Path(rec.get("cwd") or "").resolve() == root.resolve():
+                out.append(rec)
+        except (OSError, ValueError):
+            continue
+    return out
 
 
 def restored(old_run: str, rec: dict) -> str:
@@ -91,7 +119,7 @@ def _one(it: dict, root: Path, caller: str, p, cfg) -> dict:
                           check=it.get("check"), resume_run=resume, budget_usd=left, **kw), p)
         res = compact(rec)
         status = res.get("status")
-        cost = sum(a.get("ae_usd") or 0 for a in rec.get("attempts", [])) + ((rec.get("review") or {}).get("usd") or 0)
+        cost = _cost(rec)
         fields = {"run": rec["run_id"], "agent": rec["to"], "summary": (res.get("summary") or "")[:300],
                   "cost_usd": round(float(it.get("cost_usd") or 0) + cost, 6), "resume": False}
         pieces = wq.parse_split(rec.get("result")) if status == "blocked" else None
@@ -121,12 +149,16 @@ def _run(a, root: Path) -> int:
     p = paths()
     cfg = load_config(p)
     caller = _caller(a.caller)
+    from ..recover import sweep
+    sweep(p)                # runs whose ccx was killed (with the whole `q run`): interrupted, their spend in the ledger
     if a.q_cmd == "resume":
         # in progress when the machine stopped: continue the same session where there is one, else start again
         q = wq.load(root)
         for it in q["items"].values():
             if it["status"] == "doing":
-                wq.update(root, it["id"], status="todo", resume=bool(it.get("run")))
+                spent = sum(_cost(r) for r in item_runs(p, root, it))     # never reached the item: run() didn't return
+                wq.update(root, it["id"], status="todo", resume=bool(it.get("run")),
+                          cost_usd=round(float(it.get("cost_usd") or 0) + spent, 6))
     done: list[dict] = []
     width = int(a.max or cfg["defaults"].get("max_parallel", 3))
     while True:
