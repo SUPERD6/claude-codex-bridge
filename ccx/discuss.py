@@ -215,6 +215,37 @@ TURN_CHARS = SUMMARY_CHARS + MAX_POINTS * POINT_CHARS    # what one turn adds to
 MEASURED = 20                                            # last discuss turns on the same rung that are averaged
 
 
+AUTO_TIER, LOW_TIER = "T2", "T1"
+OVER = 1.0          # projected share of a quota window at its reset above which that agent steps down
+
+
+def tiers(p: Paths, names: list[str], tier: str = "auto", quota: dict | None = None) -> tuple[dict, dict]:
+    """(agent -> tier, agent -> why). A tier given applies to all. `auto`: T2, except an agent whose subscription
+    quota is projected past 100% by its reset (ccx/quota.py): it talks at T1 (Claude on haiku, Codex on luna)."""
+    if tier != "auto":
+        return {n: tier for n in names}, {}
+    if quota is None:
+        from . import quota as qmod
+        try:
+            quota = qmod.pressure(p)["quota"]
+        except Exception:  # noqa: BLE001 — unreadable quota: no step down, and it says so
+            quota = {}
+    out, why = {}, {}
+    for n in names:
+        x = quota.get(n)
+        if x is not None and x > OVER:
+            out[n], why[n] = LOW_TIER, f"quota projected at {x:.0%} by its reset: {LOW_TIER}"
+        else:
+            out[n] = AUTO_TIER
+            why[n] = AUTO_TIER + (f" (quota projected at {x:.0%})" if x is not None
+                                  else " (no quota reading: pay per token, or not read yet)")
+    return out, why
+
+
+def _tier_of(tier: str | dict, agent: str) -> str:
+    return tier.get(agent, AUTO_TIER) if isinstance(tier, dict) else tier
+
+
 def rung(cfg: dict, agent: str, tier: str) -> tuple[str, str]:
     """(model, effort) of `agent` at `tier`; a provider (deepseek, kimi ...) has no tier row: its own model."""
     spec = ((cfg.get("tiers") or {}).get(tier) or {}).get(agent)
@@ -244,7 +275,7 @@ def _modelled(p: Paths, cfg: dict, agent: str, model: str, chars: int) -> float 
     return learn.price_usd(p, agent, model, u)
 
 
-def estimate(p: Paths, names: list[str], rounds: int, *, tier: str = "T2", cfg: dict | None = None,
+def estimate(p: Paths, names: list[str], rounds: int, *, tier: str | dict = "T2", cfg: dict | None = None,
              question: str = "", context: str = "") -> dict:
     """What a discussion may cost, turn by turn: price of each agent's model at `tier` x (start-up overhead +
     question + the points passed so far), for the longest talk (every round, then the judge) and the shortest
@@ -254,7 +285,7 @@ def estimate(p: Paths, names: list[str], rounds: int, *, tier: str = "T2", cfg: 
     rl = roles(names)
     seq = [r for _ in range(rounds) for r in ("proposer", "critic")] + ["judge"]
     base = len(question) + min(len(context), 4000)
-    rungs = {a: rung(cfg, a, tier) for a in set(rl.values())}
+    rungs = {a: rung(cfg, a, _tier_of(tier, a)) for a in dict.fromkeys(rl.values())}
     seen = {a: _measured(p, a, *rungs[a]) for a in rungs}
     usd, calls = [], {}
     for k, role in enumerate(seq):
@@ -264,7 +295,7 @@ def estimate(p: Paths, names: list[str], rounds: int, *, tier: str = "T2", cfg: 
     short = [usd[0], usd[1], usd[-1]]
     known = all(x is not None for x in usd)
     missing = sorted({rl[r] for r, x in zip(seq, usd) if x is None})
-    return {"roles": rl, "tier": tier, "calls_max": len(seq), "calls": calls,
+    return {"roles": rl, "tier": {a: _tier_of(tier, a) for a in rungs}, "calls_max": len(seq), "calls": calls,
             "models": {a: f"{m} {e}" for a, (m, e) in rungs.items()},
             "usd_max_est": round(sum(usd), 4) if known else None,
             "usd_min_est": round(sum(short), 4) if known else None,
@@ -275,7 +306,7 @@ def estimate(p: Paths, names: list[str], rounds: int, *, tier: str = "T2", cfg: 
 
 
 def run(p: Paths, question: str, names: list[str], *, rounds: int = MAX_ROUNDS, caller: str = "the lead",
-        context: str = "", cwd: Path | None = None, tier: str = "T2", runner=None) -> dict:
+        context: str = "", cwd: Path | None = None, tier: str | dict = "T2", runner=None) -> dict:
     """Talk it through. `runner(agent, brief, label, resume=None) -> run record` is delegate.run by default (tests
     pass a fake); `resume` is the turn's run id when ccx asks once more, in the same session, for the format."""
     rounds = max(1, min(MAX_ROUNDS, int(rounds)))
@@ -288,8 +319,8 @@ def run(p: Paths, question: str, names: list[str], *, rounds: int = MAX_ROUNDS, 
         cfg = load_config(p)
 
         def runner(agent, text, label, resume=None):   # the rung named: a provider has no tier row
-            model, effort = rung(cfg, agent, tier)
-            return delegate_run(Request(to=agent, brief=text, tier=tier, model=model, effort=effort, mode="read",
+            model, effort = rung(cfg, agent, _tier_of(tier, agent))
+            return delegate_run(Request(to=agent, brief=text, tier=_tier_of(tier, agent), model=model, effort=effort, mode="read",
                                         cwd=cwd, caller="ccx-discuss", resume_run=resume,
                                         escalate=False, fallback=False, review="off", allow_subagents=False,
                                         ephemeral=True, keep_session=True, label=label), p)
@@ -297,6 +328,7 @@ def run(p: Paths, question: str, names: list[str], *, rounds: int = MAX_ROUNDS, 
     rl = roles(names)
     d = {"id": did, "ts": time.time(), "question": question.strip(), "context": context.strip()[:4000],
          "caller": caller, "cwd": str(cwd), "rounds": rounds, "roles": rl, "judge_independent": len(names) > 2,
+         "tiers": {n: _tier_of(tier, n) for n in names},
          "state": "running", "turns": [], "usd": 0.0}
     save(p, d)
 
@@ -377,7 +409,7 @@ def run(p: Paths, question: str, names: list[str], *, rounds: int = MAX_ROUNDS, 
 
 def view(d: dict) -> dict:
     """What `ccx discuss` prints and the page lists: no briefs, just the talk and its outcome."""
-    return {k: d.get(k) for k in ("id", "state", "question", "roles", "rounds", "agreed", "judge_independent",
+    return {k: d.get(k) for k in ("id", "state", "question", "roles", "tiers", "rounds", "agreed", "judge_independent",
                                   "result", "usd", "error", "ts", "ended", "cwd")} | \
         {"turns": [{k: t.get(k) for k in ("round", "role", "agent", "model", "summary", "points", "usd", "run_id",
                                           "verdict", "format_retry", "unparsed") if k in t}
