@@ -14,7 +14,7 @@ import socket
 import subprocess
 import time
 
-from . import ledger
+from . import ledger, recover
 from .config import Paths
 from .runners import kill_tree, pid_alive
 
@@ -64,16 +64,13 @@ def stop(p: Paths, run_id: str, wait: float = 15.0) -> dict:
         if rec.get("state") == "running":
             out["why"] = "stop requested; its ccx process has not closed the run yet (it will within a second)"
     else:
-        if not ledger.claim_final(run_dir, "ccx stop"):
-            rec = ledger.load_run(p, run_id)
+        closed = recover.close_dead(p, run_id, "user_stopped", "stopped",
+                                    "stopped by `ccx stop` (its ccx process was already gone)", "ccx stop")
+        rec = closed or ledger.load_run(p, run_id)
+        if not closed:
             out = {"run_id": run_id, "stopped": rec.get("state") != "running", "state": rec.get("state"),
                    "kind": rec.get("kind"), "killed": killed, "closed_by": "its own ccx process"}
         else:
-            rec = ledger.load_run(p, run_id)
-            rec.update(state="stopped", kind="user_stopped", ok=False, stop_requested=True,
-                       error="stopped by `ccx stop` (its ccx process was already gone)")
-            ledger.write_record(run_dir, rec)
-            ledger.append(p, rec)
             out = {"run_id": run_id, "stopped": True, "state": "stopped", "kind": "user_stopped", "killed": killed,
                    "closed_by": "ccx stop (its ccx process was gone)"}
     if out.get("kind") == "user_stopped" and rec.get("session_id"):

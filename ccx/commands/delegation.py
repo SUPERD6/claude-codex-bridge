@@ -279,6 +279,8 @@ def cmd_plan(a) -> int:
 
 def cmd_resume(a) -> int:
     p = paths()
+    from ..recover import sweep
+    sweep(p)                            # closes it as interrupted first if its ccx process died mid-run
     req = Request(to="codex", brief=_brief(a), tier=a.tier, resume_run=a.run_id,
                   caller=_caller(a.caller), escalate=False if a.no_escalate else None,
                   model=a.model, effort=a.effort, budget_usd=a.budget)

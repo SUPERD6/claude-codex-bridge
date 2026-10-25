@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .. import ledger, report
+from .. import ledger, recover, report
 from ..config import SETTINGS, daily_cap, load_config, paths, set_setting
 from ..delegate import compact, undo
 from .common import _out, lead_session_id, provider_agents
@@ -57,6 +57,7 @@ def cmd_undo(a) -> int:
 
 def cmd_show(a) -> int:
     p = paths()
+    recover.sweep(p)                    # a run whose ccx process is gone shows as interrupted, not running
     rec = ledger.load_run(p, a.run_id)
     if a.full:
         _out(rec)
@@ -68,6 +69,7 @@ def cmd_show(a) -> int:
 
 
 def cmd_stats(a) -> int:
+    recover.sweep(paths())              # count runs whose ccx process died, with what they spent
     if a.summary:
         p = paths()
         s = report.summarize(p, report.collect(p, a.days))
