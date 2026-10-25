@@ -42,12 +42,13 @@ the installed `ccx` (`tests/smoke_installed.py`).
 
 ## Adding an adapter for another agent CLI
 
-Gemini CLI is the worked example; follow it.
+Copy `ccx/agents/_template.py` (a working skeleton with notes) and `tests/fakes/fake_template.py`; Gemini CLI
+(`ccx/agents/gemini.py`) is a real example.
 
-1. `ccx/runners.py`: write `<agent>_invocation(...)` (the argv for a headless run, resume and permission flags) and
-   `parse_<agent>(stdout, stderr, rc, last_file)` (status, JSON result, usage in the four buckets of `usage_dict`,
-   session id, failure kind). Register both in `BUILDERS` and `PARSERS`, and the checked version in
-   `TESTED_VERSIONS`.
+1. `ccx/agents/<agent>.py`: the argv for a headless run (resume and permission flags) and the parser of its output
+   (status, JSON result, usage in the four buckets of `usage_dict`, session id, failure kind), in an `ADAPTER` with
+   `support="community"` and the version you checked in `tested_version`. Add the name to `NAMES` in
+   `ccx/agents/__init__.py`.
 2. `ccx/config.py`: add the agent to `DELEGATE_AGENTS`.
 3. `config/tiers.toml`: a model and effort per tier, and `[permissions.<agent>]` for `read` and `write`.
 4. `skills/task-routing/data/priors.toml`: rungs (model, effort, ability) and prices, with the source of the prices.

@@ -68,6 +68,56 @@ def codex_lead_sandbox(config_text: str, hub, windows: bool | None = None) -> tu
                     f"Add to config.toml (profiles may override it; not checked on a real run outside Windows):\n{fix}")
 
 
+def version_drift(version_out: str, tested: str, official: bool) -> tuple[str, str] | None:
+    """(state, detail) when the installed CLI's major.minor differs from the version the adapter's flags were checked
+    against (I8), None when they match. Patch releases are taken as compatible."""
+    import re
+    got = re.search(r"(\d+)\.(\d+)", version_out or "")
+    want = re.search(r"(\d+)\.(\d+)", tested or "")
+    if not got or not want:
+        return "Unknown", f"could not read a version from {(version_out or '').strip()[:60]!r}"
+    if got.groups() == want.groups():
+        return None
+    have = got.group(0)
+    if official:
+        return "WARN", (f"installed {have}, flags checked against {tested}: run the release check (H15: a real "
+                        "read, write and resume run on this version) before relying on it")
+    return "WARN", (f"installed {have}, adapter written for {tested}: not verified on this version (community "
+                    "adapter; flags or output may have changed)")
+
+
+# OpenAI's Claude Code plugin (github.com/openai/codex-plugin-cc v1.0.6, read 2026-10-25): marketplace "openai-codex",
+# plugin "codex"; its hooks.json adds SessionStart, SessionEnd and an optional Stop review gate of its own.
+CODEX_PLUGIN = "codex@openai-codex"
+
+
+def codex_plugin(home) -> tuple[str, str] | None:
+    """(state, detail) when the official codex-plugin-cc is installed or enabled in Claude Code (J8), else None.
+    Its hooks run commands of its own, next to ccx's; what could go wrong is ccx's own hook being there twice."""
+    from pathlib import Path
+    home = Path(home)
+
+    def js(f: Path) -> dict:
+        try:
+            d = json.loads(f.read_text(encoding="utf-8"))
+            return d if isinstance(d, dict) else {}
+        except (OSError, ValueError):
+            return {}
+    installed = any(str(k).startswith(CODEX_PLUGIN) for k in (js(home / "plugins" / "installed_plugins.json")
+                                                               .get("plugins") or {}))
+    settings = js(home / "settings.json")
+    enabled = (settings.get("enabledPlugins") or {}).get(CODEX_PLUGIN)
+    if not installed and not enabled:
+        return None
+    ours = sum("mem delta" in json.dumps(g) for g in (settings.get("hooks") or {}).get("SessionStart") or [])
+    state = "WARN" if ours > 1 else "info"
+    return state, (f"OpenAI's codex-plugin-cc is {'enabled' if enabled else 'installed (not enabled)'}: its "
+                   "SessionStart/SessionEnd/Stop hooks run beside ccx's, which is there "
+                   f"{'once' if ours == 1 else f'{ours} times (run `ccx sync --apply`)' if ours else 'not at all'}. "
+                   "Using both together is not tested yet; its Stop review gate, if you turn it on, reviews with "
+                   "Codex at every stop on top of ccx's review")
+
+
 def doctor(p: Paths) -> bool:
     rows: list[tuple[str, str, str]] = []
 
@@ -93,6 +143,8 @@ def doctor(p: Paths) -> bool:
         can = ", ".join(k for k, v in ad.capabilities().items() if v)
         add(f"{agent} CLI" + ("" if official else " (optional)"), "ok" if rc == 0 else ("FAIL" if official else "WARN"),
             f"{ver} (flags checked against {ad.tested_version}; {ad.support}; {ad.vendor}; {can})")
+        if rc == 0 and (drift := version_drift(ver, ad.tested_version, official)):
+            add(f"{agent} version", *drift)
         if not ad.login_argv:
             add(f"{agent} login", "Unknown", "ccx can't check this tool's login; its first run will tell")
             continue
@@ -155,6 +207,8 @@ def doctor(p: Paths) -> bool:
     except Exception:  # noqa: BLE001
         has = False
     add("Claude SessionStart hook", "ok" if has else "missing", str(sj))
+    if (cp := codex_plugin(claude_home())):
+        add("codex-plugin-cc", *cp)
     ct = codex_home() / "config.toml"
     has = ct.exists() and "ccx:begin hooks" in ct.read_text(encoding="utf-8")
     add("Codex SessionStart hook", "ok (trust once via /hooks)" if has else "missing", str(ct))

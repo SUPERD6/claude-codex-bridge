@@ -395,7 +395,7 @@ Checked 2026-10-24 (stars and dates from the GitHub API; they change). Details, 
 
 | Project | What it does | Stars · last push · license | How ccx differs |
 |---|---|---|---|
-| [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) | OpenAI's official Claude Code plugin (2026-03-30): Codex reviews, delegated tasks, moving a session to Codex, background jobs | 34.5k · 2026-07 · Apache-2.0 | It is Claude → Codex only and doesn't pick models or record cost. ccx works both ways and adds model choice by cost, a ledger and the lead's own cost. They can be used side by side. |
+| [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) | OpenAI's official Claude Code plugin (2026-03-30): Codex reviews, delegated tasks, moving a session to Codex, background jobs | 34.5k · 2026-07 · Apache-2.0 | It is Claude → Codex only and doesn't pick models or record cost. ccx works both ways and adds model choice by cost, a ledger and the lead's own cost. Meant to work side by side (different commands and hooks), but not tested together yet; `ccx doctor` says when it is installed. |
 | [PAL MCP](https://github.com/BeehiveInnovations/pal-mcp-server) (`clink`) | An MCP server bringing many model providers into one CLI; `clink` starts another CLI as a sub-agent | 11.8k · 2025-12 · Apache-2.0 | PAL offers more models and tools via API keys; ccx uses the two CLIs' subscriptions, picks by success odds and cost, and calibrates on real outcomes. |
 | [CCB](https://github.com/SeemSeam/claude_codex_bridge) (`SeemSeam/claude_codex_bridge`) | A visible multi-agent terminal workspace for 16 CLI families, with message queues and take-over | 3.6k · 2026-10 · AGPL-3.0 | CCB is about watching and steering agents together; ccx is headless delegation focused on cost. A different project despite the similar name. |
 | [sendbird/cc-plugin-codex](https://github.com/sendbird/cc-plugin-codex) | A Codex plugin that calls Claude Code (the reverse of the official plugin) | 226 · 2026-10 · Apache-2.0 | Codex → Claude only. |
@@ -432,7 +432,14 @@ you use in a terminal, not a web chat.
 DeepSeek through Claude Code is calibrated on real tasks and only works as a sub-agent; DeepSeek through Codex has run
 for real (one small read-only task). DeepSeek Harness (`dsh`) and Gemini CLI are adapted (community-supported), only
 work as sub-agents, and have not run for real yet. Kimi, GLM, Qwen and OpenRouter are configured, untested for real. One adapter per CLI (`ccx/agents/`);
-`ccx agents` lists what each can do; adding one is described in [CONTRIBUTING.md](CONTRIBUTING.md).
+`ccx agents` lists what each can do; adding one is described in [CONTRIBUTING.md](CONTRIBUTING.md) (start from
+`ccx/agents/_template.py` and `tests/fakes/fake_template.py`).
+
+**Official or community?** *Official* (Claude Code, Codex CLI): each release runs real read, write and resume tasks
+on the version in the adapter's `tested_version` (the release check). *Community* (Gemini CLI, `dsh`, new adapters):
+written from the CLI's `--help` and docs and tested with a stand-in only. `ccx doctor` warns when the installed
+version's major.minor differs from `tested_version`: for an official one, run the release check before relying on
+it; for a community one it means not verified on that version.
 
 **Can two models discuss directly?** One way, for now: `ccx ask` for a second opinion, `ccx resume` to follow up in
 the same sub-session, `ccx send` into a live Codex session. For a costly decision, `ccx discuss` runs up to three rounds between models from different vendors (one proposes,
