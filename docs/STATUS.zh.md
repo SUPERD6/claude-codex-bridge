@@ -18,15 +18,18 @@
 | J6 这一页压到一页 | ✅ PR #10 |
 | J0 基线、H11 第一批、E8 两向交接、F9 开/关、J7 | ✅ PR #6（[报告](research/2026-10-24-h11-e8-f9-measurements.zh.md)）：主智能体每次请求中位数 35.2 万 token / $0.11（7 天），每次约 5.5 万固定开销；只有主智能体信 ccx 的 check 时，派活才每个小任务少 1 次请求；F9 没启动过子智能体；J7 开关已加，还没有推翻数据 |
 | 按那份报告修的：交接按文件存（并行会话不互相覆盖）、编号列表兜底计划、交接附这段对话的 ccx 运行、节省有实测就用实测否则标明是模型、agent-delegate 写明验收已过就别重跑 | ✅ PR #15 |
+| J12 真机跑一次 `ccx uninstall --apply` 再装回（报告 5c）；修了：换行保持原样、Codex 块放回原位、卸载后提示怎么装回技能 | ✅ PR #17 |
 | J8–J10 官方 codex-plugin-cc 共存、同类项目、改名备选（只改文档，[调研](research/landscape.zh.md)） | ✅ PR #4；共存方案未实现、未实测；改名等用户拍板 |
 | G1 `ccx ui`（本机只读实时页面）+ `ui.lang` | ✅ PR #7；`ccx stop` 接着做（适配器已合并） |
 | I1–I4 适配器按家收拢、按厂商判断“另一家”、额度换边和审查者按数据选 | ✅ PR #11——新接口：`ccx.agents.get(名字)` → `Adapter`（build/parse、vendor、support、tested_version、capabilities()）；`ccx.agents.vendor()`、`others()`；`ccx agents` 以 JSON 列出 |
 | J4 一键换新会话（`ccx fresh`） | ✅ PR #12 |
 | J5 给主智能体自己的档位建议（`ccx lead --suggest`、看板一行） | ✅ PR #13 |
+| J11 按职责拆 `ccx/delegate.py`，行为不变 | ✅ PR #14 |
+| F10–F14 自带子智能体：按花费和额度限制、Claude 给 Agent 工具、有独立部分时明确要求用子智能体 | ✅ PR #18——上限还没被真实运行触发过（子智能体很少启动：PR #6） |
 
 ## 接下来三件
 
-1. 在新适配器上做 F10–F14（按 PR #6 的实测缩小范围）；J11 是 PR #14。
+1. H5–H7 + I6 共享记忆用起来（F10–F14 之后）。
 2. J1–J6 合并一周后用 `scripts/eval/j0_baseline.py real --days 7` 对比 PR #6 里的真实会话基线；每周抽查 5 条自动判定，J7 才有推翻比例。
 3. 然后是统一顺序里剩下的：H5–H7 + I6 共享记忆、H3–H4 + I7 `ccx discuss`、H8–H9、`ccx stop`、I5、H1–H2、H12、H14–H16、I8，最后开源发布。
 
@@ -35,5 +38,5 @@
 **真机** = 在一台真实的 Windows 电脑上、用已登录的命令行工具跑过；**模拟** = 只有用模拟命令行工具的测试。
 
 - **真机**：两个方向的委派（只读和可写）、`--check`、独立审查、失败类型、`--bg`、`ccx send`、自动续接、杀掉后 `task resume`、Claude 侧的记忆、接入（`sync --apply`）、记账和 `ccx report`、DeepSeek 作为模型来源、E8 两个方向的交接（各一次）、`ccx lead --breakdown` / `--cache`、`ccx ui`（在 Edge 里打开过；数据是假 CLI 上跑出的 ccx 运行，也只读地开过一次真实 hub；其他浏览器和系统没开过）。
-- **只有模拟**：worktree、`ccx batch`、额度用完换另一边、队列和岗位、`--fork`、Gemini CLI、`ccx uninstall --apply`、真实的额度中断。
+- **只有模拟**：worktree、`ccx batch`、额度用完换另一边、队列和岗位、`--fork`、Gemini CLI、真实的额度中断。
 - **没校准**：选模型的先验（真实对错记录太少）、`ccx trial` 里 10 分钟的查看时间、`--breakdown` 每一项的 token 估算（总数是实测的）。

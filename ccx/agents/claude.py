@@ -58,11 +58,22 @@ def parse_claude(stdout: str, stderr: str, rc: int, _last: Path | None = None) -
         out.session_id = data.get("session_id")
         u = data.get("usage") or {}
         cc = u.get("cache_creation") or {}
-        out.usage = usage_dict(fresh=u.get("input_tokens", 0) or 0,
-                               write=u.get("cache_creation_input_tokens", 0) or 0,
-                               write_1h=cc.get("ephemeral_1h_input_tokens", 0) or 0,
-                               cached=u.get("cache_read_input_tokens", 0) or 0,
-                               out=u.get("output_tokens", 0) or 0)
+        fresh, write = u.get("input_tokens", 0) or 0, u.get("cache_creation_input_tokens", 0) or 0
+        cached, outp = u.get("cache_read_input_tokens", 0) or 0, u.get("output_tokens", 0) or 0
+        w1h = cc.get("ephemeral_1h_input_tokens", 0) or 0
+        mu = data.get("modelUsage") or {}
+        if mu:
+            # `usage` is the last request of the main conversation only; `modelUsage` is the whole session, its
+            # own sub-agents (Agent tool) included (checked 2026-10-24, Claude Code 2.1.309: usage 11.6k cache
+            # writes, modelUsage 19.9k with one sub-agent; total_cost_usd matches modelUsage)
+            tot = lambda k: sum(int((v or {}).get(k, 0) or 0) for v in mu.values())  # noqa: E731
+            if tot("cacheCreationInputTokens") + tot("cacheReadInputTokens") + tot("inputTokens") \
+                    >= fresh + write + cached:
+                extra_w = max(0, tot("cacheCreationInputTokens") - write)
+                fresh, cached, outp = tot("inputTokens"), tot("cacheReadInputTokens"), tot("outputTokens")
+                w1h += extra_w if w1h == write else 0       # Claude Code writes the 1-hour cache throughout
+                write += extra_w
+        out.usage = usage_dict(fresh=fresh, write=write, write_1h=w1h, cached=cached, out=outp)
         out.cost_usd = data.get("total_cost_usd")
         out.result = data.get("structured_output") or _json_from_text(str(data.get("result", "")))
         out.raw_text = str(data.get("result", ""))
@@ -90,5 +101,5 @@ ADAPTER = Adapter(
     context_file="CLAUDE.md", start_hook="settings.json hooks SessionStart (+ UserPromptSubmit for `ccx lead --hint`)",
     permissions="--permission-mode / --allowedTools (config [permissions.claude])",
     can_lead=True, can_work=True, can_resume=True, builtin_subagents=True, quota_readable=True,
-    live_cost=False, turn_hook=True,
+    live_cost=True, turn_hook=True,          # its sub-agents' spend: <session>/subagents/*.jsonl, live (F12)
 )

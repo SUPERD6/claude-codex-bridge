@@ -24,7 +24,7 @@ from pathlib import Path
 
 MAX_AGE_DAYS = 7
 TIMEOUT = 30
-UA = "task-routing/1 (+https://github.com/SUPERD6/claude-codex-bridge)"
+UA = "task-routing/1 (+https://github.com/SUPERD6/relayline)"
 
 EPOCH_ZIP = "https://epoch.ai/data/benchmark_data.zip"
 # file in the zip -> (benchmark name, score column)

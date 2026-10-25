@@ -247,6 +247,36 @@ H13 让 ccx 在没人判定时自己记“大概对”（`soft`）。如果检�
 
 当前真实账本：自动结论 18 条，**还没有一条被重新判定过**，所以推翻比例暂时算不出来，学习照常。要拿到这个数，需要抽查一些自动判为“对”的运行并 `ccx verify`（见第 7 节）。
 
+## 5c. J12：`ccx uninstall --apply` 在真机上跑一次（2026-10-24，用户同意后）
+
+**做法**：全部用用户实际 hook 指向的那份 ccx（主仓库的 `ccx.py`，安装相关代码和 main 一致）执行。动手前把 Claude 的 `settings.json`、Codex 的 `config.toml` 和三处技能目录的清单存了一份到本机临时目录，之后逐项对比。
+
+**1. 预演（不带 `--apply`）列出 8 项**：
+- Claude `settings.json`：删 ccx 的 SessionStart hook；
+- Codex `config.toml`：删 ccx 的 hook 块（`# >>> ccx:begin hooks` … `# <<< ccx:end hooks`）；
+- 共享技能目录 `Shared/skills`：删 agent-delegate 链接；task-checkpoint、task-routing、task-split 删链接并恢复 `skill-backups` 里 10-23 备份的原始副本；
+- Claude、Codex 各自的 `skills/agent-delegate` 链接。
+
+**2. 执行后检查**：
+| 检查 | 结果 |
+|---|---|
+| Claude `settings.json` 里没有 ccx 的 hook | ✓；用户自己的两个 hook（共享规则刷新）原样保留，其余设置项不变 |
+| Codex `config.toml` 里没有 ccx 的块 | ✓；仍能按 TOML 解析，除 ccx 块外内容一字不差 |
+| 技能链接已移除或按备份恢复 | ✓；agent-delegate 三处都没了，task-* 换回了备份的原始文件夹 |
+| 用户自己的配置完好 | 内容完好，但**发现 bug①**：整个 `config.toml` 的换行从 LF 变成了 CRLF（Windows 下按文本模式写） |
+
+**3. 装回来**：`ccx sync` 预演 → `ccx sync --apply`：加回 Claude SessionStart hook、新增 H10 的 UserPromptSubmit 每轮提示 hook、加回 Codex hook 块、跑一遍个人配置同步。**发现 bug②**：技能没有回来——`sync` 不负责 ccx 自带的技能，要再跑 `ccx skills install --replace`（预演 → `--apply`，会先把恢复出来的 task-* 原始副本再备份一次）。**发现 bug③**：Codex 的 hook 块被追加到了文件末尾，排到用户自己的两个 hook 后面。Codex 是按位置记 hook 信任的（`session_start:0:0`、`session_start:1:0`），顺序一换，用户已经信任过的 hook 也会要求重新信任。
+
+**4. 收尾**：重新加回的 ccx 块和原来一模一样，所以我把动手前保存的 `config.toml` 原样放回（逐字节一致，LF 换行、原来的顺序），Codex 已有的信任记录继续有效，**这次不需要在 `/hooks` 里重新信任**。`ccx doctor` 全部 ok，`ccx sync` 预演显示没有要改的。最终状态：Claude `settings.json` = 原来 + H10 每轮提示 hook；Codex `config.toml` = 原来；技能链接 = 原来（`skill-backups` 里多了一份 task-* 旧副本的备份）。
+
+**修复**（本 PR）：①写这些文件时保持原有换行（新文件用 LF）；②`uninstall --apply` 结束时提示装回需要的三条命令（`ccx sync --apply`、`ccx skills install --replace --apply`、`ccx doctor`）；③`uninstall` 记下 ccx 块后面那一行，之后 `sync` 把块放回那一行前面。新测试：用户 hook 排在 ccx 块后面的配置，LF 和 CRLF 两种，卸载再装回后逐字节一致（修之前两种都失败）。
+
+**如果以后要在 Codex 里重新信任**（比如块的位置变了）：打开 Codex（桌面版或终端里的 `codex`），输入 `/hooks`，在列表里找到状态是“未信任 / needs review”的 SessionStart hook（命令里有 `ccx.py mem delta --as codex`，以及你自己的 `refresh_personal_rules.py`），逐个选中后选“信任 / Trust”。
+
+**顺带发现**：Codex 会给它运行过的每个目录写一条 `[projects.'…'] trust_level = "trusted"`，这次评测的临时目录留下了约 25 条（`…\Temp\ccx-h11-*`、`ccx-f9-*`、`ccx-e8-*`）。按项目规则不手改 Codex 的配置，没有清理；不影响使用，用户想清理可以删掉这些 `[projects.'c:\users\…\appdata\local\temp\ccx-…']` 段落。
+
+**没验证的**：“真实额度用完后换另一边”按约定只在额度自然快用完时做，这次没做；Claude 端新加的每轮提示 hook 装上后已在本会话实际触发（“This conversation re-reads about 528k tokens every turn …”）。
+
 ## 6. 局限
 
 - **任务太小、太容易**：两臂全部做对，所以“做对率”和“返工”这次没有区分度（续接 0 次、派完主智能体自己改文件 0 次、子任务 check 失败 0 次）。省不省主要取决于自己做要几次请求：这些任务自己做 3 次就够，派出去最少也要 2 次，能省的空间最多 1 次。更大的任务（自己做要 10 次以上请求）才可能看出更大的差别。

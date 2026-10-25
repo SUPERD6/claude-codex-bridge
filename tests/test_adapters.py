@@ -122,8 +122,11 @@ class TestBackgroundAndSend(AdapterEnv):
         self.assertEqual(out["state"], "started")
         f = self.hub / "ccx" / "runs" / out["run_id"] / "run.json"
         for _ in range(400):                 # up to 40 s: the detached process starts slowly under full-suite load
-            if f.exists() and json.loads(f.read_text())["state"] == "finished":
-                break
+            try:
+                if f.exists() and json.loads(f.read_text())["state"] == "finished":
+                    break
+            except (ValueError, OSError):    # caught mid-replace by the run writing it (Windows): look again
+                pass
             time.sleep(0.1)
         log = f.parent / "bg.log"
         why = (f.read_text() if f.exists() else "no run.json") + "\n" + (log.read_text() if log.exists() else "no bg.log")
@@ -311,7 +314,7 @@ class TestStartupAndHeartbeat(AdapterEnv):
     def test_claude_slim_start(self):
         self.j("run", "--from", "codex", "--to", "claude", "--tier", "T2", "x")
         a = self.argv()
-        self.assertEqual(a[a.index("--tools") + 1], "Read,Grep,Glob,Edit,Write,Bash")
+        self.assertEqual(a[a.index("--tools") + 1], "Read,Grep,Glob,Edit,Write,Bash,Agent")   # F12: its own sub-agents
         self.assertIn("--exclude-dynamic-system-prompt-sections", a)
         self.assertIn("--strict-mcp-config", a)                  # no MCP tool schemas by default
         self.assertNotIn("--disable-slash-commands", a)          # shared skills stay available

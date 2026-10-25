@@ -1,6 +1,6 @@
 """A throwaway hub with real ccx runs on the stand-in CLIs (tests/fakes), then `ccx ui` on it.
 
-    python scripts/ui_demo.py [--dir FOLDER] [--export FILE] [--no-serve]
+    python scripts/ui_demo.py [--dir FOLDER] [--export FILE] [--no-serve] [--lang zh|en] [--port N] [--plain]
 
 For screenshots and for trying the page without spending tokens or showing anyone's real work. Every run below is
 an ordinary `ccx run` / `ccx q run`; only the CLIs behind them are fakes. One Codex run hangs for a few minutes and
@@ -26,6 +26,8 @@ def main() -> int:
     ap.add_argument("--export", help="also write a static snapshot here")
     ap.add_argument("--no-serve", action="store_true")
     ap.add_argument("--lang", choices=["zh", "en"])
+    ap.add_argument("--port", help="serve on this port (default: a random free one)")
+    ap.add_argument("--plain", action="store_true", help="no markup-in-a-title run (for README screenshots)")
     a = ap.parse_args()
     t = Path(a.dir or tempfile.mkdtemp(prefix="ccx-ui-demo-"))
     for sub in ("hub", "codex", "claude"):
@@ -87,7 +89,8 @@ def main() -> int:
         ccx(shop, "verify", done["run_id"], "--ok", "1")
     ccx(shop, *w, "--to", "gemini", "--tier", "T1", "--review", "off", "--label", "Docs",
         "Write docstrings for inventory.py", **L)
-    ccx(shop, *w, "--to", "codex", "--tier", "T1", "--review", "off", "--label", "<img src=x onerror=alert(1)> Logging",
+    ccx(shop, *w, "--to", "codex", "--tier", "T1", "--review", "off", "--label",
+        "Logging" if a.plain else "<img src=x onerror=alert(1)> Logging",
         "Add logging (title with markup, to show it stays text)", **L)
     ccx(shop, *w, "--to", "codex", "--tier", "T1", "--review", "off", "--bg", "--label", "load_config",
         "Write load_config(path) that reads a JSON file", FAKE_STATUS="hang", FAKE_HANG_S="600", **L)
@@ -129,7 +132,8 @@ def main() -> int:
         print(ccx(shop, "ui", "--export", a.export))
     if a.no_serve:
         return 0
-    return subprocess.call([sys.executable, str(ROOT / "ccx.py"), "ui", "--no-open"], cwd=shop, env=env)
+    port = ["--port", a.port] if a.port else []
+    return subprocess.call([sys.executable, str(ROOT / "ccx.py"), "ui", "--no-open", *port], cwd=shop, env=env)
 
 
 if __name__ == "__main__":

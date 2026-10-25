@@ -251,6 +251,57 @@ probable overturned later"); once 5+ were re-judged and over 20% overturned, new
 routing (still recorded and shown; the card says so). Real ledger now: 18 probable verdicts, **none re-judged yet**,
 so there is no rate yet and learning goes on. Getting one needs spot checks (section 7).
 
+## 5c. J12: `ccx uninstall --apply` run once for real (2026-10-24, with the user's go-ahead)
+
+**How:** every step with the ccx the user's hooks actually call (the main checkout's `ccx.py`, whose install code is
+the same as main). Before touching anything, Claude's `settings.json`, Codex's `config.toml` and a listing of the
+three skill folders were saved to a local scratch folder and compared afterwards.
+
+**1. Dry run (no `--apply`), 8 actions:** remove ccx's SessionStart hook from Claude `settings.json`; remove ccx's
+block (`# >>> ccx:begin hooks` … `# <<< ccx:end hooks`) from Codex `config.toml`; in `Shared/skills` remove the
+agent-delegate link, and for task-checkpoint / task-routing / task-split remove the link and restore the user's
+own copies from `skill-backups` (backed up 10-23); remove Claude's and Codex's own `skills/agent-delegate` links.
+
+**2. After `--apply`:**
+
+| Check | Result |
+|---|---|
+| no ccx hook in Claude `settings.json` | ✓; the user's own two hooks (shared-rule refresh) and every other setting unchanged |
+| no ccx block in Codex `config.toml` | ✓; still valid TOML, everything else word for word the same |
+| skill links removed or restored from backup | ✓; agent-delegate gone in all three places, task-* back to the backed-up folders |
+| the user's own config intact | content yes, but **bug ①**: the whole `config.toml` went from LF to CRLF line endings (text-mode write on Windows) |
+
+**3. Back in:** `ccx sync` dry run → `ccx sync --apply`: Claude SessionStart hook back, H10's per-turn
+UserPromptSubmit hook new, Codex block back, the personal-config sync run. **Bug ②:** the skills did not come back —
+`sync` does not handle ccx's own skills; `ccx skills install --replace` (dry run, then `--apply`; it backs up the
+restored task-* copies again) is needed. **Bug ③:** the Codex block was appended at the end, after the user's own
+two hooks. Codex keeps hook trust by position (`session_start:0:0`, `session_start:1:0`), so the swap would make
+already-trusted hooks ask for trust again.
+
+**4. Finish:** the re-added ccx block was identical to the old one, so I put the saved `config.toml` back byte for
+byte (LF, original order): Codex's existing trust records still match, so **no re-trust in `/hooks` was needed this
+time**. `ccx doctor` all ok; a `ccx sync` dry run has nothing to change. End state: Claude `settings.json` = before +
+H10's per-turn hook; Codex `config.toml` = before; skill links = before (plus one more backup of the old task-*
+copies in `skill-backups`).
+
+**Fixed** (this PR): ① these files keep their own line endings (new files LF); ② `uninstall --apply` ends with the
+three commands to put things back (`ccx sync --apply`, `ccx skills install --replace --apply`, `ccx doctor`);
+③ `uninstall` remembers the line after ccx's block and `sync` puts the block back in front of it. New test: a config
+with the user's hook after the block, LF and CRLF, comes back byte for byte after uninstall + sync (both failed
+before the fix).
+
+**If Codex ever asks to trust the hooks again** (e.g. the block moved): open Codex (desktop, or `codex` in a
+terminal), type `/hooks`, find the SessionStart hooks marked untrusted / needs review (the one running
+`ccx.py mem delta --as codex`, and your own `refresh_personal_rules.py`), select each and choose Trust.
+
+**Also found:** Codex writes `[projects.'…'] trust_level = "trusted"` for every folder it ran in; this evaluation's
+scratch folders left about 25 of them (`…\Temp\ccx-h11-*`, `ccx-f9-*`, `ccx-e8-*`). The project rules say not to
+hand-edit Codex's config, so they stay; harmless, and the user can delete those `[projects.'c:\users\…\appdata\
+local\temp\ccx-…']` sections.
+
+**Not checked:** "switch to the other side when a real quota runs out" waits for a quota that runs out by itself;
+the new per-turn Claude hook fired in this very conversation once installed ("This conversation re-reads about 528k tokens every turn …").
+
 ## 6. Limits
 - **Tasks too small and easy:** both arms always right, so correctness and rework could not differ (0 follow-ups, 0
   lead edits after delegating, 0 failed sub-run checks). Self needs 3 requests, delegating at least 2: at most one

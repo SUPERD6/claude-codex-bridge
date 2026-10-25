@@ -1,66 +1,89 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.svg">
-  <img alt="ccx：Claude Code 和 Codex 互相派活；一次真实运行：选了 luna/low，一次完成，已验收，$0.0023" src="docs/assets/banner-light.svg" width="100%">
+  <img alt="relayline（命令 ccx）：几个编码智能体互为主智能体和子智能体；Claude Code、Codex、Gemini CLI；一次真实运行：选了 Codex luna/low，一次完成，已验收，$0.0023" src="docs/assets/banner-light.svg" width="100%">
 </picture>
 
 <p align="center">
-  <a href="https://github.com/SUPERD6/claude-codex-bridge/actions/workflows/test.yml"><img alt="tests" src="https://github.com/SUPERD6/claude-codex-bridge/actions/workflows/test.yml/badge.svg"></a>
+  <a href="https://github.com/SUPERD6/relayline/actions/workflows/test.yml"><img alt="tests" src="https://github.com/SUPERD6/relayline/actions/workflows/test.yml/badge.svg"></a>
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776AB">
   <img alt="dependencies: standard library only" src="https://img.shields.io/badge/dependencies-stdlib%20only-1f7a3a">
   <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/license-MIT-0f7c80"></a>
-  <a href="https://github.com/SUPERD6/claude-codex-bridge/releases"><img alt="release" src="https://img.shields.io/github/v/release/SUPERD6/claude-codex-bridge"></a>
+  <a href="https://github.com/SUPERD6/relayline/releases"><img alt="release" src="https://img.shields.io/github/v/release/SUPERD6/relayline"></a>
 </p>
 
-<p align="center"><a href="README.md">English</a> · 中文 · <a href="https://superd6.github.io/claude-codex-bridge/zh/">网站</a></p>
+<p align="center"><a href="README.md">English</a> · 中文 · <a href="https://superd6.github.io/relayline/zh/">网站</a></p>
 
-> **仍在开发中（v0.4，2026 年 10 月）。** 它每天在一台 Windows 电脑上真实使用，两个方向、终端和桌面端都跑通了。还没做完的：
-> - **还没有真实的“省了多少”数据。** 两周带验收结论的真实使用还没积累，选模型的初始参数未校准；下面的数字都是单次真实运行。
-> - **只用模拟命令行测过的：** 待办队列（`ccx q`）、长期岗位、worktree 和 `ccx batch`、真实额度用完时换另一边、`ccx uninstall --apply`。Gemini CLI 从没真跑过。macOS 和 Linux 只在 CI 里跑过。
-> - **还没做的：** 本机实时界面（`ccx ui`），以及 ccx 写进会话的几句提示语的中英文切换。上面的网站还没发布。
->
-> 旧记录（CHANGELOG、docs/STATUS）里的提交号指的是公开前压缩掉的私有历史。欢迎提问题和反馈；哪些功能验证过、怎么验证的，见 [STATUS](docs/STATUS.zh.md)。
+# relayline
 
-**让 Claude Code 和 Codex 互相派活。** ccx 为每一块工作挑一个最便宜、又大概率能做完的模型，交给另一个工具去跑，由主智能体验收，并记下花了多少——贵的主智能体就不用再干便宜的活。谁当主都行；也可以派给 Gemini CLI，或通过 Claude Code 用 DeepSeek。
+**让几个编码智能体互相当主智能体和子智能体：共享记忆、按难度分工、每块活有人验收、花了多少有账可查。**
+Claude Code 和 Codex 谁当主都行；Gemini CLI、通过 Claude Code 用的 DeepSeek 也能接活。命令是 `ccx`，只用 Python 标准库。
 
 ```bash
-pipx install git+https://github.com/SUPERD6/claude-codex-bridge
+pipx install git+https://github.com/SUPERD6/relayline
 ccx setup                    # 向导：每一步都说明，改东西前先问
 ccx run --to codex --mode read "用三行总结 README.md"
 ```
 
-<p align="center"><img alt="演示动画：ccx route 选出 codex:gpt-6-luna:low，ccx run 一次完成，ccx verify 记下结论" src="docs/assets/demo.svg" width="100%"></p>
+<p align="center"><img alt="演示动画：ccx route 选出 codex:gpt-6.1-sol:medium，ccx run 一次完成并由 ccx 重跑验收命令，ccx verify 记下结论" src="docs/assets/demo.svg" width="100%"></p>
 
-## 在真机上实测
+> **仍在开发中（v0.4，2026 年 10 月）。** 每天在一台 Windows 电脑上真实使用，两个方向、终端和桌面端都跑通了。
+> - **省没省钱，第一批实测结论是“看情况”**（见下一节）：只在主智能体信 ccx 的验收结果时，小任务才省；一周的正式对比（`ccx trial`）还在收集。选模型的初始参数还没校准。
+> - **只用模拟命令行测过的：** 待办队列（`ccx q`）、长期岗位、worktree 和 `ccx batch`、真实额度用完时换另一边。Gemini CLI 从没真跑过。macOS 和 Linux 只在 CI 里跑过。
+> - **还没做的：** 两个模型多轮讨论（`ccx discuss`）、`ccx stop`、更完整的共享记忆（见 [STATUS](docs/STATUS.zh.md)“接下来”）。网站还没发布。
+>
+> 旧记录（CHANGELOG、docs/STATUS）里早期的提交号指的是公开前压缩掉的私有历史。哪些功能验证过、怎么验证的，见 [STATUS](docs/STATUS.zh.md)。
 
-| 项目 | 结果 |
-|---|---|
-| 启动一个 Claude 子智能体（每次请求的固定上下文） | 用 ccx 的精简启动：4.6 万 → **1.36 万** token |
-| 一个小的只读任务，Claude Code → Codex | **一次完成**，luna/low，**$0.0023** |
-| 记账和 Codex 自己的周额度对照 | 每 1% 额度折算 **$2.8–4.4**，4 个时段都稳定 |
-| 测试 | 139 个，Linux、Windows、macOS × Python 3.11–3.13 |
+## 七件事
 
-1.0 之前会换成两周日常使用的真实数字（派出去到底省了多少）。
-
-## 能做什么
-
-| | |
-|---|---|
-| **两个方向都行**——Claude Code 当主、Codex 干活，或者反过来；终端和桌面端都可以。 | **自动选模型**——5 个问题打出难度 → 选智能体、模型、强度并给出成功率；每次 `ccx verify` 都会让它更准。 |
-| **启动省钱**——子智能体精简启动；一小时内同一个子会话接着用，缓存不会失效。 | **共享记忆**——开局只推对方新写的几行；还有两边都能看到的项目层。 |
-| **断了能续**——额度用完、崩溃或关了窗口：`ccx task resume` 接着原来的会话做。 | **有账可查**——每次运行的 token 和花费，以及派出去到底省了多少的看板。 |
+| | 做什么 | 现在的状态 |
+|---|---|---|
+| **1. 互为主子** | Claude Code 当主、Codex 干活，或者反过来；Gemini CLI、DeepSeek（通过 Claude Code）可以接活。每家一个适配器，`ccx agents` 列出每家能做什么、测过哪个版本、官方还是社区。 | 两个方向真机跑通；Gemini 只有模拟测试 |
+| **2. 两个模型直接对话** | `ccx ask` 让另一家快速给个第二意见；`ccx resume` 在同一个子会话里追问；`ccx send` 把消息发进正在运行的 Codex 会话。 | 这三个真机可用；多轮讨论 `ccx discuss` 还没做 |
+| **3. 共享记忆** | 个人层（你的 hub：记忆、技能、MCP、账本）和项目层（`.ccx/`：背景、日志、交接、断点）。开局 hook 只推对方新写的几行；`ccx handoff` 换主智能体接力，`ccx fresh` 把长对话交给同一工具的新对话。 | 真机可用；更完整的共享记忆在做 |
+| **4. 分工合作** | 5 个问题打出难度 → 选智能体、模型、强度并给出成功率；算下来自己做更划算或该先拆，就直接说不派。`ccx batch` / `ccx q` 并行，长任务断了 `ccx task resume` 接着做。 | 选模型真机可用，但先验没校准；队列只有模拟测试 |
+| **5. 省和高效** | 子智能体精简启动；`ccx lead` 看主智能体每轮重读多少（`--breakdown` 拆开看、`--cache` 找缓存断在哪、`--suggest` 给主智能体自己的档位建议）；`ccx sum` 只把大段输出里要紧的给主智能体。 | 工具都在；省多少取决于主智能体怎么用（见实测） |
+| **6. 不掉质量** | ccx 自己重跑验收命令（`--check`）；另一家的模型独立审查改动（`--review`）；每次记对错（`ccx verify --ok 0 --reason wrong`），没人判的 12 小时后按证据记“大概对/错”；`ccx trial` 做一周正式对比。 | 真机可用；自动结论还没被抽查过 |
+| **7. 不丢可控** | 改配置先预演、真改前备份；`ccx undo` 撤回某次运行的改动；`--mode read` / `--worktree` 不动工作区；子智能体不能再派子智能体；`ccx ui` 在本机只读地显示谁在干什么、什么等你拍板。 | 真机可用；`ccx ui` 只在 Edge 里开过 |
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture-dark.svg">
-  <img alt="谁当主都行；ccx 把简报交给另一个工具在后台跑、交回 JSON；开局 hook 从你的 hub 带来新记忆、交接和没做完的任务；项目的 .ccx 文件夹放背景、日志、inbox、断点和撤回快照" src="docs/assets/architecture-light.svg" width="100%">
+  <img alt="架构图：Claude Code、Codex、Gemini CLI 都连到 ccx，谁当主都可以把简报交给另一家在后台跑、交回 JSON；ccx 选模型、重跑验收、请另一家审查、记对错和花费；下面是个人层（hub：记忆、技能、MCP、账本）、项目层（.ccx：背景、日志、交接、断点、撤回快照）和本机只读页面 ccx ui" src="docs/assets/architecture-light.svg" width="100%">
 </picture>
+
+## 实测（2026-10-24，ccx 0.4.0）
+
+全部来自真机上的真实运行，方法、原始表格和局限见[实测报告](docs/research/2026-10-24-h11-e8-f9-measurements.zh.md)。**有利的和不利的都列在这里。**
+
+| 问题 | 结果 | 把握 |
+|---|---|---|
+| 小任务派给 Codex，主智能体省没省？（8 个小 Python 任务，同一任务自己做 / 派出去配对） | **看主智能体信不信 ccx 的验收结果。** sonnet 当主：每个任务少 1 次请求（3 → 2，6/6，p = 0.031），总花费持平。haiku 当主：派完还会自己再跑一遍测试，请求数不变，总花费反而多（中位数 $0.0024 → $0.0056，p = 0.008）。两种都**慢约 16–18 秒**。做对率两边都是 14/14。 | 对“几分钟的小任务”有把握；样本小 |
+| 换到真实的长对话主智能体会怎样？ | 少 1 次请求 ≈ 少读约 22 万 token ≈ 按 Opus 缓存读价每个小任务**约省 $0.04，多等约 16 秒**；主智能体不省请求时，只是多花约 $0.003。 | **外推，不是测量** |
+| 钱到底花在哪？（本机真实会话，7 天） | Claude 主智能体每次请求中位数 **35.2 万 token、$0.11**，缓存读占 99%；同期 ccx 子任务一共 $0.42。所以最该省的是主智能体每轮重读的上下文。 | 读数，有把握 |
+| Codex 自带的子智能体会被用上吗？ | gpt-6-luna low 上 **5/5 次都没启动**，连明确要求的那次也没有；开 / 关的花费和用时差别在噪声以内。更高档的模型没测。 | 只对 luna low 有把握 |
+| 只凭交接，接手方能说对“做到哪、下一步”吗？ | 受控场景 3/3 说对（含中途被杀）；真实长会话第一次说错（计划读成了过期状态），修好后说对。 | 真实会话只有 1 个 |
+| 精简启动一个 Claude 子智能体 | 每次请求的固定上下文 4.6 万 → **1.36 万** token | 单次实测 |
+| 记账和 Codex 自己的周额度对照 | 每 1% 额度折算 **$2.8–4.4**，4 个时段都稳定 | 4 个时段 |
+| 测试 | 268 个，Linux、Windows、macOS × Python 3.11–3.13 | 只证明逻辑，不证明真机 |
 
 设计说明：[docs/DESIGN.zh.md](docs/DESIGN.zh.md) · 进度：[docs/STATUS.zh.md](docs/STATUS.zh.md) · 决策记录：[docs/DECISIONS.md](docs/DECISIONS.md) · 变更：[CHANGELOG.md](CHANGELOG.md)
 
+**和同名项目不是一个东西：** relayline 原名 `claude-codex-bridge`，但不是 [CCB](https://github.com/SeemSeam/claude_codex_bridge)（`SeemSeam/claude_codex_bridge`，同时看、同时指挥多个代理的可见终端工作区），也不是 OpenAI 官方的 [codex-plugin-cc](https://github.com/openai/codex-plugin-cc)（只把活从 Claude Code 交给 Codex）。见[同类项目对比](#同类项目对比)。
+
 ## 实时看：`ccx ui`
 
-`ccx ui` 在本机打开一个只读页面：有什么等你处理（红框 = 要你拍板，橙框 = 要你 review）、谁在干什么（每个智能体一列，新加的自动多一列）、额度按现在的速度够不够。点任何一块，右边显示原因、依据和可以复制的 `ccx` 命令。它只读 ccx 和两个工具本来就写下的文件，不调用任何模型；只监听 127.0.0.1，页面关掉一分钟后自己退出。`ccx ui --export 快照.html` 生成静态副本；`ccx config set ui.lang zh|en` 选语言。
+`ccx ui` 在本机打开一个只读页面：有什么等你处理（红框 = 要你拍板，橙框 = 要你 review）、谁在干什么（每个智能体一列，新加的自动多一列）、额度按现在的速度够不够。点任何一块，右边显示原因、依据和可以复制的 `ccx` 命令。它只读 ccx 和各工具本来就写下的文件，不调用任何模型；只监听 127.0.0.1，页面关掉一分钟后自己退出。`ccx ui --export 快照.html` 生成静态副本；`ccx config set ui.lang zh|en` 选语言。
 
-<img alt="ccx ui：一件任务画成组织图，每个干活的一列，右边是为什么要你拍板" src="docs/assets/ui/task-zh.png" width="100%">
+<img alt="ccx ui 总览：等你处理的 9 件事、现在的主智能体、两个项目和额度预测（演示数据）" src="docs/assets/ui/overview-zh.png" width="100%">
+
+<img alt="ccx ui 任务页：一件任务画成组织图，每个干活的一列，右边是为什么要你拍板（演示数据）" src="docs/assets/ui/task-zh.png" width="100%">
+
+<details><summary>英文界面、深色</summary>
+
+<img alt="ccx ui in English, dark theme: the same task page (demo data)" src="docs/assets/ui/task-en-dark.png" width="100%">
+
+</details>
+
+截图是用 `python scripts/ui_demo.py --plain` 生成的：临时 hub、模拟命令行跑出的真实 ccx 运行，不含任何人的真实工作。
 
 ## 它怎么工作（一个例子）
 
@@ -102,7 +125,7 @@ ccx run --to codex --mode read "用三行总结 README.md"
 **不克隆仓库**（技能和配置都打在包里）：
 
 ```bash
-pipx install git+https://github.com/<you>/claude-codex-bridge
+pipx install git+https://github.com/SUPERD6/relayline
 ccx init --hub <你的个人hub路径>
 ccx doctor
 ```
@@ -110,8 +133,8 @@ ccx doctor
 **从克隆的仓库装**（要改代码，或者想让 `git pull` 直接升级接进 hub 的技能）：
 
 ```powershell
-git clone https://github.com/<you>/claude-codex-bridge
-cd claude-codex-bridge
+git clone https://github.com/SUPERD6/relayline
+cd relayline
 .\install.ps1 -Hub <你的个人hub路径>     # Windows；macOS/Linux：./install.sh <hub路径>
 ```
 
@@ -133,12 +156,18 @@ ccx selftest        # 每个已安装的智能体用最便宜的模型跑一个�
 ccx run "任务" --from claude --files 3 --coupling cross --clarity goal   # 按打分自动选（推荐）
 ccx run "任务" --model gpt-6.1-sol --effort high                       # 自己指定模型和强度
 ccx run "任务" --tier T2                                               # 按固定分级
+ccx run "任务" --check "pytest -q" --review on                        # ccx 自己重跑验收；另一家的模型独立审查改动
      [--mode read] [--check CMD] [--review auto|on|off] [--worktree] [--task <id> --step <n>] [--minutes 60] [--no-fallback] [--force] [--no-ab]
 ccx verify <run_id> --ok 1|0 [--note "说明"]  # 主智能体验收结论：校准选模型/拆分，并关掉 checkpoint 这一步
 ccx resume <run_id> "追问"          # 在同一个子会话里继续；中断后也用它接着做
 ccx task status | resume <任务>     # 长任务：一条命令接着做中断的那一步（额度用完时自动换另一边）
 ccx handoff --by claude --to codex "做完了什么/定了什么/接下来做什么" [--next "任务5" ...]   # 换主智能体接力
 ccx lead                                     # 主会话每一轮要重读多少 token、花多少钱
+ccx lead --breakdown | --cache | --suggest   # 每轮重读的东西逐项拆开 / 缓存断在哪 / 主智能体自己该用哪档
+ccx sum -- python -m pytest -q               # 跑命令，只给主智能体看要紧的（测试只看失败），完整输出留在 .ccx/sum/
+ccx fresh [--launch]                         # 长对话交给同一工具的新对话：从这段对话的文件生成交接
+ccx trial start | stop | report              # 一周正式对比：一半可派的活主智能体自己做，一半派出去，同样口径量
+ccx agents                                   # 每家命令行：厂商、能做什么、测过的版本、官方还是社区
 ccx verify <run_id> --ok 0 --reason wrong     # 你的判断（没人判断的，12 小时后按证据自动记“大概率对/错”）
 ccx handoff --from-transcript codex --to claude   # 原主智能体写不了（额度用完）：从它的会话文件生成交接
                                                   # （先用代码提取；格式认不出时交给自动选出的子智能体整理，--no-model 不用模型）
@@ -236,7 +265,7 @@ ccx 没有的：可见的分屏界面、任务运行中追加指令、多家模�
 
 ## 常见问题
 
-**多一个智能体，不是更费 token 吗？** 只有很小的任务会，这时 ccx 会直接让你自己做（`delegated: false`）。其余的子智能体用比主智能体便宜的模型、精简启动；`ccx report` 用你自己的运行算出差多少，大约每 10 个任务里会有 1 个让主智能体自己做，用来实测。
+**多一个智能体，不是更费 token 吗？** 有可能。实测里，小任务派出去只有在主智能体看到 ccx 的验收通过就直接答复时才省（每个任务少 1 次请求）；主智能体如果再自己跑一遍测试，就是多花子任务的钱、还多等十几秒。很小的任务 ccx 会直接让你自己做（`delegated: false`）。钱主要花在主智能体每轮重读自己的对话上，所以 `ccx lead`、`ccx sum`、`ccx fresh` 管的是这一块。`ccx report` 用你自己的运行算差多少；`ccx trial` 做一周的正式对比。
 
 **我用的是订阅，不是 API。** 花费按 API 价格折算，方便互相比较；看板也会显示每个工具的额度用在了哪里。一边额度用完了，任务会换到另一边。
 
@@ -246,7 +275,9 @@ ccx 没有的：可见的分屏界面、任务运行中追加指令、多家模�
 
 **它操作的是聊天网页吗？** 不是。两边调用的都是工作模式（`codex exec`、`claude -p`），也就是你在终端里用的那个智能体，不是网页聊天。
 
-**支持哪些工具？** Claude Code 和 Codex CLI，两个方向都在真机上测过。用 DeepSeek 的 Claude Code 已在真实任务上校准过；Gemini CLI 已经适配，但还没真跑过。
+**支持哪些工具？** Claude Code 和 Codex CLI 可以当主也可以当子，两个方向都在真机上测过。通过 Claude Code 用 DeepSeek 已在真实任务上校准过，只当子智能体；Gemini CLI 已经适配（社区维护），只当子智能体，还没真跑过。每家一个适配器（`ccx/agents/`），`ccx agents` 列出各自的能力；加一家的方法见 [CONTRIBUTING.zh.md](CONTRIBUTING.zh.md)。
+
+**两个模型能直接讨论吗？** 现在能做的是单向的：`ccx ask` 问一次第二意见，`ccx resume` 在同一个子会话里追问，`ccx send` 发消息进正在运行的 Codex 会话。两边多轮来回的 `ccx discuss` 还没做。
 
 ## 安全
 
@@ -258,4 +289,4 @@ ccx 会运行什么、能改什么、怎么报告问题：[SECURITY.zh.md](SECUR
 
 ## 许可
 
-MIT，见 [LICENSE](LICENSE)。目前是私有仓库，v1.0 之后公开。
+MIT，见 [LICENSE](LICENSE)。

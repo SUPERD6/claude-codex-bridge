@@ -1,5 +1,7 @@
 """Regenerate the static images in docs/assets/ (banner, architecture, social preview).
 
+Names only, no vendor logos or marks.
+
     python scripts/make_assets.py
 
 Light and dark versions come from one template, so they never drift apart. The social preview PNG needs Pillow
@@ -13,41 +15,46 @@ OUT = Path(__file__).resolve().parent.parent / "docs" / "assets"
 
 THEMES = {
     "light": dict(bg="#f6f7f9", card="#ffffff", line="#d8dce3", ink="#1c2129", muted="#5b6573", amber="#b4690e",
-                  teal="#0f7c80", ok="#1f7a3a", arrow="#8b95a3", on="#ffffff", soft="#eef1f5"),
+                  teal="#0f7c80", ok="#1f7a3a", arrow="#8b95a3", on="#ffffff", soft="#eef1f5", violet="#6e4fc4"),
     "dark": dict(bg="#0f1318", card="#161b22", line="#2b323c", ink="#e7ebf0", muted="#97a1ae", amber="#e3a14e",
-                 teal="#4cc3c6", ok="#58c27a", arrow="#6b7684", on="#0f1318", soft="#1d242d"),
+                 teal="#4cc3c6", ok="#58c27a", arrow="#6b7684", on="#0f1318", soft="#1d242d", violet="#a990ec"),
 }
 MONO = 'ui-monospace,SFMono-Regular,&quot;Cascadia Mono&quot;,Menlo,Consolas,monospace'
 SANS = '-apple-system,&quot;Segoe UI&quot;,Helvetica,Arial,sans-serif'
 
 
 def banner(c: dict) -> str:
+    chip = lambda x, y, w, label, fill: (  # noqa: E731
+        f'<rect x="{x}" y="{y}" width="{w}" height="40" rx="8" fill="{fill}"/>'
+        f'<text x="{x + w / 2}" y="{y + 27}" font-size="19" font-weight="600" fill="{c["on"]}" '
+        f'text-anchor="middle">{label}</text>')
     return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 340" width="1200" height="340" role="img" aria-labelledby="t d">
-  <title id="t">ccx — Claude Code and Codex hand work to each other</title>
-  <desc id="d">Claude Code hands a task to Codex; ccx routes it to a small model, Codex finishes in one attempt, and the result is verified at a cost of $0.0023 (a real run).</desc>
+  <title id="t">relayline (ccx): coding agents take turns as each other's lead and sub-agent</title>
+  <desc id="d">Claude Code, Codex and Gemini CLI each can lead or work. ccx picks a cheap model likely to finish, reruns the check, has another vendor review the diff, and records the cost. Example from a real run: Codex gpt-6-luna low, one attempt, $0.0023.</desc>
   <rect width="1200" height="340" rx="16" fill="{c['bg']}"/>
-  <g font-family="{MONO}">
-    <text x="64" y="122" font-size="84" font-weight="700" fill="{c['ink']}">ccx</text>
-  </g>
   <g font-family="{SANS}">
-    <text x="64" y="178" font-size="30" font-weight="600" fill="{c['ink']}">Claude Code ⇄ Codex,</text>
-    <text x="64" y="216" font-size="30" font-weight="600" fill="{c['ink']}">each other's sub-agent</text>
-    <text x="64" y="262" font-size="21" fill="{c['muted']}">The cheapest model likely to finish each piece —</text>
-    <text x="64" y="292" font-size="21" fill="{c['muted']}">checked, and with the receipt.</text>
+    <text x="64" y="118" font-size="76" font-weight="700" fill="{c['ink']}">relayline</text>
+    <text x="68" y="160" font-size="22" fill="{c['muted']}" font-family="{MONO}">command: ccx</text>
+    <text x="64" y="214" font-size="28" font-weight="600" fill="{c['ink']}">Coding agents as each other's</text>
+    <text x="64" y="250" font-size="28" font-weight="600" fill="{c['ink']}">lead and sub-agent</text>
+    <text x="64" y="294" font-size="20" fill="{c['muted']}">Shared memory · the cheapest model likely to finish ·</text>
+    <text x="64" y="320" font-size="20" fill="{c['muted']}">checked, reviewed, and with the receipt.</text>
   </g>
   <g font-family="{MONO}">
-    <rect x="640" y="32" width="512" height="276" rx="12" fill="{c['card']}" stroke="{c['line']}"/>
-    <rect x="672" y="58" width="300" height="44" rx="8" fill="{c['amber']}"/>
-    <text x="692" y="88" font-size="21" font-weight="600" fill="{c['on']}">Claude Code · lead</text>
-    <path d="M700 102 V 138 M692 130 L700 140 L708 130" stroke="{c['arrow']}" stroke-width="2.5" fill="none"/>
-    <text x="724" y="128" font-size="18" fill="{c['muted']}">route b=2 → luna · low · p 0.95</text>
-    <rect x="672" y="146" width="380" height="44" rx="8" fill="{c['teal']}"/>
-    <text x="692" y="176" font-size="21" font-weight="600" fill="{c['on']}">Codex · done, 1 attempt</text>
-    <path d="M700 190 V 226 M692 218 L700 228 L708 218" stroke="{c['arrow']}" stroke-width="2.5" fill="none"/>
-    <text x="724" y="216" font-size="18" fill="{c['muted']}">you check the diff</text>
-    <text x="672" y="268" font-size="24" font-weight="700" fill="{c['ok']}">✓ verified</text>
-    <text x="860" y="268" font-size="24" font-weight="700" fill="{c['ink']}">$0.0023</text>
-    <text x="990" y="268" font-size="17" fill="{c['muted']}">real run</text>
+    <rect x="640" y="28" width="512" height="284" rx="12" fill="{c['card']}" stroke="{c['line']}"/>
+    {chip(664, 50, 150, "Claude Code", c['amber'])}
+    {chip(822, 50, 110, "Codex", c['teal'])}
+    {chip(940, 50, 188, "Gemini CLI", c['violet'])}
+    <text x="664" y="124" font-size="16" fill="{c['muted']}">Claude Code or Codex leads · any of them works</text>
+    <rect x="664" y="140" width="464" height="40" rx="8" fill="{c['soft']}" stroke="{c['line']}"/>
+    <text x="682" y="167" font-size="18" fill="{c['ink']}">ccx route → codex · luna · low</text>
+    <text x="664" y="212" font-size="17" fill="{c['ok']}">✓ check rerun</text>
+    <text x="840" y="212" font-size="17" fill="{c['ok']}">✓ other-vendor review</text>
+    <text x="664" y="240" font-size="17" fill="{c['muted']}">shared memory · handoff · ccx ui</text>
+    <line x1="664" y1="258" x2="1128" y2="258" stroke="{c['line']}"/>
+    <text x="664" y="292" font-size="22" font-weight="700" fill="{c['ok']}">✓ verified</text>
+    <text x="840" y="292" font-size="22" font-weight="700" fill="{c['ink']}">$0.0023</text>
+    <text x="960" y="292" font-size="16" fill="{c['muted']}">one real run</text>
   </g>
 </svg>
 """
@@ -75,32 +82,41 @@ def _arrow(path, c, label=None, lx=0, ly=0, both=False):
 
 
 def architecture(c: dict) -> str:
-    # top: the two tools with ccx between them; bottom: where things live. Lines never cross.
+    # top: the agent CLIs; middle: ccx; bottom: personal layer, project layer, the local page. Lines never cross.
     parts = [
-        _box(40, 40, 290, 150, c, "Claude Code", ["lead or sub-agent", "terminal / desktop app"], c["amber"]),
-        _box(870, 40, 290, 150, c, "Codex", ["lead or sub-agent", "Gemini CLI: optional"], c["teal"]),
-        _box(450, 40, 300, 150, c, "ccx", ["route → agent:model:effort", "run → headless, JSON back",
-                                           "verify → routing learns", "writes the ledger"]),
-        _box(40, 300, 520, 200, c, "Your hub · personal, never in the repo",
-             ["memory snapshot + journal", "skills · MCP registry", "ledger · learned estimates",
-              "settings · archived sessions"]),
-        _box(640, 300, 520, 200, c, "Project · &lt;project&gt;/.ccx/",
-             ["context.md — every sub-agent reads it", "journal · inbox · handoff",
-              "tasks/ — checkpoints for resuming", "read by whichever agent works here"]),
-        _arrow("M330 100 H 448", c, "brief", 389, 90),
-        _arrow("M750 90 H 868", c, "run", 809, 80),
-        _arrow("M868 140 H 752", c, "JSON", 809, 162),
-        _arrow("M185 298 V 192", c),
-        _arrow("M420 298 V 245 H 1015 V 192", c),
-        f'<text x="718" y="236" font-size="14" fill="{c["muted"]}" font-family="{MONO}" text-anchor="middle">'
-        'to both tools: session-start hook · skills · MCP</text>',
+        _box(40, 40, 350, 130, c, "Claude Code", ["lead or worker", "DeepSeek through it: optional"], c["amber"]),
+        _box(425, 40, 350, 130, c, "Codex", ["lead or worker", "terminal / desktop app"], c["teal"]),
+        _box(810, 40, 350, 130, c, "Gemini CLI", ["worker (adapter; not run live)", "one adapter per CLI"],
+             c["violet"]),
+        _box(200, 250, 800, 150, c, "ccx", ["route → agent:model:effort · or “do it yourself”",
+                                            "run → headless, JSON back · check rerun · other-vendor review",
+                                            "verify / auto verdicts → routing learns · ledger · ccx lead"]),
+        _box(40, 480, 350, 140, c, "Personal layer · your hub",
+             ["memory snapshot + journal", "skills · MCP registry", "ledger · learned estimates"]),
+        _box(425, 480, 350, 140, c, "Project layer · .ccx/",
+             ["context.md · journal · inbox", "handoffs · checkpoints", "undo snapshots · queue"]),
+        _box(810, 480, 350, 140, c, "ccx ui · local page",
+             ["127.0.0.1, read-only, no model", "what waits for you · who works", "quota at this pace"]),
+        _arrow("M215 172 V 248", c, both=True),
+        _arrow("M600 172 V 248", c, both=True),
+        _arrow("M985 172 V 248", c, both=True),
+        f'<text x="600" y="215" font-size="14" fill="{c["muted"]}" font-family="{MONO}" text-anchor="middle" '
+        f'dx="110">brief ↓ · JSON ↑</text>',
+        _arrow("M300 402 V 478", c, both=True),
+        _arrow("M600 402 V 478", c, both=True),
+        _arrow("M900 402 V 478", c),
+        f'<text x="450" y="436" font-size="14" fill="{c["muted"]}" font-family="{MONO}" text-anchor="middle">'
+        'session-start hook:</text>',
+        f'<text x="450" y="456" font-size="14" fill="{c["muted"]}" font-family="{MONO}" text-anchor="middle">'
+        'new memory · handoffs</text>',
+        f'<text x="900" y="445" font-size="14" fill="{c["muted"]}" font-family="{MONO}" dx="12">reads files only</text>',
     ]
-    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 540" width="1200" height="540" role="img" aria-labelledby="t d">
-  <title id="t">How ccx connects Claude Code, Codex, your hub and the project</title>
-  <desc id="d">Either tool leads; ccx routes a brief to the other tool, runs it headless and returns a JSON result. A session-start hook brings new memory, handoffs and unfinished tasks from your personal hub; skills and MCP are linked into both tools; the project's .ccx folder holds context, journal, inbox, handoff, checkpoints and undo snapshots.</desc>
+    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" width="1200" height="660" role="img" aria-labelledby="t d">
+  <title id="t">How ccx connects the agent CLIs, your hub, the project and the local page</title>
+  <desc id="d">Claude Code, Codex and Gemini CLI each connect to ccx; any of them can lead and hand a brief to another, which runs headless and returns JSON. ccx routes, reruns the check, asks another vendor to review, records verdicts and costs. Below: the personal layer (your hub: memory, skills, MCP, ledger), the project layer (.ccx: context, journal, handoffs, checkpoints, undo snapshots) and ccx ui, a local read-only page.</desc>
   <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
     <path d="M0 0 L10 5 L0 10 z" fill="{c['arrow']}"/></marker></defs>
-  <rect width="1200" height="540" rx="16" fill="{c['bg']}"/>
+  <rect width="1200" height="660" rx="16" fill="{c['bg']}"/>
   {chr(10).join('  ' + p for p in parts).strip()}
 </svg>
 """
@@ -136,21 +152,19 @@ def social_preview(path: Path) -> bool:
             x += d.textlength(text, font=f)
     img = Image.new("RGB", (1280, 640), c["bg"])
     d = ImageDraw.Draw(img)
-    d.text((80, 96), "ccx", font=mono_b(150), fill=c["ink"])
-    runs((84, 300), [("Claude Code ", sans_b(56), c["ink"]), ("⇄", sym(52), c["ink"]),
-                     (" Codex,", sans_b(56), c["ink"])])
-    d.text((84, 372), "each other's sub-agent", font=sans_b(56), fill=c["ink"])
-    d.text((86, 470), "The cheapest model likely to finish each piece —", font=sans(30), fill=c["muted"])
-    d.text((86, 512), "checked, and with the receipt.", font=sans(30), fill=c["muted"])
-    x0 = 860
-    d.rounded_rectangle((x0, 120, 1200, 176), 12, fill=c["amber"])
-    d.text((x0 + 22, 132), "Claude Code", font=mono_b(30), fill=c["on"])
-    d.line((x0 + 40, 180, x0 + 40, 230), fill=c["arrow"], width=4)
-    d.rounded_rectangle((x0, 234, 1200, 290), 12, fill=c["teal"])
-    d.text((x0 + 22, 246), "Codex", font=mono_b(30), fill=c["on"])
-    d.line((x0 + 40, 294, x0 + 40, 344), fill=c["arrow"], width=4)
-    runs((x0, 356), [("✓", sym(32), c["ok"]), (" verified", mono_b(32), c["ok"])])
-    d.text((x0, 404), "$0.0023", font=mono_b(32), fill=c["ink"])
+    d.text((80, 90), "relayline", font=sans_b(120), fill=c["ink"])
+    d.text((86, 246), "command: ccx", font=mono(34), fill=c["muted"])
+    d.text((84, 330), "Coding agents as each other's", font=sans_b(52), fill=c["ink"])
+    d.text((84, 396), "lead and sub-agent", font=sans_b(52), fill=c["ink"])
+    d.text((86, 490), "Shared memory · cheapest model likely to finish", font=sans(30), fill=c["muted"])
+    d.text((86, 532), "checked, reviewed, with the receipt", font=sans(30), fill=c["muted"])
+    x0 = 900
+    for i, (name, col) in enumerate((("Claude Code", c["amber"]), ("Codex", c["teal"]), ("Gemini CLI", c["violet"]))):
+        y = 130 + i * 92
+        d.rounded_rectangle((x0, y, 1200, y + 60), 12, fill=col)
+        d.text((x0 + 24, y + 13), name, font=mono_b(30), fill=c["on"])
+    d.text((x0, 418), "two lead · all work", font=mono(28), fill=c["muted"])
+    runs((x0, 470), [("✓", sym(32), c["ok"]), (" verified", mono_b(32), c["ok"])])
     path.parent.mkdir(parents=True, exist_ok=True)
     img.save(path, optimize=True)
     return True

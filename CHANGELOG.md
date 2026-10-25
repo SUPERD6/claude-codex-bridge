@@ -1,6 +1,40 @@
 # Changelog
 
 ## Unreleased
+- `ccx uninstall --apply` run once for real (J12, report section 5c), and three things it found fixed: tool files
+  keep their own line endings (an LF `config.toml` came back CRLF); after uninstall, `ccx sync` puts the Codex hook
+  block back where it was, not at the end (Codex keeps hook trust by position, so moved hooks ask for trust again);
+  uninstall now says how to put everything back (`ccx sync --apply`, `ccx skills install --replace --apply`,
+  `ccx doctor` — sync alone does not bring back ccx's skills).
+- A sub-agent's own sub-agents, limited by spend and quota rather than head count (proposals F10–F14, narrowed
+  by the PR #6 measurements). F10: Codex's concurrency and F13: its sub-agent model are no longer forced to 3 and
+  the parent's rung; ccx sets them only when quota is tight (1 at a time, one rung down) or snug (2), or when the
+  lead says `--subagents N|off`. F11: the spend cap is the piece's budget (`--budget`, a queue item's remaining
+  share), else `[subagents] max_usd`; a run over it stops as `over_budget` and `ccx resume RUN --budget X` goes on.
+  F12: Claude write sub-runs get the Agent tool, because their sub-agents' spend shows while they run (stream
+  events and `<session>/subagents/*.jsonl`, checked live with Claude Code 2.1.309); the watchdog reads it, and a
+  Claude result is now counted from `modelUsage` — `usage` covered only the main conversation's last request
+  (11.6k vs 19.9k cache-write tokens with one sub-agent), so sub-agent tokens were missed. F14: a brief listing
+  3+ parts (or `--parallel`) explicitly asks for sub-agents on the independent parts. Docs now say that with
+  codex-cli 0.164 + gpt-6-luna/low sub-agents were not started even when asked, so these limits are untested live.
+- Front page brought up to date for relayline: README (EN + ZH) opens with the name, one sentence of what it is and
+  a table of seven things it does with where each stands; the "Measured" table now carries the 2026-10-24 results,
+  the unfavourable ones included (small tasks save only when the lead trusts ccx's check; Codex's own sub-agents never
+  started on luna low); new commands (`ccx lead --breakdown/--cache/--suggest`, `ccx sum`, `ccx fresh`, `ccx trial`,
+  `ccx agents`) in the command list. New banner, architecture (several agent CLIs, ccx, personal and project layer,
+  `ccx ui`) and social preview from `scripts/make_assets.py` (names only, no vendor marks); `scripts/make_demo.py`
+  now shows ccx rerunning the check; fresh `ccx ui` screenshots; `scripts/ui_demo.py` gains `--port` and `--plain`.
+  The website (`site/`, EN + ZH) follows the README.
+- `ccx/delegate.py` split by job (proposal J11), behaviour unchanged: `prompts.py` (what a sub-agent is told),
+  `plan.py` (which rungs a run tries, budget and provider checks, the fallback to another vendor), `workspace.py`
+  (worktree, ccx's re-run of the check, the snapshot and `ccx undo`), `verdicts.py` (`ccx verify`, built-in
+  verdicts, probable verdicts), `review.py` gains the review step itself, the Codex accounting helpers move to
+  `ccx/agents/codex.py` and writing a run record to `ledger.py`. `delegate.py` (988 → 547 lines) keeps the run loop
+  and re-exports the old names, so `from ccx.delegate import ...` still works.
+- Renamed to **relayline** (was `claude-codex-bridge`): the GitHub repo, the package name in `pyproject.toml`, the
+  install command (`pipx install git+https://github.com/SUPERD6/relayline`), and the links in the README, website,
+  CONTRIBUTING and issue templates. The `ccx` command and the `ccx/` package are unchanged; GitHub redirects the old
+  URL. The README now opens by saying how it differs from CCB and from OpenAI's codex-plugin-cc.
 - Handoffs are no longer lost between parallel sessions: each one has its own file in `.ccx/handoffs/` (`handoff.md`
   is only the latest), and session start lists every handoff to you not seen yet — the newest whole or summarised,
   the others one line each with their file. `ccx fresh` points the new conversation at its own handoff file.

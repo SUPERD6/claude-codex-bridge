@@ -1,4 +1,4 @@
-# claude-codex-bridge — instructions for coding agents (Claude Code, Codex, Gemini CLI)
+# relayline (formerly claude-codex-bridge) — instructions for coding agents (Claude Code, Codex, Gemini CLI)
 
 `ccx` lets Claude Code and Codex (and Gemini CLI) be each other's lead / sub-agent, with shared skills, MCP,
 incremental memory, resumable runs and token accounting. Python 3.11+, standard library only.
@@ -11,7 +11,9 @@ task: whatever you read is re-read on every later turn. Keep STATUS one page (EN
 ## Layout
 - `ccx/` — the CLI (`python ccx.py -h`): `cli.py` (parser + `main`), `commands/` (one module per command group,
   each with `register(sub)`: `delegation`, `memory`, `install`, `records`; shared helpers in `common`),
-  `setup.py` (the `ccx setup` wizard), `delegate.py` (run loop), `agents/<name>.py` (one adapter per CLI: argv,
+  `setup.py` (the `ccx setup` wizard), `delegate.py` (run loop) with `prompts.py` (what a sub-agent is told),
+  `plan.py` (which rungs, fallback), `workspace.py` (worktree, check, undo), `verdicts.py` (verify, probable
+  verdicts), `review.py` (independent review), `agents/<name>.py` (one adapter per CLI: argv,
   parser, files, vendor, capabilities), `runners.py` (running a CLI, shared parsing),
   `learn.py` (bridge to the skills), `memory.py` / `project.py` (shared + project memory, handoff),
   `sync.py` (wiring into both tools), `ledger.py` / `usage.py` / `report.py` (accounting, dashboard),

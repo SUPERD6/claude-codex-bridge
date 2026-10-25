@@ -84,9 +84,11 @@ def _one(it: dict, root: Path, caller: str, p, cfg) -> dict:
             return {"id": it["id"], "skipped": route.get("advice")}
         wq.update(root, it["id"], status="doing", agent=kw["to"])
         resume = it.get("run") if it.get("resume") else None
+        left = (max(0.0, float(it["budget_usd"]) - float(it.get("cost_usd") or 0))   # F11: the cap is what it has left
+                if it.get("budget_usd") is not None else None)
         rec = run(Request(brief=spec["brief"], mode=spec["mode"], mode_source=spec["mode_source"],
                           mode_why=spec["mode_why"], cwd=root, caller=caller, label=f"q:{it['id']}",
-                          check=it.get("check"), resume_run=resume, **kw), p)
+                          check=it.get("check"), resume_run=resume, budget_usd=left, **kw), p)
         res = compact(rec)
         status = res.get("status")
         cost = sum(a.get("ae_usd") or 0 for a in rec.get("attempts", [])) + ((rec.get("review") or {}).get("usd") or 0)
