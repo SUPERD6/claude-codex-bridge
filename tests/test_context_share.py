@@ -1,6 +1,7 @@
 """Shared work context: the lead's recent asks / decisions / plan / files read by code from its session file, attached
 to delegated tasks, `ccx peek`, and the per-turn "what the others did" line (fake transcripts, no real CLIs)."""
 import json
+import os
 import re
 import time
 from datetime import datetime, timezone
@@ -141,7 +142,13 @@ class TestUse(AdapterEnv):
         self.assertIsNone(self.rec(out["run_id"])["shared_context"]["source"])
 
     def test_peek(self):
-        _w(self.home_codex / "sessions" / "2026" / "rollout-1.jsonl", codex_session(str(self.work)))
+        cwd = str(self.work)
+        if os.name == "nt":                       # Codex may record a short 8.3 name (the CI runner's home is one)
+            import ctypes
+            buf = ctypes.create_unicode_buffer(1024)
+            if ctypes.windll.kernel32.GetShortPathNameW(cwd, buf, 1024):
+                cwd = buf.value
+        _w(self.home_codex / "sessions" / "2026" / "rollout-1.jsonl", codex_session(cwd))
         r = self.ccx("peek", "codex")
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("Rename parse() to parse_rows()", r.stdout)
