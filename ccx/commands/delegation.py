@@ -275,8 +275,14 @@ def cmd_verify(a) -> int:
             _out({"sample": picks, "how": "look at each, then `ccx verify RUN_ID --ok 1|0` (run this in a terminal "
                   "to answer one by one)"})
         return 0
+    if a.dismiss:
+        if not a.run_id or a.ok is not None:
+            raise ValueError("--dismiss takes a run id and no --ok: the run counts neither way")
+        from ..verdicts import dismiss
+        _out(dismiss(paths(), a.run_id, a.note))
+        return 0
     if a.ok is None:
-        raise ValueError("give --ok 1 or --ok 0 (or --sweep, --sample N)")
+        raise ValueError("give --ok 1 or --ok 0 (or --dismiss, --sweep, --sample N)")
     if a.builtin:
         from ..delegate import verify_builtin
         if a.b is None:
@@ -570,6 +576,8 @@ def register(sub) -> None:
     v.add_argument("--note", default="", help="why (kept with the verdict)")
     v.add_argument("--reason", choices=["unfinished", "wrong", "overreach", "other"],
                    help="with --ok 0: what was wrong (not finished / done wrong / changed what it shouldn't / other)")
+    v.add_argument("--dismiss", action="store_true", help="a test, probe or leftover, not real work: it leaves "
+                   "'waits for you', counts neither right nor wrong and is never learned from (a later --ok undoes it)")
     v.add_argument("--sweep", action="store_true", help="record 'probably right' for finished runs nobody judged "
                    "whose check or self-check passed and review (if any) passed (undone ones wait for you); also "
                    "runs quietly at session start. Your own verdict always overrides these")

@@ -108,7 +108,8 @@ def pieces(p: Paths, days: float = 90, include_evals: bool = False) -> list[dict
     from .learn import task_kind
     recs = [r for r in _records(p, time.time() - days * 86400)
             if not r.get("ephemeral") and not str(r.get("label") or "").startswith(INTERNAL)
-            and (include_evals or not is_eval({"label": r.get("label"), "no_ab": (r.get("route") or {}).get("no_ab")}))]
+            and (include_evals or not is_eval({"label": r.get("label"), "no_ab": (r.get("route") or {}).get("no_ab"),
+                                                    "dismissed": r.get("dismissed")}))]
     by_id = {r["run_id"]: r for r in recs}
     follow: dict[str, int] = {}
     for r in recs:
