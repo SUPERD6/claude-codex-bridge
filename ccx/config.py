@@ -209,6 +209,7 @@ SETTINGS = {   # key -> (type, help). Only these can be set with `ccx config set
     "lead.codex": (str, "model the Codex lead runs on, e.g. gpt-6.1-sol"),
     "sessions.auto_archive_hours": (float, "archive finished sub-agent sessions after N hours (0 = off)"),
     "report.publish_dir": (str, "local clone of your private usage repo; `ccx report --publish` commits there"),
+    "board.max_machine_turns": (int, "machine messages in a row in one board thread before a person must speak"),
     "ui.lang": (str, "zh | en: language of `ccx ui` and of the lines ccx writes into conversations (unset: the "
                      "page follows the browser, the lines stay English)"),
 }

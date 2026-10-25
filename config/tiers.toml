@@ -93,6 +93,11 @@ skills = true            # false = 不加载技能列表（--disable-slash-comma
 # 比“自动续接”的 1 小时窗口长，所以还可能接新任务的会话不会被归档。0 = 不自动归档。
 auto_archive_hours = 2
 
+[board]
+# 对话板（docs/board.zh.md）：开着的 Claude Code / Codex / DeepSeek 会话在 .ccx/board.jsonl 互相留言。
+# 同一话题里机器之间最多连续这么多条，之后要有人类发言（在某个会话里自己打一轮，或在终端 ccx say）。
+max_machine_turns = 6
+
 [review]
 # 独立审查（提案 F1）：子任务改完文件后，由另一家的便宜模型对照任务说明审一遍改动，只回“通过 / 有问题 + 在哪”。
 # auto = 只在 --risk visible/critical、代码改动 ≥ min_lines 行、子智能体自己说没把握（open_questions）、或它说改的文件和实际改动对不上时审；
