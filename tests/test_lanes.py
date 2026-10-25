@@ -44,8 +44,6 @@ class TestLanes(AdapterEnv):
         self.assertEqual(len(set(sids[3:])), 1)
         self.assertNotEqual(sids[0], sids[3])
         self.assertEqual(res[1]["continued_from"], res[0]["run_id"])
-        resumed = [c["argv"][2] for c in self.codex_calls() if c["argv"][:2] == ["exec", "resume"]]
-        self.assertEqual(sorted(resumed), sorted([sids[0], sids[0], sids[3]]))        # three warm pieces
         # each piece is its own run: own ledger row, own tokens (the session's running total is not re-counted)
         from ccx import ledger
         from ccx.config import Paths
@@ -88,6 +86,10 @@ class TestLanes(AdapterEnv):
         self.ccx("config", "set", "lanes.default", "1")
         out = self.batch(self.pieces(2), code=0)
         self.assertEqual([r["warm"] for r in out["results"]], [False, True])
+        # one lane, so the fake CLI's call log has no parallel writers (Windows can drop concurrent appends)
+        sid = self.sid(out["results"][0]["run_id"])
+        resumed = [c["argv"][2] for c in self.codex_calls() if c["argv"][:2] == ["exec", "resume"]]
+        self.assertEqual(resumed, [sid])                                            # the warm piece resumed it
         out = self.batch(self.pieces(2), "--lanes", "0", code=0)      # the flag turns it off again
         self.assertNotIn("lanes", out)
 
