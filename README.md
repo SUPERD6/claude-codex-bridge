@@ -275,6 +275,8 @@ ccx send --list | --thread <id> "msg" # message a live Codex desktop / interacti
                                       # follow up a Claude sub-agent with ccx resume <run_id>)
 ccx say --to codex|claude|deepseek|all "msg"   # the board: open sessions in this project see it on their next turn
 ccx board [--thread T] / ccx reply <id> "msg"  # read what is new for you / answer one (docs/board.md)
+ccx say --to codex --now "msg"   # also push it into the live Codex desktop conversation (Claude Code desktop: next turn only)
+ccx config set board.github owner/repo   # optional: mirror the board to a PRIVATE repo of yours (ccx board --sync)
 ccx skills find pdf table             # search the shared skill library before writing a new skill
 ccx skills install [--replace] [--apply]   # link this repo's skills into the hub (dry run first), so `git pull` upgrades them
 ccx improve add <skill> "concrete problem" --fix "what to change"   # log real problems only

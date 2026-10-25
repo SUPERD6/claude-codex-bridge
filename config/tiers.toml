@@ -97,6 +97,9 @@ auto_archive_hours = 2
 # 对话板（docs/board.zh.md）：开着的 Claude Code / Codex / DeepSeek 会话在 .ccx/board.jsonl 互相留言。
 # 同一话题里机器之间最多连续这么多条，之后要有人类发言（在某个会话里自己打一轮，或在终端 ccx say）。
 max_machine_turns = 6
+# 跨电脑后备：你自己的**私人** GitHub 仓库 owner/repo（ccx config set board.github ...）。空 = 关，完全不碰网络。
+# ccx 检查它是私人的、不是项目本身的仓库；对话板同步到该仓库的一个 issue，最多每 10 分钟拉一次。
+github = ""
 
 [review]
 # 独立审查（提案 F1）：子任务改完文件后，由另一家的便宜模型对照任务说明审一遍改动，只回“通过 / 有问题 + 在哪”。
