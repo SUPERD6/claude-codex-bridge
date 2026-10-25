@@ -109,8 +109,9 @@ automatic memory into the other.
 Hard to undo (a data format, a migration, a public interface, a dependency), touching safety or money, or the person
 said it matters: before committing to one answer, **ask the person** whether models from other vendors should talk
 it through. Say the question in one line and what it may cost (`ccx discuss --dry-run "question"`: who takes part,
-at most how many calls, estimated $). Only on their yes:
-`ccx discuss "question" [--context-file notes.md] [--with codex,claude,gemini] [--rounds 1-3]` — one proposes, one
+at most how many calls, estimated $, which model each uses). Only on their yes:
+`ccx discuss --confirmed "question" [--context-file notes.md] [--with codex,claude,gemini] [--rounds 1-3]` (without
+`--confirmed` you get only the estimate) — one proposes, one
 finds faults, one judges; only points travel between turns. Read `result` (recommendation, consensus,
 disagreements, reasons); the person sees the turns in `ccx ui`. It advises; the decision stays with you and the person.
 Not for routine choices: every turn is a full model call.
