@@ -12,7 +12,8 @@ from .common import _out, lead_session_id, provider_agents
 
 def cmd_report(a) -> int:
     p = paths()
-    res = report.write(p, days=a.days, out=Path(a.out) if a.out else None, include_lead=not a.no_lead)
+    res = report.write(p, days=a.days, out=Path(a.out) if a.out else None, include_lead=not a.no_lead,
+                       include_evals=a.include_evals)
     if a.publish:
         res["publish"] = report.publish(p, Path(res["report"]).parent)
     _out(res)
@@ -278,6 +279,7 @@ def register(sub) -> None:
     rp.add_argument("--out", help="output file (default <hub>/ccx/report/index.html)")
     rp.add_argument("--no-lead", action="store_true", help="skip reading the lead's own session logs")
     rp.add_argument("--publish", action="store_true", help="commit to report.publish_dir (your private repo)")
+    rp.add_argument("--include-evals", action="store_true", help="'where it was wrong' also counts evaluation runs")
     rp.set_defaults(fn=cmd_report)
     cf = sub.add_parser("config", help="settings, e.g. the save/fast knob: ccx config set defaults.tradeoff 0.3")
     cfs = cf.add_subparsers(dest="config_cmd", required=True)
