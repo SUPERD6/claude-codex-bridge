@@ -8,7 +8,7 @@
 
 | 层 | 内容 | 位置 |
 |---|---|---|
-| 工具层 | ccx 代码、默认配置、四个技能（agent-delegate、task-routing、task-split、task-checkpoint）、测试 | 本仓库 |
+| 工具层 | ccx 代码、默认配置、五个技能（agent-delegate、task-routing、task-split、task-checkpoint、project-manager）、测试 | 本仓库 |
 | 个人层（hub） | 你的技能、MCP 登记表、个人记忆、账本、学到的参数、设置、改进记录 | `ccx init --hub` 指定的目录（默认 `~/.ccx-hub`） |
 | 项目层 | 项目背景 `context.md`、项目日志 `journal.jsonl`、`inbox/`、断点任务 `tasks/` | 每个项目的 `.ccx/` |
 
