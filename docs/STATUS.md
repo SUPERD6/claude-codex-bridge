@@ -5,7 +5,7 @@ English · [中文](STATUS.zh.md) · updated 2026-10-24 · version 0.4.0 · 254 
 One page on purpose: whatever an agent reads at start-up it re-reads on every later turn. Older notes, the full
 confidence table, acceptance checks and the done list are in [STATUS-archive.md](STATUS-archive.md); what changed
 is in [CHANGELOG.md](../CHANGELOG.md). Keep this page short: when something is done, say so in one line here and
-put the detail in the changelog.
+put the detail in the changelog. Only the lead session edits this page; PRs add a `changes/<PR>.md` instead.
 
 ## Now
 

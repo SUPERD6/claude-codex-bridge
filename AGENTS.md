@@ -4,7 +4,7 @@
 incremental memory, resumable runs and token accounting. Python 3.11+, standard library only.
 
 **When you need to know where things stand** (picking the next item, not for a small fix): `docs/STATUS.md` is one
-page (now, next three, how sure we are); history is in `docs/STATUS-archive.md`, changes in CHANGELOG.md.
+page (now, next three, how sure we are); history is in `docs/STATUS-archive.md`, changes in CHANGELOG.md (plus `changes/*.md` not yet folded in).
 `.ccx/handoff.md`, if it exists, is the previous session's local notes. Don't read these up front for an unrelated
 task: whatever you read is re-read on every later turn. Keep STATUS one page (EN + ZH) when you finish an item.
 
@@ -26,8 +26,11 @@ task: whatever you read is re-read on every later turn. Keep STATUS one page (EN
 ## Rules
 - Run `python -m pytest -q tests` before every commit; all must pass (CI: Linux/Windows/macOS × 3.11–3.13).
 - Generic only: no personal paths, names or data in the repo. Personal things live in the user's hub.
-- Docs are bilingual: `x.md` (English) + `x.zh.md` (Chinese), linking to each other. Update CHANGELOG.md and,
-  for real decisions, docs/DECISIONS.md.
+- Docs are bilingual: `x.md` (English) + `x.zh.md` (Chinese), linking to each other. For real decisions, update
+  docs/DECISIONS.md.
+- A PR adds one `changes/<PR>.md` with its CHANGELOG lines and does not edit CHANGELOG.md or docs/STATUS.md:
+  the lead session updates STATUS and folds the notes in when releasing (`scripts/collect_changes.py`,
+  see `changes/README.md`). This keeps parallel PRs from conflicting.
 - Verify external CLI facts against `--help` / official docs before relying on them; note the version checked.
 - Never touch credentials; never hand-edit the tools' config files outside ccx's marked blocks.
 - Small commits with clear messages; bump `ccx/__init__.py` and `pyproject.toml` for releases.
