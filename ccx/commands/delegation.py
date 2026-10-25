@@ -103,6 +103,9 @@ def cmd_run(a) -> int:
         res["continued_from"] = prev          # same sub-session: it remembers the earlier task(s)
     res["route"] = {k: v for k, v in route.items() if k in ("source", "b", "rung", "p", "chain_p", "tier",
                                                               "stale", "mode", "trial")}
+    if route.get("b") is None:
+        # an explicit pick with no size: its verdict reaches the ledger but not routing (seven-cores A/B, PR #30)
+        res["route"]["learns"] = "no: give --minutes (or the rubric flags) so this run's verdict can teach routing"
     _out(res)
     return 0 if rec["ok"] else 2
 
