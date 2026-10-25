@@ -112,7 +112,7 @@ def task_kind(mode: str | None, kind: str | None = None) -> str:
 
 
 def self_vs_delegate(p: Paths, b: float, lead: str, best_rung: str, ctx_tokens: int, remaining_turns: int,
-                     tradeoff: str = "balanced") -> dict:
+                     tradeoff: str = "balanced", lead_ctx: int = 0) -> dict:
     """Section 4.4 of the plan: what doing it yourself costs (context you'd carry for the rest of the session)
     vs delegating (brief + sub cost + read-back/review). Uses the routing skill's estimates."""
     tr = module(p, "routing")
@@ -120,12 +120,15 @@ def self_vs_delegate(p: Paths, b: float, lead: str, best_rung: str, ctx_tokens: 
     agent = best_rung.split(":", 1)[0]
     res = tr.route(b, pri, st, [agent], tradeoff=tradeoff, ctx_tokens=0)
     best = next((x for x in res["rows"] if x["rung"] == best_rung), res["pick"])
-    return tr.self_vs_delegate(b, pri, st, lead, best, ctx_tokens, remaining_turns)
+    try:
+        return tr.self_vs_delegate(b, pri, st, lead, best, ctx_tokens, remaining_turns, lead_ctx)
+    except TypeError:                                   # an older installed skill copy
+        return tr.self_vs_delegate(b, pri, st, lead, best, ctx_tokens, remaining_turns)
 
 
 def three_way(p: Paths, b: float, lead: str, delegate_agents: list[str], ctx_tokens: int, remaining_turns: int,
               tradeoff: str = "balanced", needs: tuple = (), quota: dict | None = None,
-              kind: str = "code", risk: str = "low") -> dict | None:
+              kind: str = "code", risk: str = "low", lead_ctx: int = 0) -> dict | None:
     """Self / the lead's built-in sub-agent / ccx (task-routing's three_way). Codex's quota is read from its own
     session logs unless given; Claude Code's logs carry no quota %, so it comes only from --quota."""
     tr = module(p, "routing")
@@ -135,7 +138,7 @@ def three_way(p: Paths, b: float, lead: str, delegate_agents: list[str], ctx_tok
     pri, st = tr.load_priors(), tr.load_state()
     try:
         out = tr.three_way(b, pri, st, lead, delegate_agents, ctx_tokens, remaining_turns, tradeoff=tradeoff,
-                           needs=tuple(needs), quota=q, kind=kind, risk=risk)
+                           needs=tuple(needs), quota=q, kind=kind, risk=risk, lead_ctx=lead_ctx)
     except TypeError:                                   # skill copy without kinds
         out = tr.three_way(b, pri, st, lead, delegate_agents, ctx_tokens, remaining_turns, tradeoff=tradeoff,
                            needs=tuple(needs), quota=q)
