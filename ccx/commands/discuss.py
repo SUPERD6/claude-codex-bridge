@@ -25,13 +25,16 @@ def cmd_discuss(a) -> int:
     cfg = load_config(p)
     names = discuss.participants(cfg, a.with_.split(",") if a.with_ else None)
     context = Path(a.context_file).read_text(encoding="utf-8") if a.context_file else ""
-    est = discuss.estimate(p, names, a.rounds, tier=a.tier, cfg=cfg, question=question, context=context)
+    tiers, why = discuss.tiers(p, names, a.tier)
+    est = discuss.estimate(p, names, a.rounds, tier=tiers, cfg=cfg, question=question, context=context)
+    if why:
+        est["tier_why"] = why
     if a.dry_run:
         _out({"would_run": True, **est, "rounds_max": a.rounds,
               "next": "ask the person; on their yes run the same command without --dry-run"})
         return 0
     d = discuss.run(p, question, names, rounds=a.rounds, caller=_caller(a.caller), context=context,
-                    cwd=Path(a.cwd) if a.cwd else None, tier=a.tier)
+                    cwd=Path(a.cwd) if a.cwd else None, tier=tiers)
     out = discuss.view(d)
     out["next"] = "the turns as a conversation: `ccx ui` (Discussions)"
     _out(out)
@@ -47,7 +50,8 @@ def register(sub) -> None:
     d.add_argument("--with", dest="with_", metavar="A,B[,C]",
                    help="who takes part, in role order (proposer, critic, judge); default: installed, one per vendor")
     d.add_argument("--rounds", type=int, default=discuss.MAX_ROUNDS, choices=range(1, discuss.MAX_ROUNDS + 1))
-    d.add_argument("--tier", default="T2", help="model tier for every turn (default T2)")
+    d.add_argument("--tier", default="auto", help="model tier for every turn; auto (default): T2, but T1 for an "
+                   "agent whose quota would run past 100%% before it resets")
     d.add_argument("--cwd")
     d.add_argument("--from", dest="caller")
     d.add_argument("--dry-run", action="store_true", help="who would take part and what it may cost; runs nothing")

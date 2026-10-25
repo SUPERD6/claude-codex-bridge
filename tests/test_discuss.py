@@ -79,7 +79,11 @@ class TestDiscuss(DiscussEnv):
         out = self.j("discuss", "--with", "codex,claude,gemini", "--rounds", "2", "--dry-run", "x?")
         self.assertEqual(out["calls_max"], 5)
         self.assertGreater(out["usd_max_est"], out["usd_min_est"])   # modelled: no discuss turns recorded yet
-        self.assertEqual(out["models"]["claude"], "sonnet medium")
+        self.assertEqual(out["models"]["claude"], "sonnet medium")    # auto, no quota readings: T2
+        self.assertEqual(set(out["tier_why"]), {"codex", "claude", "gemini"})
+        t1 = self.j("discuss", "--with", "codex,claude", "--tier", "T1", "--dry-run", "x?")
+        self.assertEqual(t1["models"], {"codex": "gpt-6-luna low", "claude": "haiku low"})
+        self.assertNotIn("tier_why", t1)
         self.assertFalse(any("[ccx discuss" in (c.get("prompt") or "") for c in self.calls()))
 
     def discuss_prompts(self):
@@ -217,6 +221,17 @@ class TestEstimate(unittest.TestCase):
         self.assertTrue(all(v.startswith("modelled") for v in t1["basis"].values()))
         self.assertEqual(t1["models"], {"codex": "gpt-6-luna low", "claude": "haiku low"})
         self.assertLess(t1["usd_max_est"], e["usd_max_est"] / 5)
+
+    def test_auto_tier_steps_down_the_agent_that_would_run_out(self):
+        t, why = discuss.tiers(self.p, ["codex", "claude", "deepseek"], "auto",
+                               quota={"codex": 0.4, "claude": 1.3})
+        self.assertEqual(t, {"codex": "T2", "claude": "T1", "deepseek": "T2"})
+        self.assertIn("130%", why["claude"])
+        self.assertIn("no quota reading", why["deepseek"])
+        e = discuss.estimate(self.p, ["codex", "claude"], 2, tier=t)
+        self.assertEqual(e["models"], {"codex": "gpt-6.1-sol medium", "claude": "haiku low"})
+        self.assertEqual(e["tier"], {"codex": "T2", "claude": "T1"})
+        self.assertEqual(discuss.tiers(self.p, ["codex"], "T1"), ({"codex": "T1"}, {}))
 
     def test_provider_has_its_own_model_and_unknown_price_is_said(self):
         from ccx.config import load_config
