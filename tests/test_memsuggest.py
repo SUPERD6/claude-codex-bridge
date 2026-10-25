@@ -50,14 +50,16 @@ class TestGather(unittest.TestCase):
             {"type": "user", "message": {"content": "原生能力优先、约束只放在边界上。"}},
             {"type": "assistant", "message": {"content": [{"type": "text", "text":
                 "E8 真跑发现一个问题：只读子任务没去读文件。J6：STATUS 压成一页，原来 24 KB。"
-                "PR #21 原来漏了一个测试。The root cause was a race on **run.json** while it is replaced."}]}},
+                "PR #21 原来漏了一个测试。The root cause was a race on **run.json** while it is replaced。"
+                "试验中发现的问题已经修好，提交号 `688e3ad`，已推送。\n## 顺带发现两个小 bug\n还没做 / 需要注意\n"
+                "现在能找到，并沿用原来的模型。你原来的判断是对的，我发现上一条说偏了。"}]}},
         ]
         with tempfile.TemporaryDirectory() as d:
             f = Path(d) / "s2.jsonl"
             f.write_text("".join(json.dumps(e) + "\n" for e in session), encoding="utf-8")
             got = [(c["kind"], c["text"]) for c in memsuggest.gather(read_claude(f), f)]
         self.assertEqual(got, [("preference", "原生能力优先、约束只放在边界上。"),
-                               ("pitfall", "The root cause was a race on run.json while it is replaced.")])
+                               ("pitfall", "The root cause was a race on run.json while it is replaced。")])
 
 
 class TestFlow(Env):
