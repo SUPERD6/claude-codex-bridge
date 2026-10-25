@@ -244,7 +244,7 @@ ccx discuss "question" [--dry-run]           # 2-3 vendors talk a costly decisio
 ccx verify <run_id> --ok 0 --reason wrong     # your verdict (unjudged runs get a probable one after 12 h)
 ccx handoff --from-transcript codex --to claude   # the old lead can't write it (quota out): built from its session file
                                                   # (by code; a format the code can't read goes to a routed sub-agent, --no-model to skip)
-ccx undo <run_id> [--apply]           # put back what a write run changed (new files are moved aside, not deleted)
+ccx undo <run_id> [--apply] [--wrong]   # put back what a write run changed (new files moved aside); --wrong: also judge it wrong
 ccx ask "question"                    # quick read-only second opinion from the other agent, low effort
 ccx archive [--apply] | --restore <run>   # archive finished sub-sessions (also automatic after 2 h)
 ccx batch plan.json                   # independent tasks in parallel; parallel writers get separate worktrees

@@ -177,7 +177,7 @@ ccx discuss "问题" [--dry-run]              # 2-3 家不同厂商讨论选错�
 ccx verify <run_id> --ok 0 --reason wrong     # 你的判断（没人判断的，12 小时后按证据自动记“大概率对/错”）
 ccx handoff --from-transcript codex --to claude   # 原主智能体写不了（额度用完）：从它的会话文件生成交接
                                                   # （先用代码提取；格式认不出时交给自动选出的子智能体整理，--no-model 不用模型）
-ccx undo <run_id> [--apply]         # 撤回某次可写运行改动的文件（新建的文件挪到一边，不删除）
+ccx undo <run_id> [--apply] [--wrong]   # 撤回某次可写运行改动的文件（新建的挪到一边）；--wrong 同时记成做错
 ccx ask "问题"                       # 让另一个模型快速给个第二意见（只读、低强度）
 ccx archive [--apply] | --restore <run>   # 归档用完的子会话（2 小时后也会自动归档）
 ccx batch plan.json                 # 互不依赖的任务并行；多个写任务自动分到不同 worktree

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from . import ledger
 from .config import Paths
-from .verdicts import _hard_verdict, _soft_verdict
+from .verdicts import _hard_verdict, verify
 
 def make_worktree(cwd: Path, run_id: str) -> Path:
     top = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=cwd,
@@ -75,8 +75,9 @@ def undo_snapshot(cwd: Path) -> dict | None:
     return {"repo": top, "base": base, "untracked": untracked.splitlines()}
 
 
-def undo(p: Paths, run_id: str, apply: bool = False) -> dict:
-    """Put back the files a write run changed. Dry run unless apply. New files are moved aside, not deleted."""
+def undo(p: Paths, run_id: str, apply: bool = False, wrong: bool = False) -> dict:
+    """Put back the files a write run changed. Dry run unless apply. New files are moved aside, not deleted.
+    Undoing is not a verdict by itself (people undo to try again, or to split the work); `wrong` says it was."""
     f = p.runs / run_id / "undo.json"
     if not f.exists():
         raise FileNotFoundError(f"run {run_id} has no undo snapshot (read-only run, worktree run, or not a git repo)")
@@ -100,10 +101,13 @@ def undo(p: Paths, run_id: str, apply: bool = False) -> dict:
             dst.parent.mkdir(parents=True, exist_ok=True)
             os.replace(src, dst)
         out.update(applied=True, moved_to=str(trash) if new_files else None)
-        # undoing a run is the person saying it was wrong: unless someone already judged it, that is its verdict
-        (p.runs / run_id / "undone.json").write_text(json.dumps({"ts": time.time()}), encoding="utf-8")
-        record = ledger.load_run(p, run_id)
-        if not _hard_verdict(record):
-            _soft_verdict(p, record, False, "undone", "undone with ccx undo")
-            out["verdict"] = "recorded as wrong (undone)"
+        (p.runs / run_id / "undone.json").write_text(json.dumps({"ts": time.time(), "wrong": wrong}),
+                                                     encoding="utf-8")
+        ledger.append_event(p, {"type": "undo", "run_id": run_id, "reason": "undone", "wrong": wrong,
+                                "ts": time.time()})
+        if wrong and not _hard_verdict(ledger.load_run(p, run_id)):
+            verify(p, run_id, False, note="undone with ccx undo --wrong", reason="wrong")
+            out["verdict"] = "recorded as wrong (undo --wrong)"
+        elif not wrong:
+            out["verdict"] = "none: waits for yours (`ccx verify` or `ccx undo --wrong`)"
     return out
