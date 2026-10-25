@@ -1,2 +1,10 @@
 #!/usr/bin/env sh
-exec python3 "$(dirname "$0")/../ccx.py" "$@"
+# This checkout's ccx, run by the first Python 3.11+ found (on Windows `python3` can be the Store stub).
+here="$(dirname "$0")/.."
+for py in python3 python py; do
+  if "$py" -c 'import sys; sys.exit(sys.version_info < (3, 11))' >/dev/null 2>&1; then
+    exec "$py" -X utf8 "$here/ccx.py" "$@"
+  fi
+done
+echo "ccx: needs Python 3.11+ on PATH (python3, python or py)" >&2
+exit 127

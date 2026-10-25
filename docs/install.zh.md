@@ -14,6 +14,26 @@ ccx init --hub <你的个人hub路径>
 ccx doctor
 ```
 
+**从插件市场装**（仓库本身就是一个插件市场，名字 `relayline`）：
+
+```bash
+claude plugin install relayline --marketplace SUPERD6/relayline     # Claude Code 2.1.275+，一步装好
+# 旧版 Claude Code：claude plugin marketplace add SUPERD6/relayline && claude plugin install relayline@relayline
+codex plugin marketplace add SUPERD6/relayline && codex plugin add relayline@relayline   # Codex 0.164
+```
+
+- **Claude Code** 得到四个技能（名字是 `relayline:agent-delegate`、`relayline:task-routing`、`relayline:task-split`、
+  `relayline:task-checkpoint`）和 ccx 的两个 hook：开局的共享记忆增量、每轮的留言板/共享文档提示。hook 运行插件里自带的
+  ccx（`bin/ccx`，经 `sh` 运行；Windows 上就是 Claude Code 跑 hook 用的 Git Bash），所以要有 Python 3.11+，但不用另装。
+  没 `ccx init` 之前它们什么都不输出。
+- **Codex** 只得到四个技能。它的 hook 仍由 `ccx sync` 写（Codex 的插件 hook 要用户手动信任，这里不提供）。
+- **DeepSeek Harness（`dsh`）** 目前没有插件市场或技能安装方式（看的是它的 README，2026-10-25）；组长说明照旧由
+  `ccx sync` 写。
+- **ccx 本体仍要装**（`pipx install git+https://github.com/SUPERD6/relayline`，再 `ccx init` 或 `ccx setup`），才能在
+  终端或 Codex 里派活。插件已启用、但 ccx 没单独装时，`ccx doctor` 会提示。
+- **不会接两遍：** 插件启用的工具里，`ccx sync` 把 Claude 的 hook 和这四个技能交给插件，并删掉它以前写的那份
+  （`settings.json` 里 ccx 的 hook、各工具 `skills/` 里的链接）；Codex 的 hook 块不动。hook 仍有两份时 `ccx doctor` 会警告。
+
 **从克隆的仓库装**（要改代码，或者想让 `git pull` 直接升级接进 hub 的技能）：
 
 ```powershell

@@ -33,4 +33,5 @@ task: whatever you read is re-read on every later turn. Keep STATUS one page (EN
   see `changes/README.md`). This keeps parallel PRs from conflicting.
 - Verify external CLI facts against `--help` / official docs before relying on them; note the version checked.
 - Never touch credentials; never hand-edit the tools' config files outside ccx's marked blocks.
-- Small commits with clear messages; bump `ccx/__init__.py` and `pyproject.toml` for releases.
+- Small commits with clear messages; bump `ccx/__init__.py`, `pyproject.toml` and both `plugin.json`
+  (`.claude-plugin/`, `.codex-plugin/`) for releases.
