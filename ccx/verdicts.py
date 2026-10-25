@@ -137,6 +137,11 @@ def verify(p: Paths, run_id: str, ok: bool, note: str = "", reason: str = "") ->
                              "--note", note or f"ccx run {run_id} failed verification")
     _write_record(p.runs / run_id, record)
     ledger.append_event(p, {"type": "verify", "run_id": run_id, "ok": ok, "reason": reason, "ts": time.time()})
+    try:                                   # judged: final now (sessions.archive = after_run)
+        from . import archive
+        archive.after_run(p, record)
+    except Exception:  # noqa: BLE001
+        pass
     return {"run_id": run_id, "verdict": ok, "learned": learned, **({"reason": reason} if reason else {})}
 
 

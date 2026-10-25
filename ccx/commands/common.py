@@ -155,7 +155,7 @@ def find_continuable(p, lead: str | None, cwd: Path, to: str, mode: str | None =
     if not lead:
         return None
     from ..archive import archived_ids
-    gone = archived_ids(p)
+    gone = archived_ids(p, after_run=False)     # archived right after its run: it comes back when continued
     here = str(cwd.resolve())
     for r in reversed(ledger.rows(p)):
         if r.get("type") or r.get("lead_session") != lead:
