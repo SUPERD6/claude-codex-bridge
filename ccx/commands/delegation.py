@@ -287,6 +287,13 @@ def cmd_resume(a) -> int:
     return 0 if rec["ok"] else 2
 
 
+def cmd_stop(a) -> int:
+    from ..stop import stop
+    out = stop(paths(), a.run_id, wait=a.wait)
+    _out(out)
+    return 0 if out.get("stopped") or out.get("requested") else 2
+
+
 def cmd_batch(a) -> int:
     """plan.json: {"tasks":[{"id", "brief", "to"?, "mode"?, "cwd"?, "tier"? | "model"+"effort"? |
     rubric keys ("files","coupling","clarity","risk","novelty")?, "minutes"?, "task"?, "step"?}]}"""
@@ -505,6 +512,10 @@ def register(sub) -> None:
     rs.add_argument("--budget", type=float, metavar="USD", help="a new spending cap for its own sub-agents (after "
                     "an over_budget stop)")
     rs.set_defaults(fn=cmd_resume)
+    sp = sub.add_parser("stop", help="stop a running delegation (its whole process tree); `ccx resume` continues it")
+    sp.add_argument("run_id")
+    sp.add_argument("--wait", type=float, default=15.0, help="seconds to wait for the run to record the stop (15)")
+    sp.set_defaults(fn=cmd_stop)
     b = sub.add_parser("batch", help="run independent tasks in parallel from plan.json")
     b.add_argument("plan")
     b.add_argument("--from", dest="caller", choices=[*AGENTS, "user"])

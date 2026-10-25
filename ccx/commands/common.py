@@ -98,7 +98,7 @@ def find_continuable(p, lead: str | None, cwd: Path, to: str) -> str | None:
             return None
         if r.get("cwd") != here or r.get("to") != to or r.get("ephemeral"):
             continue
-        if r.get("kind") in ("quota", "auth", "timeout") or not r.get("session_id") or r["run_id"] in gone:
+        if r.get("kind") in ("quota", "auth", "timeout", "user_stopped") or not r.get("session_id") or r["run_id"] in gone:
             return None
         if int(r.get("continue_depth") or 0) + 1 >= CONTINUE_MAX_DEPTH:
             return None
@@ -120,7 +120,7 @@ def find_seat(p, seat: str, cwd: Path, to: str) -> str | None:
             continue
         if time.time() - (r.get("ts") or 0) > SEAT_WINDOW_SEC or r["run_id"] in gone or not r.get("session_id"):
             return None
-        if r.get("kind") in ("quota", "auth", "timeout") or int(r.get("continue_depth") or 0) + 1 >= SEAT_MAX_DEPTH:
+        if r.get("kind") in ("quota", "auth", "timeout", "user_stopped") or int(r.get("continue_depth") or 0) + 1 >= SEAT_MAX_DEPTH:
             return None
         return r["run_id"]
     return None

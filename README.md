@@ -123,6 +123,7 @@ In Claude Code you say: "make `loader.py` accept a custom delimiter and add test
    - Codex reports `blocked`: ccx continues **in the same Codex session** one rung up (high), with no re-briefing.
    - Codex is out of quota: Claude takes over.
    - A timeout or crash: `ccx resume <run_id>` continues.
+   - You want it to stop: `ccx stop <run_id>` ends the sub-agent and everything it started; `ccx resume` goes on.
 6. **Learn and report.** Every run goes into a ledger and back into task-routing / task-split, so the next pick is
    better. `ccx report` builds a dashboard: who spent how many tokens of which kind, quota use, estimated savings.
 
@@ -227,6 +228,7 @@ ccx run "task" --to dsh --tier T2            # DeepSeek's own agent, DeepSeek Ha
 ccx run "task" --provider glm                # smaller APIs through Claude Code: kimi, glm, qwen, openrouter (key needed)
 ccx verify <run_id> --ok 1|0 [--note "..."]   # the lead's verdict: calibrates routing/splitting, closes the checkpoint step
 ccx resume <run_id> "follow-up"       # same sub-session; also how an interrupted run continues
+ccx stop <run_id>                     # stop a running delegation (its whole process tree); resume continues it
 ccx task status | resume <task>       # long tasks: one command continues the interrupted step (hands off on quota)
 ccx handoff --by claude --to codex "what's done / decided / next" [--next "task 5" ...]   # switch leads
 ccx lead                                     # what each turn of your lead conversations re-reads and costs

@@ -17,7 +17,7 @@ task: whatever you read is re-read on every later turn. Keep STATUS one page (EN
   parser, files, vendor, capabilities), `runners.py` (running a CLI, shared parsing),
   `learn.py` (bridge to the skills), `memory.py` / `project.py` (shared + project memory, handoff),
   `sync.py` (wiring into both tools), `ledger.py` / `usage.py` / `report.py` (accounting, dashboard),
-  `archive.py` (session archiving), `doctor.py`.
+  `archive.py` (session archiving), `stop.py` (`ccx stop`), `doctor.py`.
 - `skills/` — standalone skills: `agent-delegate`, `task-routing`, `task-split`, `task-checkpoint`.
 - `config/tiers.toml` — defaults (tiers, permissions, slim start-up, sessions, providers).
 - `tests/` — fake CLIs in `tests/fakes/`; never call real CLIs in tests.

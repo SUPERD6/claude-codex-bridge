@@ -93,7 +93,7 @@ ccx run --to codex --mode read "用三行总结 README.md"
 2. 执行 `ccx run --from claude --files 2 --coupling one --clarity goal "…"`。ccx 调用 task-routing 技能，算出每个“智能体:模型:强度”的成功率和每次成功的花费，挑出 `codex:gpt-6.1-sol:medium`。如果算下来自己做更划算、或者应该先拆开，就直接告诉主智能体，不派。
 3. ccx 在后台调用 `codex exec -m gpt-6.1-sol -c model_reasoning_effort="medium" …`。会话 ID 一出现就存盘。Codex 自己读文件、改代码、跑测试，这部分 token 花的是 Codex 账号的额度。
 4. Codex 必须按 JSON schema 回报：`status / summary / files_changed / verification / …`。Claude 只读这一小段，再自己看一眼 `git diff`，确认测试真的跑过，然后 `ccx verify <run_id> --ok 1`。
-5. 如果 Codex 回报 `blocked`，ccx 会在**同一个 Codex 会话**里升一档（high）继续，不用重新喂背景。如果 Codex 额度用完，自动换 Claude 做；超时或崩溃，`ccx resume <run_id>` 接着做。
+5. 如果 Codex 回报 `blocked`，ccx 会在**同一个 Codex 会话**里升一档（high）继续，不用重新喂背景。如果 Codex 额度用完，自动换 Claude 做；超时或崩溃，`ccx resume <run_id>` 接着做。想让它停：`ccx stop <run_id>` 结束子智能体和它开的所有进程，之后 `ccx resume` 能接上。
 6. 每次运行都写进账本，结果自动记回 task-routing / task-split，下次选得更准。`ccx report` 生成看板网页：谁花了多少 token、什么类型的 token、额度用了多少、估计省了多少。
 
 反过来，在 Codex 里用同样的命令加 `--to claude`，就是 Codex 当主、Claude Code 当子。
@@ -161,6 +161,7 @@ ccx run "任务" --check "pytest -q" --review on                        # ccx �
      [--mode read] [--check CMD] [--review auto|on|off] [--worktree] [--task <id> --step <n>] [--minutes 60] [--no-fallback] [--force] [--no-ab]
 ccx verify <run_id> --ok 1|0 [--note "说明"]  # 主智能体验收结论：校准选模型/拆分，并关掉 checkpoint 这一步
 ccx resume <run_id> "追问"          # 在同一个子会话里继续；中断后也用它接着做
+ccx stop <run_id>                   # 停掉正在跑的委派（连同它开的所有进程）；resume 能接上
 ccx task status | resume <任务>     # 长任务：一条命令接着做中断的那一步（额度用完时自动换另一边）
 ccx handoff --by claude --to codex "做完了什么/定了什么/接下来做什么" [--next "任务5" ...]   # 换主智能体接力
 ccx lead                                     # 主会话每一轮要重读多少 token、花多少钱
