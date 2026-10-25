@@ -55,6 +55,12 @@ Result JSON: status, summary, files_changed, verification, open_questions, next_
 A quota/rate-limit stop retries once on the other agent (`--no-fallback` to stop instead);
 a timeout or crash keeps the session id — `ccx resume <run_id>` continues where it stopped.
 
+For work where a wrong result costs more, let the risk choose how it is done: `ccx way --risk low|visible|critical
+"brief" [--check CMD]`. low = one agent (review when worth it); visible = another vendor plans, one builds, the
+planner accepts (one fix round); critical = two vendors each build a version in a worktree and a third compares —
+about twice the cost, so ask the person first and pass `--yes`. Nothing is merged for you. Builders are ordered by
+their first-time-right rate for that kind of work (`ccx way --stats`).
+
 ## 4. Check, don't trust
 
 The summary is a claim. Inspect the changed files or returned evidence. Reuse valid checks
