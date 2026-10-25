@@ -156,5 +156,19 @@ class TestWeekly(unittest.TestCase):
         self.assertIn("--include-evals", h)
 
 
+class TestDoctorPrior(Env):
+    def test_doctor_names_where_routing_starts(self):
+        line = lambda: next(x for x in self.ccx("doctor").stdout.splitlines() if x.startswith("routing prior"))  # noqa: E731
+        first = line()
+        self.assertIn("seven-cores A/B round 1", first)
+        self.assertIn("codex:gpt-6-luna:low +", first)
+        self.assertNotIn("learned here since", first)
+        (self.hub / "ccx").mkdir(exist_ok=True)
+        (self.hub / "ccx" / "routing-state.json").write_text(json.dumps(
+            {"offsets": {"codex:gpt-6-luna:low": 0.1}, "counts": {"codex:gpt-6-luna:low": 1}, "outcomes": []}),
+            encoding="utf-8")
+        self.assertRegex(line(), r"codex:gpt-6-luna:low \+[0-9.]+ \(learned here since\)")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -16,8 +16,8 @@ spec.loader.exec_module(tr)
 
 
 class TestMath(unittest.TestCase):
-    def setUp(self):
-        self.pri = tr.load_priors()
+    def setUp(self):       # the math on the hand-set priors; the built-in A/B head start is tested in TestObserved
+        self.pri = {k: v for k, v in tr.load_priors().items() if k != "observed"}
         self.state = {"offsets": {}, "counts": {}, "outcomes": []}
         os.environ.pop("CODEX_HOME", None)
 
@@ -179,6 +179,40 @@ class TestMath(unittest.TestCase):
         self.assertEqual(_with_cli(old, {}, "codex", "m", cli="v"), "old")
         self.assertTrue(_with_cli(tr.unavailable, {"unavailable": {"codex:m": {"ts": 1e18, "cli": "v"}}},
                                   "codex", "m", cli="v"))
+
+class TestObserved(unittest.TestCase):
+    """A/B round 1 as a low-weight head start for rungs this hub has not learned yet."""
+    def setUp(self):
+        self.pri = tr.load_priors()
+        self.a = self.pri["irt"]["a"]
+
+    def theta(self, k):
+        return next(r["theta"] for r in self.pri["rungs"] if tr.rung_key(r) == k)
+
+    def test_shift_goes_part_way_toward_what_was_observed(self):
+        off = tr.observed_offsets(self.pri)
+        self.assertEqual(set(off), {"codex:gpt-6-luna:low", "claude:sonnet:medium"})
+        k = "codex:gpt-6-luna:low"
+        before, after = (tr.p_success(self.theta(k) + d, 2.32, self.a) for d in (0, off[k]))
+        self.assertLess(before, after)
+        self.assertLess(after, 38 / 45)                    # weight 0.5: part of the way, not all of it
+        self.assertTrue(0 < off["claude:sonnet:medium"] <= 1.5)    # 42 of 42: finite, within the cap
+        none = tr.observed_offsets({**self.pri, "observed": {**self.pri["observed"], "weight": 0}})
+        self.assertEqual(set(none.values()), {0.0})
+
+    def test_used_until_the_hub_learns_the_rung(self):
+        k = "codex:gpt-6-luna:low"
+        fresh = {"offsets": {}, "counts": {}, "outcomes": []}
+        self.assertEqual(tr.offset(fresh, self.pri, k), tr.observed_offsets(self.pri)[k])
+        self.assertEqual(tr.offset({"offsets": {k: -0.2}}, self.pri, k), -0.2)
+        self.assertEqual(tr.offset(fresh, self.pri, "claude:haiku:low"), 0.0)
+        res = tr.route(2.32, self.pri, fresh, ["codex"])
+        row = next(x for x in res["rows"] if x["rung"] == k)
+        self.assertAlmostEqual(row["theta"], round(self.theta(k) + tr.observed_offsets(self.pri)[k], 2), places=2)
+        out = tr.record(k, 2.32, True, self.pri, fresh)    # the first outcome builds on the head start
+        self.assertGreater(fresh["offsets"][k], tr.observed_offsets(self.pri)[k])
+        self.assertGreater(out["predicted_p"], tr.p_success(self.theta(k), 2.32, self.a))
+
 
 class TestCLI(unittest.TestCase):
     def test_route_record_show_standalone(self):
