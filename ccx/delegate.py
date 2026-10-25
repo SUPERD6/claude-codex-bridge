@@ -285,6 +285,9 @@ def run(req: Request, p: Paths) -> dict:
                          if p.memory_index.exists() else "") + _brief_notes(p, cfg, req.to, brief, req.cwd.resolve()),
         )
     (run_dir / "prompt.md").write_text(first_prompt, encoding="utf-8")
+    if not prev:
+        # the person's own brief: `ccx task resume` restarts from it when the run was killed before its session began
+        (run_dir / "brief.md").write_text(req.brief, encoding="utf-8")
 
     if req.provider:
         req.to = req.provider                  # a provider is its own agent: own rungs, prices and learning
@@ -304,7 +307,7 @@ def run(req: Request, p: Paths) -> dict:
         "first_rung": plan[0]["rung"],
         "continue_depth": (int(prev.get("continue_depth", 0)) + 1) if cont else 0,
         "forked_from_lead": bool(req.fork_lead), "ephemeral": req.ephemeral,
-        "mode_source": req.mode_source, "mode_why": req.mode_why,
+        "mode_source": req.mode_source, "mode_why": req.mode_why, "check_cmd": req.check,
     }
     _write_record(run_dir, record)          # visible to `ccx show` at once (background runs, crashes)
     if req.mode == "write" and (not prev or cont):
