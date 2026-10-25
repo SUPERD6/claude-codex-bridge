@@ -306,6 +306,28 @@ class TestUndoAskTask(AdapterEnv):
         self.assertNotIn("learns", sized["route"])
         self.assertIsNotNone(sized["route"]["b"])
 
+    def test_failed_check_escalates_while_a_rung_is_left(self):
+        # the check fails the first time it runs and passes after: a sub-agent that wrongly said "done"
+        counter = self.work / "check-runs.txt"
+        check = ('python -c "import pathlib,sys;f=pathlib.Path(r\'%s\');n=int(f.read_text()) if f.exists() else 0;'
+                 'f.write_text(str(n+1));sys.exit(0 if n else 1)"' % counter)
+        out = self.j("run", "--from", "claude", "--to", "codex", "--tier", "T1", "--review", "off", "--check", check,
+                     "fix it")
+        self.assertTrue(out["ok"])
+        self.assertIn("->", out.get("escalated", ""))                     # climbed one rung
+        self.assertEqual(counter.read_text(), "2")                         # once per attempt, not again at the end
+        prompts = [c["prompt"] for c in self.calls() if c["agent"] == "codex"]
+        self.assertIn("you said done, but", prompts[-1])
+        rec = json.loads((self.hub / "ccx" / "runs" / out["run_id"] / "run.json").read_text(encoding="utf-8"))
+        self.assertEqual(rec["attempts"][0]["kind"], "check_failed")
+        self.assertTrue(rec["check"]["passed"])
+
+    def test_failed_check_on_the_last_rung_stays_a_failure(self):
+        out = self.j("run", "--from", "claude", "--to", "codex", "--tier", "T1", "--no-escalate", "--review", "off",
+                     "--check", 'python -c "import sys;sys.exit(1)"', "fix it")
+        self.assertEqual(out["kind"], "check_failed")
+        self.assertEqual(len([c for c in self.calls() if c["agent"] == "codex"]), 1)
+
     def test_run_saves_its_brief(self):
         out = self.j("run", "--from", "claude", "--to", "codex", "--tier", "T2", "--mode", "read", "look at a.py")
         self.assertEqual((self.hub / "ccx" / "runs" / out["run_id"] / "brief.md").read_text(encoding="utf-8"),

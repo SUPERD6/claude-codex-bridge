@@ -186,7 +186,7 @@ def resolve(spec: dict, caller: str, p, cfg: dict) -> tuple[dict | None, dict]:
     Order: explicit --model/--effort  >  rubric (task-routing, learns from outcomes)  >  --tier  >
     keyword heuristic (fallback when no rubric is given)."""
     to = spec.get("to") or "auto"
-    tradeoff = spec.get("tradeoff") or cfg["defaults"].get("tradeoff", "balanced")
+    tradeoff = spec.get("tradeoff") or cfg["defaults"].get("tradeoff", "save")
     route = {"tradeoff": tradeoff}
     if spec.get("minutes"):
         route["minutes"] = float(spec["minutes"])

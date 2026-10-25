@@ -99,7 +99,7 @@ def _fallback_plan(req: Request, p: Paths, cfg: dict, failed: dict) -> dict | No
     if b is not None:
         try:
             pk = learn.pick(p, float(b), others(failed["agent"], cfg) or [to],
-                            (req.route or {}).get("tradeoff", "balanced"), mode=req.mode)
+                            (req.route or {}).get("tradeoff", "save"), mode=req.mode)
             return _rung_spec(pk["rung"])
         except Exception:  # noqa: BLE001
             pass
