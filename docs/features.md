@@ -12,7 +12,7 @@ English · [中文](features.zh.md) · back to the [README](../README.md)
 | **4. Splitting the work** | A five-question difficulty score → agent, model, effort and the odds; when doing it yourself is cheaper, or the task should be split first, it says so instead of delegating. `ccx batch` / `ccx q` run pieces in parallel; `ccx task resume` continues a long task after a stop. | Routing works for real but priors are uncalibrated; the queue only with stand-ins |
 | **5. Cheap and fast** | Slim sub-agent start-up; `ccx lead` shows what every turn of the lead re-reads (`--breakdown` part by part, `--cache` where the prompt cache broke, `--suggest` a model for the lead itself); `ccx sum` gives the lead only what matters of a big output. | The tools exist; how much they save depends on the lead using them (see below) |
 | **6. No drop in quality** | ccx reruns the acceptance command itself (`--check`); another vendor's model reviews the diff (`--review`); every run gets a verdict (`ccx verify --ok 0 --reason wrong`), and runs nobody judged get a probable one from the evidence after 12 hours; `ccx trial` runs a week-long comparison. | Works for real; the automatic verdicts haven't been spot-checked yet |
-| **7. You stay in control** | Config changes are a dry run first and backed up before applying; `ccx undo` reverts a run's edits; `--mode read` / `--worktree` leave your working tree alone; sub-agents can't delegate further; `ccx ui` shows, read-only on this machine, who works on what and what waits for your call. | Works for real; `ccx ui` opened in Edge only |
+| **7. You stay in control** | Config changes are a dry run first and backed up before applying; `ccx undo` reverts a run's edits; `--mode read` / `--worktree` leave your working tree alone; sub-agents can't delegate further; `ccx ui` shows on this machine who works on what and what waits for your call, and its buttons (stop, verify, one more round, budget) show the exact `ccx` command and run it only on a second click. | Works for real; `ccx ui` opened in Edge and the app's built-in browser only |
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/architecture-dark.svg">
@@ -23,9 +23,16 @@ English · [中文](features.zh.md) · back to the [README](../README.md)
 
 `ccx ui` opens a page on this machine: what waits for you (red = your call, amber = please review),
 who works on what (one column per agent, new agents get their own), and how the quota windows are going. Click a
-block for the reason, the evidence and the `ccx` command to copy. Suggested notes (preferences, decisions, pitfalls
-ccx picked from a session) have a yes / no button, the page's only write. It reads only files ccx and the tools already
-write — no model is called — listens on 127.0.0.1 only, and exits a minute after the page is closed.
+block for the reason, the evidence and its buttons. It is also the manager's board: every project in the `ccx projects`
+catalog (a work queue there shows even without a recent run; quiet projects are one line; a project's approval rules
+are quoted on its page), and what this month's sub-agents cost and saved, labelled as a relative estimate (the same
+rule as `ccx report`). A button that changes something — stop a run, record right or wrong, one more fix round,
+continue, let it edit, change a queue's budget — first shows the exact `ccx` command it will run and runs it only
+on a second click; one that starts a sub-agent says it costs money and runs in the background. The page sends only
+which button, never a command; the server runs only a fixed list of ccx commands, as an argument list, from this page
+only (same origin, a token, a one-time confirmation). Suggested notes have a yes / no button. Showing the page reads
+only files ccx and the tools already write — no model is called — listens on 127.0.0.1 only, and exits a minute after
+the page is closed.
 `ccx ui --export snapshot.html` writes a static copy; `ccx config set ui.lang zh|en` picks the language.
 Evaluations and tests (eval-* labels, `--no-ab`, ccx's probes, runs in the temporary folder or a project's `.ccx`
 folder) stay hidden until you press "show evaluations and tests"; `ccx verify RUN --dismiss --note why` clears a
@@ -34,6 +41,10 @@ leftover from "waits for you" without counting it right or wrong, and routing ne
 <img alt="ccx ui task page in English, dark theme: a task as an org chart, one column per worker, the side panel showing why a piece needs your call (demo data)" src="assets/ui/task-en-dark.png" width="100%">
 
 <details><summary>Chinese interface, light</summary>
+
+<img alt="ccx ui as the manager's board: what waits for you across projects, this month's relative estimate, the catalog's quiet projects (demo data)" src="assets/ui/k6-month-zh.png" width="100%">
+
+<img alt="A button's second click: the exact command, and whether it costs money (demo data)" src="assets/ui/k6-confirm-zh.png" width="100%">
 
 <img alt="ccx ui overview in Chinese: nine things waiting, the current lead, two projects and the quota forecast (demo data)" src="assets/ui/overview-zh.png" width="100%">
 

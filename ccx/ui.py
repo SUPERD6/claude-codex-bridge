@@ -1,5 +1,13 @@
-"""`ccx ui`: a live view on this machine (proposal G1). It writes one thing only: the person's yes or no on a
-suggested note (H5, POST /api/suggestion, same-origin only); everything else is read.
+"""`ccx ui`: a live view on this machine (proposal G1) and the manager's board (K6). Showing it never writes and
+never calls a model. Two kinds of clicks change something, both same-origin only: yes or no on a suggested note
+(H5, POST /api/suggestion), and a button that runs one of a fixed set of ccx commands (stop, verify, resume, q done /
+budget / resume, run --mode write for a needs_write run; RUNS). Such a button is two requests: /api/act/prepare
+names the button (never a command), the server answers the exact command and a one-time nonce, the page shows it
+and asks again, and /api/act/run with the nonce runs it once (execute: argv, no shell, no window).
+
+Across projects: the runs of every project (as before), plus the queue of every project in the `ccx projects`
+catalog, its approval lines, and the catalog's other projects as one quiet list. This month: report.summarize's
+saving (measured or a model estimate, said which), read in the background every 5 minutes.
 
 What it shows, all read from files ccx and the two tools already write — no model is ever called and the quota
 probe is never started (an open page must not cost anything):
@@ -53,7 +61,8 @@ INTERNAL = ("review:", "quota-probe", "selftest", "handoff-from-transcript")
 STALE_MIN = 10                # a running run with no write for this long may be stuck
 LEAD_MIN = 15                 # a lead conversation counts as current when written to this recently
 POLL_S, BEAT_S, IDLE_S, FIRST_BEAT_S = 3, 10, 60, 120
-QUOTA_EVERY_S, LEADS_EVERY_S = 60, 15
+QUOTA_EVERY_S, LEADS_EVERY_S, MONTH_EVERY_S = 60, 15, 300
+ACT_TTL_S = 120               # a prepared action must be confirmed within this long, once
 TITLE_MAX = 90
 VERDICTS_TO_KNOW = 30         # verdicts before "how much was saved" is worth a number
 
@@ -316,8 +325,31 @@ def _q(s: str) -> str:
     return f'"{s}"' if re.search(r"\s|[&|<>^;]", s) or not s else s
 
 
-def _btn(label: str, cmd: str, style: str = "") -> dict:
-    return {"label": label, "cmd": cmd, "style": style}
+# K6: the ccx commands a button may run from the page (`run: true`); anything else is shown to copy. Each spends
+# (starts a sub-agent: runs in the background) or only records something (runs at once, waits for its answer).
+RUNS = {("verify",): "record", ("stop",): "record", ("q", "done"): "record", ("q", "budget"): "record",
+        ("resume",): "spend", ("run",): "spend", ("q", "resume"): "spend"}
+FILLS = ("{reason}", "{note}", "{usd}")          # filled in by the page's form, checked by the server (fill())
+REASONS = ("unfinished", "wrong", "overreach", "other")
+
+
+def _op(argv: list[str]) -> str | None:
+    """'record' | 'spend' for a ccx command a button may run, else None (shown to copy only)."""
+    if not argv or argv[0] != "ccx":
+        return None
+    words = [x for x in argv[1:] if not x.startswith("-")]
+    if argv[1:3] == ["q", "--cwd"]:                  # ccx q --cwd ROOT resume
+        words = ["q", *argv[4:5]]
+    return RUNS.get(tuple(words[:2])) or RUNS.get(tuple(words[:1]))
+
+
+def _btn(label: str, cmd, style: str = "") -> dict:
+    """A button. cmd is an argv list (a ccx command: maybe runnable from the page) or a string (copy only)."""
+    if isinstance(cmd, str):
+        return {"label": label, "cmd": cmd, "style": style, "run": False}
+    op = _op(cmd)
+    return {"label": label, "cmd": " ".join(x if x in FILLS else _q(x) for x in cmd), "argv": cmd, "style": style,
+            "run": op is not None, "spends": op == "spend"}
 
 
 def _act(rec: dict, verdict: dict | None, now: float, beat: float | None) -> dict | None:
@@ -329,51 +361,80 @@ def _act(rec: dict, verdict: dict | None, now: float, beat: float | None) -> dic
     if rec.get("state") == "running":
         if beat and now - beat > STALE_MIN * 60:
             return {"kind": "decide", "what": "a_stale", "why": ["w_stale", {"m": int((now - beat) // 60)}],
-                    "buttons": [show, _btn("b_resume_later", f"ccx resume {rid}")]}
+                    "buttons": [show, _btn("b_stop", ["ccx", "stop", rid], "bad")]}
         return None
     if verdict is not None or (rec.get("verdict") or {}).get("ok") is not None or rec.get("dismissed"):
         return None                                  # judged (by the person, the lead or ccx's soft verdict), dismissed
     if kind == "needs_write":
         return {"kind": "decide", "what": "a_needs_write", "why": ["w_needs_write", {}],
                 "buttons": [show, _btn("b_allow_write",
-                                       f"ccx run --mode write --cwd {_q(rec.get('cwd') or '.')} "
-                                       f"{_q(f'Make the changes run {rid} listed as needed (see ccx show {rid} --full)')}",
+                                       ["ccx", "run", "--mode", "write", "--cwd", rec.get("cwd") or ".",
+                                        f"Make the changes run {rid} listed as needed (see ccx show {rid} --full)"],
                                        "primary"),
-                            _btn("b_not_needed", f"ccx verify {rid} --ok 0 --reason other --note {_q('not needed')}")]}
+                            _btn("b_not_needed", ["ccx", "verify", rid, "--ok", "0", "--reason", "other", "--note",
+                                                  "not needed"])]}
     if kind == "review_failed":
         issues = "; ".join((rec.get("review") or {}).get("issues") or [])[:300]
         return {"kind": "decide", "what": "a_review_failed", "why": ["w_review_failed", {"by": _who_rung(
             (rec.get("review") or {}).get("by"))}],
                 "issues": (rec.get("review") or {}).get("issues") or [],
-                "buttons": [show, _btn("b_one_more", f"ccx resume {rid} {_q('The review still finds: ' + issues)}",
+                "buttons": [show, _btn("b_one_more", ["ccx", "resume", rid, "The review still finds: " + issues],
                                        "primary"),
-                            _btn("b_myself", f"ccx verify {rid} --ok 0 --reason wrong --note {_q('handled by hand')}")]}
+                            _btn("b_myself", ["ccx", "verify", rid, "--ok", "0", "--reason", "wrong", "--note",
+                                              "handled by hand"])]}
     if kind == "check_failed":
         c = rec.get("check") or {}
         return {"kind": "decide", "what": "a_check_failed", "why": ["w_check_failed", {"cmd": c.get("cmd") or "",
                                                                                          "exit": c.get("exit")}],
-                "buttons": [show, _btn("b_fix_check", f"ccx resume {rid} {_q('the check fails: fix it')}", "primary")]}
+                "buttons": [show, _btn("b_fix_check", ["ccx", "resume", rid, "the check fails: fix it"], "primary")]}
     if kind in ("quota", "timeout"):
         ra = ((rec.get("attempts") or [{}])[-1]).get("retry_after")
         return {"kind": "decide", "what": "a_quota" if kind == "quota" else "a_timeout",
                 "why": ["w_quota" if kind == "quota" else "w_timeout", {"at": ra}],
-                "buttons": [_btn("b_resume", f"ccx resume {rid}", "primary"), show]}
+                "buttons": [_btn("b_resume", ["ccx", "resume", rid], "primary"), show]}
     if kind == "over_budget":
         return {"kind": "decide", "what": "a_over_budget", "why": ["w_over_budget", {}],
-                "buttons": [show, _btn("b_resume", f"ccx resume {rid}", "primary")]}
+                "buttons": [show, _btn("b_more_budget", ["ccx", "resume", rid, "--budget", "{usd}"], "primary")]}
     if rec.get("auth_problem"):
         return {"kind": "decide", "what": "a_auth", "why": ["w_auth", {"agent": rec.get("to")}],
                 "buttons": [_btn("b_login", f"{rec.get('to')} login", "primary")]}
     if not rec.get("ok") or res.get("status") in ("failed", "blocked"):
         return {"kind": "decide", "what": "a_failed", "why": ["w_failed", {}],
-                "buttons": [show, _btn("b_retry", f"ccx resume {rid} {_q('Try again: ' + (res.get('summary') or rec.get('error') or '')[:200])}",
-                                       "primary")]}
+                "buttons": [show, _btn("b_retry", ["ccx", "resume", rid, "Try again: " + (
+                    res.get("summary") or rec.get("error") or "")[:200]], "primary")]}
     if res.get("status") in ("done", "partial"):
         return {"kind": "review", "what": "a_review", "why": None, "reasons": True,
-                "buttons": [_btn("b_ok", f"ccx verify {rid} --ok 1", "good"),
-                            _btn("b_bad", f"ccx verify {rid} --ok 0 --reason {{reason}} --note {{note}}", "bad"),
+                "buttons": [_btn("b_ok", ["ccx", "verify", rid, "--ok", "1"], "good"),
+                            _btn("b_bad", ["ccx", "verify", rid, "--ok", "0", "--reason", "{reason}", "--note",
+                                           "{note}"], "bad"),
                             _btn("b_see_change", _diff_cmd(rec))]}
     return None
+
+
+def fill(argv: list[str], given: dict | None) -> list[str]:
+    """The button's argv with the page's form values put in, each checked: a reason from REASONS, a note of at most
+    200 printable characters, an amount 0 < USD <= 10000. Every value is one argument (no shell ever sees it)."""
+    given = given or {}
+    reason = given.get("reason") if given.get("reason") in REASONS else "other"
+    note = re.sub(r"[\x00-\x1f\x7f]", " ", str(given.get("note") or "")).strip()[:200] or reason
+    if "{reason}" not in argv:
+        note = f"{reason}: {note}" if note != reason else reason
+    out = []
+    for x in argv:
+        if x == "{reason}":
+            x = reason
+        elif x == "{note}":
+            x = note
+        elif x == "{usd}":
+            try:
+                usd = float(given.get("usd"))
+            except (TypeError, ValueError):
+                raise ValueError("an amount in USD") from None
+            if not 0 < usd <= 10000:
+                raise ValueError("an amount between 0 and 10000 USD")
+            x = f"{usd:.2f}"
+        out.append(x)
+    return out
 
 
 def _diff_cmd(rec: dict) -> str:
@@ -437,6 +498,7 @@ def piece_of_run(rd: Reader, rec: dict, verdict: dict | None, now: float, title:
         "native": [{"id": k[-8:], "tokens": int(sum(x.values())) if isinstance(x, dict) else 0}
                    for k, x in (rec.get("codex_children") or {}).items()],
         "act": act,
+        "ctl": [_btn("b_stop", ["ccx", "stop", rec["run_id"]], "bad")] if running and not act else [],
     }
     return piece
 
@@ -668,24 +730,91 @@ def quota_view(rd: Reader, wait: bool = True) -> list[dict]:
                     "minutes": next((r.get("window_minutes") for r in readings if r["window"] == win), None)})
         return out
 
+    return _later(rd, "quota", QUOTA_EVERY_S, make, wait, [])
+
+
+def _later(rd: Reader, key: str, seconds: float, make, wait: bool, empty):
+    """rd.every(key, seconds, make), except that with wait=False a slow first read runs in the background and the
+    page gets `empty` (then the last value) until it is done. A failure gives `empty`: the page shows the rest."""
     def safe():
         try:
             return make()
-        except Exception:  # noqa: BLE001 — odd log lines never break the page
-            return []
-    hit = rd._timed.get("quota")
-    if wait or (hit and time.time() - hit[0] < QUOTA_EVERY_S):
-        return rd.every("quota", QUOTA_EVERY_S, safe)
-    if "quota" not in rd._busy:
-        rd._busy.add("quota")
+        except Exception:  # noqa: BLE001 — odd files never break the page
+            return empty
+    hit = rd._timed.get(key)
+    if wait or (hit and time.time() - hit[0] < seconds):
+        return rd.every(key, seconds, safe)
+    if key not in rd._busy:
+        rd._busy.add(key)
 
         def bg():
             try:
-                rd._timed["quota"] = (time.time(), safe())
+                rd._timed[key] = (time.time(), safe())
             finally:
-                rd._busy.discard("quota")
+                rd._busy.discard(key)
         threading.Thread(target=bg, daemon=True).start()
-    return hit[1] if hit else []
+    return hit[1] if hit else empty
+
+
+# ------------------------------------------------------------------ K6: across projects, this month
+def _catalog(rd: Reader) -> dict[Path, dict]:
+    """The `ccx projects` catalog by resolved folder (read again only when the file changes)."""
+    from . import projects
+    cat = rd.json_file(projects.store(rd.p)) or {}
+    return {_resolved(str(e["path"])): e for e in cat.get("projects") or [] if isinstance(e, dict) and e.get("path")}
+
+
+def _rules(rd: Reader, e: dict) -> list[dict]:
+    """Lines of the project's rule files that speak of approval or a freeze, quoted (projects.approval_rules)."""
+    from . import projects
+    return rd.every(f"rules:{e['path']}", MONTH_EVERY_S,
+                    lambda: [{"file": Path(r["file"]).name, "line": r["line"], "text": r["text"]}
+                             for r in projects.approval_rules(e, 6)])
+
+
+def _level(rd: Reader, root: Path) -> str | None:
+    """The project's autonomy level (L0/L1/L2) when ccx has that module (K4); else nothing is shown."""
+    def look():
+        try:
+            from . import autonomy                    # type: ignore[attr-defined]
+            v = autonomy.level_for(root)
+        except Exception:  # noqa: BLE001 — not there (yet) or odd: no badge
+            return None
+        v = v.get("level") if isinstance(v, dict) else v
+        return str(v) if re.fullmatch(r"L\d", str(v or "")) else None
+    return rd.every(f"level:{root}", 30, look)
+
+
+def _inbox(rd: Reader) -> int | None:
+    """How many issues wait to be taken in when ccx has that module (K5); else None and nothing is shown."""
+    def look():
+        try:
+            from . import intake                      # type: ignore[attr-defined]
+            v = intake.pending(rd.p)
+        except Exception:  # noqa: BLE001
+            return None
+        return v if isinstance(v, int) else len(v) if hasattr(v, "__len__") else None
+    return rd.every("inbox", 30, look)
+
+
+def month_start(now: float) -> float:
+    t = time.localtime(now)
+    return time.mktime((t.tm_year, t.tm_mon, 1, 0, 0, 0, 0, 0, -1))
+
+
+def month_view(rd: Reader, wait: bool = True) -> dict | None:
+    """This calendar month's sub-agent spend and the saving `ccx report` computes (the same rule: measured by
+    `ccx trial` when it has enough tasks, else a model estimate against the lead's own price). Read from the
+    ledger in the background every few minutes; None until the first read is done."""
+    def make():
+        from . import report
+        now = time.time()
+        start = month_start(now)
+        s = report.summarize(rd.p, report.collect(rd.p, max(1 / 24, (now - start) / 86400), include_lead=False))
+        t = s["totals"]
+        return {"since": start, "sub_usd": t["sub_ae"], "runs": t["runs"], "saving": t["saving"],
+                "kind": t["saving_kind"], "ci95": t["saving_ci95"], "n": t["saving_n"]}
+    return _later(rd, "month", MONTH_EVERY_S, make, wait, None)
 
 
 # ------------------------------------------------------------------ the whole page's data
@@ -702,11 +831,10 @@ def _queue_pieces(rd: Reader, root: Path, q: dict, recs: dict, verdicts: dict, n
                   "model": "", "status": "queued", "step": STEP["sent"], "skip": [], "secs": 0,
                   "usd": float(it.get("cost_usd") or 0), "tokens": 0, "live": False, "summary": it.get("summary") or "",
                   "files": [], "check": None, "review": None, "verdict": None, "attempts": 0, "rungs": [], "native": [],
-                  "act": None, "ts": it.get("added")}
+                  "act": None, "ctl": [], "ts": it.get("added")}
         pc["id"], pc["qid"] = _sid(it["id"]), it["id"]
         pc["usd"] = round(float(it.get("cost_usd") or pc["usd"] or 0), 6)
         st = it.get("status")
-        cmd_done = f"ccx q done {it['id']} --ok 1 --cwd {_q(str(root))}"
         if st == "todo":
             pc.update(status="queued", act=None)
         elif st == "doing" and pc["status"] not in ("run", "decide"):
@@ -714,14 +842,16 @@ def _queue_pieces(rd: Reader, root: Path, q: dict, recs: dict, verdicts: dict, n
         elif st == "done" and it.get("verdict") is not None:
             pc.update(status="done" if it["verdict"] else "fail", step=STEP["done"], act=None)
         elif st == "done" and pc.get("act") and pc["act"]["kind"] == "review":
-            pc["act"]["buttons"][0]["cmd"] = cmd_done
-            pc["act"]["buttons"][1]["cmd"] = (f"ccx q done {it['id']} --ok 0 --note {{note}} --cwd {_q(str(root))}")
+            b = pc["act"]["buttons"]
+            b[0] = _btn(b[0]["label"], ["ccx", "q", "done", it["id"], "--ok", "1", "--cwd", str(root)], b[0]["style"])
+            b[1] = _btn(b[1]["label"], ["ccx", "q", "done", it["id"], "--ok", "0", "--note", "{note}", "--cwd",
+                                        str(root)], b[1]["style"])
         elif st in ("needs_write", "blocked", "failed") and not pc.get("act"):
             show = _btn("b_see", f"ccx show {it['run']} --full") if it.get("run") else _btn("b_tree", "ccx q tree")
             pc.update(status="decide", act={"kind": "decide", "what": "a_q_" + st, "why": ["w_q_" + st,
                                                                                              {"s": it.get("summary") or ""}],
-                                            "buttons": [show, _btn("b_q_resume", f"ccx q resume --cwd {_q(str(root))}",
-                                                                   "primary")]})
+                                            "buttons": [show, _btn("b_q_resume", ["ccx", "q", "--cwd", str(root),
+                                                                                  "resume"], "primary")]})
         kids = wq.children(q, it["id"])
         if kids:
             pc["children"] = [one(k) for k in kids]
@@ -764,6 +894,10 @@ def collect(p: Paths, project: Path | None = None, days: float = 7, rd: Reader |
 
     for r in shown.values():
         roots.setdefault(root_of(r), {})
+    catalog = _catalog(rd)                           # K6: every project `ccx projects` knows, by its folder
+    for root in catalog:                             # ... a queue there shows even without a recent run here
+        if root not in roots and (wq.qdir(root) / "queue.jsonl").exists():
+            roots[root] = {}
     if proj:
         roots = {k: v for k, v in roots.items() if k == proj}
         roots.setdefault(proj, {})
@@ -804,6 +938,7 @@ def collect(p: Paths, project: Path | None = None, days: float = 7, rd: Reader |
             "asked": min(float(it.get("added") or now) for it in q["items"].values()), "last": last,
             "lead": {"agent": lead.get("agent"), "model": lead.get("model")}, "helpers": [],
             "spent": wq.spent(q), "budget": q.get("budget_usd"), "pieces": pieces,
+            "ctl": [_btn("b_budget", ["ccx", "q", "budget", "{usd}", "--cwd", str(root)])],
             "hist": sorted(hist, key=lambda h: h.get("ts") or 0)[-40:]})
 
     # the rest: one task per lead conversation (or per run when no lead is known)
@@ -847,7 +982,7 @@ def collect(p: Paths, project: Path | None = None, days: float = 7, rd: Reader |
             "title": lead.get("title") or (pieces[0]["title"] if len(pieces) == 1 else ""),
             "asked": min(float(shown[h].get("ts") or now) for h in heads), "last": last,
             "lead": {"agent": lead.get("agent"), "model": lead.get("model")}, "helpers": [],
-            "spent": round(sum(x["usd"] for x in pieces), 6), "budget": None, "pieces": pieces,
+            "spent": round(sum(x["usd"] for x in pieces), 6), "budget": None, "pieces": pieces, "ctl": [],
             "hist": sorted(hist, key=lambda h: h.get("ts") or 0)[-40:]})
 
     current = [{**x, "test": is_scratch(x.get("cwd"), scratch)} for x in leads(rd, mine)]
@@ -867,9 +1002,17 @@ def collect(p: Paths, project: Path | None = None, days: float = 7, rd: Reader |
                     t["helpers"] = cur["helpers"]
                     t["lead"]["model"] = t["lead"]["model"] or cur["model"]
         tasks.sort(key=lambda t: -(t["last"] or t["asked"] or 0))
-        projects.append({"id": _pid(root), "name": root.name or str(root), "path": str(root), "tasks": tasks[:30],
-                         "test": is_scratch(root, scratch) or all(t["test"] for t in tasks)})
+        e = catalog.get(root)
+        projects.append({"id": _pid(root), "name": (e or {}).get("name") or root.name or str(root), "path": str(root),
+                         "tasks": tasks[:30], "test": is_scratch(root, scratch) or all(t["test"] for t in tasks),
+                         "rules": _rules(rd, e) if e else [], "level": _level(rd, root)})
     projects.sort(key=lambda pr: -max(t["last"] or t["asked"] or 0 for t in pr["tasks"]))
+    shown_roots = {Path(pr["path"]) for pr in projects}
+    quiet = sorted((e for root, e in catalog.items() if root not in shown_roots and not proj),
+                   key=lambda e: -float(e.get("last_active") or 0))
+    others = [{"name": e.get("name"), "path": e.get("path"), "last": e.get("last_active"),
+               "summary": _short(e.get("summary") or ""), "test": is_scratch(e.get("path"), scratch)}
+              for e in quiet[:12]]
 
     providers = set((cfg.get("providers") or {}).keys())
     week = [r for r in recs.values() if float(r.get("ts") or 0) >= now - 7 * 86400]
@@ -894,7 +1037,8 @@ def collect(p: Paths, project: Path | None = None, days: float = 7, rd: Reader |
         "v": 1, "generated": now, "lang": ui_lang(cfg), "poll_s": POLL_S, "beat_s": BEAT_S,
         "projects": projects, "quota": quota_view(rd, quota_wait), "leads": current, "agents": agents,
         "discussions": talks, "track": track, "track_min": ways.MIN_JUDGED, "suggestions": sugs,
-        "suggestions_total": n_sugs,
+        "suggestions_total": n_sugs, "others": others, "others_total": len(quiet),
+        "month": month_view(rd, quota_wait), "inbox": _inbox(rd),
         "week": {"usd": round(sum(_usd(r) for r in week), 4),
                  "cash_usd": round(sum(_usd(r) for r in week if r.get("to") in providers or r.get("provider")), 4),
                  "runs": len(week), "verdicts": len(hard), "verdicts_needed": VERDICTS_TO_KNOW},
@@ -925,6 +1069,41 @@ def run_detail(p: Paths, run_id: str) -> dict:
     return out
 
 
+# ------------------------------------------------------------------ running a button's ccx command (K6)
+def execute(p: Paths, argv: list[str], background: bool) -> dict:
+    """Run one ccx command a button offers: this copy of ccx, an argument list (no shell), no console window.
+    One that records something runs now and its answer comes back; one that starts a sub-agent runs in the
+    background (its run record shows on the page). Each is one line in <hub>/ccx/ui-actions.jsonl."""
+    import subprocess
+    from .config import ccx_argv
+    from .winproc import BACKGROUND, CREATE_NO_WINDOW
+    if _op(argv) is None:                            # the last guard: only RUNS commands, whatever called this
+        raise ValueError("not a command the page may run")
+    real = [*ccx_argv(), *argv[1:]]
+    log = p.state / "ui-actions.jsonl"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    row = {"ts": time.time(), "argv": argv[1:], "background": background}
+    if background:
+        out_f = p.state / "ui-actions" / f"{time.strftime('%Y%m%d-%H%M%S')}-{secrets.token_hex(3)}.log"
+        out_f.parent.mkdir(parents=True, exist_ok=True)
+        with open(out_f, "wb") as fh:
+            proc = subprocess.Popen(real, stdin=subprocess.DEVNULL, stdout=fh, stderr=subprocess.STDOUT,
+                                    close_fds=True, cwd=str(p.state), **BACKGROUND)
+        out = {"started": True, "pid": proc.pid, "log": str(out_f)}
+    else:
+        flags = {"creationflags": CREATE_NO_WINDOW} if os.name == "nt" else {}
+        try:
+            r = subprocess.run(real, stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8",
+                               errors="replace", timeout=90, cwd=str(p.state), **flags)
+            out = {"exit": r.returncode, "out": (r.stdout or "")[-1500:], "err": (r.stderr or "")[-600:]}
+        except subprocess.TimeoutExpired:
+            out = {"exit": None, "out": "", "err": "still running after 90 s"}
+    with open(log, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps({**row, **{k: out.get(k) for k in ("exit", "started", "pid")}}) + "\n")
+    out["ok"] = bool(out.get("started")) or out.get("exit") == 0
+    return out
+
+
 # ------------------------------------------------------------------ the server
 def _static(name: str) -> bytes:
     return (STATIC / name).read_bytes()
@@ -948,6 +1127,7 @@ class UI:
         self.last_beat: float | None = None
         self.reader = Reader(p)
         self.lock = threading.Lock()
+        self.pending: dict[str, dict] = {}
         self.why_stopped = ""
         ui = self
 
@@ -1016,10 +1196,40 @@ class UI:
                     return self._send(200, b'{"ok":true}')
                 if urlsplit(self.path).path == "/api/suggestion":
                     return self._suggestion()
+                if urlsplit(self.path).path in ("/api/act/prepare", "/api/act/run"):
+                    return self._act(urlsplit(self.path).path.rsplit("/", 1)[1])
                 return self._send(404, b'{"error":"not found"}')
 
+            def _body(self, limit: int = 4000):
+                n = int(self.headers.get("Content-Length") or 0)
+                body = json.loads(self.rfile.read(n).decode("utf-8")) if 0 < n <= limit else None
+                if not isinstance(body, dict):
+                    raise ValueError("a JSON object")
+                return body
+
+            def _act(self, step: str):
+                """K6, a button that runs a ccx command, in two requests. prepare {project, task, piece|null, btn,
+                fill}: the server finds that button in what it shows now, fills and checks the form values and
+                answers the exact command with a one-time nonce. run {nonce}: the page's second click (the person
+                read the command) runs it once. The page never sends a command, only which button."""
+                if not self._same_origin():
+                    return self._deny("origin")
+                if not self.headers.get("Content-Type", "").startswith("application/json"):
+                    return self._send(415, b'{"error":"json only"}')
+                try:
+                    body = self._body()
+                    if step == "prepare":
+                        out = ui.prepare(body)
+                    else:
+                        out = ui.run_prepared(str(body.get("nonce") or ""))
+                except LookupError as e:
+                    return self._send(409, json.dumps({"error": str(e)[:300]}).encode())
+                except (ValueError, TypeError, KeyError) as e:
+                    return self._send(400, json.dumps({"error": str(e)[:300]}).encode())
+                return self._send(200, json.dumps(out, ensure_ascii=False).encode("utf-8"))
+
             def _same_origin(self) -> bool:
-                """The one write: only from this page. A browser always sends Origin on a POST; it must be this
+                """Writes (a note's yes / no, a button's command) only from this page. A browser always sends Origin on a POST; it must be this
                 server's own, and Sec-Fetch-Site (when sent) same-origin. Host and token are checked before."""
                 port = self.server.server_address[1]
                 if self.headers.get("Origin", "") not in (f"http://127.0.0.1:{port}", f"http://localhost:{port}"):
@@ -1053,6 +1263,49 @@ class UI:
         self.httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
         self.httpd.daemon_threads = True
         self.port = self.httpd.server_address[1]
+
+    def find_button(self, want: dict) -> dict:
+        """The button `want` names ({project, task, piece|null, btn: "a<i>" act / "c<i>" control}) in the data the
+        page is shown now; LookupError when it is gone (the run moved on) or never offered a command to run."""
+        with self.lock:
+            data = collect(self.p, self.project, self.days, self.reader, quota_wait=False)
+        pr = next((x for x in data["projects"] if x["id"] == want.get("project")), None)
+        tk = next((x for x in (pr or {}).get("tasks") or [] if x["id"] == want.get("task")), None)
+        if tk is None:
+            raise LookupError("that task is no longer on the page: reload")
+        holder = tk
+        if want.get("piece") is not None:
+            holder = next((x for x in _walk(tk["pieces"]) if x["id"] == want.get("piece")), None)
+            if holder is None:
+                raise LookupError("that piece is no longer on the page: reload")
+        m = re.fullmatch(r"([ac])(\d{1,2})", str(want.get("btn") or ""))
+        if not m:
+            raise ValueError("btn: a<i> or c<i>")
+        group = ((holder.get("act") or {}).get("buttons") if m.group(1) == "a" else holder.get("ctl")) or []
+        i = int(m.group(2))
+        if i >= len(group) or not group[i].get("run"):
+            raise LookupError("that button is no longer there, or only shows a command: reload")
+        return group[i]
+
+    def prepare(self, want: dict) -> dict:
+        b = self.find_button(want)
+        argv = fill(b["argv"], want.get("fill"))
+        nonce = secrets.token_urlsafe(18)
+        now = time.time()
+        with self.lock:
+            self.pending = {k: v for k, v in self.pending.items() if v["until"] > now}
+            if len(self.pending) >= 20:
+                raise LookupError("too many unconfirmed actions: wait a minute")
+            self.pending[nonce] = {"argv": argv, "spends": b["spends"], "until": now + ACT_TTL_S}
+        return {"nonce": nonce, "cmd": " ".join(_q(x) for x in argv), "spends": b["spends"], "ttl_s": ACT_TTL_S}
+
+    def run_prepared(self, nonce: str) -> dict:
+        with self.lock:
+            job = self.pending.pop(nonce, None)       # once: a second run of the same nonce finds nothing
+        if not job or job["until"] < time.time():
+            raise LookupError("this confirmation has expired or was used: press the button again")
+        out = execute(self.p, job["argv"], background=job["spends"])
+        return {**out, "cmd": " ".join(_q(x) for x in job["argv"])}
 
     @property
     def url(self) -> str:
