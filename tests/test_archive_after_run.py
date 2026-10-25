@@ -81,6 +81,31 @@ class TestAfterRun(ArchiveEnv):
         b = self.go("run", *LUNA, "y", env=env, code=0)
         self.assertNotIn("continued_from", b)
 
+    def test_a_run_in_a_throwaway_hub_archives_itself(self):
+        # the run archives its own session at its end, in whatever hub it runs: the person's hub never sees it
+        hub2 = self.work.parent / "hub2"
+        hub2.mkdir()
+        out = self.go("run", *LUNA, "x", env={"CCX_HUB": str(hub2)}, code=0)
+        f = hub2 / "ccx" / "archived.jsonl"
+        self.assertEqual(json.loads(f.read_text(encoding="utf-8").splitlines()[0])["run_id"], out["run_id"])
+        self.assertEqual(len(self.codex_calls("archive")), 1)
+        self.assertEqual(self.archived(), [])                       # nothing in the default hub
+
+    def test_an_eval_archives_what_its_throwaway_hub_left(self):
+        # runs that may go on (blocked here) stay after their run; the eval ends them all: nothing continues them
+        import os
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts" / "eval"))
+        import common
+        hub2 = self.work.parent / "hub2"
+        hub2.mkdir()
+        self.go("run", *LUNA, "--no-escalate", "x", env={"CCX_HUB": str(hub2), "FAKE_STATUS": "blocked"})
+        self.assertEqual(self.codex_calls("archive"), [])
+        os.environ["FAKE_LOG"] = str(self.log)
+        self.assertEqual(common.archive_hub(hub2), 1)
+        self.assertEqual(len(self.codex_calls("archive")), 1)
+
     def test_hours_and_off_leave_it_to_session_start(self):
         for m in ("hours", "off"):
             self.go("config", "set", "sessions.archive", m)
