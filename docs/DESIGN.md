@@ -58,6 +58,8 @@ mechanism; the content stays on their own machine.
      nothing new, it prints nothing.
    - A sub-agent (any tool) gets no delta; its brief carries up to 4 notes that share words with the task
      (`memory.for_brief`, ~300 tokens at most). No shared word, no note.
+   - Each use (shown at a start, found by a search, put in a brief) is logged with who saw it and in which project;
+     `ccx mem report --days 14` prints who wrote the notes that were used and who used them.
    - The project layer (`.ccx/`) works the same way. A file or email given to one side is archived by `ccx inbox`,
      and the other side reads one line about it.
 6. **Sync** (`ccx/sync.py`):

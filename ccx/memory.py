@@ -292,15 +292,81 @@ def for_brief(p: Paths, brief: str, project: str | None = None, k: int = BRIEF_N
 UNUSED_DAYS = 60
 
 
-def mark_used(p: Paths, seqs: list[int]) -> None:
-    """A note was shown at a session start or found by a search (H6: how often each one is used)."""
+def mark_used(p: Paths, seqs: list[int], by: str | None = None, project: str | None = None,
+              via: str | None = None) -> None:
+    """A note was shown at a session start, found by a search or put in a sub-agent's brief (H6: how often each one
+    is used, and by whom: `by` the tool that saw it, `project` the folder it worked in, `via` start|search|brief)."""
     if not seqs:
         return
     ts = time.strftime("%Y-%m-%dT%H:%M:%S")
+    extra = {k: v for k, v in (("by", by), ("project", project), ("via", via)) if v}
     with _lock(p):
         with open(_meta(p), "a", encoding="utf-8") as f:
             for s in sorted(set(seqs)):
-                f.write(json.dumps({"ev": "used", "seq": s, "ts": ts}) + "\n")
+                f.write(json.dumps({"ev": "used", "seq": s, "ts": ts, **extra}) + "\n")
+
+
+def use_report(p: Paths, days: float = 14) -> dict:
+    """H6: in the last `days`, who wrote the notes that were used and who used them (writer x user), per project,
+    and how many notes written in that time nobody used. Uses recorded before `by` was kept count as "unknown"."""
+    cutoff = time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(time.time() - days * 86400))
+    arch = p.memory / "journal.archive.jsonl"
+    old = []
+    if arch.exists():
+        for line in arch.read_text(encoding="utf-8").splitlines():
+            try:
+                old.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    writer = {e["seq"]: e.get("by") or "unknown" for e in [*old, *entries(p)] if "seq" in e}
+    matrix: dict[str, dict[str, int]] = {}
+    by_project: dict[str, dict[str, dict[str, int]]] = {}
+    via: dict[str, int] = {}
+    used: set[int] = set()
+    try:
+        lines = _meta(p).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        lines = []
+    for line in lines:
+        try:
+            ev = json.loads(line)
+        except ValueError:
+            continue
+        if ev.get("ev") != "used" or (ev.get("ts") or "") < cutoff:
+            continue
+        w, u = writer.get(ev.get("seq"), "unknown"), ev.get("by") or "unknown"
+        matrix.setdefault(w, {}).setdefault(u, 0)
+        matrix[w][u] += 1
+        pj = by_project.setdefault(ev.get("project") or "unknown", {}).setdefault(w, {})
+        pj[u] = pj.get(u, 0) + 1
+        via[ev.get("via") or "unknown"] = via.get(ev.get("via") or "unknown", 0) + 1
+        used.add(ev.get("seq"))
+    new = [e for e in entries(p) if (e.get("ts") or "") >= cutoff]
+    written: dict[str, int] = {}
+    for e in new:
+        written[e.get("by") or "unknown"] = written.get(e.get("by") or "unknown", 0) + 1
+    return {"days": days, "uses": sum(via.values()), "matrix": matrix, "by_project": by_project, "via": via,
+            "written": written, "written_never_used": sum(e["seq"] not in used for e in new)}
+
+
+def format_use_report(r: dict) -> str:
+    """The writer x user matrix as a small text table."""
+    users = sorted({u for row in r["matrix"].values() for u in row})
+    lines = [f"Shared notes used in the last {r['days']:g} days: {r['uses']} time(s)"
+             + (" (" + ", ".join(f"{k} {v}" for k, v in sorted(r["via"].items())) + ")" if r["via"] else "")]
+    if users:
+        w = max(len("written by \\ used by"), *(len(x) for x in r["matrix"]))
+        lines.append("written by \\ used by".ljust(w) + "".join(f"  {u:>8}" for u in users))
+        for wr in sorted(r["matrix"]):
+            lines.append(wr.ljust(w) + "".join(f"  {r['matrix'][wr].get(u, 0):>8}" for u in users))
+    if r["by_project"]:
+        lines.append("by project: " + ", ".join(
+            f"{pj} {sum(n for row in m.values() for n in row.values())}" for pj, m in sorted(r["by_project"].items())))
+    n_new = sum(r["written"].values())
+    lines.append(f"written in that time: {n_new}"
+                 + (" (" + ", ".join(f"{k} {v}" for k, v in sorted(r["written"].items())) + ")" if n_new else "")
+                 + (f", {r['written_never_used']} not used yet" if n_new else ""))
+    return "\n".join(lines)
 
 
 def usage(p: Paths) -> dict[int, dict]:
