@@ -62,6 +62,13 @@ def _provider_lead(cli: str, env, cfg: dict | None = None) -> str | None:
     return None
 
 
+# What Codex sets for the commands it runs (codex-cli 0.164, checked on a real run 2026-10-25: also
+# CODEX_VERSION and CODEX_APPLY_PATCH_PRESERVE_LINE_ENDINGS). Not any CODEX_*: people set CODEX_HOME,
+# CODEX_SQLITE_HOME or the installer's CODEX_INSTALL_DIR for good, and then a plain terminal looked like Codex.
+CODEX_RUN_VARS = ("CODEX_THREAD_ID", "CODEX_SESSION_ID", "CODEX_TOOL_CALL_ID", "CODEX_CI", "CODEX_SANDBOX",
+                  "CODEX_SANDBOX_NETWORK_DISABLED")
+
+
 def lead_identity(env=None, cfg: dict | None = None) -> str:
     """Who is running this command, from the environment: a lead tool (claude, codex, dsh), the provider behind
     one (deepseek through Claude Code, deepseek-codex through Codex), or "user" at a plain terminal. CCX_LEAD
@@ -74,7 +81,7 @@ def lead_identity(env=None, cfg: dict | None = None) -> str:
         return "dsh"
     if env.get("CLAUDECODE") or env.get("CLAUDE_CODE_ENTRYPOINT"):
         return _provider_lead("claude", env, cfg) or "claude"
-    if any(k.startswith("CODEX_") and k not in ("CODEX_HOME",) for k in env):
+    if any(env.get(k) for k in CODEX_RUN_VARS):
         return _provider_lead("codex", env, cfg) or "codex"
     return "user"
 

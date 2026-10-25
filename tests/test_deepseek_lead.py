@@ -30,6 +30,13 @@ class TestIdentity(unittest.TestCase):
         self.assertEqual(lead_identity({"CLAUDECODE": "1", "ANTHROPIC_BASE_URL": "https://api.anthropic.com"},
                                        cfg()), "claude")
 
+    def test_codex_from_its_run_vars_only(self):
+        # set for good by the person or Codex's installer: a plain terminal, not Codex
+        self.assertEqual(lead_identity({"CODEX_HOME": "h", "CODEX_SQLITE_HOME": "h", "CODEX_INSTALL_DIR": "d"},
+                                       cfg()), "user")
+        self.assertEqual(lead_identity({"CODEX_SQLITE_HOME": "h", "CODEX_THREAD_ID": "t"}, cfg()), "codex")
+        self.assertEqual(lead_identity({"CODEX_SANDBOX_NETWORK_DISABLED": "1"}, cfg()), "codex")
+
     def test_dsh_is_the_innermost(self):
         self.assertEqual(lead_identity({"DSH_SESSION_ID": "session-1", "CLAUDECODE": "1"}, cfg()), "dsh")
 
