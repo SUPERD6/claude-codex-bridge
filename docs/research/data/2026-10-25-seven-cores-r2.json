@@ -1,0 +1,9107 @@
+{
+"about": "Seven cores round 2 (docs/research/2026-10-25-seven-cores-r2.md): one row per unit; no paths, run ids, session ids or review texts. tag r2-prefix = 4-C units run before the lenient review verdict (kept as evidence, not in the comparison).",
+"units": [
+{
+"exp": "way",
+"tag": "r2",
+"round": 1,
+"task": "cart",
+"arm": "visible",
+"ok": true,
+"usd": 0.1082,
+"tokens": 195213,
+"wall_s": 49.7,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"claude:sonnet:medium"
+],
+"agents": [
+"claude",
+"codex"
+],
+"review_usd": 0.038157,
+"plan_steps": 7,
+"plan_accepts": 4,
+"plan_other": 0,
+"rework": 0,
+"pytest": "2 passed in 0.01s",
+"acceptance": "pass"
+},
+{
+"exp": "way",
+"tag": "r2",
+"round": 1,
+"task": "cart",
+"arm": "critical",
+"ok": true,
+"usd": 0.122616,
+"tokens": 189693,
+"wall_s": 53.6,
+"n_runs": 3,
+"rungs": [
+"codex:gpt-6-luna:low",
+"claude:sonnet:medium",
+"claude:sonnet:medium"
+],
+"agents": [
+"claude",
+"codex"
+],
+"review_usd": 0,
+"plan_steps": 0,
+"plan_accepts": 0,
+"plan_other": 0,
+"rework": 0,
+"version_ok": {
+"A": true,
+"B": true
+},
+"pick_right": null,
+"acceptance": null,
+"pick": "B"
+},
+{
+"exp": "way",
+"tag": "r2",
+"round": 1,
+"task": "inventory",
+"arm": "visible",
+"ok": true,
+"usd": 0.091298,
+"tokens": 197806,
+"wall_s": 56.9,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"claude:sonnet:medium"
+],
+"agents": [
+"claude",
+"codex"
+],
+"review_usd": 0.041139,
+"plan_steps": 6,
+"plan_accepts": 2,
+"plan_other": 0,
+"rework": 0,
+"pytest": "7 passed in 0.02s",
+"acceptance": "pass"
+},
+{
+"exp": "way",
+"tag": "r2",
+"round": 1,
+"task": "inventory",
+"arm": "critical",
+"ok": true,
+"usd": 0.097915,
+"tokens": 216387,
+"wall_s": 57.7,
+"n_runs": 3,
+"rungs": [
+"codex:gpt-6-luna:low",
+"claude:sonnet:medium",
+"claude:sonnet:medium"
+],
+"agents": [
+"claude",
+"codex"
+],
+"review_usd": 0,
+"plan_steps": 0,
+"plan_accepts": 0,
+"plan_other": 0,
+"rework": 0,
+"version_ok": {
+"A": false,
+"B": true
+},
+"pick_right": true,
+"acceptance": null,
+"pick": "B"
+},
+{
+"exp": "way",
+"tag": "r2",
+"round": 1,
+"task": "merge",
+"arm": "visible",
+"ok": true,
+"usd": 0.079007,
+"tokens": 165765,
+"wall_s": 53.7,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"claude:sonnet:medium"
+],
+"agents": [
+"claude",
+"codex"
+],
+"review_usd": 0.040075,
+"plan_steps": 4,
+"plan_accepts": 4,
+"plan_other": 0,
+"rework": 0,
+"pytest": "6 passed in 0.01s",
+"acceptance": "pass"
+},
+{
+"exp": "way",
+"tag": "r2",
+"round": 1,
+"task": "merge",
+"arm": "critical",
+"ok": true,
+"usd": 0.082668,
+"tokens": 186712,
+"wall_s": 52.4,
+"n_runs": 3,
+"rungs": [
+"codex:gpt-6-luna:low",
+"claude:sonnet:medium",
+"claude:sonnet:medium"
+],
+"agents": [
+"claude",
+"codex"
+],
+"review_usd": 0,
+"plan_steps": 0,
+"plan_accepts": 0,
+"plan_other": 0,
+"rework": 0,
+"version_ok": {
+"A": true,
+"B": true
+},
+"pick_right": null,
+"acceptance": null,
+"pick": "B"
+},
+{
+"exp": "screen",
+"tag": "r2",
+"round": 1,
+"task": "coerce",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001949,
+"tokens": 93269,
+"wall_s": 18.3,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen",
+"tag": "r2",
+"round": 1,
+"task": "merge",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001898,
+"tokens": 92883,
+"wall_s": 16.8,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen",
+"tag": "r2",
+"round": 1,
+"task": "bytes",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001946,
+"tokens": 92834,
+"wall_s": 17.8,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen",
+"tag": "r2",
+"round": 1,
+"task": "inventory",
+"arm": "single",
+"ok": false,
+"ccx_ok": true,
+"usd": 0.002036,
+"tokens": 94406,
+"wall_s": 20.6,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "1 failed, 1 passed in 0.15s",
+"check_passed": true
+},
+{
+"exp": "screen",
+"tag": "r2",
+"round": 1,
+"task": "version",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002228,
+"tokens": 100280,
+"wall_s": 20.0,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen",
+"tag": "r2",
+"round": 1,
+"task": "cart",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.00202,
+"tokens": 94213,
+"wall_s": 18.4,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.02s",
+"check_passed": true
+},
+{
+"exp": "screen",
+"tag": "r2",
+"round": 1,
+"task": "retry",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001917,
+"tokens": 93119,
+"wall_s": 19.8,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen",
+"tag": "r2",
+"round": 1,
+"task": "ini",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.003516,
+"tokens": 141712,
+"wall_s": 25.7,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen",
+"tag": "r2",
+"round": 1,
+"task": "groupby",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001905,
+"tokens": 92811,
+"wall_s": 17.8,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen",
+"tag": "r2",
+"round": 1,
+"task": "wrap",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.00201,
+"tokens": 93800,
+"wall_s": 19.4,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen",
+"tag": "r2",
+"round": 2,
+"task": "inventory",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002311,
+"tokens": 113368,
+"wall_s": 26.9,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen",
+"tag": "r2",
+"round": 2,
+"task": "coerce",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001954,
+"tokens": 93313,
+"wall_s": 20.5,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen",
+"tag": "r2",
+"round": 2,
+"task": "bytes",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002573,
+"tokens": 132674,
+"wall_s": 25.1,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen",
+"tag": "r2",
+"round": 2,
+"task": "retry",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.003552,
+"tokens": 93152,
+"wall_s": 19.3,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen",
+"tag": "r2",
+"round": 2,
+"task": "cart",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002065,
+"tokens": 94111,
+"wall_s": 18.9,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.02s",
+"check_passed": true
+},
+{
+"exp": "screen",
+"tag": "r2",
+"round": 2,
+"task": "version",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002617,
+"tokens": 93457,
+"wall_s": 17.2,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen",
+"tag": "r2",
+"round": 2,
+"task": "ini",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.003492,
+"tokens": 153151,
+"wall_s": 28.9,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen",
+"tag": "r2",
+"round": 2,
+"task": "wrap",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002204,
+"tokens": 100204,
+"wall_s": 18.2,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen",
+"tag": "r2",
+"round": 2,
+"task": "merge",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.00358,
+"tokens": 92848,
+"wall_s": 16.8,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen",
+"tag": "r2",
+"round": 2,
+"task": "groupby",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002133,
+"tokens": 100013,
+"wall_s": 19.7,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen2",
+"tag": "r2",
+"round": 1,
+"task": "exporter",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.003858,
+"tokens": 111648,
+"wall_s": 22.0,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen2",
+"tag": "r2",
+"round": 1,
+"task": "rounding",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002082,
+"tokens": 99778,
+"wall_s": 19.6,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.02s",
+"check_passed": true
+},
+{
+"exp": "screen2",
+"tag": "r2",
+"round": 1,
+"task": "tags",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002532,
+"tokens": 93332,
+"wall_s": 20.5,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen2",
+"tag": "r2",
+"round": 1,
+"task": "dupparse",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001977,
+"tokens": 93185,
+"wall_s": 19.7,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen2",
+"tag": "r2",
+"round": 1,
+"task": "rank",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001932,
+"tokens": 93010,
+"wall_s": 20.2,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen2",
+"tag": "r2",
+"round": 1,
+"task": "pagefilter",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002904,
+"tokens": 100293,
+"wall_s": 21.9,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen2",
+"tag": "r2",
+"round": 1,
+"task": "inventory",
+"arm": "single",
+"ok": false,
+"ccx_ok": true,
+"usd": 0.003708,
+"tokens": 94005,
+"wall_s": 21.0,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "1 failed, 1 passed in 0.12s",
+"check_passed": true
+},
+{
+"exp": "screen2",
+"tag": "r2",
+"round": 1,
+"task": "config",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002031,
+"tokens": 93815,
+"wall_s": 19.1,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen2",
+"tag": "r2",
+"round": 1,
+"task": "cache",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001891,
+"tokens": 92956,
+"wall_s": 20.5,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.02s",
+"check_passed": true
+},
+{
+"exp": "screen2",
+"tag": "r2",
+"round": 2,
+"task": "pagefilter",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002004,
+"tokens": 93605,
+"wall_s": 20.5,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen2",
+"tag": "r2",
+"round": 2,
+"task": "exporter",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002028,
+"tokens": 93736,
+"wall_s": 23.2,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen2",
+"tag": "r2",
+"round": 2,
+"task": "rank",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.00157,
+"tokens": 59205,
+"wall_s": 16.0,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen2",
+"tag": "r2",
+"round": 2,
+"task": "config",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001976,
+"tokens": 93431,
+"wall_s": 20.9,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen2",
+"tag": "r2",
+"round": 2,
+"task": "rounding",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.003555,
+"tokens": 93075,
+"wall_s": 20.4,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.02s",
+"check_passed": true
+},
+{
+"exp": "screen2",
+"tag": "r2",
+"round": 2,
+"task": "inventory",
+"arm": "single",
+"ok": false,
+"ccx_ok": true,
+"usd": 0.00219,
+"tokens": 100684,
+"wall_s": 33.8,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "1 failed, 1 passed in 0.16s",
+"check_passed": true
+},
+{
+"exp": "screen2",
+"tag": "r2",
+"round": 2,
+"task": "cache",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001956,
+"tokens": 93310,
+"wall_s": 20.7,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.02s",
+"check_passed": true
+},
+{
+"exp": "screen2",
+"tag": "r2",
+"round": 2,
+"task": "tags",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002473,
+"tokens": 92954,
+"wall_s": 19.1,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen2",
+"tag": "r2",
+"round": 2,
+"task": "dupparse",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002807,
+"tokens": 99654,
+"wall_s": 20.1,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen3",
+"tag": "r2",
+"round": 1,
+"task": "courses",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.003339,
+"tokens": 121826,
+"wall_s": 24.2,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen3",
+"tag": "r2",
+"round": 1,
+"task": "board",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.00211,
+"tokens": 94555,
+"wall_s": 21.9,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen3",
+"tag": "r2",
+"round": 1,
+"task": "fleet",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002075,
+"tokens": 94292,
+"wall_s": 20.7,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen3",
+"tag": "r2",
+"round": 1,
+"task": "bank",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.00206,
+"tokens": 94284,
+"wall_s": 25.3,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen3",
+"tag": "r2",
+"round": 2,
+"task": "bank",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002963,
+"tokens": 101299,
+"wall_s": 19.4,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen3",
+"tag": "r2",
+"round": 2,
+"task": "board",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.00228,
+"tokens": 101085,
+"wall_s": 29.3,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.03s",
+"check_passed": true
+},
+{
+"exp": "screen3",
+"tag": "r2",
+"round": 2,
+"task": "fleet",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002075,
+"tokens": 94343,
+"wall_s": 24.9,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "screen3",
+"tag": "r2",
+"round": 2,
+"task": "courses",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002247,
+"tokens": 100962,
+"wall_s": 31.3,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.04s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "config",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.006342,
+"tokens": 163326,
+"wall_s": 42.5,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.0041,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "unclear",
+"by": "claude:haiku:low",
+"n_issues": 3,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "config",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002062,
+"tokens": 93938,
+"wall_s": 23.2,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "config",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002035,
+"tokens": 93777,
+"wall_s": 21.4,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "merge",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.012832,
+"tokens": 324013,
+"wall_s": 85.6,
+"n_runs": 4,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low",
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.009208,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": "issues"
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "merge",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001957,
+"tokens": 93164,
+"wall_s": 17.9,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "merge",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001898,
+"tokens": 92888,
+"wall_s": 18.4,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "exporter",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001996,
+"tokens": 80193,
+"wall_s": 22.5,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.02s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "exporter",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.005721,
+"tokens": 153228,
+"wall_s": 47.1,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.003758,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "exporter",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.00217,
+"tokens": 100219,
+"wall_s": 24.9,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "inventory",
+"arm": "off",
+"ok": false,
+"ccx_ok": true,
+"usd": 0.002336,
+"tokens": 114362,
+"wall_s": 22.8,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "1 failed, 1 passed in 0.12s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "inventory",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002025,
+"tokens": 94119,
+"wall_s": 28.3,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "inventory",
+"arm": "on",
+"ok": false,
+"ccx_ok": true,
+"usd": 0.006368,
+"tokens": 171595,
+"wall_s": 40.8,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.003458,
+"route_p": null,
+"route_rung": null,
+"pytest": "1 failed, 1 passed in 0.12s",
+"review": {
+"verdict": "unclear",
+"by": "claude:haiku:low",
+"n_issues": 1,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "dupparse",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.007708,
+"tokens": 153625,
+"wall_s": 39.6,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.004132,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "dupparse",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.003074,
+"tokens": 94153,
+"wall_s": 20.7,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "dupparse",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002565,
+"tokens": 93320,
+"wall_s": 19.3,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "rounding",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001954,
+"tokens": 93372,
+"wall_s": 19.9,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "rounding",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.00611,
+"tokens": 153061,
+"wall_s": 37.8,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.004214,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "rounding",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002113,
+"tokens": 99989,
+"wall_s": 17.2,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "cache",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001913,
+"tokens": 93002,
+"wall_s": 19.5,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "cache",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.007044,
+"tokens": 181474,
+"wall_s": 40.5,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.00462,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "cache",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001935,
+"tokens": 93132,
+"wall_s": 22.9,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "rank",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.0053,
+"tokens": 149319,
+"wall_s": 35.8,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.003418,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "rank",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002434,
+"tokens": 92649,
+"wall_s": 17.9,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "rank",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001944,
+"tokens": 93050,
+"wall_s": 17.1,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "pagefilter",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002064,
+"tokens": 99826,
+"wall_s": 18.3,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "pagefilter",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.005493,
+"tokens": 138020,
+"wall_s": 34.8,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.003502,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "pagefilter",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002277,
+"tokens": 113028,
+"wall_s": 21.3,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "version",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002275,
+"tokens": 100524,
+"wall_s": 21.9,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "version",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002184,
+"tokens": 100049,
+"wall_s": 18.6,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "ini",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002774,
+"tokens": 141923,
+"wall_s": 23.8,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2-prefix",
+"round": 1,
+"task": "ini",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.006459,
+"tokens": 188309,
+"wall_s": 50.0,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.003682,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "config",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.050262,
+"tokens": 255880,
+"wall_s": 73.7,
+"n_runs": 3,
+"rungs": [
+"claude:haiku:low",
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.044863,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:sonnet:medium",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "config",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002618,
+"tokens": 122592,
+"wall_s": 22.2,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "config",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002232,
+"tokens": 100593,
+"wall_s": 21.5,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "merge",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.011415,
+"tokens": 287952,
+"wall_s": 75.6,
+"n_runs": 4,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low",
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.008583,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": "issues"
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "merge",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001886,
+"tokens": 92824,
+"wall_s": 16.3,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "merge",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002519,
+"tokens": 92944,
+"wall_s": 18.7,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "exporter",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001988,
+"tokens": 93492,
+"wall_s": 18.8,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "exporter",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.006059,
+"tokens": 159725,
+"wall_s": 42.0,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.003884,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "exporter",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.003244,
+"tokens": 133003,
+"wall_s": 24.8,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "inventory",
+"arm": "off",
+"ok": false,
+"ccx_ok": true,
+"usd": 0.002025,
+"tokens": 93597,
+"wall_s": 21.4,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "1 failed, 1 passed in 0.12s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "inventory",
+"arm": "auto",
+"ok": false,
+"ccx_ok": true,
+"usd": 0.002642,
+"tokens": 133371,
+"wall_s": 27.3,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "1 failed, 1 passed in 0.13s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "inventory",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.013321,
+"tokens": 310381,
+"wall_s": 78.9,
+"n_runs": 4,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low",
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.009691,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": "issues"
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "dupparse",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.005652,
+"tokens": 144267,
+"wall_s": 34.8,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.003583,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "dupparse",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001939,
+"tokens": 93009,
+"wall_s": 16.6,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "dupparse",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002112,
+"tokens": 99717,
+"wall_s": 17.9,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "rounding",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002126,
+"tokens": 99991,
+"wall_s": 19.1,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.02s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "rounding",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.005998,
+"tokens": 137506,
+"wall_s": 37.5,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.0035,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "rounding",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.00213,
+"tokens": 100073,
+"wall_s": 20.0,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "cache",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001941,
+"tokens": 93139,
+"wall_s": 19.0,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "cache",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.00507,
+"tokens": 121527,
+"wall_s": 35.3,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.002538,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "cache",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002507,
+"tokens": 93082,
+"wall_s": 19.1,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "rank",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.005249,
+"tokens": 150288,
+"wall_s": 36.2,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.003365,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "rank",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.00189,
+"tokens": 92650,
+"wall_s": 19.1,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "rank",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002101,
+"tokens": 99682,
+"wall_s": 18.6,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "pagefilter",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001979,
+"tokens": 93419,
+"wall_s": 19.6,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.02s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "pagefilter",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.007298,
+"tokens": 157743,
+"wall_s": 43.5,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.003349,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "pagefilter",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002118,
+"tokens": 100221,
+"wall_s": 20.7,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "version",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002586,
+"tokens": 93442,
+"wall_s": 24.8,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "version",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002207,
+"tokens": 100293,
+"wall_s": 23.2,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "version",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.007518,
+"tokens": 177553,
+"wall_s": 51.9,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.005762,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "ini",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.003233,
+"tokens": 132578,
+"wall_s": 28.3,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "ini",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.00655,
+"tokens": 192710,
+"wall_s": 47.7,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.003996,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "ini",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.003216,
+"tokens": 133035,
+"wall_s": 26.5,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "tags",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002135,
+"tokens": 99875,
+"wall_s": 19.5,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "tags",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002527,
+"tokens": 93074,
+"wall_s": 19.9,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 1,
+"task": "tags",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.005621,
+"tokens": 164674,
+"wall_s": 37.3,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.003657,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.02s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "cache",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002094,
+"tokens": 99804,
+"wall_s": 22.5,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "cache",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002462,
+"tokens": 93023,
+"wall_s": 17.8,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "cache",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.00488,
+"tokens": 148650,
+"wall_s": 32.4,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.002995,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "ini",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.007055,
+"tokens": 195437,
+"wall_s": 52.7,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.004557,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "ini",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002376,
+"tokens": 113672,
+"wall_s": 26.1,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "ini",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002597,
+"tokens": 132590,
+"wall_s": 25.7,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.02s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "merge",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002107,
+"tokens": 99740,
+"wall_s": 19.9,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "merge",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.006265,
+"tokens": 154179,
+"wall_s": 47.3,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.004341,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "merge",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001878,
+"tokens": 92697,
+"wall_s": 19.0,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "config",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.005937,
+"tokens": 155585,
+"wall_s": 41.4,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.003904,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.02s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "config",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002005,
+"tokens": 93595,
+"wall_s": 21.5,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "config",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002034,
+"tokens": 93716,
+"wall_s": 18.2,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "exporter",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002011,
+"tokens": 93564,
+"wall_s": 22.0,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "exporter",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.008616,
+"tokens": 193674,
+"wall_s": 48.3,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.005232,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "exporter",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001803,
+"tokens": 74718,
+"wall_s": 19.0,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "version",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.007019,
+"tokens": 165474,
+"wall_s": 46.1,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.004767,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "version",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002577,
+"tokens": 93709,
+"wall_s": 22.3,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "version",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002112,
+"tokens": 99704,
+"wall_s": 22.7,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "pagefilter",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001932,
+"tokens": 93251,
+"wall_s": 19.7,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "pagefilter",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.005299,
+"tokens": 150111,
+"wall_s": 39.0,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.003288,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "pagefilter",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001976,
+"tokens": 93453,
+"wall_s": 20.9,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "inventory",
+"arm": "auto",
+"ok": false,
+"ccx_ok": true,
+"usd": 0.002052,
+"tokens": 94557,
+"wall_s": 23.6,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "1 failed, 1 passed in 0.12s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "inventory",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.011083,
+"tokens": 283730,
+"wall_s": 74.1,
+"n_runs": 4,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low",
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": "review_failed",
+"review_usd": 0.007738,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "issues",
+"by": "claude:haiku:low",
+"n_issues": 1,
+"first_round": "issues"
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "inventory",
+"arm": "off",
+"ok": false,
+"ccx_ok": true,
+"usd": 0.002251,
+"tokens": 101111,
+"wall_s": 20.6,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "1 failed, 1 passed in 0.10s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "dupparse",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002129,
+"tokens": 99957,
+"wall_s": 17.5,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "dupparse",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002208,
+"tokens": 100915,
+"wall_s": 18.8,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "dupparse",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.006349,
+"tokens": 155846,
+"wall_s": 40.9,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.004441,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "rank",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002089,
+"tokens": 99573,
+"wall_s": 18.6,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "rank",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002715,
+"tokens": 99161,
+"wall_s": 17.5,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "rank",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.005136,
+"tokens": 155854,
+"wall_s": 33.8,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.003043,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "rounding",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.005664,
+"tokens": 138476,
+"wall_s": 43.4,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.003753,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "rounding",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001994,
+"tokens": 93445,
+"wall_s": 19.8,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "rounding",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001903,
+"tokens": 92983,
+"wall_s": 18.2,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "tags",
+"arm": "auto",
+"ok": false,
+"ccx_ok": true,
+"usd": 0.002795,
+"tokens": 99712,
+"wall_s": 18.9,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "1 failed, 1 passed in 0.11s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "tags",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001929,
+"tokens": 93010,
+"wall_s": 19.8,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 2,
+"task": "tags",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.01127,
+"tokens": 264861,
+"wall_s": 65.1,
+"n_runs": 4,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low",
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.006798,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": "issues"
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "dupparse",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001941,
+"tokens": 93036,
+"wall_s": 19.1,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "dupparse",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.010917,
+"tokens": 253769,
+"wall_s": 60.8,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.007977,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "dupparse",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001759,
+"tokens": 75237,
+"wall_s": 19.8,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "rounding",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.00187,
+"tokens": 92872,
+"wall_s": 17.1,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "rounding",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.00191,
+"tokens": 92973,
+"wall_s": 20.6,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "rounding",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.005684,
+"tokens": 157527,
+"wall_s": 37.0,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.003619,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "inventory",
+"arm": "auto",
+"ok": false,
+"ccx_ok": true,
+"usd": 0.002225,
+"tokens": 101280,
+"wall_s": 20.6,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "1 failed, 1 passed in 0.11s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "inventory",
+"arm": "off",
+"ok": false,
+"ccx_ok": true,
+"usd": 0.002538,
+"tokens": 94014,
+"wall_s": 21.1,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "1 failed, 1 passed in 0.12s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "inventory",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.015638,
+"tokens": 353309,
+"wall_s": 86.6,
+"n_runs": 4,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low",
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.012067,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": "issues"
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "tags",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.011062,
+"tokens": 285561,
+"wall_s": 68.5,
+"n_runs": 4,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low",
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.008249,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": "issues"
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "tags",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.003236,
+"tokens": 99989,
+"wall_s": 20.0,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "tags",
+"arm": "auto",
+"ok": false,
+"ccx_ok": true,
+"usd": 0.002102,
+"tokens": 99755,
+"wall_s": 17.4,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "1 failed, 1 passed in 0.10s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "pagefilter",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.005109,
+"tokens": 142571,
+"wall_s": 33.9,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.002908,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "pagefilter",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002145,
+"tokens": 100355,
+"wall_s": 20.9,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "pagefilter",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.003888,
+"tokens": 100282,
+"wall_s": 17.8,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "cache",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001886,
+"tokens": 92938,
+"wall_s": 15.9,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "cache",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.005669,
+"tokens": 154804,
+"wall_s": 30.0,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.002887,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "unclear",
+"by": "claude:haiku:low",
+"n_issues": 4,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "cache",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001882,
+"tokens": 92905,
+"wall_s": 15.5,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "merge",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.012469,
+"tokens": 305563,
+"wall_s": 92.8,
+"n_runs": 4,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low",
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.008728,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": "issues"
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "merge",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001923,
+"tokens": 93020,
+"wall_s": 15.3,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "merge",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.003117,
+"tokens": 99072,
+"wall_s": 18.5,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "version",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002245,
+"tokens": 100449,
+"wall_s": 19.2,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "version",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002267,
+"tokens": 100534,
+"wall_s": 19.9,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "version",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.005717,
+"tokens": 140761,
+"wall_s": 36.1,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.003634,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "exporter",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001783,
+"tokens": 74601,
+"wall_s": 16.4,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "exporter",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001977,
+"tokens": 93446,
+"wall_s": 17.8,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "exporter",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.00545,
+"tokens": 169713,
+"wall_s": 35.4,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.003191,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "config",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002197,
+"tokens": 100376,
+"wall_s": 17.5,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "config",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.006443,
+"tokens": 141540,
+"wall_s": 37.8,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.00378,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "unclear",
+"by": "claude:haiku:low",
+"n_issues": 4,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "config",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002932,
+"tokens": 100664,
+"wall_s": 17.9,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "ini",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002569,
+"tokens": 132516,
+"wall_s": 22.7,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "ini",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.007398,
+"tokens": 207292,
+"wall_s": 49.5,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.004626,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "ini",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002572,
+"tokens": 132543,
+"wall_s": 31.4,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "rank",
+"arm": "off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.0019,
+"tokens": 92872,
+"wall_s": 17.3,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "rank",
+"arm": "auto",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002503,
+"tokens": 93031,
+"wall_s": 19.1,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "review",
+"tag": "r2",
+"round": 3,
+"task": "rank",
+"arm": "on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.004949,
+"tokens": 148558,
+"wall_s": 33.2,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.003073,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 1,
+"task": "inventory",
+"arm": "draft",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.048415,
+"tokens": 162028,
+"wall_s": 46.1,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"escalated": null,
+"review_usd": 0,
+"rework": 0,
+"plan_ok": true,
+"plan_items": 8,
+"pytest": "7 passed in 0.02s",
+"draft_review": {
+"must": 0,
+"notes": 2
+},
+"check_passed": true
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 1,
+"task": "inventory",
+"arm": "way",
+"ok": true,
+"usd": 0.100558,
+"tokens": 265306,
+"wall_s": 57.8,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"claude:sonnet:medium"
+],
+"agents": [
+"claude",
+"codex"
+],
+"review_usd": 0.048266,
+"plan_steps": 7,
+"plan_accepts": 4,
+"plan_other": 0,
+"rework": 0,
+"pytest": "8 passed in 0.01s",
+"acceptance": "pass"
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 1,
+"task": "inventory",
+"arm": "single",
+"ok": false,
+"ccx_ok": true,
+"usd": 0.002012,
+"tokens": 93694,
+"wall_s": 19.5,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "1 failed, 1 passed in 0.10s",
+"check_passed": true
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 1,
+"task": "tags",
+"arm": "way",
+"ok": true,
+"usd": 0.084306,
+"tokens": 160309,
+"wall_s": 46.3,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"claude:sonnet:medium"
+],
+"agents": [
+"claude",
+"codex"
+],
+"review_usd": 0.04214,
+"plan_steps": 5,
+"plan_accepts": 4,
+"plan_other": 0,
+"rework": 0,
+"pytest": "5 passed in 0.01s",
+"acceptance": "pass"
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 1,
+"task": "tags",
+"arm": "draft",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.038457,
+"tokens": 139104,
+"wall_s": 36.3,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"escalated": null,
+"review_usd": 0,
+"rework": 0,
+"plan_ok": true,
+"plan_items": 10,
+"pytest": "5 passed in 0.01s",
+"draft_review": {
+"must": 0,
+"notes": 0
+},
+"check_passed": true
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 1,
+"task": "tags",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002557,
+"tokens": 93203,
+"wall_s": 18.9,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 1,
+"task": "config",
+"arm": "way",
+"ok": true,
+"usd": 0.093363,
+"tokens": 220406,
+"wall_s": 60.6,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"claude:sonnet:medium"
+],
+"agents": [
+"claude",
+"codex"
+],
+"review_usd": 0.041429,
+"plan_steps": 6,
+"plan_accepts": 4,
+"plan_other": 2,
+"rework": 0,
+"pytest": "15 passed in 0.01s",
+"acceptance": "pass"
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 1,
+"task": "config",
+"arm": "draft",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.050931,
+"tokens": 169526,
+"wall_s": 44.8,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"escalated": null,
+"review_usd": 0,
+"rework": 0,
+"plan_ok": true,
+"plan_items": 10,
+"pytest": "5 passed in 0.01s",
+"draft_review": {
+"must": 1,
+"notes": 3
+},
+"check_passed": true
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 1,
+"task": "config",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002927,
+"tokens": 100591,
+"wall_s": 21.9,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 1,
+"task": "cache",
+"arm": "way",
+"ok": true,
+"usd": 0.081992,
+"tokens": 215705,
+"wall_s": 50.3,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"claude:sonnet:medium"
+],
+"agents": [
+"claude",
+"codex"
+],
+"review_usd": 0.039142,
+"plan_steps": 6,
+"plan_accepts": 4,
+"plan_other": 0,
+"rework": 0,
+"pytest": "5 passed in 0.01s",
+"acceptance": "pass"
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 1,
+"task": "cache",
+"arm": "draft",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.051169,
+"tokens": 165931,
+"wall_s": 39.1,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"escalated": null,
+"review_usd": 0,
+"rework": 0,
+"plan_ok": true,
+"plan_items": 9,
+"pytest": "5 passed in 0.01s",
+"draft_review": {
+"must": 0,
+"notes": 2
+},
+"check_passed": true
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 1,
+"task": "cache",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001902,
+"tokens": 92911,
+"wall_s": 15.6,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 1,
+"task": "exporter",
+"arm": "draft",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.046991,
+"tokens": 185449,
+"wall_s": 41.4,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"escalated": null,
+"review_usd": 0,
+"rework": 0,
+"plan_ok": true,
+"plan_items": 10,
+"pytest": "2 passed in 0.01s",
+"draft_review": {
+"must": 1,
+"notes": 2
+},
+"check_passed": true
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 1,
+"task": "exporter",
+"arm": "way",
+"ok": true,
+"usd": 0.111096,
+"tokens": 234109,
+"wall_s": 59.6,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"claude:sonnet:medium"
+],
+"agents": [
+"claude",
+"codex"
+],
+"review_usd": 0.039876,
+"plan_steps": 6,
+"plan_accepts": 4,
+"plan_other": 1,
+"rework": 0,
+"pytest": "4 passed in 0.01s",
+"acceptance": "pass"
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 1,
+"task": "exporter",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002202,
+"tokens": 100382,
+"wall_s": 20.1,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 1,
+"task": "rounding",
+"arm": "way",
+"ok": true,
+"usd": 0.079866,
+"tokens": 195461,
+"wall_s": 46.4,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"claude:sonnet:medium"
+],
+"agents": [
+"claude",
+"codex"
+],
+"review_usd": 0.037069,
+"plan_steps": 6,
+"plan_accepts": 4,
+"plan_other": 0,
+"rework": 0,
+"pytest": "5 passed in 0.01s",
+"acceptance": "pass"
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 1,
+"task": "rounding",
+"arm": "draft",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.044499,
+"tokens": 174156,
+"wall_s": 44.2,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"escalated": null,
+"review_usd": 0,
+"rework": 0,
+"plan_ok": true,
+"plan_items": 11,
+"pytest": "5 passed in 0.01s",
+"draft_review": {
+"must": 1,
+"notes": 2
+},
+"check_passed": true
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 1,
+"task": "rounding",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.003216,
+"tokens": 100022,
+"wall_s": 17.3,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 1,
+"task": "dupparse",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001698,
+"tokens": 74326,
+"wall_s": 16.6,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 1,
+"task": "dupparse",
+"arm": "draft",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.047883,
+"tokens": 185383,
+"wall_s": 43.6,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"escalated": null,
+"review_usd": 0,
+"rework": 0,
+"plan_ok": true,
+"plan_items": 10,
+"pytest": "9 passed in 0.01s",
+"draft_review": {
+"must": 0,
+"notes": 0
+},
+"check_passed": true
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 1,
+"task": "dupparse",
+"arm": "way",
+"ok": true,
+"usd": 0.105326,
+"tokens": 191173,
+"wall_s": 50.6,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"claude:sonnet:medium"
+],
+"agents": [
+"claude",
+"codex"
+],
+"review_usd": 0.046714,
+"plan_steps": 7,
+"plan_accepts": 4,
+"plan_other": 0,
+"rework": 0,
+"pytest": "6 passed in 0.01s",
+"acceptance": "pass"
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 2,
+"task": "inventory",
+"arm": "way",
+"ok": true,
+"usd": 0.097921,
+"tokens": 241180,
+"wall_s": 55.2,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"claude:sonnet:medium"
+],
+"agents": [
+"claude",
+"codex"
+],
+"review_usd": 0.048676,
+"plan_steps": 4,
+"plan_accepts": 4,
+"plan_other": 1,
+"rework": 0,
+"pytest": "7 passed in 0.02s",
+"acceptance": "pass"
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 2,
+"task": "inventory",
+"arm": "single",
+"ok": false,
+"ccx_ok": true,
+"usd": 0.001997,
+"tokens": 93495,
+"wall_s": 18.7,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "1 failed, 1 passed in 0.11s",
+"check_passed": true
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 2,
+"task": "inventory",
+"arm": "draft",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.051595,
+"tokens": 164940,
+"wall_s": 40.5,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"escalated": null,
+"review_usd": 0,
+"rework": 0,
+"plan_ok": true,
+"plan_items": 8,
+"pytest": "2 passed in 0.01s",
+"draft_review": {
+"must": 0,
+"notes": 1
+},
+"check_passed": true
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 2,
+"task": "exporter",
+"arm": "way",
+"ok": true,
+"usd": 0.089806,
+"tokens": 210652,
+"wall_s": 50.2,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"claude:sonnet:medium"
+],
+"agents": [
+"claude",
+"codex"
+],
+"review_usd": 0.040945,
+"plan_steps": 6,
+"plan_accepts": 4,
+"plan_other": 1,
+"rework": 0,
+"pytest": "4 passed in 0.01s",
+"acceptance": "pass"
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 2,
+"task": "exporter",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002645,
+"tokens": 93801,
+"wall_s": 19.8,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 2,
+"task": "exporter",
+"arm": "draft",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.045185,
+"tokens": 210471,
+"wall_s": 48.8,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"escalated": null,
+"review_usd": 0,
+"rework": 0,
+"plan_ok": true,
+"plan_items": 9,
+"pytest": "4 passed in 0.01s",
+"draft_review": {
+"must": 0,
+"notes": 2
+},
+"check_passed": true
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 2,
+"task": "tags",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002827,
+"tokens": 99777,
+"wall_s": 17.3,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 2,
+"task": "tags",
+"arm": "way",
+"ok": true,
+"usd": 0.085195,
+"tokens": 214600,
+"wall_s": 47.5,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"claude:sonnet:medium"
+],
+"agents": [
+"claude",
+"codex"
+],
+"review_usd": 0.042171,
+"plan_steps": 7,
+"plan_accepts": 4,
+"plan_other": 0,
+"rework": 0,
+"pytest": "5 passed in 0.01s",
+"acceptance": "pass"
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 2,
+"task": "tags",
+"arm": "draft",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.045892,
+"tokens": 165452,
+"wall_s": 39.2,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"escalated": null,
+"review_usd": 0,
+"rework": 0,
+"plan_ok": true,
+"plan_items": 10,
+"pytest": "4 passed in 0.01s",
+"draft_review": {
+"must": 0,
+"notes": 2
+},
+"check_passed": true
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 2,
+"task": "cache",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002081,
+"tokens": 99677,
+"wall_s": 17.2,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 2,
+"task": "cache",
+"arm": "draft",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.061173,
+"tokens": 185491,
+"wall_s": 50.3,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"escalated": null,
+"review_usd": 0,
+"rework": 0,
+"plan_ok": true,
+"plan_items": 11,
+"pytest": "5 passed in 0.01s",
+"draft_review": {
+"must": 0,
+"notes": 1
+},
+"check_passed": true
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 2,
+"task": "cache",
+"arm": "way",
+"ok": true,
+"usd": 0.08109,
+"tokens": 159487,
+"wall_s": 42.5,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"claude:sonnet:medium"
+],
+"agents": [
+"claude",
+"codex"
+],
+"review_usd": 0.039197,
+"plan_steps": 7,
+"plan_accepts": 3,
+"plan_other": 0,
+"rework": 0,
+"pytest": "5 passed in 0.01s",
+"acceptance": "pass"
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 2,
+"task": "config",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002631,
+"tokens": 93722,
+"wall_s": 19.5,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 2,
+"task": "config",
+"arm": "draft",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.050129,
+"tokens": 208684,
+"wall_s": 48.0,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"escalated": null,
+"review_usd": 0,
+"rework": 0,
+"plan_ok": true,
+"plan_items": 10,
+"pytest": "15 passed in 0.01s",
+"draft_review": {
+"must": 0,
+"notes": 2
+},
+"check_passed": true
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 2,
+"task": "config",
+"arm": "way",
+"ok": true,
+"usd": 0.100131,
+"tokens": 252558,
+"wall_s": 65.7,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"claude:sonnet:medium"
+],
+"agents": [
+"claude",
+"codex"
+],
+"review_usd": 0.047217,
+"plan_steps": 6,
+"plan_accepts": 4,
+"plan_other": 2,
+"rework": 0,
+"pytest": "18 passed in 0.02s",
+"acceptance": "pass"
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 2,
+"task": "rounding",
+"arm": "draft",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.04561,
+"tokens": 144414,
+"wall_s": 36.9,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"escalated": null,
+"review_usd": 0,
+"rework": 0,
+"plan_ok": true,
+"plan_items": 10,
+"pytest": "5 passed in 0.01s",
+"draft_review": {
+"must": 1,
+"notes": 2
+},
+"check_passed": true
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 2,
+"task": "rounding",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.002856,
+"tokens": 100125,
+"wall_s": 19.5,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 2,
+"task": "rounding",
+"arm": "way",
+"ok": true,
+"usd": 0.083326,
+"tokens": 146267,
+"wall_s": 43.2,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"claude:sonnet:medium"
+],
+"agents": [
+"claude",
+"codex"
+],
+"review_usd": 0.040845,
+"plan_steps": 7,
+"plan_accepts": 4,
+"plan_other": 0,
+"rework": 0,
+"pytest": "5 passed in 0.01s",
+"acceptance": "pass"
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 2,
+"task": "dupparse",
+"arm": "single",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001861,
+"tokens": 93047,
+"wall_s": 16.2,
+"n_runs": 1,
+"rungs": [
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 2,
+"task": "dupparse",
+"arm": "way",
+"ok": true,
+"usd": 0.099738,
+"tokens": 200912,
+"wall_s": 54.2,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"claude:sonnet:medium"
+],
+"agents": [
+"claude",
+"codex"
+],
+"review_usd": 0.043044,
+"plan_steps": 5,
+"plan_accepts": 4,
+"plan_other": 0,
+"rework": 0,
+"pytest": "16 passed in 0.02s",
+"acceptance": "pass"
+},
+{
+"exp": "coop",
+"tag": "r2",
+"round": 2,
+"task": "dupparse",
+"arm": "draft",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.041507,
+"tokens": 200626,
+"wall_s": 47.8,
+"n_runs": 3,
+"rungs": [
+"claude:sonnet:medium",
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"escalated": null,
+"review_usd": 0,
+"rework": 0,
+"plan_ok": true,
+"plan_items": 9,
+"pytest": "4 passed in 0.01s",
+"draft_review": {
+"must": 1,
+"notes": 3
+},
+"check_passed": true
+},
+{
+"exp": "par",
+"tag": "r2",
+"round": 1,
+"task": "par10",
+"arm": "p3",
+"ok": true,
+"ccx_ok": [
+true,
+true,
+true
+],
+"usd": 0.019059,
+"tokens": 397158,
+"wall_s": 52.2,
+"n_runs": 6,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low",
+"claude:haiku:low",
+"codex:gpt-6-luna:low",
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"escalated": [],
+"review_usd": 0.011022,
+"n_ok": 10,
+"tests_written": 10,
+"conflicts": 0,
+"merged": 3,
+"merge_s": 1.7
+},
+{
+"exp": "par",
+"tag": "r2",
+"round": 1,
+"task": "par10",
+"arm": "native",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.009508,
+"tokens": 191410,
+"wall_s": 70.8,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.005927,
+"route_p": null,
+"route_rung": null,
+"n_ok": 10,
+"tests_written": 10,
+"conflicts": 0,
+"children": 0,
+"pytest": "20 passed in 0.04s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "par",
+"tag": "r2",
+"round": 1,
+"task": "par10",
+"arm": "c_off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.012178,
+"tokens": 168582,
+"wall_s": 42.3,
+"n_runs": 2,
+"rungs": [
+"codex:gpt-6-luna:low",
+"claude:haiku:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "haiku/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.002269,
+"route_p": null,
+"route_rung": null,
+"n_ok": 10,
+"tests_written": 10,
+"conflicts": 0,
+"children": 0,
+"pytest": "20 passed in 0.04s",
+"review": {
+"verdict": "pass",
+"by": "codex:gpt-6-luna:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "par",
+"tag": "r2",
+"round": 1,
+"task": "par10",
+"arm": "c_on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.01231,
+"tokens": 211332,
+"wall_s": 41.6,
+"n_runs": 2,
+"rungs": [
+"codex:gpt-6-luna:low",
+"claude:haiku:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "haiku/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.001043,
+"route_p": null,
+"route_rung": null,
+"n_ok": 10,
+"tests_written": 10,
+"conflicts": 0,
+"children": 0,
+"pytest": "20 passed in 0.04s",
+"review": {
+"verdict": "pass",
+"by": "codex:gpt-6-luna:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "par",
+"tag": "r2",
+"round": 1,
+"task": "par10",
+"arm": "p10",
+"ok": true,
+"ccx_ok": [
+true,
+true,
+true,
+true,
+true,
+true,
+true,
+true,
+true,
+true
+],
+"usd": 0.023363,
+"tokens": 977049,
+"wall_s": 29.0,
+"n_runs": 10,
+"rungs": [
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"escalated": [],
+"review_usd": 0,
+"n_ok": 10,
+"tests_written": 10,
+"conflicts": 0,
+"merged": 10,
+"merge_s": 4.3
+},
+{
+"exp": "par",
+"tag": "r2",
+"round": 1,
+"task": "par10",
+"arm": "p1",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.009403,
+"tokens": 210845,
+"wall_s": 83.4,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.004515,
+"route_p": null,
+"route_rung": null,
+"n_ok": 10,
+"tests_written": 10,
+"conflicts": 0,
+"children": 0,
+"pytest": "20 passed in 0.03s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "par",
+"tag": "r2",
+"round": 2,
+"task": "par10",
+"arm": "c_on",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.009534,
+"tokens": 180677,
+"wall_s": 47.0,
+"n_runs": 2,
+"rungs": [
+"codex:gpt-6-luna:low",
+"claude:haiku:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "haiku/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.000883,
+"route_p": null,
+"route_rung": null,
+"n_ok": 10,
+"tests_written": 10,
+"conflicts": 0,
+"children": 0,
+"pytest": "43 passed in 0.04s",
+"review": {
+"verdict": "pass",
+"by": "codex:gpt-6-luna:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "par",
+"tag": "r2",
+"round": 2,
+"task": "par10",
+"arm": "native",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.009811,
+"tokens": 189129,
+"wall_s": 70.6,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.005872,
+"route_p": null,
+"route_rung": null,
+"n_ok": 10,
+"tests_written": 10,
+"conflicts": 0,
+"children": 0,
+"pytest": "20 passed in 0.03s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "par",
+"tag": "r2",
+"round": 2,
+"task": "par10",
+"arm": "p3",
+"ok": true,
+"ccx_ok": [
+true,
+true,
+true
+],
+"usd": 0.019167,
+"tokens": 429961,
+"wall_s": 46.6,
+"n_runs": 6,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low",
+"claude:haiku:low",
+"codex:gpt-6-luna:low",
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"escalated": [],
+"review_usd": 0.010524,
+"n_ok": 10,
+"tests_written": 10,
+"conflicts": 0,
+"merged": 3,
+"merge_s": 1.8
+},
+{
+"exp": "par",
+"tag": "r2",
+"round": 2,
+"task": "par10",
+"arm": "c_off",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.024701,
+"tokens": 380760,
+"wall_s": 60.9,
+"n_runs": 4,
+"rungs": [
+"codex:gpt-6-luna:low",
+"claude:haiku:low",
+"codex:gpt-6-luna:low",
+"claude:haiku:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "haiku/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.001714,
+"route_p": null,
+"route_rung": null,
+"n_ok": 10,
+"tests_written": 10,
+"conflicts": 0,
+"children": 0,
+"pytest": "41 passed in 0.07s",
+"review": {
+"verdict": "pass",
+"by": "codex:gpt-6-luna:low",
+"n_issues": 0,
+"first_round": "issues"
+},
+"check_passed": true
+},
+{
+"exp": "par",
+"tag": "r2",
+"round": 2,
+"task": "par10",
+"arm": "p10",
+"ok": true,
+"ccx_ok": [
+true,
+true,
+true,
+true,
+true,
+true,
+true,
+true,
+true,
+true
+],
+"usd": 0.024746,
+"tokens": 980819,
+"wall_s": 30.6,
+"n_runs": 10,
+"rungs": [
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"codex"
+],
+"escalated": [],
+"review_usd": 0,
+"n_ok": 10,
+"tests_written": 10,
+"conflicts": 0,
+"merged": 10,
+"merge_s": 4.6
+},
+{
+"exp": "par",
+"tag": "r2",
+"round": 2,
+"task": "par10",
+"arm": "p1",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.009318,
+"tokens": 192118,
+"wall_s": 68.3,
+"n_runs": 2,
+"rungs": [
+"claude:haiku:low",
+"codex:gpt-6-luna:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "gpt-6-luna/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0.005455,
+"route_p": null,
+"route_rung": null,
+"n_ok": 10,
+"tests_written": 10,
+"conflicts": 0,
+"children": 0,
+"pytest": "20 passed in 0.03s",
+"review": {
+"verdict": "pass",
+"by": "claude:haiku:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "rounding",
+"arm": "warm",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.075476,
+"tokens": 56613,
+"wall_s": 17.7,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": 0.903,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"check_passed": true,
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "rounding",
+"arm": "fixed",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.056251,
+"tokens": 86679,
+"wall_s": 19.5,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "rounding",
+"arm": "cold",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.046219,
+"tokens": 56643,
+"wall_s": 15.4,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": 0.945,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "cache",
+"arm": "cold",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.038843,
+"tokens": 41904,
+"wall_s": 12.3,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": 0.945,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "cache",
+"arm": "warm",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.039072,
+"tokens": 41932,
+"wall_s": 13.7,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": 0.903,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"check_passed": true,
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "cache",
+"arm": "fixed",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.038894,
+"tokens": 41924,
+"wall_s": 11.9,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "duration",
+"arm": "cold",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.005193,
+"tokens": 99473,
+"wall_s": 47.9,
+"n_runs": 1,
+"rungs": [
+"deepseek:deepseek-flash:low"
+],
+"agents": [
+"deepseek"
+],
+"model": "deepseek-flash/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": 0.805,
+"route_rung": "deepseek:deepseek-flash:low",
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "duration",
+"arm": "fixed",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.044207,
+"tokens": 56458,
+"wall_s": 13.8,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "duration",
+"arm": "warm",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001729,
+"tokens": 22370,
+"wall_s": 18.4,
+"n_runs": 1,
+"rungs": [
+"deepseek:deepseek-flash:low"
+],
+"agents": [
+"deepseek"
+],
+"model": "deepseek-flash/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": 0.918,
+"route_rung": "deepseek:deepseek-flash:low",
+"pytest": "2 passed in 0.01s",
+"check_passed": true,
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "inventory",
+"arm": "warm",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.050905,
+"tokens": 57942,
+"wall_s": 17.7,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": 0.903,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"check_passed": true,
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "inventory",
+"arm": "fixed",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.050889,
+"tokens": 57979,
+"wall_s": 21.9,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "inventory",
+"arm": "cold",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.051667,
+"tokens": 58035,
+"wall_s": 16.9,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": 0.945,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "dupparse",
+"arm": "cold",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.04982,
+"tokens": 58067,
+"wall_s": 14.2,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": 0.945,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "dupparse",
+"arm": "fixed",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.051932,
+"tokens": 73173,
+"wall_s": 17.3,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "dupparse",
+"arm": "warm",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.050655,
+"tokens": 58078,
+"wall_s": 17.2,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": 0.903,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"check_passed": true,
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "csvstats",
+"arm": "warm",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.04608,
+"tokens": 56502,
+"wall_s": 19.1,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": 0.903,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"check_passed": true,
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "csvstats",
+"arm": "fixed",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.049854,
+"tokens": 57597,
+"wall_s": 16.2,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "csvstats",
+"arm": "cold",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.045396,
+"tokens": 56424,
+"wall_s": 15.8,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": 0.945,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "lru",
+"arm": "warm",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.05105,
+"tokens": 71040,
+"wall_s": 19.2,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": 0.903,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"check_passed": true,
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "lru",
+"arm": "cold",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.049041,
+"tokens": 57363,
+"wall_s": 22.6,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": 0.945,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "lru",
+"arm": "fixed",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.04317,
+"tokens": 56123,
+"wall_s": 12.1,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "exporter",
+"arm": "cold",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.044664,
+"tokens": 56630,
+"wall_s": 19.4,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": 0.945,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "exporter",
+"arm": "fixed",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.040262,
+"tokens": 42245,
+"wall_s": 12.4,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "exporter",
+"arm": "warm",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.041336,
+"tokens": 42451,
+"wall_s": 12.0,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": 0.903,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"check_passed": true,
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "intervals",
+"arm": "fixed",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.04257,
+"tokens": 56012,
+"wall_s": 20.7,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "intervals",
+"arm": "cold",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.00141,
+"tokens": 14738,
+"wall_s": 14.2,
+"n_runs": 1,
+"rungs": [
+"deepseek:deepseek-flash:low"
+],
+"agents": [
+"deepseek"
+],
+"model": "deepseek-flash/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": 0.805,
+"route_rung": "deepseek:deepseek-flash:low",
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "intervals",
+"arm": "warm",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001611,
+"tokens": 22519,
+"wall_s": 16.1,
+"n_runs": 1,
+"rungs": [
+"deepseek:deepseek-flash:low"
+],
+"agents": [
+"deepseek"
+],
+"model": "deepseek-flash/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": 0.918,
+"route_rung": "deepseek:deepseek-flash:low",
+"pytest": "2 passed in 0.01s",
+"check_passed": true,
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "cli-json",
+"arm": "cold",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001641,
+"tokens": 27401,
+"wall_s": 17.2,
+"n_runs": 1,
+"rungs": [
+"deepseek:deepseek-flash:low"
+],
+"agents": [
+"deepseek"
+],
+"model": "deepseek-flash/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": 0.805,
+"route_rung": "deepseek:deepseek-flash:low",
+"pytest": "4 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "cli-json",
+"arm": "warm",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001902,
+"tokens": 26981,
+"wall_s": 17.6,
+"n_runs": 1,
+"rungs": [
+"deepseek:deepseek-flash:low"
+],
+"agents": [
+"deepseek"
+],
+"model": "deepseek-flash/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": 0.918,
+"route_rung": "deepseek:deepseek-flash:low",
+"pytest": "3 passed in 0.01s",
+"check_passed": true,
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "cli-json",
+"arm": "fixed",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.048915,
+"tokens": 56913,
+"wall_s": 14.6,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "3 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "slugify",
+"arm": "warm",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001227,
+"tokens": 18539,
+"wall_s": 13.5,
+"n_runs": 1,
+"rungs": [
+"deepseek:deepseek-flash:low"
+],
+"agents": [
+"deepseek"
+],
+"model": "deepseek-flash/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": 0.918,
+"route_rung": "deepseek:deepseek-flash:low",
+"pytest": "2 passed in 0.01s",
+"check_passed": true,
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "slugify",
+"arm": "cold",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.001262,
+"tokens": 21108,
+"wall_s": 15.9,
+"n_runs": 1,
+"rungs": [
+"deepseek:deepseek-flash:low"
+],
+"agents": [
+"deepseek"
+],
+"model": "deepseek-flash/low",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": 0.805,
+"route_rung": "deepseek:deepseek-flash:low",
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "slugify",
+"arm": "fixed",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.037215,
+"tokens": 41607,
+"wall_s": 26.0,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "tags",
+"arm": "fixed",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.043622,
+"tokens": 56248,
+"wall_s": 16.9,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": null,
+"route_rung": null,
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "tags",
+"arm": "warm",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.043388,
+"tokens": 56218,
+"wall_s": 14.0,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": 0.903,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"check_passed": true,
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "route",
+"tag": "r2",
+"round": 1,
+"task": "tags",
+"arm": "cold",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.04369,
+"tokens": 56243,
+"wall_s": 18.2,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"kind": null,
+"review_usd": 0,
+"route_p": 0.945,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"check_passed": true
+},
+{
+"exp": "learn",
+"tag": "r2",
+"round": 1,
+"task": "csvstats",
+"arm": "phase1",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.047611,
+"tokens": 57150,
+"wall_s": 19.5,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"review_usd": 0,
+"route_p": 0.903,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "learn",
+"tag": "r2",
+"round": 1,
+"task": "dupparse",
+"arm": "phase1",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.053976,
+"tokens": 73290,
+"wall_s": 22.7,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"review_usd": 0,
+"route_p": 0.906,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "learn",
+"tag": "r2",
+"round": 1,
+"task": "cache",
+"arm": "phase1",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.039099,
+"tokens": 41928,
+"wall_s": 11.9,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"review_usd": 0,
+"route_p": 0.91,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "learn",
+"tag": "r2",
+"round": 1,
+"task": "inventory",
+"arm": "phase1",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.051669,
+"tokens": 58055,
+"wall_s": 15.2,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"review_usd": 0,
+"route_p": 0.913,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "learn",
+"tag": "r2",
+"round": 1,
+"task": "exporter",
+"arm": "phase1",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.047526,
+"tokens": 71367,
+"wall_s": 15.2,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"review_usd": 0,
+"route_p": 0.916,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "learn",
+"tag": "r2",
+"round": 1,
+"task": "rounding",
+"arm": "phase1",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.045515,
+"tokens": 56635,
+"wall_s": 17.0,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"review_usd": 0,
+"route_p": 0.919,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "learn",
+"tag": "r2",
+"round": 1,
+"task": "duration",
+"arm": "phase1",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.040309,
+"tokens": 42053,
+"wall_s": 12.6,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"review_usd": 0,
+"route_p": 0.987,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.28s",
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "learn",
+"tag": "r2",
+"round": 1,
+"task": "tags",
+"arm": "phase1",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.039816,
+"tokens": 41933,
+"wall_s": 16.2,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"review_usd": 0,
+"route_p": 0.921,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "learn",
+"tag": "r2",
+"round": 1,
+"task": "lru",
+"arm": "phase1",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.041329,
+"tokens": 42359,
+"wall_s": 12.5,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"review_usd": 0,
+"route_p": 0.923,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "learn",
+"tag": "r2",
+"round": 1,
+"task": "cli-json",
+"arm": "phase1",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.054879,
+"tokens": 86378,
+"wall_s": 18.1,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"review_usd": 0,
+"route_p": 0.988,
+"route_rung": "claude:sonnet:medium",
+"pytest": "3 passed in 0.01s",
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "learn",
+"tag": "r2",
+"round": 1,
+"task": "slugify",
+"arm": "phase1",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.037921,
+"tokens": 41766,
+"wall_s": 11.3,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"review_usd": 0,
+"route_p": 0.988,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "learn",
+"tag": "r2",
+"round": 1,
+"task": "intervals",
+"arm": "phase1",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.043347,
+"tokens": 56070,
+"wall_s": 13.0,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"review_usd": 0,
+"route_p": 0.988,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "learn",
+"tag": "r2",
+"round": 1,
+"task": "csvstats",
+"arm": "phase2",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.049117,
+"tokens": 57511,
+"wall_s": 15.1,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"review_usd": 0,
+"route_p": 0.926,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "learn",
+"tag": "r2",
+"round": 1,
+"task": "dupparse",
+"arm": "phase2",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.051938,
+"tokens": 73157,
+"wall_s": 17.5,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"review_usd": 0,
+"route_p": 0.929,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "learn",
+"tag": "r2",
+"round": 1,
+"task": "cache",
+"arm": "phase2",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.038805,
+"tokens": 41909,
+"wall_s": 11.1,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"review_usd": 0,
+"route_p": 0.931,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "learn",
+"tag": "r2",
+"round": 1,
+"task": "inventory",
+"arm": "phase2",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.040262,
+"tokens": 42457,
+"wall_s": 12.2,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"review_usd": 0,
+"route_p": 0.933,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "learn",
+"tag": "r2",
+"round": 1,
+"task": "exporter",
+"arm": "phase2",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.056079,
+"tokens": 88644,
+"wall_s": 18.2,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"review_usd": 0,
+"route_p": 0.934,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "learn",
+"tag": "r2",
+"round": 1,
+"task": "rounding",
+"arm": "phase2",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.047306,
+"tokens": 56823,
+"wall_s": 20.9,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"review_usd": 0,
+"route_p": 0.936,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "learn",
+"tag": "r2",
+"round": 1,
+"task": "duration",
+"arm": "phase2",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.044161,
+"tokens": 56533,
+"wall_s": 14.0,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"review_usd": 0,
+"route_p": 0.99,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "learn",
+"tag": "r2",
+"round": 1,
+"task": "tags",
+"arm": "phase2",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.039304,
+"tokens": 41859,
+"wall_s": 11.8,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"review_usd": 0,
+"route_p": 0.938,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "learn",
+"tag": "r2",
+"round": 1,
+"task": "lru",
+"arm": "phase2",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.040865,
+"tokens": 42275,
+"wall_s": 11.8,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"review_usd": 0,
+"route_p": 0.939,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "learn",
+"tag": "r2",
+"round": 1,
+"task": "cli-json",
+"arm": "phase2",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.061139,
+"tokens": 102851,
+"wall_s": 21.2,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"review_usd": 0,
+"route_p": 0.991,
+"route_rung": "claude:sonnet:medium",
+"pytest": "3 passed in 0.01s",
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "learn",
+"tag": "r2",
+"round": 1,
+"task": "slugify",
+"arm": "phase2",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.037131,
+"tokens": 41590,
+"wall_s": 10.4,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"review_usd": 0,
+"route_p": 0.991,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "learn",
+"tag": "r2",
+"round": 1,
+"task": "intervals",
+"arm": "phase2",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.043552,
+"tokens": 56089,
+"wall_s": 13.2,
+"n_runs": 1,
+"rungs": [
+"claude:sonnet:medium"
+],
+"agents": [
+"claude"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"review_usd": 0,
+"route_p": 0.991,
+"route_rung": "claude:sonnet:medium",
+"pytest": "2 passed in 0.01s",
+"state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+}
+],
+"tiers_4d": {
+"state_sha256": "2a353b8aa3c381d2ec40d25670d186c5b4ae0576b551bfad08afd73dba751829",
+"picks": [
+{
+"warm": true,
+"task": "slugify",
+"minutes": 5,
+"rung": "deepseek:deepseek-flash:low",
+"p": 0.918,
+"ladder": [
+"deepseek:deepseek-flash:high"
+],
+"b": 2.32,
+"rc": 0
+},
+{
+"warm": true,
+"task": "slugify",
+"minutes": 15,
+"rung": "claude:sonnet:medium",
+"p": 0.903,
+"ladder": [
+"claude:sonnet:high"
+],
+"b": 3.91,
+"rc": 0
+},
+{
+"warm": true,
+"task": "slugify",
+"minutes": 30,
+"rung": "claude:sonnet:medium",
+"p": 0.737,
+"ladder": [
+"claude:sonnet:high"
+],
+"b": 4.91,
+"rc": 0
+},
+{
+"warm": true,
+"task": "csvstats",
+"minutes": 5,
+"rung": "deepseek:deepseek-flash:low",
+"p": 0.918,
+"ladder": [
+"deepseek:deepseek-flash:high"
+],
+"b": 2.32,
+"rc": 0
+},
+{
+"warm": true,
+"task": "csvstats",
+"minutes": 15,
+"rung": "claude:sonnet:medium",
+"p": 0.903,
+"ladder": [
+"claude:sonnet:high"
+],
+"b": 3.91,
+"rc": 0
+},
+{
+"warm": true,
+"task": "csvstats",
+"minutes": 30,
+"rung": "claude:sonnet:medium",
+"p": 0.737,
+"ladder": [
+"claude:sonnet:high"
+],
+"b": 4.91,
+"rc": 0
+},
+{
+"warm": true,
+"task": "cart",
+"minutes": 5,
+"rung": "deepseek:deepseek-flash:low",
+"p": 0.918,
+"ladder": [
+"deepseek:deepseek-flash:high"
+],
+"b": 2.32,
+"rc": 0
+},
+{
+"warm": true,
+"task": "cart",
+"minutes": 15,
+"rung": "claude:sonnet:medium",
+"p": 0.903,
+"ladder": [
+"claude:sonnet:high"
+],
+"b": 3.91,
+"rc": 0
+},
+{
+"warm": true,
+"task": "cart",
+"minutes": 30,
+"rung": "claude:sonnet:medium",
+"p": 0.737,
+"ladder": [
+"claude:sonnet:high"
+],
+"b": 4.91,
+"rc": 0
+},
+{
+"warm": false,
+"task": "slugify",
+"minutes": 5,
+"rung": "deepseek:deepseek-flash:low",
+"p": 0.805,
+"ladder": [
+"deepseek:deepseek-flash:high"
+],
+"b": 2.32,
+"rc": 0
+},
+{
+"warm": false,
+"task": "slugify",
+"minutes": 15,
+"rung": "claude:sonnet:medium",
+"p": 0.945,
+"ladder": [
+"claude:sonnet:high"
+],
+"b": 3.91,
+"rc": 0
+},
+{
+"warm": false,
+"task": "slugify",
+"minutes": 30,
+"rung": "claude:sonnet:medium",
+"p": 0.837,
+"ladder": [
+"claude:sonnet:high"
+],
+"b": 4.91,
+"rc": 0
+},
+{
+"warm": false,
+"task": "csvstats",
+"minutes": 5,
+"rung": "deepseek:deepseek-flash:low",
+"p": 0.805,
+"ladder": [
+"deepseek:deepseek-flash:high"
+],
+"b": 2.32,
+"rc": 0
+},
+{
+"warm": false,
+"task": "csvstats",
+"minutes": 15,
+"rung": "claude:sonnet:medium",
+"p": 0.945,
+"ladder": [
+"claude:sonnet:high"
+],
+"b": 3.91,
+"rc": 0
+},
+{
+"warm": false,
+"task": "csvstats",
+"minutes": 30,
+"rung": "claude:sonnet:medium",
+"p": 0.837,
+"ladder": [
+"claude:sonnet:high"
+],
+"b": 4.91,
+"rc": 0
+},
+{
+"warm": false,
+"task": "cart",
+"minutes": 5,
+"rung": "deepseek:deepseek-flash:low",
+"p": 0.805,
+"ladder": [
+"deepseek:deepseek-flash:high"
+],
+"b": 2.32,
+"rc": 0
+},
+{
+"warm": false,
+"task": "cart",
+"minutes": 15,
+"rung": "claude:sonnet:medium",
+"p": 0.945,
+"ladder": [
+"claude:sonnet:high"
+],
+"b": 3.91,
+"rc": 0
+},
+{
+"warm": false,
+"task": "cart",
+"minutes": 30,
+"rung": "claude:sonnet:medium",
+"p": 0.837,
+"ladder": [
+"claude:sonnet:high"
+],
+"b": 4.91,
+"rc": 0
+}
+]
+}
+}
