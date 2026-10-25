@@ -260,7 +260,7 @@ def summarize(p: Paths, data: dict) -> dict:
                         for d, v in sorted(by_day.items())],
         "runs": sorted(run_rows, key=lambda r: r["run_id"], reverse=True),
         "ab": ab, "trial": tr, "quota": list(quota.values()), "compare": compare,
-        "accuracy": accuracy.summary(p),
+        "accuracy": accuracy.summary(p, include_evals=bool(data.get("include_evals"))),
     }
 
 
@@ -519,8 +519,9 @@ delegating cost more than doing it yourself would have.</p></div>
 </div></div><div id="tip" role="tooltip"></div><script>{JS}</script></body></html>"""
 
 
-def write(p: Paths, days: int = 30, out: Path | None = None, include_lead: bool = True) -> dict:
-    s = summarize(p, collect(p, days, include_lead))
+def write(p: Paths, days: int = 30, out: Path | None = None, include_lead: bool = True,
+          include_evals: bool = False) -> dict:
+    s = summarize(p, {**collect(p, days, include_lead), "include_evals": include_evals})
     out = out or p.state / "report" / "index.html"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(render_html(s), encoding="utf-8")
