@@ -454,11 +454,12 @@ def cmd_propose(a) -> int:
     worth = (c.get("recommend") == "delegate")
     def usd(x):
         return "?" if x is None else (f"${x:.4f}" if x < 0.01 else f"${x:.2f}")
+    odds = "odds unknown" if row["p"] is None else f"about {row['p']:.0%} likely to work"
     _out({"proposal": row["proposal"], "worth_offering": worth, "recommend": c.get("recommend"),
           "why": c.get("why"), "self_usd": row["self_usd"], "delegate_usd": row["delegate_usd"], "p": row["p"],
           "lead_ctx_tokens": row["lead_ctx_tokens"], "ctx_source": c.get("ctx_source"),
           "say": (f"This looks delegable: about {usd(row['delegate_usd'])} delegated vs {usd(row['self_usd'])} "
-                  f"if I do it here, likely to work ({row['p']}). Delegate it?") if worth else None,
+                  f"if I do it here, {odds}. Delegate it?") if worth else None,
           "next": (f"on yes: ccx run --proposal {row['proposal']} ... (no --no-ab), then ccx verify <run_id>; "
                    f"on no: ccx propose --no {row['proposal']}") if worth else
                   "not worth offering: do it yourself, nothing to ask"})
