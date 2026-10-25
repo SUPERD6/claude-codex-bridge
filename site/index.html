@@ -56,12 +56,12 @@
     </div>
   </section>
 
-  <p class="wip"><b>Work in progress (v0.4).</b> Both directions run every day on one Windows machine; the first savings measurements say "it depends" (below); the queue, worktrees and quota fallback are tested only with stand-ins; Gemini CLI has not run for real; multi-turn discussion between two models (<code>ccx discuss</code>) is not built. See <a href="https://github.com/SUPERD6/relayline/blob/main/docs/STATUS.md">STATUS</a>.</p>
+  <p class="wip"><b>Work in progress (v0.4).</b> Both directions run every day on one Windows machine; the first savings measurements say "it depends" (below); the queue, worktrees and quota fallback are tested only with stand-ins; Gemini CLI has not run for real. See <a href="https://github.com/SUPERD6/relayline/blob/main/docs/STATUS.md">STATUS</a>.</p>
 
   <h2 id="seven">Seven things it does</h2>
   <section class="feat four">
     <div><h3>1 · Each other's lead and sub-agent</h3><p>Claude Code or Codex leads; Gemini CLI and DeepSeek (through Claude Code) take work. One adapter per CLI; <code>ccx agents</code> lists what each can do.</p></div>
-    <div><h3>2 · Two models talking</h3><p><code>ccx ask</code> for the other vendor's second opinion, <code>ccx resume</code> to follow up in the same sub-session, <code>ccx send</code> into a live Codex session. Multi-turn discussion is not built.</p></div>
+    <div><h3>2 · Two models talking</h3><p><code>ccx ask</code> for the other vendor's second opinion, <code>ccx resume</code> to follow up in the same sub-session, <code>ccx send</code> into a live Codex session. <code>ccx discuss</code>: 2–3 vendors talk a costly decision through (stand-ins only so far).</p></div>
     <div><h3>3 · Shared memory</h3><p>A personal layer (your hub) and a project layer (<code>.ccx/</code>); only the other side's new lines arrive at start; <code>ccx handoff</code> passes the baton, <code>ccx fresh</code> starts a fresh conversation.</p></div>
     <div><h3>4 · Splitting the work</h3><p>Five questions → agent, model, effort and the odds; it says so when doing it yourself is cheaper or the task should be split. <code>ccx batch</code>, <code>ccx q</code>, resumable.</p></div>
     <div><h3>5 · Cheap and fast</h3><p>Slim sub-agent start-up; <code>ccx lead</code> (<code>--breakdown</code> / <code>--cache</code> / <code>--suggest</code>) shows what the lead re-reads each turn; <code>ccx sum</code> trims big outputs.</p></div>

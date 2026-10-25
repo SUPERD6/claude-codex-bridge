@@ -55,6 +55,12 @@ Result JSON: status, summary, files_changed, verification, open_questions, next_
 A quota/rate-limit stop retries once on the other agent (`--no-fallback` to stop instead);
 a timeout or crash keeps the session id — `ccx resume <run_id>` continues where it stopped.
 
+For work where a wrong result costs more, let the risk choose how it is done: `ccx way --risk low|visible|critical
+"brief" [--check CMD]`. low = one agent (review when worth it); visible = another vendor plans, one builds, the
+planner accepts (one fix round); critical = two vendors each build a version in a worktree and a third compares —
+about twice the cost, so ask the person first and pass `--yes`. Nothing is merged for you. Builders are ordered by
+their first-time-right rate for that kind of work (`ccx way --stats`).
+
 ## 4. Check, don't trust
 
 The summary is a claim. Inspect the changed files or returned evidence. Reuse valid checks
@@ -92,3 +98,14 @@ No task chatter; the other side receives only new lines at its next session star
 Add `--source` (where it came from); replace a note that stopped being true with `--supersedes N`. A standing rule
 the user states goes to the user's shared instructions, only after they agree; never copy one tool's own
 automatic memory into the other.
+
+## 7. A decision that is costly to get wrong
+
+Hard to undo (a data format, a migration, a public interface, a dependency), touching safety or money, or the person
+said it matters: before committing to one answer, **ask the person** whether models from other vendors should talk
+it through. Say the question in one line and what it may cost (`ccx discuss --dry-run "question"`: who takes part,
+at most how many calls, estimated $). Only on their yes:
+`ccx discuss "question" [--context-file notes.md] [--with codex,claude,gemini] [--rounds 1-3]` — one proposes, one
+finds faults, one judges; only points travel between turns. Read `result` (recommendation, consensus,
+disagreements, reasons); the person sees the turns in `ccx ui`. It advises; the decision stays with you and the person.
+Not for routine choices: every turn is a full model call.

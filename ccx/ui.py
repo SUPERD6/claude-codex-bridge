@@ -827,9 +827,17 @@ def collect(p: Paths, project: Path | None = None, days: float = 7, rd: Reader |
     hard = [v for v in verdicts.values() if not v.get("soft")]
     agents = sorted({pc["worker"] for pr in projects for t in pr["tasks"] for pc in _walk(t["pieces"])
                      if pc.get("worker")} | {x["agent"] for x in current})
+    from . import discuss, ways
+    try:
+        track = rd.every("track", 60, lambda: ways.track(p))      # H9: who is good at what (judged pieces)
+    except Exception:  # noqa: BLE001 — the page still shows the rest
+        track = {}
+    talks =[discuss.view(d) for d in discuss.recent(p, since)
+             if not proj or project_root(d.get("cwd")) == proj][:10]
     return {
         "v": 1, "generated": now, "lang": ui_lang(cfg), "poll_s": POLL_S, "beat_s": BEAT_S,
         "projects": projects, "quota": quota_view(rd, quota_wait), "leads": current, "agents": agents,
+        "discussions": talks, "track": track, "track_min": ways.MIN_JUDGED,
         "week": {"usd": round(sum(_usd(r) for r in week), 4),
                  "cash_usd": round(sum(_usd(r) for r in week if r.get("to") in providers or r.get("provider")), 4),
                  "runs": len(week), "verdicts": len(hard), "verdicts_needed": VERDICTS_TO_KNOW},

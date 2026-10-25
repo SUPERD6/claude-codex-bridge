@@ -97,6 +97,9 @@ class TestDsh(DeepSeekEnv):
         cfg = {"review": {"by": {}, "also": ["dsh:deepseek-flash:low", "codex:gpt-6-luna:low"]}}
         self.assertEqual([a for a, _, _ in review.reviewers(cfg, "claude", lambda a: True)], ["codex"])
         self.assertTrue(agents.same_vendor("dsh", "deepseek", {"providers": {"deepseek": {"agent": "claude"}}}))
+        from ccx import discuss                                       # nor a default discussion participant
+        self.assertEqual(discuss.participants({}, None, lambda: ["codex", "claude", "dsh"]), ["codex", "claude"])
+        self.assertEqual(discuss.participants({}, ["dsh", "codex"]), ["dsh", "codex"])   # named: allowed
 
 
 class TestDeepSeekThroughCodex(DeepSeekEnv):

@@ -36,7 +36,7 @@ ccx run --to codex --mode read "Summarise README.md in three lines"
 > - **Tested only with stand-in CLIs:** the work queue (`ccx q`), seats, worktrees and `ccx batch`, fallback to the
 >   other agent on a real quota stop. Gemini CLI has never run for real. macOS and Linux
 >   run in CI only.
-> - **Not built yet:** multi-turn discussion between two models (`ccx discuss`), `ccx stop`, fuller shared memory
+> - **Not built yet:** `ccx stop`, fuller shared memory
 >   (see "Next" in [STATUS](docs/STATUS.md)). The website is not published yet.
 >
 > Early commit ids in older notes (CHANGELOG, docs/STATUS) refer to the private history squashed before going
@@ -47,7 +47,7 @@ ccx run --to codex --mode read "Summarise README.md in three lines"
 | | What | Where it stands |
 |---|---|---|
 | **1. Each other's lead and sub-agent** | Claude Code leads and Codex works, or the other way round; Gemini CLI and DeepSeek (through Claude Code, Codex, or DeepSeek Harness `dsh`) take work. One adapter per CLI; `ccx agents` lists what each can do, the version tested, official or community. | Both directions run for real; DeepSeek through Claude Code and Codex for real; Gemini and `dsh` only with stand-ins |
-| **2. Two models talking directly** | `ccx ask` gets a quick second opinion from the other vendor; `ccx resume` follows up in the same sub-session; `ccx send` puts a message into a live Codex session. | These three work for real; multi-turn `ccx discuss` is not built |
+| **2. Two models talking directly** | `ccx ask` gets a quick second opinion from the other vendor; `ccx resume` follows up in the same sub-session; `ccx send` puts a message into a live Codex session; `ccx discuss` lets 2–3 models from different vendors talk a costly decision through (propose, find faults, judge; at most 3 rounds) and shows it as a conversation in `ccx ui`. | The first three work for real; `ccx discuss` only with stand-ins |
 | **3. Shared memory** | A personal layer (your hub: memory, skills, MCP, ledger) and a project layer (`.ccx/`: context, journal, handoffs, checkpoints). The session-start hook brings only the other side's new lines; `ccx handoff` passes the baton, `ccx fresh` moves a long conversation to a fresh one of the same tool. | Works for real; fuller shared memory in progress |
 | **4. Splitting the work** | A five-question difficulty score → agent, model, effort and the odds; when doing it yourself is cheaper, or the task should be split first, it says so instead of delegating. `ccx batch` / `ccx q` run pieces in parallel; `ccx task resume` continues a long task after a stop. | Routing works for real but priors are uncalibrated; the queue only with stand-ins |
 | **5. Cheap and fast** | Slim sub-agent start-up; `ccx lead` shows what every turn of the lead re-reads (`--breakdown` part by part, `--cache` where the prompt cache broke, `--suggest` a model for the lead itself); `ccx sum` gives the lead only what matters of a big output. | The tools exist; how much they save depends on the lead using them (see below) |
@@ -231,6 +231,9 @@ ccx sum -- python -m pytest -q               # run a command, show the lead only
 ccx fresh [--launch]                         # move a long conversation to a fresh one of the same tool, handoff from its file
 ccx trial start | stop | report              # a week-long comparison: half the delegable tasks done by the lead, half delegated
 ccx agents                                   # each agent CLI: vendor, what it can do, tested version, official or community
+ccx way "brief" --risk low|visible|critical  # the risk picks the way: one agent / plan-build-accept / two versions (--yes)
+ccx way --stats                              # per kind of work: who is right the first time, how often rework
+ccx discuss "question" [--dry-run]           # 2-3 vendors talk a costly decision through: propose, find faults, judge
 ccx verify <run_id> --ok 0 --reason wrong     # your verdict (unjudged runs get a probable one after 12 h)
 ccx handoff --from-transcript codex --to claude   # the old lead can't write it (quota out): built from its session file
                                                   # (by code; a format the code can't read goes to a routed sub-agent, --no-model to skip)
@@ -426,7 +429,8 @@ work as sub-agents, and have not run for real yet. Kimi, GLM, Qwen and OpenRoute
 `ccx agents` lists what each can do; adding one is described in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 **Can two models discuss directly?** One way, for now: `ccx ask` for a second opinion, `ccx resume` to follow up in
-the same sub-session, `ccx send` into a live Codex session. A multi-turn back-and-forth (`ccx discuss`) is not built.
+the same sub-session, `ccx send` into a live Codex session. For a costly decision, `ccx discuss` runs up to three rounds between models from different vendors (one proposes,
+one finds faults, one judges), passing only the points between turns; the lead asks you before starting one.
 
 ## Security
 

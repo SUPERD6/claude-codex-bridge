@@ -103,6 +103,8 @@
     let h = `<div class="brand"><b>ccx</b><span style="color:var(--muted)">${t("now")}</span><span class="live">${state}</span></div>
       <input class="search" id="search" placeholder="${esc(t("search"))}" value="${esc(query)}" aria-label="${esc(t("search"))}">
       <nav class="nav" id="nav"><a href="#/" class="${route.length ? "" : "cur"}">${t("overview")}${all.length ? `<span class="badge">${all.length}</span>` : ""}</a>`;
+    const talks = (D && D.discussions) || [];
+    if (talks.length) h += `<a href="#/discuss" class="${route[0] === "discuss" ? "cur" : ""}">${t("disc_nav")}<span class="mini-n">${talks.length}</span></a>`;
     const q = query.toLowerCase();
     for (const pr of (D && D.projects) || []) {
       const need = pr.tasks.reduce((a, x) => a + acts(x.pieces).length, 0);
@@ -152,7 +154,7 @@
     }
     let h = banner() + `<h1>${t("ov_title")}</h1>`;
     if (!tasks) {
-      h += `<p class="lead">${t("empty")}</p>` + leadsHTML() + weekHTML();
+      h += `<p class="lead">${t("empty")}</p>` + leadsHTML() + discRecentHTML() + weekHTML();
       return h;
     }
     const parts = [t("ov_running", {n: running})];
@@ -165,7 +167,7 @@
       for (const x of todos) h += `<a class="${x.p.act.kind === "review" ? "rv" : ""}" href="${href([x.pr.id, x.tk.id].concat(x.ch.map(c => c.id)), x.p.id)}"><b>${esc(x.p.title)}</b><span>${t(x.p.act.what)}</span><span class="where">${esc(x.pr.name)} › ${esc(taskTitle(x.tk))}</span></a>`;
       h += `</div>`;
     }
-    h += leadsHTML();
+    h += leadsHTML() + discRecentHTML();
     h += `<h2>${t("projects")}</h2><div class="grid">`;
     for (const pr of D.projects) {
       let n = 0, d = 0, need = 0; const ws = new Set();
@@ -175,6 +177,10 @@
         <div class="whos">${[...ws].map(w => who(w)).join("")}</div></a>`;
     }
     return h + `</div>` + weekHTML();
+  }
+  function discRecentHTML() {
+    const talks = (D && D.discussions) || [];
+    return talks.length ? `<h2>${t("disc_recent")}</h2>` + discListHTML() : "";
   }
   function leadsHTML() {
     const ls = (D && D.leads) || [];
@@ -186,12 +192,57 @@
     const w = (D && D.week) || {runs: 0};
     let h = `<h2>${t("worth")}</h2><p class="stat">${t("week_spent", {u: usd(w.usd || 0), n: w.runs || 0})}${w.cash_usd ? " " + t("week_cash", {u: usd(w.cash_usd)}) : ""}</p>`;
     h += `<p class="stat">${w.verdicts >= w.verdicts_needed ? t("saved_see_report") : t("saved_unknown", {n: w.verdicts || 0, need: w.verdicts_needed || 30})}</p>`;
-    return h;
+    return h + trackHTML();
+  }
+  /* H9: who is right the first time, per kind of work (judged pieces only) */
+  function trackHTML() {
+    const tr = (D && D.track) || {}, rows = [];
+    for (const kind of Object.keys(tr).sort()) for (const a of Object.keys(tr[kind]).sort()) {
+      const s = tr[kind][a];
+      if (s.judged) rows.push(`<tr><td>${esc(t("kind_" + kind))}</td><td>${who(a)}</td><td>${s.judged}${s.enough ? "" : ` <span class="cost">${t("track_few")}</span>`}</td><td>${Math.round(100 * s.first_right)}%</td><td>${Math.round(100 * s.rework)}%</td></tr>`);
+    }
+    if (!rows.length) return `<h2>${t("track_title")}</h2><p class="stat">${t("track_none", {n: (D && D.track_min) || 5})}</p>`;
+    return `<h2>${t("track_title")}</h2><table class="track"><thead><tr><th>${t("track_kind")}</th><th>${t("track_who")}</th><th>${t("track_judged")}</th><th>${t("track_first")}</th><th>${t("track_rework")}</th></tr></thead><tbody>${rows.join("")}</tbody></table>`;
   }
   function banner() {
     if (SNAP) return `<div class="banner snap">${t("snap_banner", {at: clock(D.generated)})}</div>`;
     if (OFFLINE) return `<div class="banner">${t("offline_banner")}</div>`;
     return "";
+  }
+
+  /* ---------- discussions (ccx discuss): turns drawn as a conversation ---------- */
+  function discListHTML(cur) {
+    const talks = (D && D.discussions) || [];
+    if (!talks.length) return `<p class="lead">${t("disc_none")}</p>`;
+    return `<div class="todo talks">` + talks.map(x => `<a class="${x.id === cur ? "cur" : ""}" href="#/discuss/${encodeURIComponent(x.id)}"><b>${esc(x.question)}</b><span>${t("disc_state_" + (x.state || "running"))} · ${(x.turns || []).length} ${t("disc_turns")} · ${usd(x.usd || 0)}</span><span class="where">${clock(x.ts)}</span></a>`).join("") + `</div>`;
+  }
+  function discHTML(id) {
+    const talks = (D && D.discussions) || [];
+    const x = talks.find(d => d.id === id) || (!id ? talks[0] : null);
+    let h = banner() + `<div class="crumbs"><a href="#/">${t("overview")}</a> › ${t("disc_nav")}</div><h1>${t("disc_title")}</h1>`;
+    if (!x) return h + discListHTML();
+    const rl = x.roles || {};
+    h += `<p class="lead"><b>${esc(x.question)}</b><br>${["proposer", "critic", "judge"].map(r => `${t("role_" + r)} ${who(rl[r])}`).join(" ")}${x.judge_independent === false ? " · " + t("disc_two") : ""}</p><div class="chat">`;
+    let rnd = 0;
+    for (const tn of x.turns || []) {
+      if (tn.round !== rnd && tn.role !== "judge") { rnd = tn.round; h += `<div class="rnd">${t("disc_round", {n: rnd})}</div>`; }
+      h += `<div class="msg ${esc(tn.role)}"><div class="hd">${who(tn.agent, tn.model)} <span>${t("role_" + tn.role)}</span><span class="cost">${usd(tn.usd || 0)}</span></div>
+        <p>${esc(tn.summary)}</p>${(tn.points || []).length ? `<ul>${tn.points.map(pt => `<li>${esc(pt)}</li>`).join("")}</ul>` : ""}</div>`;
+    }
+    if (x.state === "running") h += `<div class="rnd">${t("disc_state_running")}…</div>`;
+    h += `</div>`;
+    const r = x.result;
+    if (r) {
+      h += `<h2>${t("disc_outcome")}${x.agreed ? ` <span class="good">${t("disc_agreed")}</span>` : ""}</h2><div class="card outcome"><p><b>${t("disc_recommend")}</b> ${esc(r.recommendation)}</p>`;
+      for (const [k, lab] of [["consensus", "disc_consensus"], ["disagreements", "disc_disagree"], ["reasons", "disc_reasons"]])
+        if ((r[k] || []).length) h += `<div class="k">${t(lab)}</div><ul>${r[k].map(s => `<li>${esc(s)}</li>`).join("")}</ul>`;
+      if (r.note) h += `<p class="cost">${esc(r.note)}</p>`;
+      h += `</div>`;
+    }
+    if (x.error) h += `<p class="lead"><span class="warn">${esc(x.error)}</span></p>`;
+    h += `<p class="cost">${t("disc_total", {u: usd(x.usd || 0)})} · <code class="mono">ccx discuss --show ${esc(x.id)}</code></p>`;
+    if (talks.length > 1) h += `<h2>${t("disc_others")}</h2>` + discListHTML(x.id);
+    return h;
   }
 
   /* ---------- a project page ---------- */
@@ -402,6 +453,7 @@
     pending = s;
     renderSide(r);
     const main = $("main");
+    if (r[0] === "discuss") { main.innerHTML = discHTML(r[1]); return; }
     const pr = r.length ? findProject(r[0]) : null;
     const tk = pr && r[1] ? findTask(pr, r[1]) : null;
     if (!pr) { main.innerHTML = renderOverview(); return; }

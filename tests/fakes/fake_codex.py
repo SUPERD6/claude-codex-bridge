@@ -96,6 +96,8 @@ if mode == "policy" or (mode == "policy_then_done" and not resuming):   # as cod
 res = {"status": status, "summary": f"fake codex {status}", "files_changed": ["a.py"] if status == "done" else [],
        "commands_run": ["pytest -q"], "verification": "pytest -q passed" if status == "done" else "not-run",
        "open_questions": [] if status == "done" else ["need X"], "next_step": ""}
+from fake_discuss import answer as _discuss  # noqa: E402
+res = _discuss(prompt, "codex", log) or res
 print(json.dumps({"type": "item.completed", "item": {"id": "i1", "type": "agent_message", "text": json.dumps(res)}}))
 usage = {"input_tokens": 1200, "cached_input_tokens": 800, "output_tokens": 150}
 if log:   # like codex-cli 0.164: turn.completed after `exec resume` carries the session's running total
