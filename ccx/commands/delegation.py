@@ -113,9 +113,6 @@ def cmd_run(a) -> int:
 def cmd_send(a) -> int:
     """Talk to a running *desktop/interactive* Codex session (the Codex app) instead of a headless one."""
     import subprocess
-    if a.to != "codex":
-        raise ValueError("sending into a live session is supported for Codex (codex queue); for Claude use "
-                         "`ccx resume <run_id>` or `claude --resume <session>`")
     codex = find_bin("codex")
     if not codex:
         raise FileNotFoundError("codex CLI not found")
@@ -476,7 +473,10 @@ def register(sub) -> None:
     tk.set_defaults(fn=cmd_task)
     se = sub.add_parser("send", help="send a message into a live Codex desktop/interactive session")
     se.add_argument("message", nargs="*")
-    se.add_argument("--to", choices=["codex", "claude"], default="codex")
+    # Codex only: `codex queue` is the one way in from outside. A Claude Code session (terminal or desktop app) has no
+    # entrance for another program's message; a Claude sub-agent is followed up with `ccx resume <run_id>`
+    se.add_argument("--to", choices=["codex"], default="codex",
+                    help="codex (the only one: Claude sessions take no message from outside; use ccx resume)")
     se.add_argument("--thread", help="Codex thread id (see --list)")
     se.add_argument("--list", action="store_true", help="list live sessions (codex agents)")
     se.add_argument("--wait", type=int, default=120, help="seconds to wait for the conversation to go idle (120)")

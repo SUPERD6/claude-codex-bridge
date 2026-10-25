@@ -264,7 +264,9 @@ ccx ui [--project DIR] [--no-open] [--export FILE]   # read-only live page on 12
 ccx config set ui.lang zh            # language of ccx ui and of the lines ccx writes into conversations
 ccx config set defaults.tradeoff 0.3  # the save <-> fast knob: save / balanced / fast, or 0..1
 ccx ab done <id> --ok 1               # close an A/B sample (the ~10% the lead does itself)
-ccx send --list | --thread <id> "msg" # message a live Codex desktop / interactive session
+ccx send --list | --thread <id> "msg" # message a live Codex desktop / interactive session (Codex only: a Claude Code
+                                      # session, terminal or desktop app, has no way in for an outside message;
+                                      # follow up a Claude sub-agent with ccx resume <run_id>)
 ccx skills find pdf table             # search the shared skill library before writing a new skill
 ccx skills install [--replace] [--apply]   # link this repo's skills into the hub (dry run first), so `git pull` upgrades them
 ccx improve add <skill> "concrete problem" --fix "what to change"   # log real problems only
