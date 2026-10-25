@@ -39,7 +39,7 @@ ccx run --to codex --mode read "用三行总结 README.md"
 |---|---|---|
 | **1. 互为主子** | Claude Code 当主、Codex 干活，或者反过来；DeepSeek 也能当组长（`dsh`，或跑 DeepSeek 模型的 Claude Code），也能接活（经 Claude Code、经 Codex 或 `dsh`）；Gemini CLI 可以接活（未实测）。每家一个适配器，`ccx agents` 列出每家能做什么、测过哪个版本、官方还是社区。 | 两个方向真机跑通；DeepSeek 当组长（dsh、跑 DeepSeek 的 Claude Code）和当子智能体（三条路）都真跑过；Gemini 未实测 |
 | **2. 两个模型直接对话** | `ccx ask` 让另一家快速给个第二意见；`ccx resume` 在同一个子会话里追问；`ccx send` 把消息发进正在运行的 Codex 会话；`ccx say` / `ccx board` 让同一项目里开着的 Claude Code、Codex、DeepSeek 会话互相留言（每轮只看到给自己的新内容；Claude Code 桌面端只能下一轮看到，DeepSeek 会话要自己跑 `ccx board`）；`ccx discuss` 让 2–3 家不同厂商的模型把选错代价高的决定讨论清楚（出方案、挑错、裁判，最多 3 轮），在 `ccx ui` 里显示成对话。 | 前三个真机可用；`ccx discuss` 真跑过两次，先两家、后三家（Codex、Claude、DeepSeek；[记录](docs/research/2026-10-25-discuss-three-vendors.zh.md)） |
-| **3. 共享记忆** | 个人层（你的 hub：记忆、技能、MCP、账本）和项目层（`.ccx/`：背景、日志、交接、断点）。开局 hook 只推对方新写的几行；`ccx handoff` 换主智能体接力，`ccx fresh` 把长对话交给同一工具的新对话。 | 真机可用；更完整的共享记忆在做 |
+| **3. 共享记忆** | 个人层（你的 hub：记忆、技能、MCP、账本）和项目层（`.ccx/`：背景、日志、交接、断点）。开局 hook 只推对方新写的几行；`ccx handoff` 换主智能体接力，`ccx fresh` 把长对话交给同一工具的新对话。**共享工作上下文**（[说明](docs/shared-context.zh.md)）：用代码从各家会话记录摘出“最近在做什么”，派活时附上（`ccx run --context`）、按需看（`ccx peek`）、每轮推一行——各家仍各有自己的上下文。 | 真机可用；共享工作上下文：在专门需要它的任务上一次做对 36/36，不带 7/36（[A/B](docs/research/2026-10-25-shared-context-ab.zh.md)） |
 | **4. 分工合作** | 5 个问题打出难度 → 选智能体、模型、强度并给出成功率；算下来自己做更划算或该先拆，就直接说不派。`ccx batch` / `ccx q` 并行，长任务断了 `ccx task resume` 接着做。 | 选模型真机可用，但先验没校准；队列只有模拟测试 |
 | **5. 省和高效** | 子智能体精简启动；`ccx lead` 看主智能体每轮重读多少（`--breakdown` 拆开看、`--cache` 找缓存断在哪、`--suggest` 给主智能体自己的档位建议）；`ccx sum` 只把大段输出里要紧的给主智能体。 | 工具都在；省多少取决于主智能体怎么用（见实测） |
 | **6. 不掉质量** | ccx 自己重跑验收命令（`--check`）；另一家的模型独立审查改动（`--review`）；每次记对错（`ccx verify --ok 0 --reason wrong`），没人判的 12 小时后按证据记“大概对/错”；`ccx trial` 做一周正式对比。 | 真机可用；自动结论还没被抽查过 |
@@ -202,6 +202,8 @@ ccx send --list | --thread <id> "消息"   # 发消息给正在运行的 Codex �
                                         # 和桌面会话都没有接收外部消息的入口；Claude 子智能体用 ccx resume <run_id> 追问）
 ccx say --to codex|claude|deepseek|all "消息"   # 对话板：本项目开着的会话下一轮就能看到
 ccx board [--thread T] / ccx reply <id> "消息"  # 看给我的新留言 / 回某一条（docs/board.zh.md）
+ccx peek codex|claude|deepseek        # 共享工作上下文：看另一家在本项目开着的会话最近在做什么
+ccx run --context auto|on|off ...     # 派活时附上组长最近的工作（auto：只给可写任务）
 ccx say --to codex --now "消息"   # 同时推进开着的 Codex 桌面对话（Claude Code 桌面端只能下一轮看到）
 ccx config set board.github owner/repo   # 可选：对话板同步到你自己的私人仓库（ccx board --sync）
 ccx skills find pdf 表格             # 先在共享技能库里找，别重复写

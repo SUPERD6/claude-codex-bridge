@@ -1,0 +1,2013 @@
+{
+ "date": "2026-10-25",
+ "script": "scripts/eval/shared_context_ab.py",
+ "models": {
+  "codex": "gpt-6-luna low (codex-cli 0.164.0)",
+  "dsh": "deepseek-flash low (dsh 0.2.1-rc.3)"
+ },
+ "summary": {
+  "runs": 84,
+  "by": {
+   "all:settled": {
+    "off": {
+     "n": 36,
+     "ok_first": 7,
+     "rate": 0.194,
+     "ci95": [
+      0.098,
+      0.35
+     ],
+     "rework": 29,
+     "ok_final": 23,
+     "usd": 0.2063,
+     "usd_per_run": 0.00573,
+     "ctx_chars_median": 0
+    },
+    "on": {
+     "n": 36,
+     "ok_first": 36,
+     "rate": 1.0,
+     "ci95": [
+      0.904,
+      1.0
+     ],
+     "rework": 0,
+     "ok_final": 36,
+     "usd": 0.0768,
+     "usd_per_run": 0.00213,
+     "ctx_chars_median": 1270
+    },
+    "pairs": 36,
+    "only_off_right": 0,
+    "only_on_right": 29,
+    "mcnemar_p": 3.725290298461914e-09
+   },
+   "all:neutral": {
+    "off": {
+     "n": 6,
+     "ok_first": 6,
+     "rate": 1.0,
+     "ci95": [
+      0.61,
+      1.0
+     ],
+     "rework": 0,
+     "ok_final": 6,
+     "usd": 0.0109,
+     "usd_per_run": 0.00182,
+     "ctx_chars_median": 0
+    },
+    "on": {
+     "n": 6,
+     "ok_first": 6,
+     "rate": 1.0,
+     "ci95": [
+      0.61,
+      1.0
+     ],
+     "rework": 0,
+     "ok_final": 6,
+     "usd": 0.0122,
+     "usd_per_run": 0.00204,
+     "ctx_chars_median": 1161
+    },
+    "pairs": 6,
+    "only_off_right": 0,
+    "only_on_right": 0,
+    "mcnemar_p": null
+   },
+   "codex:settled": {
+    "off": {
+     "n": 18,
+     "ok_first": 2,
+     "rate": 0.111,
+     "ci95": [
+      0.031,
+      0.328
+     ],
+     "rework": 16,
+     "ok_final": 11,
+     "usd": 0.0632,
+     "usd_per_run": 0.00351,
+     "ctx_chars_median": 0
+    },
+    "on": {
+     "n": 18,
+     "ok_first": 18,
+     "rate": 1.0,
+     "ci95": [
+      0.824,
+      1.0
+     ],
+     "rework": 0,
+     "ok_final": 18,
+     "usd": 0.043,
+     "usd_per_run": 0.00239,
+     "ctx_chars_median": 1270
+    },
+    "pairs": 18,
+    "only_off_right": 0,
+    "only_on_right": 16,
+    "mcnemar_p": 3.0517578125e-05
+   },
+   "codex:neutral": {
+    "off": {
+     "n": 3,
+     "ok_first": 3,
+     "rate": 1.0,
+     "ci95": [
+      0.438,
+      1.0
+     ],
+     "rework": 0,
+     "ok_final": 3,
+     "usd": 0.0065,
+     "usd_per_run": 0.00218,
+     "ctx_chars_median": 0
+    },
+    "on": {
+     "n": 3,
+     "ok_first": 3,
+     "rate": 1.0,
+     "ci95": [
+      0.438,
+      1.0
+     ],
+     "rework": 0,
+     "ok_final": 3,
+     "usd": 0.0081,
+     "usd_per_run": 0.00269,
+     "ctx_chars_median": 1161
+    },
+    "pairs": 3,
+    "only_off_right": 0,
+    "only_on_right": 0,
+    "mcnemar_p": null
+   },
+   "dsh:settled": {
+    "off": {
+     "n": 18,
+     "ok_first": 5,
+     "rate": 0.278,
+     "ci95": [
+      0.125,
+      0.509
+     ],
+     "rework": 13,
+     "ok_final": 12,
+     "usd": 0.1432,
+     "usd_per_run": 0.00795,
+     "ctx_chars_median": 0
+    },
+    "on": {
+     "n": 18,
+     "ok_first": 18,
+     "rate": 1.0,
+     "ci95": [
+      0.824,
+      1.0
+     ],
+     "rework": 0,
+     "ok_final": 18,
+     "usd": 0.0339,
+     "usd_per_run": 0.00188,
+     "ctx_chars_median": 1270
+    },
+    "pairs": 18,
+    "only_off_right": 0,
+    "only_on_right": 13,
+    "mcnemar_p": 0.000244140625
+   },
+   "dsh:neutral": {
+    "off": {
+     "n": 3,
+     "ok_first": 3,
+     "rate": 1.0,
+     "ci95": [
+      0.438,
+      1.0
+     ],
+     "rework": 0,
+     "ok_final": 3,
+     "usd": 0.0044,
+     "usd_per_run": 0.00147,
+     "ctx_chars_median": 0
+    },
+    "on": {
+     "n": 3,
+     "ok_first": 3,
+     "rate": 1.0,
+     "ci95": [
+      0.438,
+      1.0
+     ],
+     "rework": 0,
+     "ok_final": 3,
+     "usd": 0.0042,
+     "usd_per_run": 0.00139,
+     "ctx_chars_median": 1161
+    },
+    "pairs": 3,
+    "only_off_right": 0,
+    "only_on_right": 0,
+    "mcnemar_p": null
+   }
+  },
+  "per_task": {
+   "t1-empty-mean": {
+    "off": "1/6",
+    "on": "6/6"
+   },
+   "t2-slug": {
+    "off": "1/6",
+    "on": "6/6"
+   },
+   "t3-timeout": {
+    "off": "1/6",
+    "on": "6/6"
+   },
+   "t4-loader-name": {
+    "off": "0/6",
+    "on": "6/6"
+   },
+   "t5-date": {
+    "off": "3/6",
+    "on": "6/6"
+   },
+   "t6-negative-qty": {
+    "off": "1/6",
+    "on": "6/6"
+   },
+   "t7-neutral": {
+    "off": "6/6",
+    "on": "6/6"
+   }
+  }
+ },
+ "rows": [
+  {
+   "task": "t1-empty-mean",
+   "agent": "dsh",
+   "arm": "on",
+   "rep": 1,
+   "run_id": "20261025-121635-510f",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "2 passed in 0.01s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.001521,
+   "tokens": {
+    "input": 5525,
+    "cache_write": 0,
+    "cached": 48640,
+    "output": 910
+   },
+   "ctx_chars": 1270,
+   "wall_s": 15
+  },
+  {
+   "task": "t2-slug",
+   "agent": "codex",
+   "arm": "on",
+   "rep": 1,
+   "run_id": "20261025-121635-edfd",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.01s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.003317,
+   "tokens": {
+    "input": 21370,
+    "cache_write": 0,
+    "cached": 79104,
+    "output": 778
+   },
+   "ctx_chars": 1244,
+   "wall_s": 21
+  },
+  {
+   "task": "t1-empty-mean",
+   "agent": "codex",
+   "arm": "on",
+   "rep": 1,
+   "run_id": "20261025-121635-441b",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "2 passed in 0.01s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.002089,
+   "tokens": {
+    "input": 9147,
+    "cache_write": 0,
+    "cached": 91008,
+    "output": 528
+   },
+   "ctx_chars": 1270,
+   "wall_s": 21
+  },
+  {
+   "task": "t1-empty-mean",
+   "agent": "codex",
+   "arm": "off",
+   "rep": 1,
+   "run_id": "20261025-121635-138d",
+   "status": "partial",
+   "ok_first": false,
+   "pytest_first": "1 failed, 1 passed in 0.13s",
+   "rework": true,
+   "ok_final": true,
+   "usd": 0.003032,
+   "tokens": {
+    "input": 6702,
+    "cache_write": 0,
+    "cached": 48000,
+    "output": 499
+   },
+   "ctx_chars": null,
+   "wall_s": 31
+  },
+  {
+   "task": "t2-slug",
+   "agent": "codex",
+   "arm": "off",
+   "rep": 1,
+   "run_id": "20261025-121635-771d",
+   "status": "done",
+   "ok_first": false,
+   "pytest_first": "1 failed in 0.13s",
+   "rework": true,
+   "ok_final": false,
+   "usd": 0.0051730000000000005,
+   "tokens": {
+    "input": 22118,
+    "cache_write": 0,
+    "cached": 80128,
+    "output": 908
+   },
+   "ctx_chars": null,
+   "wall_s": 44
+  },
+  {
+   "task": "t3-timeout",
+   "agent": "codex",
+   "arm": "on",
+   "rep": 1,
+   "run_id": "20261025-121706-d2a0",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.02s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.002634,
+   "tokens": {
+    "input": 9887,
+    "cache_write": 0,
+    "cached": 112000,
+    "output": 1050
+   },
+   "ctx_chars": 1268,
+   "wall_s": 23
+  },
+  {
+   "task": "t3-timeout",
+   "agent": "codex",
+   "arm": "off",
+   "rep": 1,
+   "run_id": "20261025-121656-11d2",
+   "status": "done",
+   "ok_first": false,
+   "pytest_first": "1 failed in 0.13s",
+   "rework": true,
+   "ok_final": true,
+   "usd": 0.003032,
+   "tokens": {
+    "input": 7706,
+    "cache_write": 0,
+    "cached": 103040,
+    "output": 764
+   },
+   "ctx_chars": null,
+   "wall_s": 34
+  },
+  {
+   "task": "t2-slug",
+   "agent": "dsh",
+   "arm": "on",
+   "rep": 1,
+   "run_id": "20261025-121656-d90a",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.01s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.003243,
+   "tokens": {
+    "input": 7420,
+    "cache_write": 0,
+    "cached": 97280,
+    "output": 3064
+   },
+   "ctx_chars": 1244,
+   "wall_s": 35
+  },
+  {
+   "task": "t3-timeout",
+   "agent": "dsh",
+   "arm": "on",
+   "rep": 1,
+   "run_id": "20261025-121729-d51c",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.02s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.001214,
+   "tokens": {
+    "input": 5252,
+    "cache_write": 0,
+    "cached": 37632,
+    "output": 522
+   },
+   "ctx_chars": 1268,
+   "wall_s": 13
+  },
+  {
+   "task": "t1-empty-mean",
+   "agent": "dsh",
+   "arm": "off",
+   "rep": 1,
+   "run_id": "20261025-121635-8961",
+   "status": "blocked",
+   "ok_first": false,
+   "pytest_first": "1 failed, 1 passed in 0.12s",
+   "rework": true,
+   "ok_final": false,
+   "usd": 0.004914,
+   "tokens": {
+    "input": 6542,
+    "cache_write": 0,
+    "cached": 50432,
+    "output": 2091
+   },
+   "ctx_chars": null,
+   "wall_s": 67
+  },
+  {
+   "task": "t4-loader-name",
+   "agent": "codex",
+   "arm": "on",
+   "rep": 1,
+   "run_id": "20261025-121732-0281",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.03s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.002401,
+   "tokens": {
+    "input": 8606,
+    "cache_write": 0,
+    "cached": 104960,
+    "output": 981
+   },
+   "ctx_chars": 1309,
+   "wall_s": 27
+  },
+  {
+   "task": "t4-loader-name",
+   "agent": "dsh",
+   "arm": "on",
+   "rep": 1,
+   "run_id": "20261025-121742-ce4f",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.01s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.001637,
+   "tokens": {
+    "input": 5663,
+    "cache_write": 0,
+    "cached": 60288,
+    "output": 1011
+   },
+   "ctx_chars": 1309,
+   "wall_s": 18
+  },
+  {
+   "task": "t2-slug",
+   "agent": "dsh",
+   "arm": "off",
+   "rep": 1,
+   "run_id": "20261025-121650-7749",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.00s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.013231,
+   "tokens": {
+    "input": 50190,
+    "cache_write": 0,
+    "cached": 633472,
+    "output": 6336
+   },
+   "ctx_chars": null,
+   "wall_s": 75
+  },
+  {
+   "task": "t4-loader-name",
+   "agent": "codex",
+   "arm": "off",
+   "rep": 1,
+   "run_id": "20261025-121731-f4be",
+   "status": "done",
+   "ok_first": false,
+   "pytest_first": "1 failed in 0.20s",
+   "rework": true,
+   "ok_final": true,
+   "usd": 0.00472,
+   "tokens": {
+    "input": 20703,
+    "cache_write": 0,
+    "cached": 111232,
+    "output": 1260
+   },
+   "ctx_chars": null,
+   "wall_s": 46
+  },
+  {
+   "task": "t5-date",
+   "agent": "codex",
+   "arm": "on",
+   "rep": 1,
+   "run_id": "20261025-121801-66fb",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.00s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.003033,
+   "tokens": {
+    "input": 19811,
+    "cache_write": 0,
+    "cached": 73344,
+    "output": 636
+   },
+   "ctx_chars": 1130,
+   "wall_s": 20
+  },
+  {
+   "task": "t3-timeout",
+   "agent": "dsh",
+   "arm": "off",
+   "rep": 1,
+   "run_id": "20261025-121719-589f",
+   "status": "partial",
+   "ok_first": false,
+   "pytest_first": "1 failed in 0.12s",
+   "rework": true,
+   "ok_final": true,
+   "usd": 0.004234,
+   "tokens": {
+    "input": 6387,
+    "cache_write": 0,
+    "cached": 102144,
+    "output": 3238
+   },
+   "ctx_chars": null,
+   "wall_s": 63
+  },
+  {
+   "task": "t5-date",
+   "agent": "codex",
+   "arm": "off",
+   "rep": 1,
+   "run_id": "20261025-121759-b2d9",
+   "status": "blocked",
+   "ok_first": false,
+   "pytest_first": "1 failed in 0.17s",
+   "rework": true,
+   "ok_final": true,
+   "usd": 0.002503,
+   "tokens": {
+    "input": 6674,
+    "cache_write": 0,
+    "cached": 47872,
+    "output": 386
+   },
+   "ctx_chars": null,
+   "wall_s": 29
+  },
+  {
+   "task": "t5-date",
+   "agent": "dsh",
+   "arm": "on",
+   "rep": 1,
+   "run_id": "20261025-121816-c058",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.01s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.001336,
+   "tokens": {
+    "input": 5379,
+    "cache_write": 0,
+    "cached": 47872,
+    "output": 642
+   },
+   "ctx_chars": 1130,
+   "wall_s": 13
+  },
+  {
+   "task": "t4-loader-name",
+   "agent": "dsh",
+   "arm": "off",
+   "rep": 1,
+   "run_id": "20261025-121742-f004",
+   "status": "blocked",
+   "ok_first": false,
+   "pytest_first": "1 failed in 0.14s",
+   "rework": true,
+   "ok_final": true,
+   "usd": 0.004122000000000001,
+   "tokens": {
+    "input": 5593,
+    "cache_write": 0,
+    "cached": 73216,
+    "output": 2263
+   },
+   "ctx_chars": null,
+   "wall_s": 63
+  },
+  {
+   "task": "t6-negative-qty",
+   "agent": "codex",
+   "arm": "on",
+   "rep": 1,
+   "run_id": "20261025-121822-f9e8",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.01s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.002215,
+   "tokens": {
+    "input": 9314,
+    "cache_write": 0,
+    "cached": 88576,
+    "output": 795
+   },
+   "ctx_chars": 1388,
+   "wall_s": 26
+  },
+  {
+   "task": "t6-negative-qty",
+   "agent": "dsh",
+   "arm": "on",
+   "rep": 1,
+   "run_id": "20261025-121830-b65c",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.01s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.002101,
+   "tokens": {
+    "input": 6101,
+    "cache_write": 0,
+    "cached": 73728,
+    "output": 1608
+   },
+   "ctx_chars": 1388,
+   "wall_s": 24
+  },
+  {
+   "task": "t7-neutral",
+   "agent": "codex",
+   "arm": "off",
+   "rep": 1,
+   "run_id": "20261025-121845-0110",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.01s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.001614,
+   "tokens": {
+    "input": 7042,
+    "cache_write": 0,
+    "cached": 66048,
+    "output": 499
+   },
+   "ctx_chars": null,
+   "wall_s": 14
+  },
+  {
+   "task": "t6-negative-qty",
+   "agent": "codex",
+   "arm": "off",
+   "rep": 1,
+   "run_id": "20261025-121821-9101",
+   "status": "done",
+   "ok_first": false,
+   "pytest_first": "1 failed in 0.16s",
+   "rework": true,
+   "ok_final": false,
+   "usd": 0.0035960000000000002,
+   "tokens": {
+    "input": 7938,
+    "cache_write": 0,
+    "cached": 84864,
+    "output": 1015
+   },
+   "ctx_chars": null,
+   "wall_s": 46
+  },
+  {
+   "task": "t5-date",
+   "agent": "dsh",
+   "arm": "off",
+   "rep": 1,
+   "run_id": "20261025-121806-118b",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.01s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.009071,
+   "tokens": {
+    "input": 34952,
+    "cache_write": 0,
+    "cached": 443648,
+    "output": 4162
+   },
+   "ctx_chars": null,
+   "wall_s": 63
+  },
+  {
+   "task": "t7-neutral",
+   "agent": "codex",
+   "arm": "on",
+   "rep": 1,
+   "run_id": "20261025-121848-152a",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.00s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.003058,
+   "tokens": {
+    "input": 19814,
+    "cache_write": 0,
+    "cached": 73472,
+    "output": 684
+   },
+   "ctx_chars": 1161,
+   "wall_s": 21
+  },
+  {
+   "task": "t7-neutral",
+   "agent": "dsh",
+   "arm": "off",
+   "rep": 1,
+   "run_id": "20261025-121854-1137",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.00s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.001551,
+   "tokens": {
+    "input": 5353,
+    "cache_write": 0,
+    "cached": 57856,
+    "output": 957
+   },
+   "ctx_chars": null,
+   "wall_s": 16
+  },
+  {
+   "task": "t7-neutral",
+   "agent": "dsh",
+   "arm": "on",
+   "rep": 1,
+   "run_id": "20261025-121858-943b",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.01s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.001516,
+   "tokens": {
+    "input": 5736,
+    "cache_write": 0,
+    "cached": 69376,
+    "output": 746
+   },
+   "ctx_chars": 1161,
+   "wall_s": 16
+  },
+  {
+   "task": "t1-empty-mean",
+   "agent": "dsh",
+   "arm": "on",
+   "rep": 2,
+   "run_id": "20261025-121911-7ccd",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "2 passed in 0.01s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.001278,
+   "tokens": {
+    "input": 5148,
+    "cache_write": 0,
+    "cached": 37888,
+    "output": 654
+   },
+   "ctx_chars": 1270,
+   "wall_s": 11
+  },
+  {
+   "task": "t1-empty-mean",
+   "agent": "codex",
+   "arm": "on",
+   "rep": 2,
+   "run_id": "20261025-121909-9636",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "2 passed in 0.01s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.002978,
+   "tokens": {
+    "input": 19664,
+    "cache_write": 0,
+    "cached": 73856,
+    "output": 547
+   },
+   "ctx_chars": 1270,
+   "wall_s": 19
+  },
+  {
+   "task": "t1-empty-mean",
+   "agent": "codex",
+   "arm": "off",
+   "rep": 2,
+   "run_id": "20261025-121907-9eb9",
+   "status": "partial",
+   "ok_first": true,
+   "pytest_first": "2 passed in 0.00s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.00252,
+   "tokens": {
+    "input": 9249,
+    "cache_write": 0,
+    "cached": 110208,
+    "output": 987
+   },
+   "ctx_chars": null,
+   "wall_s": 25
+  },
+  {
+   "task": "t2-slug",
+   "agent": "codex",
+   "arm": "on",
+   "rep": 2,
+   "run_id": "20261025-121923-b0bd",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.01s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.002025,
+   "tokens": {
+    "input": 7724,
+    "cache_write": 0,
+    "cached": 86016,
+    "output": 785
+   },
+   "ctx_chars": 1244,
+   "wall_s": 22
+  },
+  {
+   "task": "t2-slug",
+   "agent": "codex",
+   "arm": "off",
+   "rep": 2,
+   "run_id": "20261025-121915-783a",
+   "status": "partial",
+   "ok_first": false,
+   "pytest_first": "1 failed in 0.13s",
+   "rework": true,
+   "ok_final": false,
+   "usd": 0.0031060000000000003,
+   "tokens": {
+    "input": 6766,
+    "cache_write": 0,
+    "cached": 47872,
+    "output": 463
+   },
+   "ctx_chars": null,
+   "wall_s": 31
+  },
+  {
+   "task": "t3-timeout",
+   "agent": "codex",
+   "arm": "on",
+   "rep": 2,
+   "run_id": "20261025-121946-7815",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.02s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.001904,
+   "tokens": {
+    "input": 7608,
+    "cache_write": 0,
+    "cached": 85888,
+    "output": 569
+   },
+   "ctx_chars": 1268,
+   "wall_s": 18
+  },
+  {
+   "task": "t2-slug",
+   "agent": "dsh",
+   "arm": "on",
+   "rep": 2,
+   "run_id": "20261025-121932-3131",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.00s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.002978,
+   "tokens": {
+    "input": 6813,
+    "cache_write": 0,
+    "cached": 113024,
+    "output": 2695
+   },
+   "ctx_chars": 1244,
+   "wall_s": 34
+  },
+  {
+   "task": "t1-empty-mean",
+   "agent": "dsh",
+   "arm": "off",
+   "rep": 2,
+   "run_id": "20261025-121909-5346",
+   "status": "blocked",
+   "ok_first": false,
+   "pytest_first": "1 failed, 1 passed in 0.11s",
+   "rework": true,
+   "ok_final": false,
+   "usd": 0.005324000000000001,
+   "tokens": {
+    "input": 6241,
+    "cache_write": 0,
+    "cached": 63232,
+    "output": 2682
+   },
+   "ctx_chars": null,
+   "wall_s": 73
+  },
+  {
+   "task": "t3-timeout",
+   "agent": "codex",
+   "arm": "off",
+   "rep": 2,
+   "run_id": "20261025-121945-4963",
+   "status": "partial",
+   "ok_first": false,
+   "pytest_first": "1 failed in 0.14s",
+   "rework": true,
+   "ok_final": true,
+   "usd": 0.0032860000000000003,
+   "tokens": {
+    "input": 7998,
+    "cache_write": 0,
+    "cached": 121088,
+    "output": 863
+   },
+   "ctx_chars": null,
+   "wall_s": 40
+  },
+  {
+   "task": "t3-timeout",
+   "agent": "dsh",
+   "arm": "on",
+   "rep": 2,
+   "run_id": "20261025-122006-3d21",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.02s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.001951,
+   "tokens": {
+    "input": 7457,
+    "cache_write": 0,
+    "cached": 76160,
+    "output": 1006
+   },
+   "ctx_chars": 1268,
+   "wall_s": 22
+  },
+  {
+   "task": "t6-negative-qty",
+   "agent": "dsh",
+   "arm": "off",
+   "rep": 1,
+   "run_id": "20261025-121828-581b",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.01s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.012822,
+   "tokens": {
+    "input": 45224,
+    "cache_write": 0,
+    "cached": 703872,
+    "output": 6544
+   },
+   "ctx_chars": null,
+   "wall_s": 137
+  },
+  {
+   "task": "t4-loader-name",
+   "agent": "codex",
+   "arm": "on",
+   "rep": 2,
+   "run_id": "20261025-122026-ac5f",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.02s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.002013,
+   "tokens": {
+    "input": 7841,
+    "cache_write": 0,
+    "cached": 86016,
+    "output": 737
+   },
+   "ctx_chars": 1309,
+   "wall_s": 19
+  },
+  {
+   "task": "t2-slug",
+   "agent": "dsh",
+   "arm": "off",
+   "rep": 2,
+   "run_id": "20261025-121927-8a4c",
+   "status": "done",
+   "ok_first": false,
+   "pytest_first": "1 failed in 0.17s",
+   "rework": true,
+   "ok_final": true,
+   "usd": 0.00703,
+   "tokens": {
+    "input": 8488,
+    "cache_write": 0,
+    "cached": 130176,
+    "output": 3087
+   },
+   "ctx_chars": null,
+   "wall_s": 88
+  },
+  {
+   "task": "t4-loader-name",
+   "agent": "dsh",
+   "arm": "on",
+   "rep": 2,
+   "run_id": "20261025-122044-c9bf",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.02s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.001908,
+   "tokens": {
+    "input": 7110,
+    "cache_write": 0,
+    "cached": 52608,
+    "output": 1139
+   },
+   "ctx_chars": 1309,
+   "wall_s": 18
+  },
+  {
+   "task": "t4-loader-name",
+   "agent": "codex",
+   "arm": "off",
+   "rep": 2,
+   "run_id": "20261025-122022-9aeb",
+   "status": "done",
+   "ok_first": false,
+   "pytest_first": "1 failed in 0.14s",
+   "rework": true,
+   "ok_final": true,
+   "usd": 0.004144,
+   "tokens": {
+    "input": 19793,
+    "cache_write": 0,
+    "cached": 72832,
+    "output": 1002
+   },
+   "ctx_chars": null,
+   "wall_s": 40
+  },
+  {
+   "task": "t3-timeout",
+   "agent": "dsh",
+   "arm": "off",
+   "rep": 2,
+   "run_id": "20261025-122004-1753",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.03s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.011959,
+   "tokens": {
+    "input": 49610,
+    "cache_write": 0,
+    "cached": 571648,
+    "output": 4671
+   },
+   "ctx_chars": null,
+   "wall_s": 65
+  },
+  {
+   "task": "t5-date",
+   "agent": "dsh",
+   "arm": "on",
+   "rep": 2,
+   "run_id": "20261025-122103-ae82",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.01s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.001353,
+   "tokens": {
+    "input": 5379,
+    "cache_write": 0,
+    "cached": 48128,
+    "output": 669
+   },
+   "ctx_chars": 1130,
+   "wall_s": 13
+  },
+  {
+   "task": "t5-date",
+   "agent": "codex",
+   "arm": "on",
+   "rep": 2,
+   "run_id": "20261025-122056-8d46",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.00s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.001961,
+   "tokens": {
+    "input": 7690,
+    "cache_write": 0,
+    "cached": 85760,
+    "output": 669
+   },
+   "ctx_chars": 1130,
+   "wall_s": 21
+  },
+  {
+   "task": "t4-loader-name",
+   "agent": "dsh",
+   "arm": "off",
+   "rep": 2,
+   "run_id": "20261025-122028-e35b",
+   "status": "blocked",
+   "ok_first": false,
+   "pytest_first": "1 failed in 0.16s",
+   "rework": true,
+   "ok_final": true,
+   "usd": 0.003715,
+   "tokens": {
+    "input": 5906,
+    "cache_write": 0,
+    "cached": 37888,
+    "output": 2440
+   },
+   "ctx_chars": null,
+   "wall_s": 49
+  },
+  {
+   "task": "t5-date",
+   "agent": "codex",
+   "arm": "off",
+   "rep": 2,
+   "run_id": "20261025-122044-0378",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.00s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.004265,
+   "tokens": {
+    "input": 15502,
+    "cache_write": 0,
+    "cached": 202880,
+    "output": 1371
+   },
+   "ctx_chars": null,
+   "wall_s": 39
+  },
+  {
+   "task": "t6-negative-qty",
+   "agent": "codex",
+   "arm": "on",
+   "rep": 2,
+   "run_id": "20261025-122116-ad92",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.00s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.003691,
+   "tokens": {
+    "input": 26522,
+    "cache_write": 0,
+    "cached": 67200,
+    "output": 733
+   },
+   "ctx_chars": 1388,
+   "wall_s": 21
+  },
+  {
+   "task": "t6-negative-qty",
+   "agent": "dsh",
+   "arm": "on",
+   "rep": 2,
+   "run_id": "20261025-122118-f477",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.00s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.001992,
+   "tokens": {
+    "input": 5964,
+    "cache_write": 0,
+    "cached": 72064,
+    "output": 1469
+   },
+   "ctx_chars": 1388,
+   "wall_s": 23
+  },
+  {
+   "task": "t7-neutral",
+   "agent": "codex",
+   "arm": "off",
+   "rep": 2,
+   "run_id": "20261025-122123-d00c",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.01s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.001924,
+   "tokens": {
+    "input": 7534,
+    "cache_write": 0,
+    "cached": 84352,
+    "output": 655
+   },
+   "ctx_chars": null,
+   "wall_s": 19
+  },
+  {
+   "task": "t6-negative-qty",
+   "agent": "codex",
+   "arm": "off",
+   "rep": 2,
+   "run_id": "20261025-122109-82bd",
+   "status": "done",
+   "ok_first": false,
+   "pytest_first": "1 failed in 0.15s",
+   "rework": true,
+   "ok_final": false,
+   "usd": 0.004324,
+   "tokens": {
+    "input": 9355,
+    "cache_write": 0,
+    "cached": 106880,
+    "output": 1112
+   },
+   "ctx_chars": null,
+   "wall_s": 45
+  },
+  {
+   "task": "t7-neutral",
+   "agent": "dsh",
+   "arm": "off",
+   "rep": 2,
+   "run_id": "20261025-122140-7b74",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.00s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.001416,
+   "tokens": {
+    "input": 5299,
+    "cache_write": 0,
+    "cached": 56576,
+    "output": 753
+   },
+   "ctx_chars": null,
+   "wall_s": 14
+  },
+  {
+   "task": "t5-date",
+   "agent": "dsh",
+   "arm": "off",
+   "rep": 2,
+   "run_id": "20261025-122103-d4a0",
+   "status": "blocked",
+   "ok_first": false,
+   "pytest_first": "1 failed in 0.13s",
+   "rework": true,
+   "ok_final": true,
+   "usd": 0.003089,
+   "tokens": {
+    "input": 7173,
+    "cache_write": 0,
+    "cached": 76800,
+    "output": 1380
+   },
+   "ctx_chars": null,
+   "wall_s": 52
+  },
+  {
+   "task": "t7-neutral",
+   "agent": "dsh",
+   "arm": "on",
+   "rep": 2,
+   "run_id": "20261025-122143-244a",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.00s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.00131,
+   "tokens": {
+    "input": 5579,
+    "cache_write": 0,
+    "cached": 58112,
+    "output": 498
+   },
+   "ctx_chars": 1161,
+   "wall_s": 14
+  },
+  {
+   "task": "t7-neutral",
+   "agent": "codex",
+   "arm": "on",
+   "rep": 2,
+   "run_id": "20261025-122137-a6ee",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.00s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.001951,
+   "tokens": {
+    "input": 7760,
+    "cache_write": 0,
+    "cached": 85504,
+    "output": 640
+   },
+   "ctx_chars": 1161,
+   "wall_s": 21
+  },
+  {
+   "task": "t1-empty-mean",
+   "agent": "codex",
+   "arm": "on",
+   "rep": 3,
+   "run_id": "20261025-122154-db5a",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "2 passed in 0.01s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.001639,
+   "tokens": {
+    "input": 7349,
+    "cache_write": 0,
+    "cached": 66944,
+    "output": 469
+   },
+   "ctx_chars": 1270,
+   "wall_s": 15
+  },
+  {
+   "task": "t1-empty-mean",
+   "agent": "dsh",
+   "arm": "on",
+   "rep": 3,
+   "run_id": "20261025-122157-072f",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "2 passed in 0.01s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.001977,
+   "tokens": {
+    "input": 6094,
+    "cache_write": 0,
+    "cached": 83584,
+    "output": 1353
+   },
+   "ctx_chars": 1270,
+   "wall_s": 23
+  },
+  {
+   "task": "t2-slug",
+   "agent": "codex",
+   "arm": "on",
+   "rep": 3,
+   "run_id": "20261025-122209-ddc3",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.01s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.00241,
+   "tokens": {
+    "input": 8338,
+    "cache_write": 0,
+    "cached": 105216,
+    "output": 1049
+   },
+   "ctx_chars": 1244,
+   "wall_s": 20
+  },
+  {
+   "task": "t1-empty-mean",
+   "agent": "codex",
+   "arm": "off",
+   "rep": 3,
+   "run_id": "20261025-122154-2a42",
+   "status": "blocked",
+   "ok_first": false,
+   "pytest_first": "1 failed, 1 passed in 0.11s",
+   "rework": true,
+   "ok_final": false,
+   "usd": 0.004185,
+   "tokens": {
+    "input": 20777,
+    "cache_write": 0,
+    "cached": 55552,
+    "output": 611
+   },
+   "ctx_chars": null,
+   "wall_s": 36
+  },
+  {
+   "task": "t2-slug",
+   "agent": "codex",
+   "arm": "off",
+   "rep": 3,
+   "run_id": "20261025-122158-33b5",
+   "status": "done",
+   "ok_first": false,
+   "pytest_first": "1 failed in 0.14s",
+   "rework": true,
+   "ok_final": true,
+   "usd": 0.003302,
+   "tokens": {
+    "input": 8911,
+    "cache_write": 0,
+    "cached": 106112,
+    "output": 989
+   },
+   "ctx_chars": null,
+   "wall_s": 37
+  },
+  {
+   "task": "t1-empty-mean",
+   "agent": "dsh",
+   "arm": "off",
+   "rep": 3,
+   "run_id": "20261025-122154-7ee1",
+   "status": "blocked",
+   "ok_first": false,
+   "pytest_first": "1 failed, 1 passed in 0.12s",
+   "rework": true,
+   "ok_final": false,
+   "usd": 0.0041930000000000005,
+   "tokens": {
+    "input": 7173,
+    "cache_write": 0,
+    "cached": 67584,
+    "output": 1813
+   },
+   "ctx_chars": null,
+   "wall_s": 54
+  },
+  {
+   "task": "t3-timeout",
+   "agent": "codex",
+   "arm": "on",
+   "rep": 3,
+   "run_id": "20261025-122235-57f2",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.02s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.001915,
+   "tokens": {
+    "input": 7672,
+    "cache_write": 0,
+    "cached": 85888,
+    "output": 577
+   },
+   "ctx_chars": 1268,
+   "wall_s": 20
+  },
+  {
+   "task": "t6-negative-qty",
+   "agent": "dsh",
+   "arm": "off",
+   "rep": 2,
+   "run_id": "20261025-122117-9505",
+   "status": "blocked",
+   "ok_first": false,
+   "pytest_first": "1 failed in 0.14s",
+   "rework": true,
+   "ok_final": false,
+   "usd": 0.01163,
+   "tokens": {
+    "input": 34883,
+    "cache_write": 0,
+    "cached": 244864,
+    "output": 5568
+   },
+   "ctx_chars": null,
+   "wall_s": 98
+  },
+  {
+   "task": "t2-slug",
+   "agent": "dsh",
+   "arm": "on",
+   "rep": 3,
+   "run_id": "20261025-122229-4d34",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.00s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.002423,
+   "tokens": {
+    "input": 5964,
+    "cache_write": 0,
+    "cached": 85888,
+    "output": 2118
+   },
+   "ctx_chars": 1244,
+   "wall_s": 28
+  },
+  {
+   "task": "t3-timeout",
+   "agent": "codex",
+   "arm": "off",
+   "rep": 3,
+   "run_id": "20261025-122230-9ec5",
+   "status": "partial",
+   "ok_first": false,
+   "pytest_first": "1 failed in 0.14s",
+   "rework": true,
+   "ok_final": false,
+   "usd": 0.002966,
+   "tokens": {
+    "input": 6600,
+    "cache_write": 0,
+    "cached": 47872,
+    "output": 392
+   },
+   "ctx_chars": null,
+   "wall_s": 31
+  },
+  {
+   "task": "t3-timeout",
+   "agent": "dsh",
+   "arm": "on",
+   "rep": 3,
+   "run_id": "20261025-122255-74ef",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.02s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.001724,
+   "tokens": {
+    "input": 5734,
+    "cache_write": 0,
+    "cached": 59904,
+    "output": 1140
+   },
+   "ctx_chars": 1268,
+   "wall_s": 17
+  },
+  {
+   "task": "t4-loader-name",
+   "agent": "codex",
+   "arm": "off",
+   "rep": 3,
+   "run_id": "20261025-122255-3c44",
+   "status": "done",
+   "ok_first": false,
+   "pytest_first": "1 failed in 0.13s",
+   "rework": true,
+   "ok_final": true,
+   "usd": 0.002901,
+   "tokens": {
+    "input": 7386,
+    "cache_write": 0,
+    "cached": 84352,
+    "output": 816
+   },
+   "ctx_chars": null,
+   "wall_s": 31
+  },
+  {
+   "task": "t4-loader-name",
+   "agent": "dsh",
+   "arm": "on",
+   "rep": 3,
+   "run_id": "20261025-122312-2f7c",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.02s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.001802,
+   "tokens": {
+    "input": 5677,
+    "cache_write": 0,
+    "cached": 61312,
+    "output": 1278
+   },
+   "ctx_chars": 1309,
+   "wall_s": 20
+  },
+  {
+   "task": "t4-loader-name",
+   "agent": "codex",
+   "arm": "on",
+   "rep": 3,
+   "run_id": "20261025-122257-c725",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.01s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.002731,
+   "tokens": {
+    "input": 8948,
+    "cache_write": 0,
+    "cached": 124416,
+    "output": 1185
+   },
+   "ctx_chars": 1309,
+   "wall_s": 39
+  },
+  {
+   "task": "t5-date",
+   "agent": "codex",
+   "arm": "on",
+   "rep": 3,
+   "run_id": "20261025-122332-89d2",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.00s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.001947,
+   "tokens": {
+    "input": 7505,
+    "cache_write": 0,
+    "cached": 85760,
+    "output": 677
+   },
+   "ctx_chars": 1130,
+   "wall_s": 19
+  },
+  {
+   "task": "t4-loader-name",
+   "agent": "dsh",
+   "arm": "off",
+   "rep": 3,
+   "run_id": "20261025-122301-bd01",
+   "status": "partial",
+   "ok_first": false,
+   "pytest_first": "1 failed in 0.13s",
+   "rework": true,
+   "ok_final": true,
+   "usd": 0.0036680000000000003,
+   "tokens": {
+    "input": 6737,
+    "cache_write": 0,
+    "cached": 88832,
+    "output": 2555
+   },
+   "ctx_chars": null,
+   "wall_s": 51
+  },
+  {
+   "task": "t5-date",
+   "agent": "codex",
+   "arm": "off",
+   "rep": 3,
+   "run_id": "20261025-122326-2373",
+   "status": "blocked",
+   "ok_first": false,
+   "pytest_first": "1 failed in 0.11s",
+   "rework": true,
+   "ok_final": true,
+   "usd": 0.002493,
+   "tokens": {
+    "input": 6666,
+    "cache_write": 0,
+    "cached": 47872,
+    "output": 405
+   },
+   "ctx_chars": null,
+   "wall_s": 30
+  },
+  {
+   "task": "t5-date",
+   "agent": "dsh",
+   "arm": "on",
+   "rep": 3,
+   "run_id": "20261025-122351-2bec",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.01s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.001758,
+   "tokens": {
+    "input": 5923,
+    "cache_write": 0,
+    "cached": 82560,
+    "output": 1037
+   },
+   "ctx_chars": 1130,
+   "wall_s": 22
+  },
+  {
+   "task": "t3-timeout",
+   "agent": "dsh",
+   "arm": "off",
+   "rep": 3,
+   "run_id": "20261025-122248-51b9",
+   "status": "blocked",
+   "ok_first": false,
+   "pytest_first": "1 failed in 0.14s",
+   "rework": true,
+   "ok_final": false,
+   "usd": 0.007084,
+   "tokens": {
+    "input": 8126,
+    "cache_write": 0,
+    "cached": 88448,
+    "output": 6071
+   },
+   "ctx_chars": null,
+   "wall_s": 87
+  },
+  {
+   "task": "t6-negative-qty",
+   "agent": "codex",
+   "arm": "on",
+   "rep": 3,
+   "run_id": "20261025-122356-c128",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.00s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.002051,
+   "tokens": {
+    "input": 8105,
+    "cache_write": 0,
+    "cached": 86016,
+    "output": 761
+   },
+   "ctx_chars": 1388,
+   "wall_s": 22
+  },
+  {
+   "task": "t5-date",
+   "agent": "dsh",
+   "arm": "off",
+   "rep": 3,
+   "run_id": "20261025-122336-b76d",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.00s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.009964,
+   "tokens": {
+    "input": 46483,
+    "cache_write": 0,
+    "cached": 369536,
+    "output": 3138
+   },
+   "ctx_chars": null,
+   "wall_s": 48
+  },
+  {
+   "task": "t6-negative-qty",
+   "agent": "dsh",
+   "arm": "on",
+   "rep": 3,
+   "run_id": "20261025-122416-e376",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.01s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.001688,
+   "tokens": {
+    "input": 5955,
+    "cache_write": 0,
+    "cached": 60032,
+    "output": 1025
+   },
+   "ctx_chars": 1388,
+   "wall_s": 17
+  },
+  {
+   "task": "t6-negative-qty",
+   "agent": "codex",
+   "arm": "off",
+   "rep": 3,
+   "run_id": "20261025-122353-a278",
+   "status": "done",
+   "ok_first": false,
+   "pytest_first": "1 failed in 0.15s",
+   "rework": true,
+   "ok_final": false,
+   "usd": 0.0036290000000000003,
+   "tokens": {
+    "input": 8305,
+    "cache_write": 0,
+    "cached": 103424,
+    "output": 985
+   },
+   "ctx_chars": null,
+   "wall_s": 45
+  },
+  {
+   "task": "t7-neutral",
+   "agent": "codex",
+   "arm": "off",
+   "rep": 3,
+   "run_id": "20261025-122419-2d7a",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.01s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.00299,
+   "tokens": {
+    "input": 19396,
+    "cache_write": 0,
+    "cached": 72320,
+    "output": 654
+   },
+   "ctx_chars": null,
+   "wall_s": 19
+  },
+  {
+   "task": "t7-neutral",
+   "agent": "codex",
+   "arm": "on",
+   "rep": 3,
+   "run_id": "20261025-122424-95e2",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.00s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.003064,
+   "tokens": {
+    "input": 19825,
+    "cache_write": 0,
+    "cached": 73472,
+    "output": 694
+   },
+   "ctx_chars": 1161,
+   "wall_s": 18
+  },
+  {
+   "task": "t7-neutral",
+   "agent": "dsh",
+   "arm": "on",
+   "rep": 3,
+   "run_id": "20261025-122438-0c6a",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.00s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.001338,
+   "tokens": {
+    "input": 5394,
+    "cache_write": 0,
+    "cached": 47744,
+    "output": 642
+   },
+   "ctx_chars": 1161,
+   "wall_s": 11
+  },
+  {
+   "task": "t7-neutral",
+   "agent": "dsh",
+   "arm": "off",
+   "rep": 3,
+   "run_id": "20261025-122433-0c80",
+   "status": "done",
+   "ok_first": true,
+   "pytest_first": "1 passed in 0.00s",
+   "rework": false,
+   "ok_final": true,
+   "usd": 0.001433,
+   "tokens": {
+    "input": 5293,
+    "cache_write": 0,
+    "cached": 57472,
+    "output": 777
+   },
+   "ctx_chars": null,
+   "wall_s": 18
+  },
+  {
+   "task": "t6-negative-qty",
+   "agent": "dsh",
+   "arm": "off",
+   "rep": 3,
+   "run_id": "20261025-122413-b66a",
+   "status": "blocked",
+   "ok_first": false,
+   "pytest_first": "1 failed in 0.13s",
+   "rework": true,
+   "ok_final": false,
+   "usd": 0.009223,
+   "tokens": {
+    "input": 23589,
+    "cache_write": 0,
+    "cached": 239104,
+    "output": 5630
+   },
+   "ctx_chars": null,
+   "wall_s": 84
+  },
+  {
+   "task": "t2-slug",
+   "agent": "dsh",
+   "arm": "off",
+   "rep": 3,
+   "run_id": "20261025-122220-4489",
+   "status": "done",
+   "ok_first": false,
+   "pytest_first": "1 failed in 0.16s",
+   "rework": true,
+   "ok_final": true,
+   "usd": 0.017894,
+   "tokens": {
+    "input": 31747,
+    "cache_write": 0,
+    "cached": 246400,
+    "output": 3831
+   },
+   "ctx_chars": null,
+   "wall_s": 247
+  }
+ ]
+}
