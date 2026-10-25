@@ -24,19 +24,19 @@ claude plugin install relayline --marketplace SUPERD6/relayline     # Claude Cod
 codex plugin marketplace add SUPERD6/relayline && codex plugin add relayline@relayline   # Codex 0.164
 ```
 
-- **Claude Code** gets the four skills (as `relayline:agent-delegate`, `relayline:task-routing`, `relayline:task-split`,
-  `relayline:task-checkpoint`) and ccx's two hooks: the start-of-session shared-memory delta and the per-turn board /
-  shared-document line. The hooks run the copy of ccx inside the plugin (`bin/ccx`, through `sh`; on Windows that is
+- **Claude Code** gets the five skills (as `relayline:agent-delegate`, `relayline:task-routing`, `relayline:task-split`,
+  `relayline:task-checkpoint`, `relayline:project-manager`) and ccx's two hooks: the start-of-session shared-memory
+  delta and the per-turn board / shared-document line. The hooks run the copy of ccx inside the plugin (`bin/ccx`, through `sh`; on Windows that is
   the Git Bash Claude Code uses for hooks), so they need Python 3.11+ but no separate install. Before `ccx init` they
   print nothing.
-- **Codex** gets the four skills only. Its hooks stay with `ccx sync` (plugin hooks in Codex must be trusted by
+- **Codex** gets the five skills only. Its hooks stay with `ccx sync` (plugin hooks in Codex must be trusted by
   hand and are not offered here).
 - **DeepSeek Harness (`dsh`)** has no plugin marketplace or skill install yet (its README, read 2026-10-25); `ccx sync`
   writes its lead instructions as before.
 - **Still install ccx itself** (`pipx install git+https://github.com/SUPERD6/relayline`, then `ccx init` or
   `ccx setup`) to delegate from a terminal or from Codex. `ccx doctor` says so when the plugin is enabled but ccx is
   not installed on its own.
-- **No double wiring:** where the plugin is enabled, `ccx sync` leaves the Claude hooks and the four skills to it and
+- **No double wiring:** where the plugin is enabled, `ccx sync` leaves the Claude hooks and the five skills to it and
   takes out the copies it wrote earlier (`ccx:` hooks in `settings.json`, links in the tools' `skills/` folders);
   Codex's hook block stays. `ccx doctor` warns if a hook is still there twice.
 
