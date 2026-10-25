@@ -317,7 +317,8 @@ def cmd_stop(a) -> int:
 
 def cmd_batch(a) -> int:
     """plan.json: {"tasks":[{"id", "brief", "to"?, "mode"?, "cwd"?, "tier"? | "model"+"effort"? |
-    rubric keys ("files","coupling","clarity","risk","novelty")?, "minutes"?, "task"?, "step"?}]}"""
+    rubric keys ("files","coupling","clarity","risk","novelty")?, "minutes"?, "task"?, "step"?, "check"?,
+    "review"? (auto|on|off, as `ccx run --review`)}]}"""
     p = paths()
     cfg = load_config(p)
     plan = json.loads(Path(a.plan).read_text(encoding="utf-8"))
@@ -338,7 +339,7 @@ def cmd_batch(a) -> int:
             skipped.append({"id": t.get("id"), "advice": route.get("advice")})
             continue
         reqs.append(Request(brief=t["brief"], mode=t["mode"], mode_source=t["mode_source"], mode_why=t["mode_why"],
-                            check=t.get("check"),
+                            check=t.get("check"), review=t.get("review", "auto"), risk=t.get("risk"),
                             cwd=Path(t.get("cwd") or os.getcwd()), caller=caller, label=t.get("id", ""),
                             task=t.get("task"), step=t.get("step"),
                             # parallel writers in one repo must not trample each other

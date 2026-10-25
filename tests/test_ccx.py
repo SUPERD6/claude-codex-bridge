@@ -286,6 +286,25 @@ class TestDelegation(Env):
         self.assertEqual(len(out["results"]), 2)
         self.assertEqual([d["id"] for d in out["do_yourself"]], ["c"])
 
+    def test_batch_passes_review_and_risk(self):
+        # a plan can turn review off (or on) per task, as `ccx run --review` does
+        import argparse
+        from unittest import mock
+        from ccx.commands import delegation
+        plan = {"tasks": [{"id": "a", "to": "codex", "tier": "T1", "brief": "fix a.py", "review": "off"},
+                          {"id": "b", "to": "codex", "tier": "T1", "brief": "fix b.py", "risk": "visible"}]}
+        f = self.work / "plan.json"
+        f.write_text(json.dumps(plan))
+        seen = []
+        fake = {"run_id": "r", "ok": True}
+        with mock.patch.dict(os.environ, {"CCX_HUB": str(self.hub)}), \
+                mock.patch.object(delegation, "run", side_effect=lambda r, p: seen.append(r) or fake), \
+                mock.patch.object(delegation, "compact", side_effect=lambda rec: rec), \
+                mock.patch.object(delegation, "_out"):
+            delegation.cmd_batch(argparse.Namespace(plan=str(f), caller="claude"))
+        got = {r.label: (r.review, r.risk) for r in seen}
+        self.assertEqual(got, {"a": ("off", None), "b": ("auto", "visible")})
+
 
 class TestMemory(Env):
     def P(self):
