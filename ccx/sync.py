@@ -80,6 +80,20 @@ def ccx_command(*args: str) -> str:
     return " ".join(x if x in ("-m", "ccx") else f'"{x}"' for x in ccx_argv()) + " " + " ".join(args)
 
 
+def codex_hook_command(*args: str, windows: bool | None = None) -> str:
+    """The command for a Codex hook. Codex (0.164) runs hook commands through PowerShell on Windows, where a line
+    that starts with a quoted path is just a string and runs nothing ("hook: SessionStart Failed", no output): the
+    call operator `& ` makes it a call (H7, 2026-10-25)."""
+    windows = os.name == "nt" if windows is None else windows
+    return ("& " if windows else "") + ccx_command(*args)
+
+
+def codex_hook_needs_call_operator(config_text: str) -> bool:
+    """A ccx hook block written before the fix: on Windows its commands start with a quoted path and fail."""
+    m = re.search(re.escape(TOML_BEGIN) + r"(.*?)" + re.escape(TOML_END), config_text, re.S)
+    return bool(m) and bool(re.search(r"^command = '\"", m.group(1), re.M))
+
+
 # ------------------------------------------------------------ managed blocks
 def upsert_block(text: str, block_id: str, body: str) -> str:
     b, e = BEGIN.format(id=block_id), END.format(id=block_id)
@@ -204,7 +218,7 @@ def sync_hooks(p: Paths, plan: Plan) -> None:
     # Codex: config.toml inline [[hooks.SessionStart]] in a marked block
     ct = codex_home() / "config.toml"
     old = ct.read_text(encoding="utf-8") if ct.exists() else ""
-    cmd = ccx_command("mem", "delta", "--as", "codex")
+    cmd = codex_hook_command("mem", "delta", "--as", "codex")
     block = "\n".join([
         TOML_BEGIN,
         "[[hooks.SessionStart]]",
@@ -217,7 +231,7 @@ def sync_hooks(p: Paths, plan: Plan) -> None:
         "[[hooks.UserPromptSubmit]]",              # every turn: board messages, shared-document changes (Codex 0.164)
         "[[hooks.UserPromptSubmit.hooks]]",
         'type = "command"',
-        f"command = '{ccx_command('turn', '--as', 'codex')}'",
+        f"command = '{codex_hook_command('turn', '--as', 'codex')}'",
         "timeout = 10",
         TOML_END,
     ])
