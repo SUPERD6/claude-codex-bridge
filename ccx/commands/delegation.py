@@ -489,7 +489,7 @@ def register(sub) -> None:
     v.add_argument("--reason", choices=["unfinished", "wrong", "overreach", "other"],
                    help="with --ok 0: what was wrong (not finished / done wrong / changed what it shouldn't / other)")
     v.add_argument("--sweep", action="store_true", help="record 'probably right' for finished runs nobody judged "
-                   "whose check or self-check passed and review (if any) passed, and 'wrong' for undone ones; also "
+                   "whose check or self-check passed and review (if any) passed (undone ones wait for you); also "
                    "runs quietly at session start. Your own verdict always overrides these")
     v.add_argument("--after-h", type=float, default=12.0, help="with --sweep: only runs at least this old (hours)")
     v.add_argument("--builtin", metavar="RUNG", help="work your own built-in sub-agent did, e.g. claude-builtin:haiku:low")

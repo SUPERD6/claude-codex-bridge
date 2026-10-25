@@ -41,8 +41,9 @@ def _soft_verdict(p: Paths, record: dict, ok: bool, reason: str, note: str) -> N
 
 def soft_verdicts(p: Paths, min_age_h: float = SOFT_AFTER_H, now: float | None = None) -> list[dict]:
     """Finished runs nobody judged within `min_age_h`: 'probably right' when ccx's own check passed or the
-    sub-agent's self-check ran, the independent review (if any) passed, and it was neither undone nor sent back, and the check
-    command has not let wrong work through before (J7). Runs without such evidence stay unjudged: they wait for the person (the UI's 'please review' list)."""
+    sub-agent's self-check ran, the independent review (if any) passed, it was neither undone nor sent back, and the
+    check command has not let wrong work through before (J7). Undone runs and runs without such evidence stay
+    unjudged: they wait for the person (the UI's 'please review' list)."""
     now = now or time.time()
     rows = ledger.rows(p)
     judged = {r.get("run_id") for r in rows if r.get("type") == "verify"}
@@ -60,9 +61,7 @@ def soft_verdicts(p: Paths, min_age_h: float = SOFT_AFTER_H, now: float | None =
             continue
         if _hard_verdict(record) or (record.get("verdict") or {}).get("soft"):
             continue
-        if (p.runs / r["run_id"] / "undone.json").exists():
-            _soft_verdict(p, record, False, "undone", "undone with ccx undo")
-            out.append({"run_id": r["run_id"], "ok": False, "why": "undone"})
+        if (p.runs / r["run_id"] / "undone.json").exists():       # undone: right or wrong is the person's call
             continue
         if record.get("kind") in ("check_failed", "review_issues", "review_failed", "needs_write", "split"):
             continue

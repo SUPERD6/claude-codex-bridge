@@ -51,7 +51,7 @@ def cmd_archive(a) -> int:
 
 
 def cmd_undo(a) -> int:
-    _out(undo(paths(), a.run_id, a.apply))
+    _out(undo(paths(), a.run_id, a.apply, wrong=a.wrong))
     return 0
 
 
@@ -259,6 +259,8 @@ def register(sub) -> None:
     ar.set_defaults(fn=cmd_archive)
     ud = sub.add_parser("undo", help="put back the files a write run changed (dry run unless --apply)")
     ud.add_argument("run_id"); ud.add_argument("--apply", action="store_true")
+    ud.add_argument("--wrong", action="store_true", help="with --apply: also record the run as wrong (teaches "
+                    "routing). Without it undoing records no verdict")
     ud.set_defaults(fn=cmd_undo)
     sh = sub.add_parser("show", help="show a run (compact by default)")
     sh.add_argument("run_id")
