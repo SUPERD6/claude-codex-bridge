@@ -21,6 +21,12 @@ def all_adapters() -> list[Adapter]:
     return [get(n) for n in NAMES]
 
 
+def leads() -> tuple[str, ...]:
+    """Agents that can sit in the lead's chair (`can_lead`: a start hook and memory wiring): the `--as` choices.
+    A tool becomes a possible lead by saying so in its adapter, not by an edit to each command."""
+    return tuple(a.name for a in all_adapters() if a.can_lead)
+
+
 def vendor(name: str, cfg: dict | None = None) -> str:
     """Who makes the model behind this agent name. A provider is its own vendor unless its config says
     otherwise (`vendor = "..."`), so DeepSeek through Claude Code is not "the same as Claude"."""

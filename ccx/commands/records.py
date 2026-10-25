@@ -5,6 +5,7 @@ from pathlib import Path
 
 from .. import ledger, recover, report
 from ..config import SETTINGS, daily_cap, load_config, paths, set_setting
+from ..agents import leads
 from ..delegate import compact, undo
 from .common import _out, lead_session_id, provider_agents
 
@@ -243,7 +244,7 @@ def register(sub) -> None:
     ld.add_argument("--threshold", type=int, default=150_000, help="tokens a turn reads before advising")
     ld.add_argument("--hint", action="store_true", help="for a per-turn hook: read the hook's JSON on stdin and "
                     "print one line only when this conversation is long (at most once every 20 turns)")
-    ld.add_argument("--as", dest="as_", choices=["claude", "codex"])
+    ld.add_argument("--as", dest="as_", choices=leads())
     ld.add_argument("--breakdown", action="store_true", help="what every turn re-reads, part by part (system "
                     "prompt, tools, each MCP server, instruction files, skill list, hook output), with advice")
     ld.add_argument("--cache", action="store_true", help="turns where the prompt cache broke, the likely cause "
