@@ -157,7 +157,7 @@
       h += `<p class="lead">${t("empty")}</p>` + sugHTML() + leadsHTML() + discRecentHTML() + weekHTML();
       return h;
     }
-    const parts = [t("ov_running", {n: running})], nsug = ((D && D.suggestions) || []).length;
+    const parts = [t("ov_running", {n: running})], nsug = (D && D.suggestions_total) || ((D && D.suggestions) || []).length;
     parts.push(todos.length ? `<span class="warn">${t("ov_waiting", {n: todos.length})}</span>` : `<span class="good">${t("ov_nothing")}</span>`);
     if (nsug) parts.push(`<span class="warn">${t("ov_sug", {n: nsug})}</span>`);
     const qw = quotaWarn(); if (qw) parts.push(qw);
@@ -193,7 +193,8 @@
           + `<button class="btn" data-sug="${id}" data-ok="0"${busy ? " disabled" : ""}>${t("sug_no")}</button></span>`;
       h += (busy === "err" ? `<span class="warn">${t("sug_failed")}</span>` : "") + `</div>`;
     }
-    return h + `</div>`;
+    const more = ((D && D.suggestions_total) || 0) - ss.length;
+    return h + `</div>` + (more > 0 ? `<p class="stat">${t("sug_more", {n: more})}</p>` : "");
   }
   const sugBusy = {};
   async function decideSug(id, ok) {
@@ -202,6 +203,7 @@
       await api("/api/suggestion", {method: "POST", headers: {"X-CCX-Token": TOKEN, "Content-Type": "application/json"},
                                     body: JSON.stringify({id: +id, accept: ok})});
       D.suggestions = (D.suggestions || []).filter(s => String(s.id) !== String(id));
+      if (D.suggestions_total) D.suggestions_total--;
       delete sugBusy[id];
     } catch (e) { sugBusy[id] = "err"; }
     render();

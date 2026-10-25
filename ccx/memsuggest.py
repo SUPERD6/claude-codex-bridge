@@ -119,6 +119,16 @@ def pending(p: Paths) -> list[dict]:
     return [i for i in load(p) if i["status"] == "pending"]
 
 
+SHOW = 3   # the person's call (2026-10-25): the rules only sift, so show a few and let the person judge
+
+
+def ranked(p: Paths) -> list[dict]:
+    """Pending suggestions, the most trustworthy first: the person's own words (preferences), then decisions, then
+    pitfalls (the held-out checks found most noise in the lead's own sentences); newest first within a kind."""
+    order = {"preference": 0, "decision": 1, "pitfall": 2}
+    return sorted(pending(p), key=lambda i: (i.get("by") != "user", order.get(i.get("kind"), 3), -i["id"]))
+
+
 def decide(p: Paths, sid: int, accept: bool, text: str | None = None, topic: str | None = None) -> dict:
     """The person's answer. Accepting writes the note (with its source) to shared memory."""
     from . import memory

@@ -221,9 +221,11 @@ def cmd_mem(a) -> int:
         try:                           # H5: suggested notes wait for the person's yes or no
             from .. import memsuggest
             from ..lang import say
-            n_sug = len(memsuggest.pending(p))
-            if n_sug:
-                parts.append(say("hint_mem_suggest", p, n=n_sug))
+            sug = memsuggest.ranked(p)
+            if sug:                    # only the first few: the rules sift, the person judges (2026-10-25)
+                top = sug[:memsuggest.SHOW]
+                parts.append(say("hint_mem_suggest", p, n=len(sug), k=len(top),
+                                 items="\n".join(f"- #{i['id']} ({i['kind']}): {i['text']}" for i in top)))
         except Exception:  # noqa: BLE001 — never break session start
             pass
         root = project.find_root()
@@ -289,7 +291,13 @@ def cmd_mem(a) -> int:
                       "written to shared memory before that"})
     elif a.mem_cmd == "suggestions":
         from .. import memsuggest
-        _out({"pending": memsuggest.pending(p)})
+        sug = memsuggest.ranked(p)
+        shown = sug if a.all else sug[:memsuggest.SHOW]
+        out = {"pending": shown}
+        if len(sug) > len(shown):
+            out["more"] = len(sug) - len(shown)
+            out["next"] = "the first ones only (the person's words first); all of them: `ccx mem suggestions --all`"
+        _out(out)
     elif a.mem_cmd in ("accept", "reject"):
         from .. import memsuggest
         _out(memsuggest.decide(p, a.id, a.mem_cmd == "accept", getattr(a, "text", None), getattr(a, "topic", None)))
@@ -434,7 +442,8 @@ def register(sub) -> None:
     sg.add_argument("--from-transcript", choices=["claude", "codex"])
     sg.add_argument("--session", help="a session id instead of the newest here")
     sg.add_argument("--max", type=int, default=6)
-    msub.add_parser("suggestions", help="suggested notes waiting for your yes or no")
+    sgs = msub.add_parser("suggestions", help="suggested notes waiting for your yes or no (the first 3; --all)")
+    sgs.add_argument("--all", action="store_true", help="every pending suggestion, not just the first 3")
     acc = msub.add_parser("accept", help="write suggested note #N to shared memory (with its source)")
     acc.add_argument("id", type=int)
     acc.add_argument("--text", help="your wording instead")

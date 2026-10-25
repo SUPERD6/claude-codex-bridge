@@ -92,6 +92,23 @@ class TestFlow(Env):
         left = self.j("mem", "suggestions")["pending"]
         self.assertNotIn(first, [i["id"] for i in left])
 
+    def test_only_the_first_three_the_persons_words_first(self):
+        p = Paths(self.hub)
+        memsuggest.add(p, [{"kind": "pitfall", "text": f"pitfall number {i} is long enough", "by": "claude",
+                            "source": "s"} for i in range(3)]
+                       + [{"kind": "decision", "text": "we decided to keep one queue file", "by": "claude", "source": "s"},
+                          {"kind": "preference", "text": "from now on PR text in Chinese", "by": "user", "source": "s"}])
+        out = self.j("mem", "suggestions")
+        self.assertEqual([i["kind"] for i in out["pending"]], ["preference", "decision", "pitfall"])
+        self.assertEqual(out["more"], 2)
+        self.assertEqual(len(self.j("mem", "suggestions", "--all")["pending"]), 5)
+        start = self.ccx("mem", "delta", "--as", "codex", "--peek").stdout
+        self.assertIn("5 suggested note(s)", start)
+        self.assertIn("from now on PR text in Chinese", start)
+        self.assertIn("pitfall number 2", start)                     # newest pitfall
+        self.assertNotIn("pitfall number 0", start)
+        self.assertIn("--all", start)
+
     def test_handoff_from_transcript_gathers_suggestions(self):
         self.write_session()
         out = self.j("handoff", "--from-transcript", "claude", "--to", "codex", "--no-model")

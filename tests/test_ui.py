@@ -365,6 +365,15 @@ class TestLang(Env):
         bad = self.ccx("config", "set", "ui.lang", "fr")
         self.assertNotEqual(bad.returncode, 0)
 
+    def test_page_shows_the_first_three_suggestions(self):
+        from ccx import memsuggest
+        p = Paths(self.hub)
+        memsuggest.add(p, [{"kind": "pitfall", "text": f"pitfall {i} long enough", "by": "claude", "source": "s"}
+                           for i in range(4)] + [{"kind": "preference", "text": "always X", "by": "user", "source": "s"}])
+        d = ui.collect(p, quota_wait=False)
+        self.assertEqual((len(d["suggestions"]), d["suggestions_total"]), (3, 5))
+        self.assertEqual(d["suggestions"][0]["text"], "always X")
+
     def test_start_count_leaves_out_evaluation_runs(self):
         p = Paths(self.hub)
         put_run(self.hub, "r-real", self.work)                                      # done, nobody judged it
