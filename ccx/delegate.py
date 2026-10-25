@@ -64,6 +64,7 @@ class Request:
     continued: bool = False         # resume_run is a finished earlier task: reuse its session for a NEW task
     fork_lead: str | None = None    # Claude lead session id: the sub-agent starts as a fork of it (same tool only)
     ephemeral: bool = False         # one-shot (ask/selftest): nothing saved to the tools' session history
+    keep_session: bool = False      # ephemeral for ccx, but the tool keeps its session (a discuss turn resumed once)
     check: str | None = None        # acceptance command: the sub-agent runs it, then ccx runs it again
     mode_source: str = "explicit"   # explicit | inferred | default (ccx/modes.py)
     mode_why: str = ""
@@ -365,7 +366,7 @@ def run(req: Request, p: Paths) -> dict:
             perm += ["--fork-session"]
         elif cli == "claude":
             perm += claude_slim_flags(cfg, req.mode, req.mcp, agent_tool=req.allow_subagents and not extra)
-        if req.ephemeral:
+        if req.ephemeral and not req.keep_session:
             perm += {"claude": ["--no-session-persistence"], "codex": ["--ephemeral"]}.get(cli, [])
         if not req.allow_subagents:
             # --no-subagents: no agents of their own. The slim Claude start has no Agent tool anyway.
