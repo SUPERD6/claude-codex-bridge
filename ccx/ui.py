@@ -14,7 +14,8 @@ probe is never started (an open page must not cost anything):
 
 Tests and evaluations are marked `test` and the page hides them unless asked ('show evaluations and tests'): runs
 `ledger.is_eval` leaves out (eval-*, --no-ab, ccx's probes, dismissed), runs in the system's temporary folder or in
-a project's .ccx folder (unless the hub itself is in one: then it is all scratch), and projects and leads there.
+a project's .ccx folder (unless the hub itself is in one: then it is all scratch), and projects, leads and
+discussions there.
 
 Grouping: a project = the folder a run worked in (worktrees fold back into their repo). A task = one project's work
 queue (pieces = its items, split items drill down a level, at most 3), or the runs one lead conversation sent out
@@ -880,7 +881,7 @@ def collect(p: Paths, project: Path | None = None, days: float = 7, rd: Reader |
         track = rd.every("track", 60, lambda: ways.track(p))      # H9: who is good at what (judged pieces)
     except Exception:  # noqa: BLE001 — the page still shows the rest
         track = {}
-    talks =[discuss.view(d) for d in discuss.recent(p, since)
+    talks = [{**discuss.view(d), "test": is_scratch(d.get("cwd"), scratch)} for d in discuss.recent(p, since)
              if not proj or project_root(d.get("cwd")) == proj][:10]
     from . import memsuggest
     try:                                                      # H5: notes that wait for the person's yes or no

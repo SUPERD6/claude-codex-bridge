@@ -88,7 +88,8 @@
       }
       if (tasks.length) projects.push(Object.assign({}, pr, {tasks}));
     }
-    return Object.assign({}, d, {projects, leads: (d.leads || []).filter(l => !l.test)});
+    return Object.assign({}, d, {projects, leads: (d.leads || []).filter(l => !l.test),
+                                 discussions: (d.discussions || []).filter(x => !x.test)});
   }
   function findProject(id) { return ((D && D.projects) || []).find(x => x.id === id); }
   function findTask(pr, id) { return pr && pr.tasks.find(x => x.id === id); }
