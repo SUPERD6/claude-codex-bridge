@@ -195,7 +195,9 @@ def cmd_mem(a) -> int:
         _out(memory.verify(p, a.seq, by=_caller(None)))
     elif a.mem_cmd == "search":
         hits = memory.search(p, a.words)
-        memory.mark_used(p, [h["seq"] for h in hits if h.get("seq")])
+        from .. import project
+        memory.mark_used(p, [h["seq"] for h in hits if h.get("seq")], by=_caller(None),
+                         project=(project.find_root() or Path.cwd()).name, via="search")
         _out({"hits": hits})
     elif a.mem_cmd == "stale":
         _out({"stale": memory.stale(p), "unused": memory.unused(p),
@@ -210,7 +212,7 @@ def cmd_mem(a) -> int:
         parts = [memory.format_delta(memory.delta(p, a.as_, advance=not a.peek),
                                      project=(root or Path.cwd()).name, shown=shown)]
         if not a.peek:
-            memory.mark_used(p, shown)
+            memory.mark_used(p, shown, by=a.as_, project=(root or Path.cwd()).name, via="start")
         old = memory.stale(p)
         if old:
             from ..lang import say
@@ -294,6 +296,12 @@ def cmd_mem(a) -> int:
         _out({"snapshot": str(p.memory_index), "snapshot_seq": memory.snapshot_seq(p),
               "snapshot_bytes": p.memory_index.stat().st_size if p.memory_index.exists() else 0,
               "journal_entries": len(memory.entries(p)), "cursors": memory.load_cursors(p)})
+    elif a.mem_cmd == "report":
+        r = memory.use_report(p, a.days)
+        if a.json:
+            _out(r)
+        else:
+            print(memory.format_use_report(r))
     elif a.mem_cmd == "compact":
         res = memory.compact(p)
         from ..sync import Plan, sync_memory
@@ -417,7 +425,10 @@ def register(sub) -> None:
     msub.add_parser("show")
     msub.add_parser("status")
     msub.add_parser("compact")
-    sg = msub.add_parser("suggest", help="gather notes worth keeping from a lead session (the person's preferences, "
+    mr = msub.add_parser("report", help="who wrote the shared notes that were used, and who used them (H6)")
+    mr.add_argument("--days", type=float, default=14)
+    mr.add_argument("--json", action="store_true")
+    sg =msub.add_parser("suggest", help="gather notes worth keeping from a lead session (the person's preferences, "
                          "decisions, pitfalls); nothing is written until you accept")
     sg.add_argument("--from-transcript", choices=["claude", "codex"])
     sg.add_argument("--session", help="a session id instead of the newest here")

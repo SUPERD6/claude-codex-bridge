@@ -107,7 +107,7 @@ def _brief_notes(p: Paths, cfg: dict, to: str, brief: str, cwd: Path) -> str:
         return ""
     if not notes:
         return ""
-    memory.mark_used(p, [e["seq"] for e in notes])
+    memory.mark_used(p, [e["seq"] for e in notes], by=to, project=cwd.name, via="brief")   # via brief: a sub-agent
     return "Shared notes that may bear on this task (facts recorded earlier; check before relying on them):\n" + \
         "".join(f"- #{e['seq']} ({e.get('topic')}): {e['text']}\n" for e in notes)
 
