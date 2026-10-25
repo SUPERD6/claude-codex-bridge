@@ -1,4 +1,5 @@
-"""`ccx ui`: a read-only live view on this machine (proposal G1).
+"""`ccx ui`: a live view on this machine (proposal G1). It writes one thing only: the person's yes or no on a
+suggested note (H5, POST /api/suggestion, same-origin only); everything else is read.
 
 What it shows, all read from files ccx and the two tools already write — no model is ever called and the quota
 probe is never started (an open page must not cost anything):
@@ -8,6 +9,7 @@ probe is never started (an open page must not cost anything):
   live tokens      the sub-agent's own session file while it runs (Codex rollout-*.jsonl, Claude <session>.jsonl);
                    its last write time is the heartbeat
   quota            quota.pace() over the readings already kept (Codex session logs, <hub>/ccx/quota.jsonl)
+  suggested notes  <hub>/ccx/mem-suggestions.json, the pending ones (H5), each with a yes and a no button
   leads            main Claude / Codex conversations written to in the last 15 minutes: model, own sub-agents
 
 Grouping: a project = the folder a run worked in (worktrees fold back into their repo). A task = one project's work
@@ -835,10 +837,15 @@ def collect(p: Paths, project: Path | None = None, days: float = 7, rd: Reader |
         track = {}
     talks =[discuss.view(d) for d in discuss.recent(p, since)
              if not proj or project_root(d.get("cwd")) == proj][:10]
+    from . import memsuggest
+    try:                                                      # H5: notes that wait for the person's yes or no
+        sugs = [{k: s.get(k) for k in ("id", "kind", "text", "by", "source", "ts")} for s in memsuggest.pending(p)]
+    except Exception:  # noqa: BLE001 — the page still shows the rest
+        sugs = []
     return {
         "v": 1, "generated": now, "lang": ui_lang(cfg), "poll_s": POLL_S, "beat_s": BEAT_S,
         "projects": projects, "quota": quota_view(rd, quota_wait), "leads": current, "agents": agents,
-        "discussions": talks, "track": track, "track_min": ways.MIN_JUDGED,
+        "discussions": talks, "track": track, "track_min": ways.MIN_JUDGED, "suggestions": sugs,
         "week": {"usd": round(sum(_usd(r) for r in week), 4),
                  "cash_usd": round(sum(_usd(r) for r in week if r.get("to") in providers or r.get("provider")), 4),
                  "runs": len(week), "verdicts": len(hard), "verdicts_needed": VERDICTS_TO_KNOW},
@@ -958,7 +965,39 @@ class UI:
                 if urlsplit(self.path).path == "/api/alive":
                     ui.last_beat = time.time()
                     return self._send(200, b'{"ok":true}')
+                if urlsplit(self.path).path == "/api/suggestion":
+                    return self._suggestion()
                 return self._send(404, b'{"error":"not found"}')
+
+            def _same_origin(self) -> bool:
+                """The one write: only from this page. A browser always sends Origin on a POST; it must be this
+                server's own, and Sec-Fetch-Site (when sent) same-origin. Host and token are checked before."""
+                port = self.server.server_address[1]
+                if self.headers.get("Origin", "") not in (f"http://127.0.0.1:{port}", f"http://localhost:{port}"):
+                    return False
+                return self.headers.get("Sec-Fetch-Site", "same-origin") == "same-origin"
+
+            def _suggestion(self):
+                """The person's yes or no on a suggested note (H5): {"id": N, "accept": true|false}."""
+                if not self._same_origin():
+                    return self._deny("origin")
+                if not self.headers.get("Content-Type", "").startswith("application/json"):
+                    return self._send(415, b'{"error":"json only"}')
+                try:
+                    n = int(self.headers.get("Content-Length") or 0)
+                    body = json.loads(self.rfile.read(n).decode("utf-8")) if 0 < n <= 1000 else None
+                    sid, accept = int(body["id"]), body["accept"]
+                    if not isinstance(accept, bool):
+                        raise ValueError("accept: true or false")
+                except (ValueError, TypeError, KeyError):
+                    return self._send(400, b'{"error":"want {\\"id\\": N, \\"accept\\": true|false}"}')
+                from . import memsuggest
+                try:
+                    with ui.lock:
+                        out = memsuggest.decide(ui.p, sid, accept)
+                except ValueError as e:
+                    return self._send(409, json.dumps({"error": str(e)[:200]}).encode())
+                return self._send(200, json.dumps(out, ensure_ascii=False).encode("utf-8"))
 
             do_HEAD = do_GET
 
