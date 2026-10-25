@@ -541,8 +541,17 @@ def route(b: float, pri: dict, state: dict, agents: list[str], tradeoff: str = "
             "new_models_without_prior": unknown_new}
 
 
+def lead_rereads(pri: dict, price: dict, b: float, lead_ctx: int, way: str) -> float:
+    """$ for the lead re-reading its own conversation (`lead_ctx` tokens a request, a cache read) on the turns this
+    way costs it: more when it does the task itself than when it only briefs and reads back a result."""
+    c = pri["cost"]
+    turns = (c.get("lead_turns_self_base", 2) + c.get("lead_turns_self_per_b", 0.5) * b if way == "self"
+             else c.get("lead_turns_delegate", 2))
+    return turns * lead_ctx * price["cached"] / 1e6
+
+
 def self_vs_delegate(b: float, pri: dict, state: dict, lead: str, best: dict,
-                     ctx_tokens: int, remaining_turns: int) -> dict:
+                     ctx_tokens: int, remaining_turns: int, lead_ctx: int = 0) -> dict:
     agent, model, effort = lead.split(":")
     r = next((x for x in pri["rungs"] if rung_key(x) == lead), None)
     if r is None:
@@ -550,10 +559,12 @@ def self_vs_delegate(b: float, pri: dict, state: dict, lead: str, best: dict,
     price = pri["prices"][r["price"]]
     persist = lambda tok: tok * (price["input"] * 1.25 + remaining_turns * price["cached"]) / 1e6  # noqa: E731
     c_self = attempt_cost(r, b, pri, ctx_tokens)["usd"] - pri["cost"]["startup_tokens"].get(agent, 0) \
-        * (pri["cost"]["turns_base"] + pri["cost"]["turns_per_b"] * b) * price["cached"] / 1e6 + persist(ctx_tokens)
+        * (pri["cost"]["turns_base"] + pri["cost"]["turns_per_b"] * b) * price["cached"] / 1e6 + persist(ctx_tokens) \
+        + lead_rereads(pri, price, b, lead_ctx, "self")
     brief, readback = 400, 600
     review = 1500 + 1000 * b          # lead reads the diff / runs the check before trusting the result
-    c_del = brief * price["output"] / 1e6 + best["expected_usd"] + persist(readback + review)
+    c_del = brief * price["output"] / 1e6 + best["expected_usd"] + persist(readback + review) \
+        + lead_rereads(pri, price, b, lead_ctx, "delegate")
     p_floor = best["chain_success"] >= 0.6
     delegate = p_floor and c_del < 0.85 * c_self
     return {"self_usd": round(c_self, 4), "delegate_usd": round(c_del, 4),
@@ -585,7 +596,7 @@ def builtin_rungs(pri: dict, lead: str) -> list[dict]:
 
 def three_way(b: float, pri: dict, state: dict, lead: str, delegate_agents: list[str], ctx_tokens: int,
               remaining_turns: int, tradeoff: str = "balanced", needs: tuple = (), quota: dict | None = None,
-              kind: str = "code", risk: str = "low") -> dict:
+              kind: str = "code", risk: str = "low", lead_ctx: int = 0) -> dict:
     """Do it yourself, hand it to your own built-in sub-agent, or delegate it through ccx — lowest total cost
     (money + subscription quota at its shadow price + time + risk) among options likely to succeed. Hard needs (undo,
     worktree, another vendor, resume) rule out the built-in sub-agent."""
@@ -601,8 +612,10 @@ def three_way(b: float, pri: dict, state: dict, lead: str, delegate_agents: list
     lam = shadow_lambda(quota.get(agent), pri)             # the lead's own quota pays for self, built-in and overhead
     price = pri["prices"][r["price"]]
     persist = lambda tok: tok * (price["input"] * 1.25 + remaining_turns * price["cached"]) / 1e6  # noqa: E731
-    overhead = 400 * price["output"] / 1e6 + persist(600 + 1500 + 1000 * b)   # brief + read-back + review
-    self_usd = attempt_cost(r, b, pri, ctx_tokens)["usd"] - pri["cost"]["startup_tokens"].get(agent, 0)         * (pri["cost"]["turns_base"] + pri["cost"]["turns_per_b"] * b) * price["cached"] / 1e6 + persist(ctx_tokens)
+    overhead = 400 * price["output"] / 1e6 + persist(600 + 1500 + 1000 * b) \
+        + lead_rereads(pri, price, b, lead_ctx, "delegate")                    # brief + read-back + review
+    self_usd = attempt_cost(r, b, pri, ctx_tokens)["usd"] - pri["cost"]["startup_tokens"].get(agent, 0)         * (pri["cost"]["turns_base"] + pri["cost"]["turns_per_b"] * b) * price["cached"] / 1e6 + persist(ctx_tokens) \
+        + lead_rereads(pri, price, b, lead_ctx, "self")
     p_self = p_success(r["theta"] + offset(state, pri, lead), b, pri["irt"]["a"])
     # the lead checks its own work and can redo it once: expected 1 + (1 - p) attempts, a wrong result left only
     # when both tries fail
@@ -706,6 +719,8 @@ def main(argv=None) -> int:
     r.add_argument("--ctx-tokens", type=int, default=0, help="tokens of files/logs the task needs to read")
     r.add_argument("--lead", help="agent:model:effort of the lead, to compare self vs delegate")
     r.add_argument("--remaining-turns", type=int, default=10)
+    r.add_argument("--lead-ctx", type=int, default=0,
+                   help="tokens your own conversation re-reads each request (its size now); each turn you spend costs that")
     r.add_argument("--explain", action="store_true", help="human-readable table instead of JSON")
     r.add_argument("--kind", choices=KINDS, default="code",
                    help="kind of work; decides which public benchmarks count (see references/method.md 10)")
@@ -772,7 +787,7 @@ def main(argv=None) -> int:
                 a.tradeoff, not a.not_verifiable, a.ctx_tokens, kind=a.kind)
     if a.lead:
         res["self_vs_delegate"] = self_vs_delegate(b, pri, state, a.lead, res["pick"], a.ctx_tokens,
-                                                   a.remaining_turns)
+                                                   a.remaining_turns, a.lead_ctx)
     if a.explain:
         print(_fmt(res))
     else:

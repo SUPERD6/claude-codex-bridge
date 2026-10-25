@@ -216,7 +216,9 @@ def _child_env(to: str, run_id: str, extra: dict | None = None, provider: bool =
         # When the caller itself runs inside Claude Code, these would tie the child
         # to the parent's session/effort. The child must be its own session. CLAUDE_CODE_EFFORT_LEVEL overrides
         # --effort (and "ultracode" there turns on dynamic workflows), so the routed effort would not apply.
-        for k in ("CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_REMOTE_SESSION_ID",
+        # CLAUDE_CODE_ENTRYPOINT would label the child's session file "claude-desktop"; without it a -p run
+        # writes "sdk-cli", which is how a reading of real sessions tells a sub-run from a person's conversation.
+        for k in ("CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_REMOTE_SESSION_ID", "CLAUDE_CODE_ENTRYPOINT",
                   "CLAUDE_EFFORT", "CLAUDE_CODE_EFFORT_LEVEL", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_PID"):
             env.pop(k, None)
     return env
@@ -436,9 +438,12 @@ def run(req: Request, p: Paths) -> dict:
         finally:
             hb.close()
         dt = round(time.time() - t0, 1)
+        recovered = None
         if oc.kind in ("timeout", "over_budget", "user_stopped") and not any((oc.usage or {}).values()):
             # killed before its final usage line: read back what it spent (Claude's stream, Codex's session file)
-            oc.usage = recover.partial_usage(cli, oc.session_id or session, so, cwd) or oc.usage
+            sid = oc.session_id or session
+            recovered = recover.partial_usage(cli, sid, so, cwd, since=t0, before=seen.get(sid))
+            oc.usage = recovered[0] or oc.usage
         n = len(record["attempts"])
         (run_dir / f"events.{n}.log").write_text(so, encoding="utf-8")
         if cli == "claude" and not extra and "rate_limit_event" in so:
@@ -451,7 +456,11 @@ def run(req: Request, p: Paths) -> dict:
             (run_dir / f"stderr.{n}.log").write_text(se, encoding="utf-8")
         session = oc.session_id or session
         codex_total = None
-        if cli == "codex" and oc.usage:
+        if recovered and cli == "codex":
+            codex_total = recovered[1]          # already this attempt's own usage; remember the running total
+            if codex_total and oc.session_id:
+                seen[oc.session_id] = codex_total
+        elif cli == "codex" and oc.usage:
             codex_total = _codex_total(oc.usage)
             if resume_id and resume_id in seen:
                 oc.usage = _codex_growth(codex_total, seen[resume_id])
@@ -466,6 +475,7 @@ def run(req: Request, p: Paths) -> dict:
             "cost_usd": None if extra else oc.cost_usd, "ae_usd": round(ae, 6) if ae is not None else None,
             "error": oc.error, "auth_problem": oc.auth_problem, "retry_after": oc.retry_after,
             "session_id": oc.session_id, "substituted_for": spec.get("substituted_for"),
+            **({"recovered": True} if recovered and oc.usage else {}),
             **({"codex_total": codex_total} if codex_total else {})})
         record["session_id"] = session
         record["tier"] = spec.get("tier", "rung")
@@ -599,7 +609,12 @@ def run(req: Request, p: Paths) -> dict:
     record.pop("current", None)
     if not ledger.claim_final(run_dir, "run"):
         # `ccx stop` found this process gone and closed the run already: its record and ledger row stand
-        return ledger.load_run(p, run_id)
+        closed = ledger.load_run(p, run_id)
+        if closed.get("state") == "running":
+            # nobody wrote a final state although the lock is taken: say so instead of an empty "not ok"
+            closed.update(ok=False, error=closed.get("error") or "final.lock was already taken by "
+                          + ((run_dir / "final.lock").read_text(encoding="utf-8", errors="replace")[:200]))
+        return closed
     _write_record(run_dir, record)
     ledger.append(p, record)
     if record.get("kind") == "review_issues" and record.get("session_id"):

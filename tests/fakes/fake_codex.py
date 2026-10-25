@@ -77,10 +77,17 @@ if mode == "hang":
             with open(live, "a", encoding="utf-8") as fh:
                 if n == 1:              # a headless run's session file, as codex exec writes it
                     fh.write(json.dumps({"type": "session_meta", "payload": {"id": tid, "originator": "codex_exec"}}) + "\n")
-                fh.write(json.dumps({"timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "type": "event_msg",
-                                     "payload": {"type": "token_count", "info": {"total_token_usage": {
-                                         "input_tokens": 3000 * n, "cached_input_tokens": 1000 * n,
-                                         "output_tokens": 120 * n}}}}) + "\n")
+                if os.environ.get("FAKE_RECORDS"):
+                    # codex-cli 0.164: a token_usage_record per request; no token_count until the turn gets further
+                    fh.write(json.dumps({"timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                                         "type": "token_usage_record", "payload": {"thread_id": tid, "usage": {
+                                             "input_tokens": 19245, "cached_input_tokens": 0,
+                                             "output_tokens": 207}}}) + "\n")
+                else:
+                    fh.write(json.dumps({"timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                                         "type": "event_msg", "payload": {"type": "token_count", "info": {
+                                             "total_token_usage": {"input_tokens": 3000 * n, "cached_input_tokens": 1000 * n,
+                                                                   "output_tokens": 120 * n}}}}) + "\n")
         time.sleep(min(2.0, max(0.0, end - time.time())))
 if mode == "auth":
     print(json.dumps({"type": "error", "message": "unexpected status 401 Unauthorized"}))

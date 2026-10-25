@@ -67,6 +67,10 @@ def cmd_run(a) -> int:
     mode = apply_mode(spec)                      # before routing: start-up cost depends on read/write
     kw, route = resolve(spec, caller, p, cfg)
     route["mode"] = mode
+    if a.proposal:                               # the person said yes to an offer (H12)
+        from .. import proposals
+        proposals.answer(p, a.proposal, True)
+        route["proposal"] = a.proposal
     if kw is None:
         _out({"delegated": False, "advice": route.get("advice"), "route": route,
               "hint": "add --force to delegate anyway"})
@@ -374,6 +378,11 @@ def cmd_bench(a) -> int:
 
 
 def cmd_route(a) -> int:
+    _out(_route(a))
+    return 0
+
+
+def _route(a) -> dict:
     p = paths()
     cfg = load_config(p)
     if a.coupling or a.clarity or a.risk or a.novelty or a.b is not None or a.minutes:
@@ -391,19 +400,28 @@ def cmd_route(a) -> int:
                     ctx += Path(f).stat().st_size // 4
                 except OSError:
                     pass
+            # what each of your own turns re-reads: given, else your conversation's last request (J5/H10)
+            lead_agent, lead_ctx, src = a.lead.split(":")[0], a.lead_ctx, "given"
+            if lead_ctx is None:
+                from .. import context
+                from .common import lead_session_id
+                lead_ctx = context.lead_now(lead_agent, lead_session_id(lead_agent))
+                src = "none" if lead_ctx is None else "lead_session"
+            lead_ctx = lead_ctx or 0
             route["self_vs_delegate"] = learn.self_vs_delegate(p, route["b"], a.lead, route["rung"], ctx,
-                                                               a.turns_left, route["tradeoff"])
-            route["self_vs_delegate"]["ctx_tokens"] = ctx
+                                                               a.turns_left, route["tradeoff"], lead_ctx)
+            route["self_vs_delegate"].update(ctx_tokens=ctx, lead_ctx_tokens=lead_ctx, ctx_source=src)
             others = ((installed_agents() or list(DELEGATE_AGENTS)) + provider_agents(load_config(p))
                       if a.to == "auto" else [a.to])      # three_way holds pay-per-token agents back itself
             quota = parse_quota(a.quota)
             choice = learn.three_way(p, route["b"], a.lead, others, ctx, a.turns_left, route["tradeoff"],
                                      needs=tuple(x for x in (a.needs or "").split(",") if x), quota=quota,
-                                     kind=learn.task_kind(mode["mode"], a.kind), risk=a.risk or "low")
+                                     kind=learn.task_kind(mode["mode"], a.kind), risk=a.risk or "low",
+                                     lead_ctx=lead_ctx)
             if choice:
+                choice.update(lead_ctx_tokens=lead_ctx, ctx_source=src)
                 route["choice"] = choice      # self / built-in sub-agent / ccx: see the agent-delegate skill
-        _out(route)
-        return 0
+        return route
     r = router.classify(" ".join(a.text), a.files)
     t = cfg["tiers"][r.tier]
     out = r.as_dict() | {"label": t.get("label"), "when": t.get("when"),
@@ -412,7 +430,38 @@ def cmd_route(a) -> int:
     for ag in AGENTS:
         if t.get(ag):
             out[ag] = t[ag]
-    _out(out)
+    return out
+
+
+def cmd_propose(a) -> int:
+    """H12: estimate before offering to delegate, and record the offer and the person's answer."""
+    from .. import proposals
+    p = paths()
+    if a.stats:
+        _out(proposals.stats(p, a.days))
+        return 0
+    if a.no:
+        _out(proposals.answer(p, a.no, False))
+        return 0
+    if not a.lead:
+        raise ValueError("ccx propose needs --lead (your own rung, e.g. claude:opus:high) and the rubric or --minutes")
+    route = _route(a)
+    if "b" not in route:
+        raise ValueError("ccx propose needs the rubric flags or --minutes, so the estimate has a difficulty")
+    lead_agent = a.lead.split(":")[0]
+    row = proposals.new(p, route, " ".join(a.text or []), lead_session_id(lead_agent))
+    c = route.get("choice") or route.get("self_vs_delegate") or {}
+    worth = (c.get("recommend") == "delegate")
+    def usd(x):
+        return "?" if x is None else (f"${x:.4f}" if x < 0.01 else f"${x:.2f}")
+    _out({"proposal": row["proposal"], "worth_offering": worth, "recommend": c.get("recommend"),
+          "why": c.get("why"), "self_usd": row["self_usd"], "delegate_usd": row["delegate_usd"], "p": row["p"],
+          "lead_ctx_tokens": row["lead_ctx_tokens"], "ctx_source": c.get("ctx_source"),
+          "say": (f"This looks delegable: about {usd(row['delegate_usd'])} delegated vs {usd(row['self_usd'])} "
+                  f"if I do it here, likely to work ({row['p']}). Delegate it?") if worth else None,
+          "next": (f"on yes: ccx run --proposal {row['proposal']} ... (no --no-ab), then ccx verify <run_id>; "
+                   f"on no: ccx propose --no {row['proposal']}") if worth else
+                  "not worth offering: do it yourself, nothing to ask"})
     return 0
 
 
@@ -438,6 +487,7 @@ def register(sub) -> None:
     r.add_argument("--step", type=int, help="task-checkpoint step number")
     r.add_argument("--force", action="store_true", help="delegate even when routing says do it yourself/split")
     r.add_argument("--no-ab", action="store_true", help="never pick this task as an A/B self-run sample")
+    r.add_argument("--proposal", help="the `ccx propose` id the person said yes to (H12)")
     r.add_argument("--mcp", action="store_true", help="Claude sub-agent: also load MCP tools (bigger start-up)")
     r.add_argument("--new", action="store_true", help="always a fresh sub-session (default: continue the last "
                    "one from this conversation, same folder and agent, if under 1 h old)")
@@ -546,11 +596,23 @@ def register(sub) -> None:
     sv.add_argument("--lead", help="your own rung, e.g. claude:opus:high")
     sv.add_argument("--ctx-files", nargs="*", help="files you would have to read yourself")
     sv.add_argument("--ctx-tokens", type=int, default=0, help="or the token count directly")
+    sv.add_argument("--lead-ctx", type=int, help="tokens each of your requests re-reads (your conversation's size); "
+                    "default: read from your conversation's last request")
     sv.add_argument("--turns-left", type=int, default=10, help="turns this session will still run")
     sv.add_argument("--needs", help="comma list that only a ccx run gives: undo,worktree,other-vendor,resume")
     sv.add_argument("--quota", action="append", metavar="AGENT=USED",
                     help="share of an agent's quota already used, e.g. claude=0.4 (Codex's is read automatically)")
     ro.set_defaults(fn=cmd_route)
+    pr = sub.add_parser("propose", help="before offering to delegate a large, checkable task: the estimate, one "
+                        "line to say, and a record of the offer (H12)")
+    for act in ro._actions:                    # the same flags as `ccx route`
+        if act.dest != "help":
+            pr._add_action(act)
+    pr.add_argument("--no", metavar="PROPOSAL", help="the person said no to this offer")
+    pr.add_argument("--stats", action="store_true",
+                    help="proposed -> agreed -> delegated -> judged, and the share of real runs with a verdict")
+    pr.add_argument("--days", type=float, default=7.0)
+    pr.set_defaults(fn=cmd_propose)
     bn = sub.add_parser("bench", help="public benchmark data for routing: refresh (weekly by itself) or show sources")
     bn.add_argument("what", choices=["sources", "refresh"], nargs="?", default="sources")
     bn.set_defaults(fn=cmd_bench)
