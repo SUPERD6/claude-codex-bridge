@@ -193,7 +193,10 @@ def _spend_watch(p: Paths, cfg: dict, cli: str, spec: dict, record: dict, since:
             for c in subagents.claude_children(sid, cwd or Path.cwd()):
                 usd += learn.price_usd(p, "claude", c["model"] or spec["model"], c["usage"]) or 0.0
         if usd > cap:
-            return (f"stopped: its own sub-agents spent ${usd:.2f} (cap ${cap:.2f}, {where}); add budget and "
+            # 4 places below a cent: a $0.0001 cap read "spent $0.00 (cap $0.00)" in a real run (PR #30)
+            def money(x: float) -> str:
+                return f"${x:.4f}" if x < 0.01 else f"${x:.2f}"
+            return (f"stopped: its own sub-agents spent {money(usd)} (cap {money(cap)}, {where}); add budget and "
                     f"continue with `ccx resume {record['run_id']} --budget <usd>`, or split it with `ccx q`")
         return None
     return check

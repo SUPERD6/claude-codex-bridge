@@ -22,6 +22,51 @@ def _run(argv, timeout=20):
 
 HUB_FORMAT = 2   # bump when the hub's on-disk layout changes; `ccx init` migrates
 
+# what to add to ~/.codex/config.toml so a Codex lead can run `ccx run` (codex-cli 0.164 `exec --help`, 2026-10-24)
+CODEX_LEAD_FIX = ('[sandbox_workspace_write]\nwritable_roots = ["{hub}"]\nnetwork_access = true\n'
+                  '(or start Codex with --add-dir "{hub}")')
+# on Windows that is not enough: workspace-write runs commands as a separate sandbox account (CodexSandboxOnline), and a
+# Claude sub-agent started there refused every edit ("sensitive file") and saved no session, even with the hub and
+# ~/.claude as writable roots and the network on (real runs, codex-cli 0.164 + Claude Code, 2026-10-24)
+CODEX_LEAD_FIX_WIN = ('on Windows, give lead sessions full access, e.g. a profile:\n[profiles.lead]\n'
+                      'sandbox_mode = "danger-full-access"\nthen start the lead with `codex -p lead`')
+
+
+def codex_lead_sandbox(config_text: str, hub, windows: bool | None = None) -> tuple[str, str]:
+    """Can a Codex lead run `ccx run`? ccx writes its run records into the hub, and the sub-agent CLI it starts needs
+    the network. In Codex's workspace-write sandbox both are blocked unless configured: a real headless Codex lead
+    got `[WinError 5] Access is denied` on the hub's runs folder (seven-cores check, 2026-10-24)."""
+    import os
+    import tomllib
+    from pathlib import Path
+    windows = os.name == "nt" if windows is None else windows
+    try:
+        cfg = tomllib.loads(config_text) if config_text else {}
+    except tomllib.TOMLDecodeError as e:
+        return "Unknown", f"config.toml does not parse: {e}"
+    # not set: Codex picks read-only or workspace-write from the project's trust, so check as workspace-write
+    mode = cfg.get("sandbox_mode") or "not set"
+    if mode == "danger-full-access":
+        return "ok", "sandbox_mode = danger-full-access"
+    if windows:
+        return "WARN", (f"sandbox_mode = {mode}: a Codex lead cannot hand work to Claude through `ccx run` in this "
+                        f"sandbox on Windows (checked on real runs); {CODEX_LEAD_FIX_WIN}")
+    fix = CODEX_LEAD_FIX.format(hub=Path(hub).as_posix())
+    if mode == "read-only":
+        return "WARN", f"sandbox_mode = read-only: a Codex lead cannot run `ccx run`; use workspace-write and add\n{fix}"
+    ws = cfg.get("sandbox_workspace_write") or {}
+
+    def norm(x) -> str:
+        return str(Path(x).expanduser().resolve()).rstrip("\\/").lower()
+    roots = {norm(r) for r in ws.get("writable_roots") or []}
+    hub_ok = any(norm(hub) == r or norm(hub).startswith(r + ("\\" if "\\" in r else "/")) for r in roots)
+    missing = [w for w, ok in (("the hub is not a writable root", hub_ok),
+                               ("network_access is off", ws.get("network_access") is True)) if not ok]
+    if not missing:
+        return "ok", f"sandbox_mode = {mode}, hub writable, network on (not checked on a real run outside Windows)"
+    return "WARN", (f"sandbox_mode = {mode} ({'; '.join(missing)}): a Codex lead's `ccx run` will fail. "
+                    f"Add to config.toml (profiles may override it; not checked on a real run outside Windows):\n{fix}")
+
 
 def doctor(p: Paths) -> bool:
     rows: list[tuple[str, str, str]] = []
@@ -113,6 +158,8 @@ def doctor(p: Paths) -> bool:
     ct = codex_home() / "config.toml"
     has = ct.exists() and "ccx:begin hooks" in ct.read_text(encoding="utf-8")
     add("Codex SessionStart hook", "ok (trust once via /hooks)" if has else "missing", str(ct))
+    if find_bin("codex"):
+        add("Codex as lead (sandbox)", *codex_lead_sandbox(ct.read_text(encoding="utf-8") if ct.exists() else "", p.hub))
 
     skill = "agent-delegate"
     for tool, d in (("claude", claude_home() / "skills"), ("codex", codex_home() / "skills")):

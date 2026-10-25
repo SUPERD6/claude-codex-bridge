@@ -127,6 +127,10 @@ In Claude Code you say: "make `loader.py` accept a custom delimiter and add test
    better. `ccx report` builds a dashboard: who spent how many tokens of which kind, quota use, estimated savings.
 
 The other way round, run the same command inside Codex with `--to claude`: Codex leads, Claude Code is the sub-agent.
+Codex's sandbox decides whether that works: ccx writes its run records into the hub and the sub-agent needs the
+network. `ccx doctor` checks it (row "Codex as lead (sandbox)"). On Windows only `danger-full-access` worked in real
+runs (codex-cli 0.164): in `workspace-write` the commands run as a separate sandbox account, and a Claude sub-agent
+started there refused every edit, even with the hub and `~/.claude` as writable roots and the network on.
 
 **Does the sub-agent know what you discussed with the lead?** Not directly: copying a long conversation into every
 sub-agent would be expensive, and Claude and Codex can't share a context window anyway. The sub-agent gets the

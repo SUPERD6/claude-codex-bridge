@@ -85,6 +85,8 @@ class TestRuns(Env):
         why = _spend_watch(p, load_config(p), "claude", spec, record, 0, 0.10, self.work)()
         self.assertIn("cap $0.10, --budget", why)
         self.assertIn("ccx resume r1 --budget", why)
+        tiny = _spend_watch(p, load_config(p), "claude", spec, record, 0, 0.0001, self.work)()
+        self.assertIn("cap $0.0001", tiny)                               # not "$0.00" below a cent
         self.assertIsNone(_spend_watch(p, load_config(p), "claude", spec, record, 0, None, self.work)())  # $2 default
 
     def test_claude_result_counts_its_sub_agents(self):

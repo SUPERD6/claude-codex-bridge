@@ -27,5 +27,11 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return a.fn(a)
     except (PermissionError, FileNotFoundError, ValueError, RuntimeError) as e:
-        _out({"ok": False, "error": str(e)})
+        out = {"ok": False, "error": str(e)}
+        if isinstance(e, PermissionError):
+            # seen on a real headless Codex lead: its workspace-write sandbox may not write outside the project
+            out["hint"] = ("ccx could not write there. If a sandboxed agent (e.g. Codex in workspace-write) ran this, "
+                           "let it write to the ccx hub and use the network: see `ccx doctor`, row "
+                           "'Codex as lead (sandbox)'.")
+        _out(out)
         return 3
