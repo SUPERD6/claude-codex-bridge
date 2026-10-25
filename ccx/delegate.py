@@ -214,7 +214,9 @@ def _child_env(to: str, run_id: str, extra: dict | None = None, provider: bool =
         # When the caller itself runs inside Claude Code, these would tie the child
         # to the parent's session/effort. The child must be its own session. CLAUDE_CODE_EFFORT_LEVEL overrides
         # --effort (and "ultracode" there turns on dynamic workflows), so the routed effort would not apply.
-        for k in ("CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_REMOTE_SESSION_ID",
+        # CLAUDE_CODE_ENTRYPOINT would label the child's session file "claude-desktop"; without it a -p run
+        # writes "sdk-cli", which is how a reading of real sessions tells a sub-run from a person's conversation.
+        for k in ("CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_REMOTE_SESSION_ID", "CLAUDE_CODE_ENTRYPOINT",
                   "CLAUDE_EFFORT", "CLAUDE_CODE_EFFORT_LEVEL", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_PID"):
             env.pop(k, None)
     return env

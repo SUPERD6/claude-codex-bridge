@@ -12,7 +12,10 @@ cache write of 20k+ tokens and over half of the request), `ccx lead --cache`'s b
 what ccx sub-runs cost in the same window. Only conversations a person drove count as the lead: left out are the
 sessions any ccx ledger knows (this hub's and the temporary hubs eval scripts leave under the temp folder) and
 every session a program started headless — Claude `-p` (entrypoint sdk-*) and `codex exec` — which is how every
-ccx sub-run (CCX_ROLE=subagent; the variable itself is not in the session files) and every eval lead runs.
+ccx sub-run (CCX_ROLE=subagent; the variable itself is not in the session files) and every eval lead runs. A `-p`
+run started from inside the desktop app inherited its CLAUDE_CODE_ENTRYPOINT and was labelled "claude-desktop"
+until ccx and the eval scripts stopped passing it on (2026-10-25); such older sub-runs are caught by the ledgers
+and the project filter (eval leads ran in temp folders), not by the label.
 `--keep-headless` counts them as before (the reading in PR #6 did). By default only this project's conversations
 are read (its main checkout and its worktrees; Claude folders by path, Codex sessions by their cwd), `--project
 DIR` for another, `--all-projects` for every one (PR #6's scope). `--until` re-reads an earlier window with the same

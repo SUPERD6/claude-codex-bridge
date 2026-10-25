@@ -23,7 +23,7 @@ HIDDEN = "test_zz_hidden_eval.py"
 # Variables that would tie a child Claude to the session that started this script (same list as ccx's
 # delegate._child_env, plus the desktop app's messaging channel).
 PARENT_VARS = ("CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_REMOTE_SESSION_ID", "CLAUDE_EFFORT",
-               "CLAUDE_CODE_EFFORT_LEVEL", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_PID", "CLAUDE_CODE_HOST_SESSION_ID",
+               "CLAUDE_CODE_EFFORT_LEVEL", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_PID", "CLAUDE_CODE_HOST_SESSION_ID",
                "CLAUDE_CODE_MESSAGING_SOCKET", "CLAUDE_CODE_MESSAGING_TOKEN", "CCX_LEAD_SESSION", "CCX_DEPTH",
                "CCX_ROLE", "CCX_PARENT_RUN")
 

@@ -77,6 +77,17 @@ class TestJ0Real(ReportEnv):
         self.assertEqual(old["sessions"], 2)
         self.assertEqual(self.real(ledger=[str(hub / "ledger.jsonl")])["lead"]["claude"]["sessions"], 1)
 
+    def test_sub_runs_do_not_inherit_the_entrypoint(self):
+        import os
+        from ccx.delegate import _child_env
+        os.environ["CLAUDE_CODE_ENTRYPOINT"] = "claude-desktop"
+        try:
+            self.assertNotIn("CLAUDE_CODE_ENTRYPOINT", _child_env("claude", "r1"))   # -p then writes sdk-cli
+        finally:
+            os.environ.pop("CLAUDE_CODE_ENTRYPOINT")
+        import common
+        self.assertIn("CLAUDE_CODE_ENTRYPOINT", common.PARENT_VARS)                    # eval leads too
+
     def test_only_this_project(self):
         now = time.time() - 3600
         proj = Path(self.tmp.name) / "repo"

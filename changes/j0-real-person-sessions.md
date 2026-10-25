@@ -5,3 +5,6 @@
   earlier window with the same rules, `--tag` names a reading, `compare --before T1 --after T2` puts two side by
   side, and each reading now carries `ccx lead --cache`'s breaks and causes inside the window. By default it reads
   only this repository's conversations (main checkout and worktrees); `--project DIR`, `--all-projects`.
+- Claude sub-runs (and eval leads) no longer inherit `CLAUDE_CODE_ENTRYPOINT`: started from the desktop app, a `-p`
+  run's session file said `claude-desktop` and looked like a person's conversation; now it says `sdk-cli`
+  (checked with Claude Code 2.1.309).
