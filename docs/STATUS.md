@@ -9,7 +9,7 @@ put the detail in the changelog. Only the lead session edits this page; PRs add 
 
 ## Now
 
-0.5.0 holds everything since 0.4.0 (PRs up to #103), grouped by theme in the CHANGELOG. What the measurements
+0.5.0 holds everything since 0.4.0 (PRs up to #104), grouped by theme in the CHANGELOG. What the measurements
 say, each from a raw record:
 
 | Result | Numbers | Source |
@@ -32,8 +32,8 @@ real-machine checks below (session ccx-realcheck, before 2026-10-31).
 ## Next three
 
 1. **Real-machine checks before 10/31**: worktrees, `--fork`, `ccx say --now`, dsh archiving after
-   the app is quit; fix the two queue problems from round 2 (#104: a killed `q run` stays `running`; `q resume`
-   redoes the piece instead of continuing its session).
+   the app is quit; the queue problem left from round 2: `q resume` redoes the piece instead of continuing its session
+   (the killed run staying `running` is fixed in #104).
 2. **Going public** (ask the person first): demo GIF, a public benchmark from the round-1/2 tasks, then the launch.
 3. **Coordinator K4–K6**: autonomy levels, work sent in from outside (phone, a private GitHub issue), the
    coordinator board. K7 (an avatar from a separate desktop-pet project) waits for that project.
@@ -46,7 +46,7 @@ real-machine checks below (session ccx-realcheck, before 2026-10-31).
   runs counted, archiving after a run, DeepSeek leading, a three-vendor `ccx discuss`, the board via
   `ccx say --resume`, shared work context A/B, project catalog scan, the plugin marketplace install (Claude Code,
   from a temporary config), `ccx ui` hiding tests, a 3-task `ccx batch` (#100), non-ASCII paths, no console pop-ups, Codex hooks on Windows (H7,
-  #82 + #92), the queue killed and resumed (with the two problems above).
+  #82 + #92), the queue killed and resumed (one problem left, above).
 - **fake only**: worktrees, quota fallback, seats, `--fork`, Gemini CLI, a real quota stop.
 - **not verified**: `ccx say --now` into a live Codex thread; the Codex rule from `ccx doctor --codex-rule`; the
   dsh app's own later writes after a queued archive; the Codex plugin from a GitHub address; own sub-agent limits
