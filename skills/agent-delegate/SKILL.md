@@ -63,6 +63,8 @@ their first-time-right rate for that kind of work (`ccx way --stats`).
 
 ## 4. Check, don't trust
 
+A printed result with a `run_id` means that delegation ran: do not send the same brief again (a real Codex lead
+did, after a run that had already passed, in the seven-cores check of 2026-10-24); to add to it, `ccx resume <run_id>`.
 The summary is a claim. Inspect the changed files or returned evidence. Reuse valid checks
 for the same artifact; run affected checks when missing, stale or contradicted.
 **When the result's `check` shows ccx ran your `--check` command and it passed, do not run it again yourself**:
