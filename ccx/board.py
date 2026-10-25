@@ -18,6 +18,8 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
+from . import ledger
+
 VENDORS = ("claude", "codex", "deepseek")
 ALIASES = {"dsh": "deepseek", "deepseek-codex": "deepseek", "human": "user", "person": "user"}
 MARK = "[ccx board"                 # starts every message ccx pushes into a session: such a turn is not a person's
@@ -80,7 +82,7 @@ def _save(f: Path, data: dict) -> None:
     f.parent.mkdir(parents=True, exist_ok=True)
     tmp = f.with_suffix(f.suffix + f".{os.getpid()}.tmp")
     tmp.write_text(json.dumps(data, indent=1), encoding="utf-8")
-    os.replace(tmp, f)
+    ledger.replace(tmp, f)              # a reader may have it open (Windows)
 
 
 @contextmanager

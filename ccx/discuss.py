@@ -13,6 +13,7 @@ import time
 import uuid
 from pathlib import Path
 
+from . import ledger
 from .config import Paths
 
 MARK = "[ccx discuss"
@@ -63,12 +64,12 @@ def save(p: Paths, d: dict) -> None:
     f.parent.mkdir(parents=True, exist_ok=True)
     tmp = f.with_suffix(".tmp")
     tmp.write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
-    tmp.replace(f)                      # the page may read it at any moment
+    ledger.replace(tmp, f)              # the page may read it at any moment
 
 
 def load(p: Paths, did: str) -> dict:
     try:
-        return json.loads(_file(p, did).read_text(encoding="utf-8"))
+        return ledger.read_record(_file(p, did))       # retries while it is being replaced (Windows)
     except OSError:
         raise ValueError(f"no discussion {did}") from None
 
