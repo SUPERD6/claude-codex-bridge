@@ -470,6 +470,12 @@ def run(req: Request, p: Paths) -> dict:
         record["session_id"] = session
         record["tier"] = spec.get("tier", "rung")
         _write_record(run_dir, record)
+        if oc.kind == "quota":
+            try:                       # H2: what made this a quota stop, kept to check the call later
+                from . import quota
+                quota.log_stop(p, run_id, record["attempts"][-1], quota.stop_evidence(cli, so, se, oc.error))
+            except Exception:  # noqa: BLE001 — evidence is best effort
+                pass
         status = (oc.result or {}).get("status")
 
         if status == "blocked" and ((oc.result or {}).get("summary") or "").lstrip().upper().startswith("SPLIT"):

@@ -151,6 +151,60 @@ def backfill(p) -> int:
     return n
 
 
+def _stops_file(p) -> Path:
+    return p.state / "quota-stops.jsonl"
+
+
+def stop_evidence(cli: str, stdout: str, stderr: str, error: str | None) -> dict:
+    """Why an attempt was taken for a quota stop (H2): Claude's rejected rate_limit_event as it came, else the hint
+    in runners.QUOTA_HINTS that matched and the words around it. Kept so a wrong call ("quota" in a task's own
+    text, a new wording of a real limit) can be found and the hints corrected, without spending quota to test."""
+    from .runners import QUOTA_HINTS
+    if cli == "claude":
+        for line in stdout.splitlines():
+            if '"rate_limit_event"' not in line:
+                continue
+            try:
+                info = json.loads(line).get("rate_limit_info") or {}
+            except ValueError:
+                continue
+            if str(info.get("status", "")).lower() in ("rejected", "exceeded", "blocked"):
+                return {"by": "rate_limit_event", "event": {k: info.get(k) for k in (
+                    "status", "rateLimitType", "resetsAt", "overageStatus", "isUsingOverage") if k in info}}
+    text = " ".join(x for x in (error, stderr[-4000:], stdout[-4000:]) if x)
+    low = text.lower()
+    for h in QUOTA_HINTS:
+        i = low.find(h)
+        if i != -1:
+            return {"by": "hint", "hint": h, "text": " ".join(text[max(0, i - 160): i + 160].split())}
+    return {"by": "unknown"}
+
+
+def log_stop(p, run_id: str, attempt: dict, evidence: dict) -> None:
+    """One line per quota stop in <hub>/ccx/quota-stops.jsonl (shown by `ccx quota`)."""
+    row = {"ts": time.time(), "run_id": run_id, "agent": attempt.get("agent"), "model": attempt.get("model"),
+           "effort": attempt.get("effort"), "retry_after": attempt.get("retry_after"),
+           "seconds": attempt.get("seconds"), **evidence}
+    f = _stops_file(p)
+    f.parent.mkdir(parents=True, exist_ok=True)
+    with open(f, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def recent_stops(p, n: int = 5) -> list[dict]:
+    try:
+        lines = _stops_file(p).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    out = []
+    for line in lines[-n:]:
+        try:
+            out.append(json.loads(line))
+        except ValueError:
+            continue
+    return out
+
+
 def claude_reading_age(p) -> float | None:
     rs = claude_readings(p, days=8)
     return (time.time() - max(r["ts"] for r in rs)) if rs else None

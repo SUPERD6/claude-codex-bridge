@@ -347,6 +347,9 @@ def cmd_quota(a) -> int:
         lam = {ag: round(tr.shadow_lambda(v), 2) for ag, v in pr["quota"].items()}
     except Exception:  # noqa: BLE001
         pass
+    stops = quota.recent_stops(p)
+    if stops:
+        extra["recent_quota_stops"] = stops       # H2: why each was taken for a quota stop
     _out({"projected_at_reset": pr["quota"], "quota_price_share_of_api": lam, "windows": pr["pace"], **extra})
     return 0
 
