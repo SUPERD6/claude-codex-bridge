@@ -11,7 +11,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from .. import learn, ledger, router, usage
+from .. import lanes, learn, ledger, router, usage
 from ..config import AGENTS, DELEGATE_AGENTS, PROVIDER_AGENTS, TIER_ORDER, load_config, paths
 from ..delegate import Request, compact, run, verify
 from ..runners import find_bin
@@ -374,7 +374,27 @@ def cmd_batch(a) -> int:
                             # (outside git there is no worktree: they share the folder, so keep pieces disjoint)
                             worktree=t.get("worktree", len(writers) > 1 and t in writers
                                            and in_git(t.get("cwd"))), **kw))
-    with ThreadPoolExecutor(max_workers=int(cfg["defaults"].get("max_parallel", 3))) as ex:
+    threads = int(cfg["defaults"].get("max_parallel", 3))
+    n = lanes.width(getattr(a, "lanes", None), cfg)
+    if n:
+        # warm lanes (ccx/lanes.py): same project + agent + mode share at most n sessions, piece after piece
+        lane_list = lanes.split(reqs, n, lambda r: (str(r.cwd.resolve()), r.to, r.provider, r.mode))
+        for lane in lane_list:                   # a lane works in one folder: its first piece's worktree (if any)
+            for r in lane[1:]:
+                r.worktree = lane[0].worktree
+
+        def step(r, warm):
+            if warm:
+                r.resume_run, r.continued = warm, True
+            try:
+                rec = run(r, p)
+            except Exception as e:  # noqa: BLE001 — one piece's error must not stop its lane
+                return {"label": r.label, "ok": False, "error": f"{type(e).__name__}: {e}"[:300]}, None
+            return compact(rec), rec
+        results = lanes.run_lanes(lane_list, step, lanes.limits(cfg), threads)
+        _out({"results": results, "do_yourself": skipped, "lanes": len(lane_list)})
+        return 0 if all(r["ok"] for r in results) else 2
+    with ThreadPoolExecutor(max_workers=threads) as ex:
         results = list(ex.map(lambda r: compact(run(r, p)), reqs))
     _out({"results": results, "do_yourself": skipped})
     return 0 if all(r["ok"] for r in results) else 2
@@ -642,6 +662,9 @@ def register(sub) -> None:
     b = sub.add_parser("batch", help="run independent tasks in parallel from plan.json")
     b.add_argument("plan")
     b.add_argument("--from", dest="caller", choices=[*DELEGATE_AGENTS, *PROVIDER_AGENTS, "user"])
+    b.add_argument("--lanes", type=int, metavar="N", help="warm lanes: pieces for the same project and agent share "
+                   "at most N sub-sessions, one piece after another (each still its own run, check and ledger row); "
+                   "0 = every piece its own session (default: [lanes] default, 0)")
     b.set_defaults(fn=cmd_batch)
     ro = sub.add_parser("route", help="which agent/model/effort for a task (rubric -> task-routing)")
     ro.add_argument("text", nargs="*", help="the task description (used to recommend read or write)")

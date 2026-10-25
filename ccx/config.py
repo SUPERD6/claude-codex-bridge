@@ -210,6 +210,10 @@ SETTINGS = {   # key -> (type, help). Only these can be set with `ccx config set
     "defaults.max_escalations": (int, "stronger rungs to try after a verified failure"),
     "defaults.max_parallel": (int, "parallel sub-agents in ccx batch"),
     "defaults.timeout_sec": (int, "per-attempt timeout"),
+    "lanes.default": (int, "warm lanes for ccx batch / q run: small pieces for the same project and agent share at "
+                           "most N sub-sessions, one after another (0 = off: every piece its own session)"),
+    "lanes.max_tokens": (int, "a warm lane starts a new session after a piece that used this many tokens (the session has grown long)"),
+    "lanes.max_blocks": (int, "a warm lane starts a new session after this many pieces"),
     "lead.claude": (str, "model the Claude lead runs on (for savings estimates), e.g. opus"),
     "lead.codex": (str, "model the Codex lead runs on, e.g. gpt-6.1-sol"),
     "sessions.archive": (str, "after_run | hours | off: archive a sub-agent session as soon as its result is "

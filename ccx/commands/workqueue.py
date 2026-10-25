@@ -6,7 +6,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from .. import queue as wq
+from .. import lanes, queue as wq
 from ..config import load_config, paths
 from ..delegate import Request, compact, run, verify
 from .common import _caller, _out, apply_mode, resolve
@@ -98,8 +98,9 @@ def restored(old_run: str, rec: dict) -> str:
     return "resumed" if rec.get("continued") or rec.get("resumed_from") == old_run else "fresh"
 
 
-def _one(it: dict, root: Path, caller: str, p, cfg) -> dict:
-    """Route and run one queue item; write its outcome back. Never raises (a thread must report)."""
+def _one(it: dict, root: Path, caller: str, p, cfg, warm: str | None = None, got: dict | None = None) -> dict:
+    """Route and run one queue item; write its outcome back. Never raises (a thread must report).
+    warm: a lane's last run (ccx/lanes.py), whose session takes this item as a new task; got["rec"]: its record."""
     try:
         if it.get("budget_usd") is not None and float(it.get("cost_usd") or 0) >= float(it["budget_usd"]):
             wq.update(root, it["id"], status="blocked", summary="its budget is used up")
@@ -121,7 +122,10 @@ def _one(it: dict, root: Path, caller: str, p, cfg) -> dict:
         brief = (RESUME_NOTE + spec["brief"]) if resume else spec["brief"]
         rec = run(Request(brief=brief, mode=spec["mode"], mode_source=spec["mode_source"],
                           mode_why=spec["mode_why"], cwd=root, caller=caller, label=f"q:{it['id']}",
-                          check=it.get("check"), resume_run=resume, budget_usd=left, **kw), p)
+                          check=it.get("check"), resume_run=resume or warm, continued=bool(warm and not resume),
+                          budget_usd=left, **kw), p)
+        if got is not None:
+            got["rec"] = rec
         res = compact(rec)
         status = res.get("status")
         cost = _cost(rec)
@@ -182,11 +186,20 @@ def _run(a, root: Path) -> int:
             _out({"stopped": "budget reached", "spent_usd": wq.spent(q), "budget_usd": q["budget_usd"],
                   "results": done, "ask": "raise it with `ccx q budget <usd>` if the rest is worth it"})
             return 2
-        batch = wq.ready(q)[:width]
+        n = lanes.width(getattr(a, "lanes", None), cfg)
+        batch = wq.ready(q) if n else wq.ready(q)[:width]
         if not batch:
             break
-        with ThreadPoolExecutor(max_workers=width) as ex:
-            done += list(ex.map(lambda it: _one(it, root, caller, p, cfg), batch))
+        if n:
+            # warm lanes: ready items for the same agent and mode share at most n sessions, one after another
+            def step(it, warm):
+                got: dict = {}
+                return _one(it, root, caller, p, cfg, warm=warm, got=got), got.get("rec")
+            done += lanes.run_lanes(lanes.split(batch, n, lambda it: (it.get("to"), it.get("mode"))), step,
+                                    lanes.limits(cfg), width)
+        else:
+            with ThreadPoolExecutor(max_workers=width) as ex:
+                done += list(ex.map(lambda it: _one(it, root, caller, p, cfg), batch))
         wq.close_parents(root)
         if a.once:
             break
@@ -229,6 +242,8 @@ def register(sub) -> None:
         r = qs.add_parser(name, help=hlp)
         r.add_argument("--max", type=int, help="parallel runs (default: defaults.max_parallel)")
         r.add_argument("--once", action="store_true", help="one round only")
+        r.add_argument("--lanes", type=int, metavar="N", help="warm lanes: ready items for the same agent share at "
+                       "most N sub-sessions, one item after another (default: [lanes] default, 0 = off)")
         r.add_argument("--from", dest="caller")
     for x in (ad, bu, dn):
         x.add_argument("--cwd")
