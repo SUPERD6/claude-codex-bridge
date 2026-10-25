@@ -227,6 +227,8 @@ ccx sum -- python -m pytest -q               # run a command, show the lead only
 ccx fresh [--launch]                         # move a long conversation to a fresh one of the same tool, handoff from its file
 ccx trial start | stop | report              # a week-long comparison: half the delegable tasks done by the lead, half delegated
 ccx agents                                   # each agent CLI: vendor, what it can do, tested version, official or community
+ccx way "brief" --risk low|visible|critical  # the risk picks the way: one agent / plan-build-accept / two versions (--yes)
+ccx way --stats                              # per kind of work: who is right the first time, how often rework
 ccx discuss "question" [--dry-run]           # 2-3 vendors talk a costly decision through: propose, find faults, judge
 ccx verify <run_id> --ok 0 --reason wrong     # your verdict (unjudged runs get a probable one after 12 h)
 ccx handoff --from-transcript codex --to claude   # the old lead can't write it (quota out): built from its session file
