@@ -212,9 +212,10 @@ def _child_env(to: str, run_id: str, extra: dict | None = None, provider: bool =
     env["CCX_PARENT_RUN"] = run_id
     if to == "claude":
         # When the caller itself runs inside Claude Code, these would tie the child
-        # to the parent's session/effort. The child must be its own session.
+        # to the parent's session/effort. The child must be its own session. CLAUDE_CODE_EFFORT_LEVEL overrides
+        # --effort (and "ultracode" there turns on dynamic workflows), so the routed effort would not apply.
         for k in ("CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_REMOTE_SESSION_ID",
-                  "CLAUDE_EFFORT", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_PID"):
+                  "CLAUDE_EFFORT", "CLAUDE_CODE_EFFORT_LEVEL", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_PID"):
             env.pop(k, None)
     return env
 
