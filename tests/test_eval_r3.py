@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts" / "eval"))
@@ -36,8 +37,9 @@ class TestSchedule(unittest.TestCase):
             self.assertIn(task["brief"], p)
         self.assertIn("--tradeoff save --review on --context auto", ps["ccx"])
         self.assertIn("subagent_type `worker`", ps["builtin"])
-        self.assertIn("--agents", r3.lead_argv("builtin", 0.5))
-        self.assertNotIn("--no-session-persistence", r3.lead_argv("ccx", 0.5))   # --context reads it
+        with mock.patch.object(r3, "bin_argv", lambda name: [name]):      # CI has no claude CLI
+            self.assertIn("--agents", r3.lead_argv("builtin", 0.5))
+            self.assertNotIn("--no-session-persistence", r3.lead_argv("ccx", 0.5))   # --context reads it
 
 
 class TestReadShare(unittest.TestCase):
