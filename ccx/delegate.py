@@ -631,7 +631,8 @@ def compact(record: dict) -> dict:
                        f"yourself, or `ccx resume {record['run_id']} \"...\"`")
     if record.get("check"):
         c = record["check"]
-        out["check"] = {"cmd": c["cmd"], "passed": c["passed"], "exit": c["exit"]}
+        out["check"] = {"cmd": c["cmd"], "passed": c["passed"], "exit": c["exit"],
+                        **({"weak": c["weak"], "note": c["note"]} if c.get("weak") else {})}
     if record["cwd"] and "/.ccx-worktrees/" in record["cwd"].replace("\\", "/"):
         out["worktree"] = record["cwd"]
     if record.get("auth_problem"):
