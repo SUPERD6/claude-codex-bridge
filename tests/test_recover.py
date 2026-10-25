@@ -195,3 +195,13 @@ class TestKilledQueue(RecoverEnv):
         item = json.loads(self.ccx("q", "ls").stdout)["items"][0]
         self.assertEqual(item["status"], "done")
         self.assertGreaterEqual(item["cost_usd"], killed)               # the queue counts it too
+
+    def test_resume_continues_the_killed_session(self):
+        it, rec = self.kill_q_run()
+        r = self.ccx("q", "resume", "--from", "claude", env={"FAKE_STATUS": "done"})
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        out = json.loads(r.stdout)
+        self.assertEqual(out["restored"][it["id"]], "resumed")
+        last = self.calls()[-1]
+        self.assertEqual(last["argv"][:3], ["exec", "resume", rec["session_id"]])   # not started over
+        self.assertIn("ccx was stopped while you were working", last["prompt"])

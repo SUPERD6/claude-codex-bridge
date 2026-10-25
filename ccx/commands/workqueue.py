@@ -59,6 +59,10 @@ def cmd_q(a) -> int:
     return 0
 
 
+RESUME_NOTE = ("ccx was stopped while you were working on this piece. Go on from where you were: check what is "
+               "already done before redoing anything.\n\n")
+
+
 def _cost(rec: dict) -> float:
     return sum(a.get("ae_usd") or 0 for a in rec.get("attempts", [])) + ((rec.get("review") or {}).get("usd") or 0)
 
@@ -114,7 +118,8 @@ def _one(it: dict, root: Path, caller: str, p, cfg) -> dict:
         resume = it.get("run") if it.get("resume") else None
         left = (max(0.0, float(it["budget_usd"]) - float(it.get("cost_usd") or 0))   # F11: the cap is what it has left
                 if it.get("budget_usd") is not None else None)
-        rec = run(Request(brief=spec["brief"], mode=spec["mode"], mode_source=spec["mode_source"],
+        brief = (RESUME_NOTE + spec["brief"]) if resume else spec["brief"]
+        rec = run(Request(brief=brief, mode=spec["mode"], mode_source=spec["mode_source"],
                           mode_why=spec["mode_why"], cwd=root, caller=caller, label=f"q:{it['id']}",
                           check=it.get("check"), resume_run=resume, budget_usd=left, **kw), p)
         res = compact(rec)
@@ -151,15 +156,25 @@ def _run(a, root: Path) -> int:
     caller = _caller(a.caller)
     from ..recover import sweep
     sweep(p)                # runs whose ccx was killed (with the whole `q run`): interrupted, their spend in the ledger
+    done: list[dict] = []
     if a.q_cmd == "resume":
         # in progress when the machine stopped: continue the same session where there is one, else start again
         q = wq.load(root)
         for it in q["items"].values():
             if it["status"] == "doing":
-                spent = sum(_cost(r) for r in item_runs(p, root, it))     # never reached the item: run() didn't return
-                wq.update(root, it["id"], status="todo", resume=bool(it.get("run")),
-                          cost_usd=round(float(it.get("cost_usd") or 0) + spent, 6))
-    done: list[dict] = []
+                runs = item_runs(p, root, it)
+                spent = sum(_cost(r) for r in runs)                      # never reached the item: run() didn't return
+                cost = round(float(it.get("cost_usd") or 0) + spent, 6)
+                last = runs[-1] if runs else {}
+                if last.get("ok") and last.get("state") == "finished" and (last.get("result") or {}).get("status") == "done":
+                    # it finished; only writing it back to the queue was cut off
+                    wq.update(root, it["id"], status="done", run=last["run_id"], agent=last.get("to"), cost_usd=cost,
+                              summary=str((last.get("result") or {}).get("summary") or "")[:300], resume=False)
+                    done.append({"id": it["id"], "status": "done", "run": last["run_id"], "restored": "finished"})
+                    continue
+                # the run it was in the middle of (a review's fix round included): its session goes on
+                run_id = last["run_id"] if last.get("session_id") else it.get("run")
+                wq.update(root, it["id"], status="todo", resume=bool(run_id), run=run_id, cost_usd=cost)
     width = int(a.max or cfg["defaults"].get("max_parallel", 3))
     while True:
         q = wq.load(root)
@@ -180,7 +195,8 @@ def _run(a, root: Path) -> int:
            "spent_usd": wq.spent(q), "tree": wq.tree(q)}
     back = {r["id"]: r["restored"] for r in done if r.get("restored")}
     if back:
-        out["restored"] = back          # resumed = same session; fresh = started again; decide = needs you
+        # resumed = same session; fresh = started again; decide = needs you; finished = it had finished already
+        out["restored"] = back
     _out(out)
     return 0
 
