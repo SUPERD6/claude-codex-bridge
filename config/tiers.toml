@@ -120,6 +120,15 @@ max_chars = 5000          # 约 1.2k token
 # 每轮 hook（ccx turn）里加一行“另一家刚做了什么”；false = 关
 turn = true
 
+[lanes]
+# 热车道（ccx/lanes.py）：同一项目、同一家、同一读写模式的小活，不再每块开一个新子会话（Codex 每次约 9.3 万 token
+# 启动，第 2 轮实测），而是最多 N 个会话按顺序做，后面的块像 ccx resume 一样续在同一会话里。每块仍是单独的 ccx 运行：
+# 单独 --check、单独记账、单独可 undo（worktree 里每块一个提交）。某块失败、会话太长时下一块开新会话。
+# 默认关（0）：2026-11-01 前 H11 试用不改默认行为，之后由统筹按实测决定。单次打开：ccx batch --lanes 2 / ccx q run --lanes 2。
+default = 0
+max_tokens = 200000     # 车道里某一块用的 token（新读 + 缓存读 + 写）到这么多，说明会话太长、每块都要重读一大段，下一块换新会话
+max_blocks = 5          # 一个会话最多做这么多块，再换新会话
+
 [memory]
 # 共享记忆（docs/DECISIONS.md 的 L1–L3）。ccx mem search 已按 BM25 排序（少见的词权重高，不要求每个词都出现）。
 # by_kind = true：按类决定带什么——开局只推“偏好、约束”，简报带相关的“坑、事实、其他”（按 BM25 挑），
