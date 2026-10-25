@@ -208,16 +208,25 @@ def main_checkout(root: Path = ROOT) -> Path:
     return Path(common).parent if common else root
 
 
+def _forms(p) -> set[str]:
+    """A path as written and resolved, lower case (/var vs /private/var on macOS, short names on Windows)."""
+    try:
+        both = {str(p), str(Path(p).resolve())}
+    except OSError:
+        both = {str(p)}
+    return {x.lower().rstrip("\\/") for x in both}
+
+
 def project_sessions(project: Path, claude_root: Path | None = None, codex_root: Path | None = None) -> set[str]:
     """Conversations started in `project` or below it (its worktrees live under .claude/worktrees/)."""
     from ccx.config import claude_home, codex_home
-    slug = re.sub(r"[^A-Za-z0-9]", "-", str(project.resolve()))
+    here = _forms(project)
+    slugs = {re.sub(r"[^a-z0-9]", "-", h) for h in here}
     out = set()
     root = (claude_root or claude_home()) / "projects"
     for d in root.iterdir() if root.exists() else ():
-        if d.is_dir() and d.name.lower().startswith(slug.lower()):
+        if d.is_dir() and any(d.name.lower().startswith(sl) for sl in slugs):
             out.update(x.stem for x in d.glob("*.jsonl"))
-    here = str(project.resolve()).lower().rstrip("\\/")
     xroot = (codex_root or codex_home()) / "sessions"
     for x in xroot.rglob("rollout-*.jsonl") if xroot.exists() else ():
         try:
@@ -225,7 +234,7 @@ def project_sessions(project: Path, claude_root: Path | None = None, codex_root:
                 meta = (json.loads(fh.readline()) or {}).get("payload") or {}
         except (OSError, ValueError):
             continue
-        if str(meta.get("cwd") or "").lower().startswith(here):
+        if meta.get("cwd") and any(c.startswith(h) for c in _forms(meta["cwd"]) for h in here):
             out.add(meta.get("id") or x.stem)
     return out
 
