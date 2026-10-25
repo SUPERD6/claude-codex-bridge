@@ -23,6 +23,11 @@ ab_self_rate = 0.1        # 约 10% 的可派任务让主智能体自己做，�
 claude = "opus"
 codex = "gpt-6.1-sol"
 
+[projects]                # 项目目录（ccx projects / ccx where）：在这些根目录下找项目，目录只存在本机 hub
+roots = []                # 默认空；ccx config set projects.roots "DIR;DIR"
+max_depth = 5             # 根目录往下最多找几层
+refresh_hours = 24        # 开局时目录比这更旧就在后台轻量刷新（0 = 关）
+
 [report]
 publish_dir = ""          # 你的私有用量仓库的本地克隆；ccx report --publish 提交到这里
 

@@ -199,6 +199,11 @@ def load_config(p: Paths | None = None) -> dict:
     return cfg
 
 
+def path_list(raw: str) -> list[str]:
+    """`ccx config set` value for a list of folders: separated by ';' (a ':' is part of a Windows path)."""
+    return [x.strip() for x in raw.replace("\n", ";").split(";") if x.strip()]
+
+
 SETTINGS = {   # key -> (type, help). Only these can be set with `ccx config set`.
     "defaults.tradeoff": (str, "save | balanced | fast, or a knob 0..1 (0 = cheapest, 1 = fastest)"),
     "defaults.ab_self_rate": (float, "share of routed tasks the lead does itself to measure savings (0 = off)"),
@@ -212,6 +217,8 @@ SETTINGS = {   # key -> (type, help). Only these can be set with `ccx config set
     "board.github": (str, "owner/repo of a PRIVATE repository of yours: the board's fallback between computers "
                           "(empty = off, no network)"),
     "board.max_machine_turns": (int, "machine messages in a row in one board thread before a person must speak"),
+    "projects.roots": (path_list, "folders `ccx projects scan` looks for your projects in, separated by ';' "
+                                  "(the catalog stays in the hub, on this machine)"),
     "ui.lang": (str, "zh | en: language of `ccx ui` and of the lines ccx writes into conversations (unset: the "
                      "page follows the browser, the lines stay English)"),
 }
@@ -222,6 +229,8 @@ def _toml_value(v) -> str:
         return "true" if v else "false"
     if isinstance(v, (int, float)):
         return repr(v)
+    if isinstance(v, list):
+        return "[" + ", ".join(_toml_value(x) for x in v) + "]"
     return json.dumps(str(v), ensure_ascii=False)
 
 

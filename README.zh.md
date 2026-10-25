@@ -211,6 +211,8 @@ ccx mem add "一句话" --by claude     # 写入共享记忆
 ccx mem delta --as codex            # 拿对方新增的条目（hook 会自动运行）
 ccx mem compact                     # 把日志合并进快照
 ccx ctx init | add "…" | show       # 项目背景文件
+ccx config set projects.roots "目录;目录" ; ccx projects scan   # 本机项目目录（只存在 hub，不进仓库）
+ccx projects | projects show <名字>        # 列出项目 / 看一个：路径、简介、先读的规则、最近在做什么
 ccx sync [--apply] [--only skills,memory,hooks,mcp]
 ccx doctor
 ```
