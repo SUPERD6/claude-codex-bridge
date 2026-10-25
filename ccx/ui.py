@@ -40,6 +40,7 @@ from __future__ import annotations
 import functools
 import hashlib
 import hmac
+import importlib
 import json
 import os
 import re
@@ -780,7 +781,7 @@ def _level(rd: Reader, e: dict | None) -> str | None:
 
     def look():
         try:
-            from . import autonomy                    # type: ignore[attr-defined]
+            autonomy = importlib.import_module(__package__ + ".autonomy")     # by sys.modules: tests can hide it
             v = autonomy.level_for(e, p=rd.p)
         except Exception:  # noqa: BLE001 — not there (yet) or odd: no badge
             return None
@@ -793,7 +794,7 @@ def _inbox(rd: Reader) -> int | None:
     """How many issues wait to be taken in when ccx has that module (K5); else None and nothing is shown."""
     def look():
         try:
-            from . import intake                      # type: ignore[attr-defined]
+            intake = importlib.import_module(__package__ + ".intake")
             v = intake.pending(rd.p)
         except Exception:  # noqa: BLE001
             return None
