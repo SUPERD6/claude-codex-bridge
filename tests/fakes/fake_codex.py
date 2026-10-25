@@ -58,6 +58,12 @@ if os.environ.get("FAKE_BIG_CHILD") and os.environ.get("CODEX_HOME"):
         fh.write(json.dumps({"type": "event_msg", "timestamp": "2026-10-24T00:00:01Z", "payload": {
             "type": "token_count", "info": {"total_token_usage": {"input_tokens": 50_000_000, "cached_input_tokens": 0,
                                                                   "output_tokens": 1_000_000}}}}) + "\n")
+if os.environ.get("FAKE_GRANDCHILD"):
+    # a tool process of its own (as a .cmd shim's real CLI, or a shell command): `ccx stop` must end it too
+    import subprocess
+    gc = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"])
+    with open(os.environ["FAKE_GRANDCHILD"], "w", encoding="utf-8") as fh:
+        fh.write(str(gc.pid))
 if mode == "hang":
     # FAKE_HANG_S: how long; with CODEX_HOME its session file grows every 2 s, like a live Codex (for ccx ui)
     end = time.time() + float(os.environ.get("FAKE_HANG_S") or 30)
@@ -129,3 +135,11 @@ print(json.dumps({"type": "turn.completed", "usage": usage}))
 if out_file:
     with open(out_file, "w", encoding="utf-8") as f:
         f.write(json.dumps(res))
+if os.environ.get("FAKE_STOP_AT_END"):
+    # `ccx stop` arriving just as the sub-agent finished ("lock": and closing the run, as if its ccx were gone)
+    rd = os.path.join(os.environ["CCX_HUB"], "ccx", "runs", os.environ["CCX_PARENT_RUN"])
+    with open(os.path.join(rd, "stop.request"), "w", encoding="utf-8") as fh:
+        fh.write("{}")
+    if os.environ["FAKE_STOP_AT_END"] == "lock":
+        with open(os.path.join(rd, "final.lock"), "w", encoding="utf-8") as fh:
+            fh.write('{"by": "ccx stop"}')

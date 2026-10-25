@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import time
 import uuid
 from dataclasses import dataclass
@@ -25,7 +26,7 @@ from pathlib import Path
 
 from . import agents, learn, ledger, subagents
 from .config import DELEGATE_AGENTS, Paths, load_config, provider_of
-from .runners import BUILDERS, execute, usage_dict
+from .runners import BUILDERS, Outcome, execute, usage_dict
 # split out by job (J11); re-exported so `from ccx.delegate import ...` keeps working
 from .agents.codex import _add_children, _codex_growth, _codex_seen, _codex_total  # noqa: F401
 from .ledger import write_record as _write_record  # noqa: F401
@@ -332,7 +333,17 @@ def run(req: Request, p: Paths) -> dict:
     record["codex_children"] = kids
     prompt, i, fell_back, swaps, policy_retried = first_prompt, 0, False, 0, False
     oc, early_check = None, None
+    stop_file = run_dir / "stop.request"         # written by `ccx stop <run_id>`
+
+    def on_start(pid: int) -> None:
+        # what `ccx stop` needs: the child's process tree, and whether this ccx process is still there to close it
+        record.update(pid=pid, ccx_pid=os.getpid(), host=socket.gethostname(), child=Path(inv.argv[0]).name)
+        _write_record(run_dir, record)
+
     while i < len(plan):
+        if stop_file.exists():                    # stopped between attempts: start nothing more
+            oc = Outcome(ok=False, kind="user_stopped", error="stopped by `ccx stop`") if not (oc and oc.ok) else oc
+            break
         spec = plan[i]
         to = spec["agent"]
         record["to"] = to
@@ -393,7 +404,8 @@ def run(req: Request, p: Paths) -> dict:
                                  on_session=on_session, watch=_spend_watch(p, cfg, cli, spec, record, t0,
                                                                            req.budget_usd, cwd)
                                  if req.allow_subagents else None,
-                                 watch_every=float((cfg.get("subagents") or {}).get("watch_every_sec", 20)))
+                                 watch_every=float((cfg.get("subagents") or {}).get("watch_every_sec", 20)),
+                                 on_start=on_start, stop_file=stop_file)
         finally:
             hb.close()
         dt = round(time.time() - t0, 1)
@@ -504,7 +516,10 @@ def run(req: Request, p: Paths) -> dict:
 
     status = (oc.result or {}).get("status")
     record.update(result=oc.result, ok=oc.ok, error=None if oc.ok else oc.error,
-                  auth_problem=oc.auth_problem, kind=oc.kind, state="finished")
+                  auth_problem=oc.auth_problem, kind=oc.kind,
+                  state="stopped" if oc.kind == "user_stopped" else "finished")
+    if stop_file.exists():
+        record["stop_requested"] = True
     check_passed = None
     if req.check and oc.ok and status in ("done", "partial"):
         reuse = early_check and early_check[0] == len(record["attempts"])    # already run on this very attempt
@@ -521,7 +536,7 @@ def run(req: Request, p: Paths) -> dict:
         except Exception as e:  # noqa: BLE001 — a review that can't run never fails the work itself
             record["review"] = {"verdict": "not-run", "error": f"{type(e).__name__}: {e}"[:200]}
     if req.task and req.step:
-        if oc.kind in ("quota", "timeout"):
+        if oc.kind in ("quota", "timeout", "user_stopped"):
             args = ["fail", req.task, str(req.step), "--reason", "quota" if oc.kind == "quota" else "error",
                     "--note", f"ccx run {run_id}: {oc.kind}; resume with `ccx resume {run_id}`"]
             if oc.retry_after:
@@ -536,7 +551,7 @@ def run(req: Request, p: Paths) -> dict:
     # provisional learning: a definite failure, or a success the sub-agent itself checked.
     # `ccx verify` (the lead's verdict) adds or corrects this later.
     verified = check_passed is not None or (oc.result or {}).get("verification", "not-run") not in ("", "not-run")
-    if oc.kind not in ("quota", "auth", "timeout", "model", "needs_write", "split", "over_budget",
+    if oc.kind not in ("quota", "auth", "timeout", "model", "needs_write", "split", "over_budget", "user_stopped",
                        "review_issues", "review_failed") and (status in ("blocked", "failed") or not oc.ok
                                                         or (status == "done" and verified)):
         try:
@@ -544,6 +559,9 @@ def run(req: Request, p: Paths) -> dict:
             record["learned"] = "auto" if (record.get("route") or {}).get("b") is not None else None
         except Exception:  # noqa: BLE001 — learning is best effort
             pass
+    if not ledger.claim_final(run_dir, "run"):
+        # `ccx stop` found this process gone and closed the run already: its record and ledger row stand
+        return ledger.load_run(p, run_id)
     _write_record(run_dir, record)
     ledger.append(p, record)
     if record.get("kind") == "review_issues" and record.get("session_id"):
@@ -596,8 +614,9 @@ def compact(record: dict) -> dict:
         if record["kind"] == "needs_write":
             out["hint"] = ("read-only run: the sub-agent says it needs to edit files (see summary). If you agree, "
                            f"run it again with --mode write")
-        if record["kind"] in ("quota", "timeout"):
-            out["hint"] = f"stopped by {record['kind']}; continue later with `ccx resume {record['run_id']}`"
+        if record["kind"] in ("quota", "timeout", "user_stopped"):
+            why = "ccx stop" if record["kind"] == "user_stopped" else record["kind"]
+            out["hint"] = f"stopped by {why}; continue later with `ccx resume {record['run_id']}`"
             ra = last.get("retry_after")
             if ra:
                 out["retry_after"] = ra

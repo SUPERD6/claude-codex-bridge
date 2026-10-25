@@ -131,18 +131,73 @@ def _first_session_id(agent: str, line: str) -> str | None:
     return None
 
 
+def group_flags() -> dict:
+    """Popen arguments that start a child in its own process group, so it and everything it starts (a .cmd shim's
+    real CLI, the CLI's own tool processes) can be stopped together by kill_tree."""
+    if os.name == "nt":
+        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+    return {"start_new_session": True}
+
+
+def kill_tree(pid: int | None) -> bool:
+    """Kill a process started with group_flags() and every process under it: Windows `taskkill /T /F`, POSIX its
+    process group (start_new_session makes the group id the child's pid, and the group outlives its leader)."""
+    if not pid:
+        return False
+    try:
+        if os.name == "nt":
+            r = subprocess.run(["taskkill", "/PID", str(int(pid)), "/T", "/F"], capture_output=True,
+                               stdin=subprocess.DEVNULL, timeout=30)
+            return r.returncode == 0
+        import signal
+        os.killpg(int(pid), signal.SIGKILL)
+        return True
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def pid_alive(pid: int | None) -> bool:
+    """Is this process still running? (Windows: os.kill(pid, 0) would terminate it, so ask the kernel instead.)"""
+    if not pid:
+        return False
+    if os.name == "nt":
+        import ctypes
+        k = ctypes.windll.kernel32
+        h = k.OpenProcess(0x1000, False, int(pid))          # PROCESS_QUERY_LIMITED_INFORMATION
+        if not h:
+            return False
+        try:
+            code = ctypes.c_ulong()
+            return bool(k.GetExitCodeProcess(h, ctypes.byref(code))) and code.value == 259   # STILL_ACTIVE
+        finally:
+            k.CloseHandle(h)
+    try:
+        os.kill(int(pid), 0)
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
 def execute(agent: str, inv: Invocation, timeout: int, env: dict, on_session=None, watch=None,
-            watch_every: float = 20.0) -> tuple[Outcome, str, str]:
+            watch_every: float = 20.0, on_start=None, stop_file: Path | None = None) -> tuple[Outcome, str, str]:
     """Run the sub-agent, streaming stdout so the session id is persisted the moment it appears. `watch()` is
-    asked every `watch_every` seconds while it runs; a reason it returns stops the run (e.g. a spending cap)."""
+    asked every `watch_every` seconds while it runs; a reason it returns stops the run (e.g. a spending cap).
+    `on_start(pid)` gets the child's pid at once; `stop_file` appearing (`ccx stop`) stops the run the same way."""
     import threading
     try:
         proc = subprocess.Popen(inv.argv, cwd=str(inv.cwd), env=env, stdin=subprocess.PIPE,
                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
-                                encoding="utf-8", errors="replace")
+                                encoding="utf-8", errors="replace", **group_flags())
     except OSError as e:
         oc = Outcome(ok=False, error=f"could not start {agent}: {e}", kind="error")
         return oc, "", ""
+    if on_start:
+        try:
+            on_start(proc.pid)
+        except Exception:  # noqa: BLE001 — bookkeeping must never kill the run
+            pass
     err_chunks: list[str] = []
     t_err = threading.Thread(target=lambda: err_chunks.append(proc.stderr.read()), daemon=True)
     t_err.start()
@@ -155,26 +210,39 @@ def execute(agent: str, inv: Invocation, timeout: int, env: dict, on_session=Non
     seen = False
     fired: list[bool] = []
 
+    def _stop():
+        if not kill_tree(proc.pid):       # the whole tree: a .cmd shim's child would otherwise run on
+            proc.kill()
+
     def _kill():
         fired.append(True)
-        proc.kill()
+        _stop()
 
     timer = threading.Timer(timeout, _kill)
     timer.start()
-    stopped: list[str] = []
+    stopped: list[tuple[str, str]] = []      # (kind, why)
     done_ev = threading.Event()
 
     def _watch():
-        while not done_ev.wait(watch_every):
+        import time
+        nxt = time.monotonic() + watch_every
+        while not done_ev.wait(min(1.0, watch_every) if stop_file else watch_every):
+            if stop_file and stop_file.exists():
+                stopped.append(("user_stopped", "stopped by `ccx stop`"))
+                _stop()
+                return
+            if not watch or time.monotonic() < nxt:
+                continue
+            nxt = time.monotonic() + watch_every
             try:
                 why = watch()
             except Exception:  # noqa: BLE001 — a failing check never stops the run
                 why = None
             if why:
-                stopped.append(why)
-                proc.kill()
+                stopped.append(("over_budget", why))
+                _stop()
                 return
-    if watch:
+    if watch or stop_file:
         threading.Thread(target=_watch, daemon=True).start()
     rc = -1
     try:
@@ -189,6 +257,9 @@ def execute(agent: str, inv: Invocation, timeout: int, env: dict, on_session=Non
                     except Exception:  # noqa: BLE001 — bookkeeping must never kill the run
                         pass
         rc = proc.wait()
+    except BaseException:
+        _stop()                 # Ctrl+C or a crash in ccx: its own process group no longer gets the signal
+        raise
     finally:
         timer.cancel()
         done_ev.set()
@@ -198,8 +269,11 @@ def execute(agent: str, inv: Invocation, timeout: int, env: dict, on_session=Non
     oc = PARSERS[agent](so, se, rc, inv.last_message_file)
     if timed_out and not oc.ok:
         oc.error, oc.kind = f"timed out after {timeout}s", "timeout"
-    if stopped:
-        oc.ok, oc.error, oc.kind = False, stopped[0], "over_budget"
+    if not stopped and stop_file and stop_file.exists() and not oc.ok:
+        stopped.append(("user_stopped", "stopped by `ccx stop`"))   # `ccx stop` killed the tree itself
+    if stopped and not (stopped[0][0] == "user_stopped" and oc.ok):
+        # a stop that came as the sub-agent finished keeps its finished result: nothing done is thrown away
+        oc.ok, oc.kind, oc.error = False, *stopped[0]
     return oc, so, se
 
 

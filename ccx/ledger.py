@@ -219,6 +219,18 @@ def repair(p: Paths, apply: bool = False) -> dict:
     return out
 
 
+def claim_final(run_dir: Path, by: str) -> bool:
+    """Only one writer closes a run (its own ccx process, or `ccx stop` when that process is gone): the first to
+    create final.lock writes the final state and the ledger row; the other leaves both alone."""
+    try:
+        fd = os.open(run_dir / "final.lock", os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        return False
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(json.dumps({"by": by, "pid": os.getpid(), "ts": time.time()}))
+    return True
+
+
 def write_record(run_dir: Path, record: dict) -> None:
     tmp = run_dir / "run.json.tmp"
     tmp.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
