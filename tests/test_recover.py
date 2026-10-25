@@ -17,7 +17,7 @@ from ccx.runners import kill_tree, pid_alive
 class RecoverEnv(StopEnv):
     def record(self, run_id):
         f = self.hub / "ccx" / "runs" / run_id / "run.json"
-        return json.loads(f.read_text(encoding="utf-8")) if f.exists() else {}
+        return ledger.read_record(f) if f.exists() else {}
 
     def rows(self, run_id):
         return [r for r in ledger.rows(Paths(self.hub)) if r.get("run_id") == run_id and not r.get("type")]
