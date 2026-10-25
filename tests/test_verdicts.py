@@ -1,4 +1,4 @@
-"""H13: verdicts without asking — probable verdicts from the evidence, reasons, undo as 'wrong' (fake CLIs only)."""
+"""H13: verdicts without asking — probable verdicts from the evidence, reasons, undo only with --wrong as 'wrong' (fake CLIs only)."""
 import json
 import subprocess
 import sys
@@ -50,15 +50,32 @@ class TestVerdicts(Env):
                      "--review", "off", "change x")              # the fake reports verification: not-run, no --check
         self.assertEqual(self.run_ccx("verify", "--sweep", "--after-h", "0")["recorded"], [])
 
-    def test_undo_counts_as_wrong(self):
+    def test_undo_is_not_a_verdict_unless_wrong(self):
+        # A/B question 8: undoing is not a verdict by itself; routing and its samples stay as they were
+        state = self.hub / "ccx" / "routing-state.json"
         env = {"FAKE_WRITE": f"{self.work / 'a.py'}=x = 2\n"}
-        run = self.run_ccx("run", "--to", "codex", "--tier", "T1", "--mode", "write", "--review", "off",
-                           "change x", env=env)["run_id"]
+        run = self.run_ccx("run", "--to", "codex", "--b", "3", "--mode", "write", "--review", "off",
+                           "--check", "exit 0", "change x", env=env)["run_id"]
+        before = state.read_bytes()
         out = self.run_ccx("undo", run, "--apply")
-        self.assertEqual(out.get("verdict"), "recorded as wrong (undone)")
+        self.assertTrue(out["verdict"].startswith("none"))
         self.assertEqual((self.work / "a.py").read_text(encoding="utf-8"), "x = 1\n")
+        self.assertEqual(state.read_bytes(), before)
+        self.assertEqual(self.events(), [])
+        led = [json.loads(x) for x in (self.hub / "ccx" / "ledger.jsonl").read_text(encoding="utf-8").splitlines()]
+        self.assertEqual([(e["type"], e["reason"], e["wrong"]) for e in led if e.get("type") == "undo"],
+                         [("undo", "undone", False)])
+        self.assertEqual(self.run_ccx("verify", "--sweep", "--after-h", "0")["recorded"], [])   # waits for a person
+        self.assertEqual(state.read_bytes(), before)
+
+        run2 = self.run_ccx("run", "--to", "codex", "--b", "3", "--mode", "write", "--review", "off",
+                            "--check", "exit 0", "change x", env=env)["run_id"]
+        before = state.read_bytes()
+        out = self.run_ccx("undo", run2, "--apply", "--wrong")
+        self.assertEqual(out["verdict"], "recorded as wrong (undo --wrong)")
+        self.assertNotEqual(state.read_bytes(), before)
         ev = self.events()[-1]
-        self.assertEqual((ev["ok"], ev["soft"], ev["reason"]), (False, True, "undone"))
+        self.assertEqual((ev["run_id"], ev["ok"], ev.get("soft"), ev["reason"]), (run2, False, None, "wrong"))
 
     def test_bad_reason(self):
         run = self.run_ccx("run", "--to", "codex", "--tier", "T1", "--mode", "read", "look")["run_id"]

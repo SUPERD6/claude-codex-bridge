@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from ccx import ledger  # noqa: E402
-from ccx.config import paths  # noqa: E402
+from ccx.config import Paths, paths  # noqa: E402
 from ccx.runners import bin_argv  # noqa: E402
 
 CCX = f'python "{ROOT.as_posix()}/ccx.py"'
@@ -123,15 +123,17 @@ def parse_stream(stdout: str) -> dict:
             "output_tokens": u.get("output_tokens"), "usage": u, "tools": tools, "bash": bash}
 
 
-def ccx_rows(label: str) -> list[dict]:
-    return [r for r in ledger.rows(paths()) if not r.get("type") and r.get("label") == label]
+def ccx_rows(label: str, hub: Path | None = None) -> list[dict]:
+    """Ledger rows of the runs under `label`, in the hub ccx uses (or the given one, e.g. a throwaway eval hub)."""
+    return [r for r in ledger.rows(Paths(hub) if hub else paths()) if not r.get("type") and r.get("label") == label]
 
 
-def ccx_verify(run_id: str, ok: bool, note: str) -> str:
+def ccx_verify(run_id: str, ok: bool, note: str, hub: Path | None = None) -> str:
     args = [sys.executable, str(ROOT / "ccx.py"), "verify", run_id, "--ok", "1" if ok else "0", "--note", note]
     if not ok:
         args += ["--reason", "wrong"]
-    r = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace", env=lead_env())
+    env = {**lead_env(), **({"CCX_HUB": str(hub)} if hub else {})}
+    r = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace", env=env)
     return (r.stdout or r.stderr).strip()[-300:]
 
 

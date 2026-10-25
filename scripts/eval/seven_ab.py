@@ -9,6 +9,11 @@ random order fixed by --seed (docs/research/2026-10-24-seven-cores-ab.md, sectio
                                round) vs `--review off`
   memory  nomem -> mem         the same sub-agent, the repo with or without a project-memory note (`ccx ctx add`) that
                                the brief leaves out and the hidden test checks
+          nomem -> hubmem      the same note only in the shared hub journal (`ccx mem add`), nothing in the repo: does
+                               it reach the sub-agent through its brief (I6)? Reported as `memory:hubmem`, outside the
+                               Holm family of the four primary comparisons
+Every memory unit runs in its own throwaway hub (CCX_HUB), so the person's hub is never read or written and no other
+note can reach the brief.
 
 Every comparison is arm B minus arm A, i.e. treatment minus control. A hidden acceptance test the agents never see decides right or wrong; it is recorded on the run with `ccx verify`.
 Every unit is appended to .ccx/eval/seven/results.jsonl as soon as it ends, so `run` again resumes where it stopped.
@@ -25,6 +30,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import shutil
 import statistics
 import subprocess
 import sys
@@ -46,7 +52,7 @@ EXPS = {
     "deleg": {"arms": ("self", "delegate"), "tasks": CORE},
     "route": {"arms": ("fixed", "routed"), "tasks": CORE},
     "review": {"arms": ("noreview", "review"), "tasks": CORE},
-    "memory": {"arms": ("nomem", "mem"), "tasks": [t["id"] for t in MEMORY]},
+    "memory": {"arms": ("nomem", "mem", "hubmem"), "tasks": [t["id"] for t in MEMORY]},   # arms[0] is the control
 }
 MINUTES = {**{t: 5 for t in CORE}, **{t["id"]: 15 for t in MEDIUM}}       # what --minutes routing is told
 
@@ -59,7 +65,7 @@ def by_id(task_id: str) -> dict:
 
 
 def schedule(exps: list[str], rounds: int, seed: int) -> list[dict]:
-    """Every (exp, round, task) pair as two units in a random arm order; the task order is shuffled per round.
+    """Every (exp, round, task) as one unit per arm in a random arm order; the task order is shuffled per round.
     Rounds come first so a batch cut short still has every experiment's early rounds."""
     out = []
     for rd in range(1, rounds + 1):
@@ -131,10 +137,26 @@ def sub_cost(label: str, rows_for=ccx_rows) -> dict:
 def run_direct(u: dict, a, work: Path, ccx: list[str], rows_for=ccx_rows, verify=ccx_verify) -> dict:
     task = by_id(u["task"])
     repo = make_repo(task, work / f"{u['exp']}-{u['round']}-{u['task']}-{u['arm']}")
+    env, hub = lead_env(), None
+    if u["exp"] == "memory":                   # a throwaway hub: the person's hub is never read or written
+        hub = work / f"hub-{u['round']}-{u['task']}-{u['arm']}"
+        if hub.exists():
+            shutil.rmtree(hub)
+        hub.mkdir(parents=True)
+        env["CCX_HUB"] = str(hub)
+        if rows_for is ccx_rows:
+            rows_for = lambda lab: ccx_rows(lab, hub=hub)  # noqa: E731
+        if verify is ccx_verify:
+            verify = lambda rid, ok, note: ccx_verify(rid, ok, note, hub=hub)  # noqa: E731
+    if u["exp"] == "memory" and u["arm"] == "hubmem":
+        r = subprocess.run([*ccx, "mem", "add", "--by", "user", "--topic", "conventions", task["memory"]],
+                           cwd=repo, capture_output=True, text=True, encoding="utf-8", errors="replace", env=env)
+        if r.returncode:
+            raise RuntimeError(f"`ccx mem add` into the eval hub failed: {(r.stderr or r.stdout)[-300:]}")
     if u["exp"] == "memory" and u["arm"] == "mem":
         for step in (["init"], ["add", task["memory"]]):
             subprocess.run([*ccx, "ctx", "--cwd", str(repo), *step], capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", env=lead_env())
+                           encoding="utf-8", errors="replace", env=env)
         ctx = repo / ".ccx" / "context.md"
         if task["memory"] not in (ctx.read_text(encoding="utf-8") if ctx.exists() else ""):
             raise RuntimeError(f"the project memory note did not reach {ctx}")
@@ -144,7 +166,7 @@ def run_direct(u: dict, a, work: Path, ccx: list[str], rows_for=ccx_rows, verify
     t0 = time.time()
     try:
         r = subprocess.run(ccx_argv(u["exp"], u["arm"], task, label, a, ccx), cwd=repo, capture_output=True,
-                           text=True, encoding="utf-8", errors="replace", env=lead_env(), timeout=a.timeout)
+                           text=True, encoding="utf-8", errors="replace", env=env, timeout=a.timeout)
         out, rc = r.stdout, r.returncode
     except subprocess.TimeoutExpired:
         out, rc = "", -9
@@ -153,6 +175,9 @@ def run_direct(u: dict, a, work: Path, ccx: list[str], rows_for=ccx_rows, verify
     row = {**u, "ts": t0, "wall_s": round(time.time() - t0, 1), "rc": rc, "ok": sc["ok"], "pytest": sc["pytest"],
            "ccx_status": res.get("status"), "ccx_ok": res.get("ok"), "check": res.get("check"),
            "review": res.get("review"), "lead": None, **sub_cost(label, rows_for)}
+    if hub and row["run_ids"]:                 # did the note travel in the sub-agent's first prompt?
+        pr = hub / "ccx" / "runs" / row["run_ids"][0] / "prompt.md"
+        row["note_in_prompt"] = pr.exists() and task["memory"] in pr.read_text(encoding="utf-8", errors="replace")
     if row["run_ids"]:
         row["verify"] = verify(row["run_ids"][-1], sc["ok"], f"eval-7c hidden acceptance: {sc['pytest']}")
     return row
@@ -247,13 +272,15 @@ def holm(ps: dict[str, float | None]) -> dict[str, tuple[float | None, float | N
     return out
 
 
-def pairs_of(rows: list[dict], exp: str) -> list[tuple[dict, dict]]:
+def pairs_of(rows: list[dict], exp: str, treat: str | None = None) -> list[tuple[dict, dict]]:
+    """(control, treatment) units of the same tag, round and task; the treatment is arms[1] unless named."""
     arms = EXPS[exp]["arms"]
+    t = treat or arms[1]
     by: dict = {}
     for r in rows:
         if r.get("exp") == exp:
             by.setdefault((r["tag"], r["round"], r["task"]), {})[r["arm"]] = r
-    return [(d[arms[0]], d[arms[1]]) for k, d in sorted(by.items()) if arms[0] in d and arms[1] in d]
+    return [(d[arms[0]], d[t]) for k, d in sorted(by.items()) if arms[0] in d and t in d]
 
 
 def _metrics(exp: str, lead_context: int) -> dict:
@@ -286,11 +313,12 @@ def compare(pairs: list[tuple[dict, dict]], f) -> dict:
 
 def summarize(rows: list[dict], lead_context: int = 351853) -> dict:
     res = {}
-    for exp, spec in EXPS.items():
-        ps = pairs_of(rows, exp)
+    for exp, spec, B in [(e, s, t) for e, s in EXPS.items() for t in s["arms"][1:]]:
+        ps = pairs_of(rows, exp, B)
         if not ps:
             continue
-        A, B = spec["arms"]
+        A = spec["arms"][0]
+        key = exp if B == spec["arms"][1] else f"{exp}:{B}"
         ka, kb = sum(p[0]["ok"] for p in ps), sum(p[1]["ok"] for p in ps)
         b = sum(p[0]["ok"] and not p[1]["ok"] for p in ps)
         c = sum(p[1]["ok"] and not p[0]["ok"] for p in ps)
@@ -300,6 +328,8 @@ def summarize(rows: list[dict], lead_context: int = 351853) -> dict:
              "mcnemar_p": mcnemar_p(b, c),
              "ccx_said_ok_but_hidden_failed": sum(bool(r.get("ccx_ok")) and not r["ok"] for p in ps for r in p),
              "metrics": {k: compare(ps, f) for k, f in _metrics(exp, lead_context).items()}}
+        if any("note_in_prompt" in p[1] for p in ps):
+            e["note_in_prompt"] = sum(bool(p[1].get("note_in_prompt")) for p in ps)
         if exp == "route":                       # p[1] is the treatment arm (routed)
             e["routed_rungs"] = sorted({g for p in ps for g in (p[1].get("rungs") or [])})
             e["escalated"] = sum(len(p[1].get("rungs") or []) > 1 for p in ps)
@@ -313,7 +343,7 @@ def summarize(rows: list[dict], lead_context: int = 351853) -> dict:
         if exp == "deleg":
             e["did_not_delegate"] = sum(not p[1].get("run_ids") for p in ps)
             e["lead_edited_after_delegating"] = sum((p[1].get("lead_edits") or 0) > 0 for p in ps)
-        res[exp] = e
+        res[key] = e
     prim = {"deleg": ("total_usd", "task_sign_p"), "route": ("total_usd", "task_sign_p"),
             "review": ("ok", "mcnemar_p"), "memory": ("ok", "mcnemar_p")}
     ps = {e: (res[e]["metrics"][m][k] if m != "ok" else res[e][k]) for e, (m, k) in prim.items() if e in res}

@@ -79,8 +79,8 @@ are optional reading) or `issues` with `file:line`; after one fix round, `kind: 
 Then give your verdict:
 `ccx verify <run_id> --ok 1|0 [--reason unfinished|wrong|overreach|other] [--note "..."]` — this calibrates
 routing (and splitting, if `--minutes` was given) and closes the checkpoint step. Runs nobody judges get a
-probable verdict after 12 h when ccx's check or the self-check and the review passed (`ccx undo --apply` counts as
-wrong); your verdict always overrides it, so give one whenever you actually looked.
+probable verdict after 12 h when ccx's check or the self-check and the review passed (an undone run waits for
+yours: `ccx undo --apply --wrong` records it as wrong in the same step); your verdict always overrides it, so give one whenever you actually looked.
 `ccx show <id> --full` only when the compact result is not enough.
 
 ## 5. Switching leads

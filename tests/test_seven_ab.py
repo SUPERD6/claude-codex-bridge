@@ -58,7 +58,7 @@ class TestSchedule(unittest.TestCase):
         s = seven_ab.schedule(list(seven_ab.EXPS), 3, seed=7)
         self.assertEqual(s, seven_ab.schedule(list(seven_ab.EXPS), 3, seed=7))
         self.assertNotEqual(s, seven_ab.schedule(list(seven_ab.EXPS), 3, seed=8))
-        n = sum(3 * len(e["tasks"]) * 2 for e in seven_ab.EXPS.values())
+        n = sum(3 * len(e["tasks"]) * len(e["arms"]) for e in seven_ab.EXPS.values())
         self.assertEqual(len(s), n)
         by = {}
         for u in s:
@@ -101,12 +101,13 @@ class TestRun(unittest.TestCase):
         a = args(out=str(out), exps="memory", rounds=1, budget=10.0, workdir=str(tmp))
         runners = {"direct": fake, "deleg": fake}
         self.assertEqual(seven_ab.cmd_run(a, ["ccx"], runners), 0)
-        self.assertEqual(len(calls), 6)                                      # 3 memory tasks x 2 arms
+        self.assertEqual(len(calls), 9)                                      # 3 memory tasks x 3 arms
         calls.clear()
         self.assertEqual(seven_ab.cmd_run(a, ["ccx"], runners), 0)
         self.assertEqual(calls, [])                                          # all done: nothing re-run
         a2 = args(out=str(out), exps="memory", rounds=2, budget=2.0, workdir=str(tmp))
-        self.assertEqual(seven_ab.cmd_run(a2, ["ccx"], runners), 2)        # $1.8 spent, stops at $2.0
+        a2.budget = 2.9
+        self.assertEqual(seven_ab.cmd_run(a2, ["ccx"], runners), 2)        # $2.7 spent: one more unit, then stops at $2.9
         self.assertEqual(len(calls), 1)
 
     @unittest.skipUnless(HAS_PYTEST, "pytest is needed to score the task")
@@ -130,6 +131,38 @@ class TestRun(unittest.TestCase):
         self.assertEqual(row["ccx_ok"], True)
         self.assertEqual(verdicts, [("r1", True)])
         self.assertAlmostEqual(seven_ab.unit_usd(row), 0.003)
+
+
+    @unittest.skipUnless(HAS_PYTEST, "pytest is needed to score the task")
+    def test_hub_memory_unit_with_real_ccx(self):
+        """hubmem: the note goes into a throwaway hub only, and real ccx carries it into the sub-agent's brief."""
+        import os
+        tmp = Path(tempfile.mkdtemp())
+        fakes = Path(__file__).resolve().parent / "fakes"
+        env = {"CCX_CODEX_BIN": str(fakes / "fake_codex.py"), "CCX_CLAUDE_BIN": str(fakes / "fake_claude.py"),
+               "CODEX_HOME": str(tmp / "codex"), "CLAUDE_CONFIG_DIR": str(tmp / "claude"),
+               "CCX_CONFIG": str(tmp / "user-config.toml"), "FAKE_LOG": str(tmp / "calls.jsonl"),
+               "CCX_HUB": str(tmp / "persons-hub"), "CCX_AB_RATE": "0", "CCX_NO_BENCH_REFRESH": "1",
+               "CCX_NO_QUOTA_PROBE": "1"}
+        old = dict(os.environ)
+        os.environ.update(env)
+        for k in ("CCX_DEPTH", "CCX_ROLE", "CLAUDECODE", "CODEX_THREAD_ID", "CCX_LEAD_SESSION"):
+            os.environ.pop(k, None)
+        try:
+            u = {"exp": "memory", "arm": "hubmem", "round": 1, "task": "mem-money", "slot": 0, "tag": "t",
+                 "label": "eval-7c:t:memory:1:mem-money:hubmem"}
+            row = seven_ab.run_direct(u, args(timeout=120), tmp / "work", [sys.executable, str(common.ROOT / "ccx.py")])
+        finally:
+            os.environ.clear()
+            os.environ.update(old)
+        note = seven_ab.by_id("mem-money")["memory"]
+        self.assertTrue(row["note_in_prompt"], row)
+        self.assertEqual(len(row["run_ids"]), 1)               # the ledger row was read from the eval hub
+        self.assertFalse((tmp / "persons-hub").exists())       # the person's hub was never touched
+        self.assertFalse((tmp / "work" / "memory-1-mem-money-hubmem" / ".ccx").exists())   # nothing in the repo
+        import json
+        prompt = [json.loads(x) for x in (tmp / "calls.jsonl").read_text(encoding="utf-8").splitlines()][-1]["prompt"]
+        self.assertIn(note, prompt)
 
 
 class TestStats(unittest.TestCase):
@@ -168,6 +201,13 @@ class TestStats(unittest.TestCase):
         self.assertAlmostEqual(m["ratio_median"], 0.004 / 0.003, places=4)
         self.assertEqual(seven_ab.summarize(rows)["units"], 13)
         self.assertAlmostEqual(seven_ab.summarize(rows)["primary_holm"]["memory"]["p_holm"], 0.03125)
+        hub = [row("mem-errors", rd, "hubmem", rd != 2, 0.003) | {"note_in_prompt": True} for rd in (1, 2, 3)]
+        s2 = seven_ab.summarize(rows + hub)
+        h = s2["memory:hubmem"]
+        self.assertEqual((h["arms"], h["pairs"], h["ok"]), (["nomem", "hubmem"], 3, {"nomem": 0, "hubmem": 2}))
+        self.assertEqual(h["note_in_prompt"], 3)
+        self.assertEqual(s2["memory"]["pairs"], 6)                       # the primary comparison is unchanged
+        self.assertNotIn("memory:hubmem", s2["primary_holm"])
 
 
 if __name__ == "__main__":

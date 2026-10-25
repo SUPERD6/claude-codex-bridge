@@ -1,5 +1,8 @@
 """What the fake CLIs answer to a `ccx discuss` brief. FAKE_DISCUSS="objections,agree" = the critic's answers in
-successive rounds (default agree); FAKE_DISCUSS_FAIL=judge makes that role's turn fail."""
+successive rounds (default agree); FAKE_DISCUSS_FAIL=judge makes that role's turn fail.
+Not keeping to the format: a critic answer `unparsed` (no CRITIQUE line, no [must]) stays so after ccx's reminder,
+`unparsed-once` is fixed by it; FAKE_DISCUSS_JUDGE=unparsed|unparsed-once does the same for the judge (no RECOMMEND,
+untagged items)."""
 import os
 import re
 
@@ -25,6 +28,7 @@ def answer(prompt: str, agent: str, log: str | None) -> dict | None:
     if not m:
         return None
     role, rnd = m.group(1), int(m.group(2))
+    again = "format-again]" in prompt
     if os.environ.get("FAKE_DISCUSS_FAIL") == role:
         return {"status": "blocked", "summary": "could not", "files_changed": [], "commands_run": [], "verification": "not-run", "open_questions": [], "next_step": ""}
     base = {"status": "done", "files_changed": [], "commands_run": [], "verification": "not-run", "next_step": ""}
@@ -34,9 +38,17 @@ def answer(prompt: str, agent: str, log: str | None) -> dict | None:
     if role == "critic":
         seq = (os.environ.get("FAKE_DISCUSS") or "agree").split(",")
         v = seq[min(rnd - 1, len(seq) - 1)]
+        if v == "unparsed" or (v == "unparsed-once" and not again):
+            return {**base, "summary": f"I think the proposal is mostly fine. r{rnd}",
+                    "open_questions": ["maybe name the lock file"]}
+        v = "agree" if v == "unparsed-once" else v
         return {**base, "summary": f"CRITIQUE: {v}. r{rnd}",
                 "open_questions": ["[must] two writers can lose an update"] if v == "objections"
                 else ["[note] name the lock file"]}
+    j = os.environ.get("FAKE_DISCUSS_JUDGE", "")
+    if j == "unparsed" or (j == "unparsed-once" and not again):
+        return {**base, "summary": "Use one queue file with a lock.",
+                "open_questions": ["one file is simpler", "the lock answers the objection"]}
     return {**base, "summary": "RECOMMEND: one queue file with a lock",
             "open_questions": ["[consensus] one file is simpler", "[disagreement] lock vs append-only log",
                                "[reason] the lock answers the lost-update objection"]}

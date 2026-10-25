@@ -8,7 +8,7 @@ from test_ccx import FAKES, Env
 
 from ccx import ledger
 from ccx.config import Paths
-from ccx.runners import Invocation, execute, group_flags, pid_alive
+from ccx.runners import Invocation, execute, group_flags, kill_tree, pid_alive
 from ccx.stop import stop
 
 
@@ -37,7 +37,22 @@ class StopEnv(Env):
         r = self.ccx("run", "--from", "claude", "--to", "codex", "--model", "gpt-6-luna", "--effort", "low",
                      "--no-ab", "--bg", "implement x", env=env)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        return json.loads(r.stdout)["run_id"]
+        run_id = json.loads(r.stdout)["run_id"]
+        self._bg = [*getattr(self, "_bg", []), run_id]
+        return run_id
+
+    def tearDown(self):
+        for run_id in getattr(self, "_bg", []):    # before the temp folder goes (cleanups run after it)
+            self.reap(run_id)
+        super().tearDown()
+
+    def reap(self, run_id):
+        """Let the background ccx finish before the temp folder goes (Windows can't delete a process's cwd)."""
+        rec = self.record(run_id)
+        if not wait_for(lambda: not pid_alive(rec.get("ccx_pid")), 15):
+            kill_tree(rec.get("ccx_pid"))
+        kill_tree(rec.get("pid"))
+        wait_for(lambda: not pid_alive(rec.get("ccx_pid")), 5)
 
 
 class TestStop(StopEnv):

@@ -33,9 +33,9 @@ python -m pytest -q tests            # 每次提交前都必须全部通过
 
 ## 为另一个智能体命令行加适配器
 
-Gemini CLI 就是现成的例子，照着做：
+复制 `ccx/agents/_template.py`（能跑的骨架，带说明）和 `tests/fakes/fake_template.py`；Gemini CLI（`ccx/agents/gemini.py`）是真实的例子。
 
-1. `ccx/runners.py`：写 `<agent>_invocation(...)`（后台运行、续接和权限参数）和 `parse_<agent>(stdout, stderr, rc, last_file)`（状态、JSON 结果、按 `usage_dict` 四类整理的用量、会话 ID、失败类型）。把两者登记到 `BUILDERS` 和 `PARSERS`，核对过的版本写进 `TESTED_VERSIONS`。
+1. `ccx/agents/<agent>.py`：后台运行的参数（续接和权限参数）和输出的解析（状态、JSON 结果、按 `usage_dict` 四类整理的用量、会话 ID、失败类型），放进一个 `ADAPTER`，`support="community"`，`tested_version` 写你核对过的版本。把名字加进 `ccx/agents/__init__.py` 的 `NAMES`。
 2. `ccx/config.py`：把它加进 `DELEGATE_AGENTS`。
 3. `config/tiers.toml`：每一档的模型和强度，以及 `[permissions.<agent>]` 的 `read` 和 `write`。
 4. `skills/task-routing/data/priors.toml`：档位（模型、强度、能力）和价格，并写明价格的出处。
