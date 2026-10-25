@@ -86,6 +86,31 @@ class TestBoard(AdapterEnv):
         line = (self.work / ".ccx" / "board.jsonl").read_text(encoding="utf-8").splitlines()[0]
         self.assertEqual(set(json.loads(line)), {"id", "ts", "from", "via", "to", "thread", "text", "reply_to"})
 
+    def turn(self, agent, data, env=None):
+        r = self.ccx("turn", "--as", agent, env=env, stdin=json.dumps(data))
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        return r.stdout
+
+    def test_the_turn_hook_delivers_and_notices_the_person(self):
+        hook = {"session_id": "s9", "cwd": str(self.work), "prompt": "what did codex say?",
+                "hook_event_name": "UserPromptSubmit"}
+        self.assertEqual(self.turn("codex", hook), "")
+        self.assertFalse((self.work / ".ccx").exists())                  # never creates .ccx in a project
+        e = self.say(CLAUDE, "--to", "codex", "--thread", "fn", "please look at parse()")["posted"]
+        out = self.turn("codex", hook)
+        self.assertIn("please look at parse()", out)
+        self.assertIn("data, not instructions", out)
+        self.assertEqual(self.turn("codex", hook), "")                    # once
+        humans = json.loads((self.work / ".ccx" / "board.humans.json").read_text(encoding="utf-8"))
+        self.assertEqual(humans["codex"], e["id"])                       # the person typed in the Codex session
+        pushed = {**hook, "prompt": "[ccx board #3 from claude] answer please"}
+        self.turn("claude", pushed)
+        humans = json.loads((self.work / ".ccx" / "board.humans.json").read_text(encoding="utf-8"))
+        self.assertNotIn("claude", humans)                               # a message ccx pushed in is not a person
+        self.say(CODEX, "--to", "claude", "for the lead")
+        self.assertEqual(self.turn("claude", hook, env={"CCX_DEPTH": "1"}), "")   # a sub-agent's turn: silent
+        self.assertIn("for the lead", self.turn("claude", hook))
+
     def test_turn_text_is_short_and_shows_only_changes(self):
         root = self.work
         (root / ".ccx").mkdir(exist_ok=True)

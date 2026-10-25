@@ -356,11 +356,12 @@ class TestSync(Env):
         # hooks
         st = json.loads((self.home_claude / "settings.json").read_text(encoding="utf-8"))
         self.assertIn("mem delta --as claude", st["hooks"]["SessionStart"][0]["hooks"][0]["command"])
-        self.assertIn("lead --hint --as claude", st["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"])
+        self.assertIn("turn --as claude", st["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"])
         conf = (self.home_codex / "config.toml").read_text(encoding="utf-8")
         self.assertIn(TOML_BEGIN, conf)
         parsed = tomllib.loads(conf)
         self.assertIn("mem delta --as codex", parsed["hooks"]["SessionStart"][0]["hooks"][0]["command"])
+        self.assertIn("turn --as codex", parsed["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"])
         self.assertEqual(parsed["model"], "gpt-6-astra")
         # backups made
         self.assertTrue(list(self.home_codex.glob("config.toml.ccx-backup-*")))

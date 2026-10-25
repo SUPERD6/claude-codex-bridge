@@ -105,7 +105,48 @@ def cmd_board(a) -> int:
     return 0
 
 
+def turn_output(agent: str, data: dict, threshold: int) -> str:
+    """Everything one turn of a lead sees from ccx: board messages for it, the shared document's changed lines,
+    the others' journal lines, and the H10 hint. '' when nothing is new (a hook that costs nothing)."""
+    from .. import context, learn, project
+    parts = []
+    if not int(os.environ.get("CCX_DEPTH", "0") or 0):          # a ccx sub-agent's turn is not the lead's
+        cwd = Path(data.get("cwd") or Path.cwd())
+        root = project.find_root(cwd) or learn.cp_root(cwd)
+        if (root / ".ccx").is_dir():                             # never creates .ccx in a project without one
+            sid = data.get("session_id")
+            reader = f"{agent}:{sid}" if sid else agent
+            if (root / ".ccx" / "board.jsonl").exists() and not str(data.get("prompt") or "").lstrip() \
+                    .startswith(board.MARK):
+                board.human_turn(root, reader)                   # a person typed this turn
+            parts.append(board.turn_text(root, reader))
+    parts.append(context.hint(paths(), agent, data, threshold) if agent == "claude" else "")
+    return "\n\n".join(x for x in parts if x)
+
+
+def cmd_turn(a) -> int:
+    """For a per-turn hook (UserPromptSubmit in Claude Code and Codex): reads the hook's JSON on stdin."""
+    import json
+    try:
+        data = json.loads(sys.stdin.read() or "{}") if not sys.stdin.isatty() else {}
+    except ValueError:
+        data = {}
+    try:
+        text = turn_output(board.vendor_of(a.as_), data if isinstance(data, dict) else {}, a.threshold)
+    except Exception:  # noqa: BLE001 — a hook must never break the lead's turn
+        text = ""
+    if text:
+        print(text)
+    return 0
+
+
 def register(sub) -> None:
+    tu = sub.add_parser("turn", help="for a per-turn hook: what this lead should see before its turn (board "
+                        "messages for it, shared-document changes, the long-conversation hint); nothing when "
+                        "nothing is new")
+    tu.add_argument("--as", dest="as_", required=True, choices=["claude", "codex", "deepseek", "dsh"])
+    tu.add_argument("--threshold", type=int, default=150_000, help="tokens a turn reads before the H10 hint")
+    tu.set_defaults(fn=cmd_turn)
     targets = [*board.VENDORS, "dsh", "all"]
     sy = sub.add_parser("say", help="write to the other open sessions in this project (the board): they see it on "
                         "their next turn")
