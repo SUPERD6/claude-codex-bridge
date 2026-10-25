@@ -1,6 +1,6 @@
 # Status
 
-English · [中文](STATUS.zh.md) · updated 2026-10-24 · version 0.4.0 · 274 tests
+English · [中文](STATUS.zh.md) · updated 2026-10-24 · version 0.4.0 · 317 tests
 
 One page on purpose: whatever an agent reads at start-up it re-reads on every later turn. Older notes, the full
 confidence table, acceptance checks and the done list are in [STATUS-archive.md](STATUS-archive.md); what changed
@@ -31,14 +31,22 @@ turn re-reads ~220k tokens):
 | J5 a model for the lead itself (`ccx lead --suggest`, a line in `ccx report`) | ✅ PR #13 |
 | J11 `ccx/delegate.py` split by job, behaviour unchanged | ✅ PR #14 |
 | F10–F14 own sub-agents: spend and quota limits, Agent tool for Claude, explicit "use sub-agents" for parts | ✅ PR #18 — limits not yet hit by a real run (sub-agents rarely start: PR #6) |
-| H5–H6 + I6 shared memory in use: suggested notes the person accepts, this project first, usage counts, notes in the brief for tools without a start hook | ✅ PR #21 — suggestions are heuristic; **H7 waits for the user**: open a new Codex desktop conversation in this project and send "ok", to confirm the start hook arrives |
+| H5–H6 + I6 shared memory in use: suggested notes the person accepts, this project first, usage counts, notes in the brief for tools without a start hook | ✅ PR #21 — suggestions are heuristic; **H7 waits for the user**: the first try (in a folder named `...\玩`) hit a crash on non-ASCII paths, fixed in PR #27; send "ok" again in a new Codex desktop conversation |
+| `changes/<PR>.md` per PR instead of editing CHANGELOG/STATUS | ✅ PR #22 |
+| H3–H4 + I7 `ccx discuss` (2–3 vendors propose / critique / judge, `ccx ui` shows it as a conversation) | ✅ PR #23 — one real discussion (Codex + Claude, agreed in 3 rounds, $0.28); with two vendors the proposer also judges |
+| H8–H9 `ccx way` (three ways of working by risk; first-try and rework rates per kind of task) | ✅ PR #24 |
+| DeepSeek as the fourth vendor (`dsh` adapter, DeepSeek through Codex), Kimi / GLM / Qwen / OpenRouter providers | ✅ PR #25 — through Claude Code and through Codex run for real; `dsh`, Gemini and the small vendors not run (not installed / no keys) |
+| Fixes from the seven-cores real runs: `ccx task resume` restarts a step killed before its session began (#26); non-ASCII paths no longer crash (#27); `ccx doctor` checks a Codex lead's sandbox (#28) | ✅ #26, #27; #28 open — on Windows only `danger-full-access` lets a Codex lead hand work to Claude |
+| Seven cores A/B on real CLIs (delegation, routing, review, memory; 3 rounds, $6 cap) | ⏳ running (session ccx-evals); round 1: delegating saves the lead 1 request in 3 but costs as much in total and is ~2.7× slower; routing no better than one fixed model; review cost ~34× with no gain in pass rate and passed one wrong solution |
 
 ## Next three
 
-1. H3–H4 + I7 `ccx discuss`, then H8–H9 ways of working.
+1. Finish the seven-cores A/B (rounds 2–3, memory group) and act on it: review and routing defaults, the "ccx says ok,
+   hidden test fails" cases (the check is too weak when the visible tests miss a requirement).
 2. J0 on real sessions (`scripts/eval/j0_baseline.py real --days 7`) a week after J1–J6, against the baseline in
    PR #6; spot-check 5 probable verdicts a week so J7 has an overturn rate.
-3. Then the rest of the unified order: H7 (the user's check above), `ccx stop`, I5, H1–H2, H12, H14–H16, I8, and the open-source release.
+3. Then: H7 (the user's check above), `ccx stop`, I5, H1–H2, H12, H14–H16, I8, a third vendor in a real `ccx discuss`,
+   and the release.
 
 ## How sure we are (short)
 
