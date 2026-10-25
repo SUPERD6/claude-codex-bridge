@@ -161,8 +161,11 @@ class TestRun(unittest.TestCase):
         self.assertFalse((tmp / "persons-hub").exists())       # the person's hub was never touched
         self.assertFalse((tmp / "work" / "memory-1-mem-money-hubmem" / ".ccx").exists())   # nothing in the repo
         import json
-        prompt = [json.loads(x) for x in (tmp / "calls.jsonl").read_text(encoding="utf-8").splitlines()][-1]["prompt"]
+        calls = [json.loads(x) for x in (tmp / "calls.jsonl").read_text(encoding="utf-8").splitlines()]
+        prompt = [c for c in calls if c["argv"][:1] == ["exec"]][-1]["prompt"]
         self.assertIn(note, prompt)
+        self.assertEqual(calls[-1]["argv"][:1], ["archive"])        # the eval hub's session was archived at the end
+        self.assertEqual(row["archived_sessions"], 1)
 
 
 class TestStats(unittest.TestCase):

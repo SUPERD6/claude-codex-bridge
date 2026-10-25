@@ -137,6 +137,20 @@ def ccx_verify(run_id: str, ok: bool, note: str, hub: Path | None = None) -> str
     return (r.stdout or r.stderr).strip()[-300:]
 
 
+def archive_hub(hub: Path) -> int:
+    """At the end of an eval: archive every sub-agent session a throwaway hub's runs left, final or not. Nothing will
+    continue them, and the person's own hub (whose `ccx archive` would) never sees them: without this they stayed in
+    the apps' session lists (seen 2026-10-25). Returns how many sessions were archived."""
+    env = {**lead_env(), "CCX_HUB": str(hub)}
+    r = subprocess.run([sys.executable, str(ROOT / "ccx.py"), "archive", "--apply"], capture_output=True, text=True,
+                       encoding="utf-8", errors="replace", env=env)
+    try:
+        rows = json.loads(r.stdout).get("sessions") or []
+    except ValueError:
+        return 0
+    return sum("-> ok" in str(x.get("action")) or str(x.get("action", "")).startswith("move ") for x in rows)
+
+
 def append_jsonl(f: Path, row: dict) -> None:
     f.parent.mkdir(parents=True, exist_ok=True)
     with f.open("a", encoding="utf-8") as fh:

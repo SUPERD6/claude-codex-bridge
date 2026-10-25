@@ -41,7 +41,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import (ROOT, append_jsonl, boot_ci, ccx_rows, ccx_verify, git, lead_env, make_repo,  # noqa: E402
+from common import (ROOT, append_jsonl, archive_hub, boot_ci, ccx_rows, ccx_verify, git, lead_env, make_repo,  # noqa: E402
                     read_jsonl, score, sign_test)
 from tasks import MEDIUM, MEMORY, by_id as _by_id  # noqa: E402
 
@@ -180,6 +180,8 @@ def run_direct(u: dict, a, work: Path, ccx: list[str], rows_for=ccx_rows, verify
         row["note_in_prompt"] = pr.exists() and task["memory"] in pr.read_text(encoding="utf-8", errors="replace")
     if row["run_ids"]:
         row["verify"] = verify(row["run_ids"][-1], sc["ok"], f"eval-7c hidden acceptance: {sc['pytest']}")
+    if hub:
+        row["archived_sessions"] = archive_hub(hub)    # a throwaway hub: nothing continues its sessions
     return row
 
 

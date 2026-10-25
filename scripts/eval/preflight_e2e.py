@@ -31,7 +31,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from common import ROOT, append_jsonl, lead_env, make_repo, score  # noqa: E402
+from common import ROOT, append_jsonl, archive_hub, lead_env, make_repo, score  # noqa: E402
 from seven_func import last_json, tree_hash  # noqa: E402
 from tasks import by_id  # noqa: E402
 
@@ -226,6 +226,7 @@ def main(argv=None) -> int:
            "cap": a.cap, "hub": str(pf.hub), "steps": results,
            "ledger": [{k: r.get(k) for k in ("run_id", "label", "kind", "state", "ae_usd", "usage4", "sessions")}
                       for r in pf.rows()]}
+    row["archived_sessions"] = archive_hub(pf.hub)    # the throwaway hub's sessions leave the apps' lists
     append_jsonl(Path(a.out) if a.out else OUT, row)
     print(json.dumps(row, ensure_ascii=False, indent=1))
     return 0 if row["ok"] else 1
