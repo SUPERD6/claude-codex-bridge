@@ -291,7 +291,7 @@ def cmd_resume(a) -> int:
     sweep(p)                            # closes it as interrupted first if its ccx process died mid-run
     req = Request(to="codex", brief=_brief(a), tier=a.tier, resume_run=a.run_id,
                   caller=_caller(a.caller), escalate=False if a.no_escalate else None,
-                  model=a.model, effort=a.effort, budget_usd=a.budget)
+                  model=a.model, effort=a.effort, budget_usd=a.budget, review=a.review)
     rec = run(req, p)
     _out(compact(rec))
     return 0 if rec["ok"] else 2
@@ -578,6 +578,8 @@ def register(sub) -> None:
     rs.add_argument("--effort")
     rs.add_argument("--budget", type=float, metavar="USD", help="a new spending cap for its own sub-agents (after "
                     "an over_budget stop)")
+    rs.add_argument("--review", choices=["auto", "on", "off"], default="auto", help="independent review of what this "
+                    "follow-up changed, as for ccx run (default auto)")
     rs.set_defaults(fn=cmd_resume)
     sp = sub.add_parser("stop", help="stop a running delegation (its whole process tree); `ccx resume` continues it")
     sp.add_argument("run_id")
