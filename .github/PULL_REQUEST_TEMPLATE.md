@@ -14,5 +14,5 @@
 
 ## Docs
 
-- [ ] CHANGELOG.md updated
+- [ ] `changes/<PR number>.md` added (not CHANGELOG.md or docs/STATUS.md; see changes/README.md)
 - [ ] English and Chinese docs both updated where they changed

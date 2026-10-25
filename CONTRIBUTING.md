@@ -30,12 +30,15 @@ the installed `ccx` (`tests/smoke_installed.py`).
 
 - **Tests with every change.** A fix comes with a test that fails without it.
 - **Nothing personal in the repo**: no names, local paths or data. Personal things live in the user's hub.
-- **Two languages for docs**: `x.md` (English) and `x.zh.md` (Chinese), linking to each other. Update
-  `CHANGELOG.md`; record real decisions in `docs/DECISIONS.md`.
+- **Two languages for docs**: `x.md` (English) and `x.zh.md` (Chinese), linking to each other. Record real decisions
+  in `docs/DECISIONS.md`.
+- **One change note per PR**: add `changes/<PR number>.md` with the lines for the CHANGELOG instead of editing
+  `CHANGELOG.md` (see [changes/README.md](changes/README.md)); they are folded in when releasing, so parallel PRs
+  don't conflict. `docs/STATUS.md` is kept by the maintainers.
 - **Check external facts**: a flag, event field or price you rely on must be confirmed with `--help` or official docs;
   note the version you checked (`TESTED_VERSIONS` in `ccx/runners.py`, the "External facts" section of the README).
 - **Never touch credentials**, and never edit a tool's config outside ccx's marked blocks.
-- Small commits with clear messages; behaviour changes go in the CHANGELOG.
+- Small commits with clear messages; behaviour changes go in the PR's change note.
 
 ## Adding an adapter for another agent CLI
 
