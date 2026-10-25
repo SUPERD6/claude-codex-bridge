@@ -3,7 +3,7 @@
 ## Unreleased
 
 ## 0.5.0 — 2026-10-25 (save, check, split, share, control: cheaper defaults, review that checks the task, project catalog, shared work context, the board, stop and archive)
-- Highlights: everything since 0.4.0 (PRs up to #103), grouped by theme below; 523 tests. Measured on real CLIs:
+- Highlights: everything since 0.4.0 (PRs up to #104), grouped by theme below; 523 tests. Measured on real CLIs:
   shared work context, right the first time 36/36 vs 7/36 and 63 % less spend
   ([report](docs/research/2026-10-25-shared-context-ab.md)); project memory 9/9 vs 0/9 and hub memory 9/9 vs 0/9;
   seven-cores round 1 ([report](docs/research/2026-10-24-seven-cores-ab.md)): delegating cut the lead's tokens 32 %
@@ -630,7 +630,7 @@
 - README (EN + ZH) cut to one promise (spend less), four pillars with one sourced measurement each, and a three-command
   quick start; the details moved, unchanged, to docs/features, docs/install, docs/measured and docs/faq (EN + ZH).
 
-### Added before the tag (#96–#103)
+### Added before the tag (#96–#104)
 - The repository is now a plugin marketplace: `claude plugin install relayline --marketplace SUPERD6/relayline`
   gives Claude Code the four skills and ccx's SessionStart / UserPromptSubmit hooks (they run the plugin's own
   `bin/ccx`); `codex plugin marketplace add SUPERD6/relayline` + `codex plugin add relayline@relayline` gives Codex
@@ -676,6 +676,10 @@
   runs. Round 2 of the seven-cores A/B: auto fired 0 times in 36 runs, while review on raised right first time from
   33/36 to 36/36 for +$0.004 a task; replaying the 18 trap tasks' reference changes, the new rule fires on 4,
   inventory among them (its visible test never calls `low_stock` or `remove_stock`).
+- `ccx q`: when the whole `q run` process tree was killed, the run in progress stayed `running` and its spend never
+  reached the ledger or the item (r2 group 9, 4-I). `q run`, `q resume` and `q ls` now close such runs as
+  interrupted first (`recover.sweep`, as `ccx stats` does, with the usage read back from the session file), and
+  `q resume` adds what the item's runs since it went `doing` spent to its `cost_usd`.
 
 ## 0.4.0 — 2026-10-24 (routing from public benchmarks and total cost, quota by pace, work queue, reviews, handoff from the session file)
 - Highlights: proposals E and F, the F1 live trial and the fixes below; 201 tests. Details per item follow.

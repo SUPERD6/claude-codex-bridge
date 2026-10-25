@@ -6,7 +6,7 @@
 
 ## 现在
 
-0.5.0 收进了 0.4.0 之后的全部改动（PR 到 #103 为止），CHANGELOG 里按主题分组。实测结论如下，每条都有原始记录：
+0.5.0 收进了 0.4.0 之后的全部改动（PR 到 #104 为止），CHANGELOG 里按主题分组。实测结论如下，每条都有原始记录：
 
 | 结论 | 数字 | 出处 |
 |---|---|---|
@@ -25,7 +25,7 @@
 
 ## 接下来三件
 
-1. **10/31 前的真机补验**：worktree、`--fork`、`ccx say --now`、dsh 在桌面端退出后再写归档；修第 2 轮查出的两个队列问题（#104：被杀的 `q run` 停在 running；`q resume` 从头重做那一块，没接着原会话）。
+1. **10/31 前的真机补验**：worktree、`--fork`、`ccx say --now`、dsh 在桌面端退出后再写归档；第 2 轮剩下的队列问题：`q resume` 从头重做那一块，没接着原会话（被杀的运行停在 running 已由 #104 修好）。
 2. **对外发布**（先问用户）：演示 GIF、用第 1–2 轮任务做公开基准，然后推广。
 3. **总管 K4–K6**：自动档位、从外面派活进来（手机、私人 GitHub issue）、总管看板。K7（用另一个桌宠项目当形象）等那个项目做好。
 
@@ -33,6 +33,6 @@
 
 **real** = 在真实 Windows 机器上、用已登录的 CLI 跑过；**fake** = 只有用假 CLI 的测试。
 
-- **real**：双向派活、`--check`、审查（第 1–2 轮）、`ccx way`、`ccx stop` → `ccx resume` 以及被杀的运行也记账、跑完即归档、DeepSeek 当组长、三家一起的 `ccx discuss`、对话板经 `ccx say --resume`、共享工作上下文 A/B、项目目录扫描、插件市场安装（Claude Code，临时配置目录）、`ccx ui` 隐藏测试、3 个任务的 `ccx batch`（#100）、非 ASCII 路径、不再弹控制台窗口、Codex hook 在 Windows 上（H7，#82 + #92）、队列中途杀掉再续跑（有上面两个问题）。
+- **real**：双向派活、`--check`、审查（第 1–2 轮）、`ccx way`、`ccx stop` → `ccx resume` 以及被杀的运行也记账、跑完即归档、DeepSeek 当组长、三家一起的 `ccx discuss`、对话板经 `ccx say --resume`、共享工作上下文 A/B、项目目录扫描、插件市场安装（Claude Code，临时配置目录）、`ccx ui` 隐藏测试、3 个任务的 `ccx batch`（#100）、非 ASCII 路径、不再弹控制台窗口、Codex hook 在 Windows 上（H7，#82 + #92）、队列中途杀掉再续跑（还剩上面一个问题）。
 - **只有 fake**：worktree、额度回退、席位、`--fork`、Gemini CLI、真实的额度用尽。
 - **未验证**：`ccx say --now` 推进正在进行的 Codex 对话；`ccx doctor --codex-rule` 给出的 Codex 规则；归档排队写入后 dsh 桌面端自己的下一次写入；Codex 从 GitHub 地址装插件；子智能体自己的子智能体上限真机（F11 没触发：明确要求了也没有一家开子智能体）；新 `--review auto` 的触发率；建议笔记的筛选规则（留出集 13/30）；评测任务之外的路由表现。
