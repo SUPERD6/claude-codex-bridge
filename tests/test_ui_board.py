@@ -216,13 +216,15 @@ class TestAcrossProjects(Env):
         self.assertIsNone(data["projects"][0]["level"])
         self.assertIsNone(data["inbox"])
         auto = types.ModuleType("ccx.autonomy")
-        auto.level_for = lambda root: {"level": "L1"}
+        seen = []
+        auto.level_for = lambda e, p=None: seen.append((e["name"], p)) or {"level": "L1", "source": "config"}
         intake = types.ModuleType("ccx.intake")
-        intake.pending = lambda p: [{"n": 1}, {"n": 2}]
+        intake.pending = lambda p: 2                                    # K5: a count (a list would do too)
         with mock.patch.dict(sys.modules, {"ccx.autonomy": auto, "ccx.intake": intake}):
             data = ui.collect(self.p)
         self.assertEqual((data["projects"][0]["level"], data["inbox"]), ("L1", 2))
-        auto.level_for = lambda root: "<b>bold</b>"                     # anything else is not shown
+        self.assertEqual(seen, [("alpha-app", self.p)])                 # the catalog entry and this hub
+        auto.level_for = lambda e, p=None: "<b>bold</b>"                # anything else is not shown
         with mock.patch.dict(sys.modules, {"ccx.autonomy": auto}):
             self.assertIsNone(ui.collect(self.p)["projects"][0]["level"])
 

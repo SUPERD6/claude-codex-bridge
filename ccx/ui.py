@@ -772,17 +772,21 @@ def _rules(rd: Reader, e: dict) -> list[dict]:
                              for r in projects.approval_rules(e, 6)])
 
 
-def _level(rd: Reader, root: Path) -> str | None:
-    """The project's autonomy level (L0/L1/L2) when ccx has that module (K4); else nothing is shown."""
+def _level(rd: Reader, e: dict | None) -> str | None:
+    """A catalog project's autonomy level (L0/L1/L2) when ccx has that module (K4: level_for(entry, p=) ->
+    {level, ...}); else, or for a folder outside the catalog, nothing is shown."""
+    if not e:
+        return None
+
     def look():
         try:
             from . import autonomy                    # type: ignore[attr-defined]
-            v = autonomy.level_for(root)
+            v = autonomy.level_for(e, p=rd.p)
         except Exception:  # noqa: BLE001 — not there (yet) or odd: no badge
             return None
         v = v.get("level") if isinstance(v, dict) else v
         return str(v) if re.fullmatch(r"L\d", str(v or "")) else None
-    return rd.every(f"level:{root}", 30, look)
+    return rd.every(f"level:{e['path']}", 30, look)
 
 
 def _inbox(rd: Reader) -> int | None:
@@ -1005,7 +1009,7 @@ def collect(p: Paths, project: Path | None = None, days: float = 7, rd: Reader |
         e = catalog.get(root)
         projects.append({"id": _pid(root), "name": (e or {}).get("name") or root.name or str(root), "path": str(root),
                          "tasks": tasks[:30], "test": is_scratch(root, scratch) or all(t["test"] for t in tasks),
-                         "rules": _rules(rd, e) if e else [], "level": _level(rd, root)})
+                         "rules": _rules(rd, e) if e else [], "level": _level(rd, e)})
     projects.sort(key=lambda pr: -max(t["last"] or t["asked"] or 0 for t in pr["tasks"]))
     shown_roots = {Path(pr["path"]) for pr in projects}
     quiet = sorted((e for root, e in catalog.items() if root not in shown_roots and not proj),
