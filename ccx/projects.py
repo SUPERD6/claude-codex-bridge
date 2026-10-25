@@ -574,3 +574,42 @@ def brief_header(e: dict) -> str:
     if state:
         lines.append("Where things stand: " + "; ".join(state))
     return "\n".join(lines)
+
+
+# ---- keeping the catalog fresh (session start) ----
+
+REFRESH_GUARD_SEC = 600         # one background scan at a time: a start within 10 minutes of the last one waits
+
+
+def refresh_due(p, cfg: dict, now: float | None = None) -> bool:
+    """True when the catalog is older than [projects] refresh_hours (default 24; 0 = never) and there are roots
+    to scan, or when roots are set but nothing was scanned yet."""
+    hours = float((cfg.get("projects") or {}).get("refresh_hours", 24) or 0)
+    if hours <= 0:
+        return False
+    now = now or time.time()
+    cat = load(p)
+    if not (configured_roots(cfg) or cat.get("roots")):
+        return False
+    guard = p.state / "projects.scanning"
+    try:
+        if now - guard.stat().st_mtime < REFRESH_GUARD_SEC:
+            return False
+    except OSError:
+        pass
+    return now - float(cat.get("scanned_at") or 0) > hours * 3600
+
+
+def refresh_later(p, cfg: dict) -> bool:
+    """At session start: rescan in a detached, windowless process when due (the start never waits; a scan of
+    a few dozen projects takes a second or two). Returns whether one was started."""
+    if not refresh_due(p, cfg):
+        return False
+    from .config import ccx_argv
+    from .winproc import BACKGROUND as flags
+    guard = p.state / "projects.scanning"
+    guard.parent.mkdir(parents=True, exist_ok=True)
+    guard.write_text(str(int(time.time())), encoding="utf-8")
+    subprocess.Popen([*ccx_argv(), "projects", "scan"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL, close_fds=True, cwd=str(p.state), **flags)
+    return True

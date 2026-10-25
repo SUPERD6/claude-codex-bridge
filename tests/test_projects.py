@@ -3,6 +3,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -263,3 +264,41 @@ def test_where_shows_approval_rules_and_session_start_points_at_where(tmp_path):
     r = subprocess.run([sys.executable, str(REPO / "ccx.py"), "mem", "delta", "--as", "claude", "--peek"],
                        capture_output=True, text=True, encoding="utf-8", cwd=tmp_path)
     assert "ccx where" in r.stdout and "8 projects" in r.stdout
+
+
+# ---- background refresh at session start ----
+
+def test_refresh_due_rules(tmp_path):
+    p = paths()
+    cfg = load_config(p)
+    assert not projects.refresh_due(p, cfg)                       # no roots, no catalog: nothing to do
+    root = tree(tmp_path)
+    cfg["projects"]["roots"] = [str(root)]
+    assert projects.refresh_due(p, cfg)                           # roots set, never scanned
+    projects.refresh(p, cfg)
+    assert not projects.refresh_due(p, cfg)                       # fresh
+    later = time.time() + 25 * 3600
+    assert projects.refresh_due(p, cfg, now=later)                # a day old
+    cfg["projects"]["roots"] = []
+    assert projects.refresh_due(p, cfg, now=later)                # the roots of the last scan are enough
+    (p.state / "projects.scanning").write_text("1", encoding="utf-8")
+    assert not projects.refresh_due(p, cfg, now=time.time() + 60)  # a scan just started: the next start waits
+    assert projects.refresh_due(p, cfg, now=later)
+    cfg["projects"]["refresh_hours"] = 0
+    assert not projects.refresh_due(p, cfg, now=later)            # 0 = off
+
+
+def test_session_start_rescans_in_the_background_once(tmp_path):
+    root = tree(tmp_path)
+    p = paths()
+    set_setting(p, "projects.roots", str(root))
+    env = {**os.environ, "CCX_NO_BENCH_REFRESH": "1"}
+    for _ in range(2):                                            # the second start sees the guard and waits
+        subprocess.run([sys.executable, str(REPO / "ccx.py"), "mem", "delta", "--as", "claude"],
+                       capture_output=True, text=True, encoding="utf-8", cwd=tmp_path, env=env)
+    deadline = time.time() + 60
+    while time.time() < deadline and not projects.load(p).get("projects"):
+        time.sleep(0.5)
+    assert len(projects.load(p)["projects"]) == 8
+    assert (p.state / "projects.scanning").exists()
+    assert not projects.refresh_due(p, load_config(p))
