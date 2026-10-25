@@ -229,7 +229,7 @@
       h += `<div class="msg ${esc(tn.role)}"><div class="hd">${who(tn.agent, tn.model)} <span>${t("role_" + tn.role)}</span><span class="cost">${usd(tn.usd || 0)}</span>${tn.unparsed ? ` <span class="warn">${t("disc_unparsed")}</span>` : ""}</div>
         <p>${esc(tn.summary)}</p>${(tn.points || []).length ? `<ul>${tn.points.map(pt => `<li>${esc(pt)}</li>`).join("")}</ul>` : ""}</div>`;
     }
-    if (x.state === "running") h += `<div class="rnd">${t("disc_state_running")}…</div>`;
+    if (x.state === "running" || x.state === "starting") h += `<div class="rnd">${t("disc_state_" + x.state)}…</div>`;
     h += `</div>`;
     const r = x.result;
     if (r) {

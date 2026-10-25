@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from .. import learn, ledger, router, usage
-from ..config import AGENTS, DELEGATE_AGENTS, PROVIDER_AGENTS, TIER_ORDER, ccx_argv, load_config, paths
+from ..config import AGENTS, DELEGATE_AGENTS, PROVIDER_AGENTS, TIER_ORDER, load_config, paths
 from ..delegate import Request, compact, run, verify
 from ..runners import find_bin
 from .common import (_brief, _caller, _out, _routing_args, _spec_from_args, _target, find_continuable,
@@ -46,16 +46,10 @@ def cmd_ab(a) -> int:
 # ---------------------------------------------------------------- commands
 def _background(argv: list[str], p) -> dict:
     """Re-run this exact command detached; the run id is fixed up front so the caller can poll it."""
-    import subprocess
+    from .common import detach
     run_id = time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:4]
-    (p.runs / run_id).mkdir(parents=True, exist_ok=True)
     log = p.runs / run_id / "bg.log"
-    env = {**os.environ, "CCX_RUN_ID": run_id}
-    args = [a for a in argv if a != "--bg"]
-    from ..winproc import BACKGROUND as kw   # hidden console: its git/codex/claude calls pop no windows
-    with open(log, "w", encoding="utf-8") as lf:
-        subprocess.Popen([*ccx_argv(), *args],
-                         stdout=lf, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=env, cwd=os.getcwd(), **kw)
+    detach(argv, log, {"CCX_RUN_ID": run_id})
     return {"run_id": run_id, "state": "started", "check": f"ccx show {run_id}", "log": str(log)}
 
 
