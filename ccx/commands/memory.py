@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .. import learn, memory
 from ..config import AGENTS, DELEGATE_AGENTS, data_dir, paths
+from ..agents import leads
 from .common import _caller, _out
 
 
@@ -70,8 +71,8 @@ def cmd_fresh(a) -> int:
     from ..runners import bin_argv
     root = project.find_root() or learn.cp_root(Path.cwd())
     agent = a.as_ or _caller(None)
-    if agent not in ("claude", "codex"):
-        raise ValueError("say which lead: --as claude|codex")
+    if agent not in leads():
+        raise ValueError(f"say which lead: --as {'|'.join(leads())}")
     src = transcript_handoff(paths(), root, agent, a.session, a.max_chars, not a.no_model,
                              where=Path.cwd())
     if src is None:
@@ -375,7 +376,7 @@ def cmd_ctx(a) -> int:
 def register(sub) -> None:
     fr = sub.add_parser("fresh", help="hand this long conversation over to a fresh one of the same tool: the "
                         "handoff comes from this conversation's own file; the next conversation here starts with it")
-    fr.add_argument("--as", dest="as_", choices=["claude", "codex"])
+    fr.add_argument("--as", dest="as_", choices=leads())
     fr.add_argument("--session", help="a specific session id instead of the newest in this folder")
     fr.add_argument("--note", help="a line from the person to add")
     fr.add_argument("--no-model", action="store_true", help="code only, never a routed sub-agent reading the file")
@@ -412,7 +413,7 @@ def register(sub) -> None:
     ms.add_argument("words", nargs="+")
     msub.add_parser("stale", help="notes not written or checked for 30 days")
     md = msub.add_parser("delta")
-    md.add_argument("--as", dest="as_", choices=AGENTS, required=True)
+    md.add_argument("--as", dest="as_", choices=leads(), required=True)
     md.add_argument("--peek", action="store_true", help="do not move the cursor")
     msub.add_parser("show")
     msub.add_parser("status")
