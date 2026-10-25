@@ -130,10 +130,38 @@ def _tagged(items: list[str], tag: str) -> list[str]:
     return [x.strip()[len(t):].strip() for x in items if x.strip().lower().startswith(t)]
 
 
+AGAIN = """{mark} {did} role={role} round={rnd}/{rounds} format-again] ccx could not read your answer: {missing}.
+{rule}
+Give the same answer again in that format. Status done."""
+
+RULE = {
+    "critique": "Start summary with exactly `CRITIQUE: objections` (at least one `[must] ` item) or `CRITIQUE: agree`; "
+                "open_questions items start with `[must] ` or `[note] `.",
+    "judge": "Start summary with `RECOMMEND: ` and the recommendation; every open_questions item starts with "
+             "`[consensus] `, `[disagreement] ` or `[reason] `.",
+}
+
+
+def critique(turn: dict) -> str:
+    """agree / objections / unparsed. [must] items are objections even without the header; no header and no
+    [must] means the critic did not keep to the format, which is neither agreement nor objection."""
+    s = " ".join((turn.get("summary") or "").upper().split())
+    if _tagged(turn.get("points") or [], "must") or s.startswith("CRITIQUE: OBJECTIONS"):
+        return "objections"
+    return "agree" if s.startswith("CRITIQUE: AGREE") else "unparsed"
+
+
 def agrees(turn: dict) -> bool:
     """The critic found nothing that makes the choice wrong."""
-    s = (turn.get("summary") or "").upper()
-    return not _tagged(turn.get("points") or [], "must") and not s.startswith("CRITIQUE: OBJECTIONS")
+    return critique(turn) == "agree"
+
+
+def judge_missing(turn: dict) -> list[str]:
+    """What the judge's answer lacks for ccx to read it: the RECOMMEND line, the tagged items."""
+    out = [] if (turn.get("summary") or "").strip().upper().startswith("RECOMMEND:") else ["RECOMMEND"]
+    if not any(_tagged(turn.get("points") or [], t) for t in ("consensus", "disagreement", "reason")):
+        out.append("[consensus]/[disagreement]/[reason] items")
+    return out
 
 
 def outcome(judge: dict | None, turns: list[dict]) -> dict:
@@ -147,8 +175,12 @@ def outcome(judge: dict | None, turns: list[dict]) -> dict:
     s = judge.get("summary") or ""
     rec = s[len("RECOMMEND:"):].strip() if s.upper().startswith("RECOMMEND:") else s
     pts = judge.get("points") or []
-    return {"recommendation": rec, "consensus": _tagged(pts, "consensus"),
-            "disagreements": _tagged(pts, "disagreement"), "reasons": _tagged(pts, "reason")}
+    out = {"recommendation": rec, "consensus": _tagged(pts, "consensus"),
+           "disagreements": _tagged(pts, "disagreement"), "reasons": _tagged(pts, "reason")}
+    if judge_missing(judge):
+        out["unparsed"] = "judge's answer lacks " + " and ".join(judge_missing(judge)) + \
+            ": the recommendation is its summary as written"
+    return out
 
 
 def _so_far(turns: list[dict]) -> str:
@@ -244,7 +276,8 @@ def estimate(p: Paths, names: list[str], rounds: int, *, tier: str = "T2", cfg: 
 
 def run(p: Paths, question: str, names: list[str], *, rounds: int = MAX_ROUNDS, caller: str = "the lead",
         context: str = "", cwd: Path | None = None, tier: str = "T2", runner=None) -> dict:
-    """Talk it through. `runner(agent, brief, label) -> run record` is delegate.run by default (tests pass a fake)."""
+    """Talk it through. `runner(agent, brief, label, resume=None) -> run record` is delegate.run by default (tests
+    pass a fake); `resume` is the turn's run id when ccx asks once more, in the same session, for the format."""
     rounds = max(1, min(MAX_ROUNDS, int(rounds)))
     if not question.strip():
         raise ValueError("empty question")
@@ -254,12 +287,12 @@ def run(p: Paths, question: str, names: list[str], *, rounds: int = MAX_ROUNDS, 
         from .delegate import Request, run as delegate_run
         cfg = load_config(p)
 
-        def runner(agent, text, label):     # the rung named, so a provider (no tier row) runs on its own model
+        def runner(agent, text, label, resume=None):   # the rung named: a provider has no tier row
             model, effort = rung(cfg, agent, tier)
             return delegate_run(Request(to=agent, brief=text, tier=tier, model=model, effort=effort, mode="read",
-                                        cwd=cwd, caller="ccx-discuss",
+                                        cwd=cwd, caller="ccx-discuss", resume_run=resume,
                                         escalate=False, fallback=False, review="off", allow_subagents=False,
-                                        ephemeral=True, label=label), p)
+                                        ephemeral=True, keep_session=True, label=label), p)
     did = time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:4]
     rl = roles(names)
     d = {"id": did, "ts": time.time(), "question": question.strip(), "context": context.strip()[:4000],
@@ -267,26 +300,52 @@ def run(p: Paths, question: str, names: list[str], *, rounds: int = MAX_ROUNDS, 
          "state": "running", "turns": [], "usd": 0.0}
     save(p, d)
 
-    def turn(role: str, part: str, rnd: int) -> dict | None:
-        agent = rl[role]
-        text = brief(d, role, part, d["turns"], rnd)
-        t0 = time.time()
+    def call(agent: str, text: str, label: str, resume: str | None = None) -> tuple[dict, float]:
         try:
-            rec = runner(agent, text, f"discuss:{did}:{role}")
+            rec = runner(agent, text, label, resume=resume) if resume else runner(agent, text, label)
         except Exception as e:  # noqa: BLE001 — one failed turn ends the talk, the record keeps what was said
             rec = {"ok": False, "error": str(e)[:300]}
         usd = sum(a.get("ae_usd") or 0 for a in rec.get("attempts") or [])
         d["usd"] = round(d["usd"] + usd, 6)
-        status = (rec.get("result") or {}).get("status")
-        if not rec.get("ok") or status != "done":
+        ok = rec.get("ok") and (rec.get("result") or {}).get("status") == "done"
+        return rec if ok else {**rec, "ok": False}, usd
+
+    def missing(part: str, t: dict) -> list[str]:
+        if part == "critique":
+            return [] if critique(t) != "unparsed" else ["no `CRITIQUE:` line and no [must] item"]
+        return judge_missing(t) if part == "judge" else []
+
+    def turn(role: str, part: str, rnd: int) -> dict | None:
+        agent = rl[role]
+        text = brief(d, role, part, d["turns"], rnd)
+        t0 = time.time()
+        rec, usd = call(agent, text, f"discuss:{did}:{role}")
+        if not rec.get("ok"):
+            status = (rec.get("result") or {}).get("status")
             d["error"] = f"{role} ({agent}): {rec.get('error') or status or 'did not finish'}"
             save(p, d)
             return None
         summary, pts = points(rec.get("result"))
         last = (rec.get("attempts") or [{}])[-1]
         t = {"round": rnd, "role": role, "agent": agent, "model": last.get("model"), "part": part,
-             "summary": summary, "points": pts, "run_id": rec.get("run_id"), "usd": round(usd, 6),
-             "seconds": round(time.time() - t0, 1)}
+             "summary": summary, "points": pts, "run_id": rec.get("run_id")}
+        lacks = missing(part, t)
+        if lacks and rec.get("run_id"):    # once, same session: say what was missing and the rule again
+            again = AGAIN.format(mark=MARK, did=did, role=role, rnd=rnd, rounds=d["rounds"], missing="; ".join(lacks),
+                                 rule=RULE[part])
+            rec2, usd2 = call(agent, again, f"discuss:{did}:{role}:format", resume=rec["run_id"])
+            usd += usd2
+            t["format_retry"] = True
+            if rec2.get("ok"):
+                t2 = {**t}
+                t2["summary"], t2["points"] = points(rec2.get("result"))
+                if len(missing(part, t2)) < len(lacks):
+                    t, lacks = t2, missing(part, t2)
+        if part == "critique":
+            t["verdict"] = critique(t)
+        if lacks:
+            t["unparsed"] = "; ".join(lacks)
+        t.update(usd=round(usd, 6), seconds=round(time.time() - t0, 1))
         d["turns"].append(t)
         save(p, d)
         return t
@@ -304,6 +363,9 @@ def run(p: Paths, question: str, names: list[str], *, rounds: int = MAX_ROUNDS, 
     judged = turn("judge", "judge", r) if d["turns"] and "error" not in d else None
     d["agreed"] = agreed
     d["result"] = outcome(judged, d["turns"])
+    bad = [f"{t['role']} r{t['round']}" for t in d["turns"] if t.get("unparsed")]
+    if bad:     # still not in the format after one reminder: said, not guessed
+        d["result"]["unparsed_turns"] = bad
     if not d["judge_independent"]:
         d["result"]["note"] = (d["result"].get("note", "") + "; " if d["result"].get("note") else "") + \
             "only two vendors: the proposer also judged"
@@ -317,5 +379,6 @@ def view(d: dict) -> dict:
     """What `ccx discuss` prints and the page lists: no briefs, just the talk and its outcome."""
     return {k: d.get(k) for k in ("id", "state", "question", "roles", "rounds", "agreed", "judge_independent",
                                   "result", "usd", "error", "ts", "ended", "cwd")} | \
-        {"turns": [{k: t.get(k) for k in ("round", "role", "agent", "model", "summary", "points", "usd", "run_id")}
+        {"turns": [{k: t.get(k) for k in ("round", "role", "agent", "model", "summary", "points", "usd", "run_id",
+                                          "verdict", "format_retry", "unparsed") if k in t}
                    for t in d.get("turns") or []]}

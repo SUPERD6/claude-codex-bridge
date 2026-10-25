@@ -82,6 +82,40 @@ class TestDiscuss(DiscussEnv):
         self.assertEqual(out["models"]["claude"], "sonnet medium")
         self.assertFalse(any("[ccx discuss" in (c.get("prompt") or "") for c in self.calls()))
 
+    def discuss_prompts(self):
+        return [c for c in self.calls() if "[ccx discuss" in (c.get("prompt") or "")]
+
+    def test_format_reminder_in_the_same_session_fixes_it(self):
+        out = self.j("discuss", "--with", "codex,claude,gemini", "x?",
+                     env={**self.env, "FAKE_DISCUSS": "unparsed-once", "FAKE_DISCUSS_JUDGE": "unparsed-once"})
+        crit, judge = out["turns"][1], out["turns"][2]
+        self.assertEqual(crit["verdict"], "agree")
+        self.assertTrue(crit["format_retry"] and judge["format_retry"])
+        self.assertNotIn("unparsed", crit)
+        self.assertTrue(out["agreed"])
+        self.assertEqual(out["result"]["recommendation"], "one queue file with a lock")
+        self.assertNotIn("unparsed", out["result"])
+        calls = self.discuss_prompts()
+        again = [c for c in calls if "format-again]" in c["prompt"]]
+        self.assertEqual(len(again), 2)
+        self.assertIn("CRITIQUE: agree", again[0]["prompt"])
+        self.assertTrue(all("--resume" in c["argv"] for c in again))          # the same session, asked once more
+        self.assertFalse(any("--no-session-persistence" in c["argv"] for c in calls))   # so it can be resumed
+        from ccx.archive import finished_runs                     # ... and auto-archive tidies those sessions
+        self.assertIn(crit["run_id"], finished_runs(Paths(self.hub)))
+
+    def test_still_unparsed_is_said_and_does_not_end_the_talk(self):
+        out = self.j("discuss", "--with", "codex,claude,gemini", "--rounds", "2", "x?",
+                     env={**self.env, "FAKE_DISCUSS": "unparsed", "FAKE_DISCUSS_JUDGE": "unparsed"})
+        self.assertEqual(out["state"], "done")
+        self.assertFalse(out["agreed"])
+        self.assertEqual([t["role"] for t in out["turns"]], ["proposer", "critic"] * 2 + ["judge"])
+        self.assertEqual({t.get("verdict") for t in out["turns"] if t["role"] == "critic"}, {"unparsed"})
+        self.assertEqual(out["result"]["unparsed_turns"], ["critic r1", "critic r2", "judge r2"])
+        self.assertIn("RECOMMEND", out["result"]["unparsed"])
+        self.assertEqual(out["result"]["recommendation"], "Use one queue file with a lock.")
+        self.assertEqual(len([c for c in self.discuss_prompts() if "format-again]" in c["prompt"]]), 3)
+
     def test_show_list_and_the_page(self):
         out = self.j("discuss", "--with", "codex,claude", "--rounds", "1", "which lock?")
         self.assertEqual(self.j("discuss", "--show", out["id"])["question"], "which lock?")
@@ -106,6 +140,12 @@ class TestUnits(unittest.TestCase):
         self.assertTrue(discuss.agrees({"summary": "CRITIQUE: agree", "points": ["[note] fine"]}))
         self.assertFalse(discuss.agrees({"summary": "CRITIQUE: agree", "points": ["[must] broken"]}))
         self.assertFalse(discuss.agrees({"summary": "CRITIQUE: objections", "points": []}))
+        c = discuss.critique
+        self.assertEqual(c({"summary": "critique:  AGREE. fine", "points": []}), "agree")
+        self.assertEqual(c({"summary": "looks risky", "points": ["[must] broken"]}), "objections")
+        self.assertEqual(c({"summary": "looks fine to me", "points": ["minor"]}), "unparsed")
+        self.assertEqual(discuss.judge_missing({"summary": "RECOMMEND: A", "points": ["[reason] r"]}), [])
+        self.assertEqual(len(discuss.judge_missing({"summary": "A", "points": ["r"]})), 2)
 
     def test_runner_injection_and_bad_id(self):
         import tempfile

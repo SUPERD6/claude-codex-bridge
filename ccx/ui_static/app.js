@@ -226,7 +226,7 @@
     let rnd = 0;
     for (const tn of x.turns || []) {
       if (tn.round !== rnd && tn.role !== "judge") { rnd = tn.round; h += `<div class="rnd">${t("disc_round", {n: rnd})}</div>`; }
-      h += `<div class="msg ${esc(tn.role)}"><div class="hd">${who(tn.agent, tn.model)} <span>${t("role_" + tn.role)}</span><span class="cost">${usd(tn.usd || 0)}</span></div>
+      h += `<div class="msg ${esc(tn.role)}"><div class="hd">${who(tn.agent, tn.model)} <span>${t("role_" + tn.role)}</span><span class="cost">${usd(tn.usd || 0)}</span>${tn.unparsed ? ` <span class="warn">${t("disc_unparsed")}</span>` : ""}</div>
         <p>${esc(tn.summary)}</p>${(tn.points || []).length ? `<ul>${tn.points.map(pt => `<li>${esc(pt)}</li>`).join("")}</ul>` : ""}</div>`;
     }
     if (x.state === "running") h += `<div class="rnd">${t("disc_state_running")}…</div>`;
@@ -237,6 +237,7 @@
       for (const [k, lab] of [["consensus", "disc_consensus"], ["disagreements", "disc_disagree"], ["reasons", "disc_reasons"]])
         if ((r[k] || []).length) h += `<div class="k">${t(lab)}</div><ul>${r[k].map(s => `<li>${esc(s)}</li>`).join("")}</ul>`;
       if (r.note) h += `<p class="cost">${esc(r.note)}</p>`;
+      if (r.unparsed) h += `<p class="cost"><span class="warn">${esc(r.unparsed)}</span></p>`;
       h += `</div>`;
     }
     if (x.error) h += `<p class="lead"><span class="warn">${esc(x.error)}</span></p>`;

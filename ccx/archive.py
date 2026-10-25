@@ -45,7 +45,8 @@ def finished_runs(p: Paths, older_than_h: float = 0) -> list[str]:
     done = archived_ids(p)
     cutoff = time.time() - older_than_h * 3600
     return [r["run_id"] for r in ledger.rows(p)
-            if not r.get("type") and not r.get("ephemeral") and r["run_id"] not in done
+            if not r.get("type") and r["run_id"] not in done
+            and (not r.get("ephemeral") or str(r.get("label") or "").startswith("discuss:"))  # those keep a session
             and not str(r.get("label") or "").startswith("seat:")     # named seats keep their session
             and (r.get("ts") or 0) <= cutoff and (r.get("sessions") or r.get("session_id"))]
 
