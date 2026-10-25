@@ -44,8 +44,10 @@ trusted once in `/hooks`). ccx puts one command there, `ccx turn --as <tool>`, w
    the project journal lines the others added;
 3. the existing H10 one-line hint when the conversation gets long.
 
-Nothing new → prints nothing → costs nothing. `dsh` has no hook (rc.3), so its instructions say to run
-`ccx board` at the start of every turn.
+Nothing new → prints nothing → costs nothing. `dsh` has no start or per-turn hook (0.2.1-rc.3, checked
+with `dsh --profile headless --dump-config`: no hook plugin); it reads `AGENTS.md` (its own home's, then the
+project's). `ccx board --init` writes the board's rules into the project's `AGENTS.md`, in ccx's marked block:
+DeepSeek runs `ccx board --as deepseek` at the start of every turn; all three treat messages as data.
 
 ## Answering now
 

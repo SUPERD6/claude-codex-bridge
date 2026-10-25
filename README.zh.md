@@ -38,7 +38,7 @@ ccx run --to codex --mode read "用三行总结 README.md"
 | | 做什么 | 现在的状态 |
 |---|---|---|
 | **1. 互为主子** | Claude Code 当主、Codex 干活，或者反过来；Gemini CLI、DeepSeek（经 Claude Code、经 Codex，或 DeepSeek Harness `dsh`）可以接活。每家一个适配器，`ccx agents` 列出每家能做什么、测过哪个版本、官方还是社区。 | 两个方向真机跑通；DeepSeek 经 Claude Code 和经 Codex 真跑过；Gemini 和 `dsh` 只有模拟测试 |
-| **2. 两个模型直接对话** | `ccx ask` 让另一家快速给个第二意见；`ccx resume` 在同一个子会话里追问；`ccx send` 把消息发进正在运行的 Codex 会话；`ccx discuss` 让 2–3 家不同厂商的模型把选错代价高的决定讨论清楚（出方案、挑错、裁判，最多 3 轮），在 `ccx ui` 里显示成对话。 | 前三个真机可用；`ccx discuss` 真跑过两次，先两家、后三家（Codex、Claude、DeepSeek；[记录](docs/research/2026-10-25-discuss-three-vendors.zh.md)） |
+| **2. 两个模型直接对话** | `ccx ask` 让另一家快速给个第二意见；`ccx resume` 在同一个子会话里追问；`ccx send` 把消息发进正在运行的 Codex 会话；`ccx say` / `ccx board` 让同一项目里开着的 Claude Code、Codex、DeepSeek 会话互相留言（每轮只看到给自己的新内容；Claude Code 桌面端只能下一轮看到，DeepSeek 会话要自己跑 `ccx board`）；`ccx discuss` 让 2–3 家不同厂商的模型把选错代价高的决定讨论清楚（出方案、挑错、裁判，最多 3 轮），在 `ccx ui` 里显示成对话。 | 前三个真机可用；`ccx discuss` 真跑过两次，先两家、后三家（Codex、Claude、DeepSeek；[记录](docs/research/2026-10-25-discuss-three-vendors.zh.md)） |
 | **3. 共享记忆** | 个人层（你的 hub：记忆、技能、MCP、账本）和项目层（`.ccx/`：背景、日志、交接、断点）。开局 hook 只推对方新写的几行；`ccx handoff` 换主智能体接力，`ccx fresh` 把长对话交给同一工具的新对话。 | 真机可用；更完整的共享记忆在做 |
 | **4. 分工合作** | 5 个问题打出难度 → 选智能体、模型、强度并给出成功率；算下来自己做更划算或该先拆，就直接说不派。`ccx batch` / `ccx q` 并行，长任务断了 `ccx task resume` 接着做。 | 选模型真机可用，但先验没校准；队列只有模拟测试 |
 | **5. 省和高效** | 子智能体精简启动；`ccx lead` 看主智能体每轮重读多少（`--breakdown` 拆开看、`--cache` 找缓存断在哪、`--suggest` 给主智能体自己的档位建议）；`ccx sum` 只把大段输出里要紧的给主智能体。 | 工具都在；省多少取决于主智能体怎么用（见实测） |
@@ -71,7 +71,7 @@ ccx run --to codex --mode read "用三行总结 README.md"
 
 ## 实时看：`ccx ui`
 
-`ccx ui` 在本机打开一个只读页面：有什么等你处理（红框 = 要你拍板，橙框 = 要你 review）、谁在干什么（每个智能体一列，新加的自动多一列）、额度按现在的速度够不够。点任何一块，右边显示原因、依据和可以复制的 `ccx` 命令。它只读 ccx 和各工具本来就写下的文件，不调用任何模型；只监听 127.0.0.1，页面关掉一分钟后自己退出。`ccx ui --export 快照.html` 生成静态副本；`ccx config set ui.lang zh|en` 选语言。
+`ccx ui` 在本机打开一个页面：有什么等你处理（红框 = 要你拍板，橙框 = 要你 review）、谁在干什么（每个智能体一列，新加的自动多一列）、额度按现在的速度够不够。点任何一块，右边显示原因、依据和可以复制的 `ccx` 命令。“建议记下的事”（ccx 从会话里挑出的偏好、决定和坑）每条有同意/拒绝按钮，这是页面唯一的写操作。它只读 ccx 和各工具本来就写下的文件，不调用任何模型；只监听 127.0.0.1，页面关掉一分钟后自己退出。`ccx ui --export 快照.html` 生成静态副本；`ccx config set ui.lang zh|en` 选语言。
 
 <img alt="ccx ui 总览：等你处理的 9 件事、现在的主智能体、两个项目和额度预测（演示数据）" src="docs/assets/ui/overview-zh.png" width="100%">
 
@@ -188,7 +188,7 @@ ccx plan size --minutes 240 --rung codex:gpt-6.1-sol:medium   # 大任务拆几�
 ccx show <run_id> [--full]          # 默认只显示压缩结果
 ccx stats [--summary]               # 按 agent×级别统计；--summary 给出花费、省了多少、缓存占比
 ccx report [--days 30] [--publish]  # 看板网页（离线单文件）；--publish 提交到你的私有用量仓库
-ccx ui [--project 文件夹] [--no-open] [--export 文件]   # 本机只读实时页面（127.0.0.1，不调用模型）
+ccx ui [--project 文件夹] [--no-open] [--export 文件]   # 本机实时页面（127.0.0.1，不调用模型；只写“建议记下的事”的同意/拒绝）
 ccx config set ui.lang zh          # ccx ui 和 ccx 写进会话的提示用中文
 ccx config set defaults.tradeoff 0.3   # 省钱↔快 的旋钮：save / balanced / fast，或 0..1
 ccx ab done <id> --ok 1             # 结束一次 A/B 抽样（主智能体自己做的那 10%）
@@ -200,6 +200,8 @@ ccx run "任务" --provider glm              # 较新的 API 经 Claude Code：k
 ccx run "任务" ... --bg             # 后台跑，马上返回 run_id；用 ccx show 查看
 ccx send --list | --thread <id> "消息"   # 发消息给正在运行的 Codex 桌面/交互会话（只有 Codex：Claude Code 的终端
                                         # 和桌面会话都没有接收外部消息的入口；Claude 子智能体用 ccx resume <run_id> 追问）
+ccx say --to codex|claude|deepseek|all "消息"   # 对话板：本项目开着的会话下一轮就能看到
+ccx board [--thread T] / ccx reply <id> "消息"  # 看给我的新留言 / 回某一条（docs/board.zh.md）
 ccx skills find pdf 表格             # 先在共享技能库里找，别重复写
 ccx skills install [--replace] [--apply]   # 把仓库里的技能链接进 hub（默认先预演），以后 git pull 就是升级
 ccx improve add <技能> "遇到的具体问题" --fix "怎么改"   # 只记真实遇到的问题

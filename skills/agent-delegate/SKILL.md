@@ -1,6 +1,6 @@
 ---
 name: agent-delegate
-description: Execute an authorized cross-agent delegation through ccx and verify the result. Use for "派给 Codex/Claude" or an already-approved handoff; task splitting or token saving alone does not trigger delegation.
+description: Execute an authorized cross-agent delegation through ccx and verify the result, or offer one in a line before a large, checkable piece of work (the person decides). Use for "派给 Codex/Claude", an already-approved handoff, or that offer; task splitting or token saving alone does not start a delegation.
 ---
 
 # Delegate to the other agent with ccx
@@ -17,6 +17,25 @@ logs, research) out read-only and take back the conclusion; when the conversatio
 new work, hand over to a fresh one (section 5). Run long-output commands as `ccx sum -- <command>` (tests, logs,
 `git diff`): you get the failures or the per-file summary, the full output stays on disk. `ccx lead` shows what a
 turn costs you now; `ccx lead --breakdown` what it is made of.
+
+## 0. Offer it; the person decides
+
+Nobody asked you to delegate, but the next piece is large and checkable: about 15 minutes or more for a skilled
+engineer, with an acceptance command or a plain test of "done", and a brief of ≤ 200 words can carry what it needs.
+Estimate before saying anything:
+```
+ccx propose --lead <your rung, e.g. claude:opus:high> --minutes <n> [--files N --coupling one|cross|system] "the task in one line"
+```
+It reads your own conversation's size by itself (each extra turn of yours re-reads it) and returns `worth_offering`,
+the cost delegated vs here, the odds, and `say`.
+- `worth_offering: false` → do it yourself and don't mention it.
+- `true` → ask with that one line (cost and odds, nothing more) and wait; don't start the work meanwhile.
+- yes → `ccx run --proposal <id> --minutes <n> [--check "CMD"] "brief"`, **without `--no-ab`** (that flag marks an
+  evaluation run, which no statistic counts; a running `ccx trial` may hand the task back to you: then do it and
+  close it with `ccx ab done`). Check it (section 4) and always give `ccx verify <run_id> --ok 1|0`.
+- no → `ccx propose --no <id>`, do it yourself, and don't offer that kind of piece again in this conversation.
+One offer per piece. Small edits, questions, and work that needs your judgement turn by turn are never offered.
+The same rule — one line with what it costs, act only on a yes — holds for a discussion between vendors (section 7).
 
 ## 1. Decide who and with what
 
@@ -108,9 +127,9 @@ automatic memory into the other.
 ## 7. A decision that is costly to get wrong
 
 Hard to undo (a data format, a migration, a public interface, a dependency), touching safety or money, or the person
-said it matters: before committing to one answer, **ask the person** whether models from other vendors should talk
-it through. Say the question in one line and what it may cost (`ccx discuss --dry-run "question"`: who takes part,
-at most how many calls, estimated $, which model each uses). Only on their yes:
+said it matters: before committing to one answer, offer a discussion between models from other vendors the way
+section 0 offers a delegation: one line with the question and what it may cost (`ccx discuss --dry-run "question"`:
+who takes part, at most how many calls, estimated $, which model each uses), then wait. Only on their yes:
 `ccx discuss --confirmed "question" [--context-file notes.md] [--with codex,claude,gemini] [--rounds 1-3]` (without
 `--confirmed` you get only the estimate; add `--bg` to keep working and follow it with `ccx discuss --show ID`) —
 one proposes, one

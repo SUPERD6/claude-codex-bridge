@@ -43,7 +43,17 @@ class Env(unittest.TestCase):
     def tearDown(self):
         os.environ.clear()
         os.environ.update(self._old)
-        self.tmp.cleanup()
+        import time
+        for i in range(40):
+            try:
+                self.tmp.cleanup()
+                return
+            except PermissionError:
+                # Windows: a background ccx (--bg) that just finished still holds the work folder as its cwd for a
+                # moment; the folder can't go until it has exited
+                if i == 39:
+                    raise
+                time.sleep(0.25)
 
     def ccx(self, *args, env=None, stdin=None):
         e = {**self.env, **(env or {})}
@@ -356,11 +366,12 @@ class TestSync(Env):
         # hooks
         st = json.loads((self.home_claude / "settings.json").read_text(encoding="utf-8"))
         self.assertIn("mem delta --as claude", st["hooks"]["SessionStart"][0]["hooks"][0]["command"])
-        self.assertIn("lead --hint --as claude", st["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"])
+        self.assertIn("turn --as claude", st["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"])
         conf = (self.home_codex / "config.toml").read_text(encoding="utf-8")
         self.assertIn(TOML_BEGIN, conf)
         parsed = tomllib.loads(conf)
         self.assertIn("mem delta --as codex", parsed["hooks"]["SessionStart"][0]["hooks"][0]["command"])
+        self.assertIn("turn --as codex", parsed["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"])
         self.assertEqual(parsed["model"], "gpt-6-astra")
         # backups made
         self.assertTrue(list(self.home_codex.glob("config.toml.ccx-backup-*")))

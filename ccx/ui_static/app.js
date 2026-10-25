@@ -154,11 +154,12 @@
     }
     let h = banner() + `<h1>${t("ov_title")}</h1>`;
     if (!tasks) {
-      h += `<p class="lead">${t("empty")}</p>` + leadsHTML() + discRecentHTML() + weekHTML();
+      h += `<p class="lead">${t("empty")}</p>` + sugHTML() + leadsHTML() + discRecentHTML() + weekHTML();
       return h;
     }
-    const parts = [t("ov_running", {n: running})];
+    const parts = [t("ov_running", {n: running})], nsug = ((D && D.suggestions) || []).length;
     parts.push(todos.length ? `<span class="warn">${t("ov_waiting", {n: todos.length})}</span>` : `<span class="good">${t("ov_nothing")}</span>`);
+    if (nsug) parts.push(`<span class="warn">${t("ov_sug", {n: nsug})}</span>`);
     const qw = quotaWarn(); if (qw) parts.push(qw);
     h += `<p class="lead">${parts.join(" · ")}</p>`;
     if (todos.length) {
@@ -167,7 +168,7 @@
       for (const x of todos) h += `<a class="${x.p.act.kind === "review" ? "rv" : ""}" href="${href([x.pr.id, x.tk.id].concat(x.ch.map(c => c.id)), x.p.id)}"><b>${esc(x.p.title)}</b><span>${t(x.p.act.what)}</span><span class="where">${esc(x.pr.name)} › ${esc(taskTitle(x.tk))}</span></a>`;
       h += `</div>`;
     }
-    h += leadsHTML() + discRecentHTML();
+    h += sugHTML() + leadsHTML() + discRecentHTML();
     h += `<h2>${t("projects")}</h2><div class="grid">`;
     for (const pr of D.projects) {
       let n = 0, d = 0, need = 0; const ws = new Set();
@@ -177,6 +178,33 @@
         <div class="whos">${[...ws].map(w => who(w)).join("")}</div></a>`;
     }
     return h + `</div>` + weekHTML();
+  }
+  /* H5: notes ccx suggests keeping, each waiting for a yes or no (the page's one write; a snapshot shows the command) */
+  const SUG_KINDS = {preference: "sug_preference", decision: "sug_decision", pitfall: "sug_pitfall"};
+  function sugHTML() {
+    const ss = (D && D.suggestions) || [];
+    if (!ss.length) return "";
+    let h = `<h2>${t("sug_title")}</h2><p class="stat">${t("sug_lead")}</p><div class="todo sug">`;
+    for (const s of ss) {
+      const id = esc(s.id), busy = sugBusy[s.id];
+      h += `<div class="sugrow"><div><b>${esc(s.text)}</b><span class="where">${t(SUG_KINDS[s.kind] || "sug_other")} · ${esc(s.source || "")}</span></div>`;
+      h += SNAP ? `<code>ccx mem accept ${id}</code>`
+        : `<span class="acts"><button class="btn primary" data-sug="${id}" data-ok="1"${busy ? " disabled" : ""}>${t("sug_yes")}</button>`
+          + `<button class="btn" data-sug="${id}" data-ok="0"${busy ? " disabled" : ""}>${t("sug_no")}</button></span>`;
+      h += (busy === "err" ? `<span class="warn">${t("sug_failed")}</span>` : "") + `</div>`;
+    }
+    return h + `</div>`;
+  }
+  const sugBusy = {};
+  async function decideSug(id, ok) {
+    sugBusy[id] = 1; render();
+    try {
+      await api("/api/suggestion", {method: "POST", headers: {"X-CCX-Token": TOKEN, "Content-Type": "application/json"},
+                                    body: JSON.stringify({id: +id, accept: ok})});
+      D.suggestions = (D.suggestions || []).filter(s => String(s.id) !== String(id));
+      delete sugBusy[id];
+    } catch (e) { sugBusy[id] = "err"; }
+    render();
   }
   function discRecentHTML() {
     const talks = (D && D.discussions) || [];
@@ -471,8 +499,9 @@
 
   /* ---------- events (one listener; no inline handlers, the page's CSP forbids them) ---------- */
   document.addEventListener("click", (e) => {
-    const el = e.target.closest("[data-sel],[data-filt],[data-more],[data-btn],[data-reason],[data-do]");
+    const el = e.target.closest("[data-sel],[data-filt],[data-more],[data-btn],[data-reason],[data-do],[data-sug]");
     if (!el) return;
+    if (el.dataset.sug !== undefined) { if (!SNAP && !el.disabled) decideSug(el.dataset.sug, el.dataset.ok === "1"); return; }
     if (el.dataset.do === "lang") { LANG = LANG === "zh" ? "en" : "zh"; try { localStorage.setItem("ccx-lang", LANG); } catch (x) { /* ok */ } render(); return; }
     if (el.dataset.do === "theme") {
       const root = document.documentElement, dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;

@@ -17,7 +17,8 @@ def cmd_ui(a) -> int:
         return 0
     srv = ui.UI(p, project, a.days, port=a.port)
     print(f"ccx ui: {srv.url}", flush=True)
-    print("read-only; stops on its own about a minute after the page is closed (or Ctrl+C)", file=sys.stderr, flush=True)
+    print("read-only except yes/no on suggested notes; stops on its own about a minute after the page is closed "
+          "(or Ctrl+C)", file=sys.stderr, flush=True)
     if not a.no_open:
         ui.open_browser(srv.url)
     try:

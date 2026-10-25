@@ -241,6 +241,45 @@ class TestServer(Env):
         self.assertTrue(self.srv.url.startswith(f"http://127.0.0.1:{self.srv.port}/#k="))
         self.assertEqual(self.srv.httpd.server_address[0], "127.0.0.1")
 
+    def test_suggested_notes_yes_and_no_same_origin_only(self):
+        from ccx import memory, memsuggest
+        memsuggest.add(self.p, [{"kind": "preference", "text": "keep PR text in Chinese", "by": "user", "source": "s1"},
+                                {"kind": "pitfall", "text": EVIL, "by": "claude", "source": "s1"}])
+        code, _, body = get(self.srv, "/api/data", token=self.srv.token)
+        sugs = json.loads(body)["suggestions"]
+        self.assertEqual([s["text"] for s in sugs], ["keep PR text in Chinese", EVIL])   # data, escaped by the page
+        a, b = sugs[0]["id"], sugs[1]["id"]
+        origin = f"http://127.0.0.1:{self.srv.port}"
+
+        def post(body, token=self.srv.token, origin=origin, ctype="application/json", site=None, host=None):
+            c = http.client.HTTPConnection("127.0.0.1", self.srv.port, timeout=10)
+            h = {"Host": host or f"127.0.0.1:{self.srv.port}", "X-CCX-Token": token, "Content-Type": ctype}
+            if origin:
+                h["Origin"] = origin
+            if site:
+                h["Sec-Fetch-Site"] = site
+            c.request("POST", "/api/suggestion", body=json.dumps(body), headers=h)
+            r = c.getresponse()
+            return r.status, json.loads(r.read() or b"{}")
+
+        self.assertEqual(post({"id": a, "accept": True}, origin=None)[0], 403)              # no Origin
+        self.assertEqual(post({"id": a, "accept": True}, origin="http://evil.example")[0], 403)
+        self.assertEqual(post({"id": a, "accept": True}, origin="http://127.0.0.1:1")[0], 403)   # another port
+        self.assertEqual(post({"id": a, "accept": True}, site="cross-site")[0], 403)
+        self.assertEqual(post({"id": a, "accept": True}, token="wrong")[0], 403)
+        self.assertEqual(post({"id": a, "accept": True}, host="evil.example:80")[0], 403)
+        self.assertEqual(post({"id": a, "accept": True}, ctype="text/plain")[0], 415)       # no simple form post
+        self.assertEqual(post({"id": a, "accept": "yes"})[0], 400)
+        self.assertEqual(memory.entries(self.p), [])                                        # nothing written yet
+        code, out = post({"id": a, "accept": True}, site="same-origin")
+        self.assertEqual((code, out["status"]), (200, "accepted"))
+        self.assertEqual(memory.entries(self.p)[0]["text"], "keep PR text in Chinese")
+        self.assertEqual(post({"id": a, "accept": False})[0], 409)                          # already decided
+        self.assertEqual(post({"id": b, "accept": False}, origin=f"http://localhost:{self.srv.port}")[1]["status"],
+                         "rejected")
+        self.assertEqual(len(memory.entries(self.p)), 1)
+        self.assertEqual(json.loads(get(self.srv, "/api/data", token=self.srv.token)[2])["suggestions"], [])
+
     def test_run_detail(self):
         code, _, body = get(self.srv, "/api/run/r1", token=self.srv.token)
         self.assertEqual(code, 200)
