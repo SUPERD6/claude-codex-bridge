@@ -86,6 +86,18 @@ class TestDiscuss(DiscussEnv):
         self.assertNotIn("tier_why", t1)
         self.assertFalse(any("[ccx discuss" in (c.get("prompt") or "") for c in self.calls()))
 
+    def test_a_lead_needs_the_persons_yes(self):
+        for env in ({"CLAUDECODE": "1"}, {"CODEX_THREAD_ID": "t"}, {"CCX_DEPTH": "1"}):
+            out = self.j("discuss", "--with", "codex,claude", "--from", "user", "x?", env={**self.env, **env})
+            self.assertFalse(out["ran"], env)                     # --from user does not count as the person
+            self.assertIn("--confirmed", out["next"])
+            self.assertIsNotNone(out["usd_max_est"])
+        self.assertEqual(self.discuss_prompts(), [])
+        out = self.j("discuss", "--with", "codex,claude", "--rounds", "1", "--confirmed", "x?",
+                     env={**self.env, "CLAUDECODE": "1"})
+        self.assertEqual(out["state"], "done")
+        self.assertEqual(self.j("discuss", "--with", "codex,claude", "--rounds", "1", "x?")["state"], "done")  # person
+
     def discuss_prompts(self):
         return [c for c in self.calls() if "[ccx discuss" in (c.get("prompt") or "")]
 
