@@ -22,13 +22,14 @@ def cmd_discuss(a) -> int:
         question = Path(a.question_file).read_text(encoding="utf-8").strip()
     if not question:
         raise ValueError("give the question: ccx discuss \"...\" (or --question-file)")
-    names = discuss.participants(load_config(p), a.with_.split(",") if a.with_ else None)
-    est = discuss.estimate(p, names, a.rounds)
+    cfg = load_config(p)
+    names = discuss.participants(cfg, a.with_.split(",") if a.with_ else None)
+    context = Path(a.context_file).read_text(encoding="utf-8") if a.context_file else ""
+    est = discuss.estimate(p, names, a.rounds, tier=a.tier, cfg=cfg, question=question, context=context)
     if a.dry_run:
         _out({"would_run": True, **est, "rounds_max": a.rounds,
               "next": "ask the person; on their yes run the same command without --dry-run"})
         return 0
-    context = Path(a.context_file).read_text(encoding="utf-8") if a.context_file else ""
     d = discuss.run(p, question, names, rounds=a.rounds, caller=_caller(a.caller), context=context,
                     cwd=Path(a.cwd) if a.cwd else None, tier=a.tier)
     out = discuss.view(d)
