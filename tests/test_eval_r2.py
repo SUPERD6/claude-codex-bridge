@@ -14,13 +14,13 @@ class TestR2(unittest.TestCase):
         self.assertEqual(a, b)
         learn = [u["arm"] for u in a if u["exp"] == "learn"]
         self.assertEqual(learn, ["phase1"] * 12 + ["phase2"] * 12)
-        self.assertEqual(sum(u["exp"] == "review" for u in a), 13 * 3 * 3)
+        self.assertEqual(sum(u["exp"] == "review" for u in a), 12 * 3 * 3)
 
     def test_coop_tasks_takes_the_most_failed_and_at_least_seven(self):
-        rows = [{"exp": "screen", "task": t, "ok": t not in ("merge", "cart")} for t in r2.TRAP_IDS]
-        rows += [{"exp": "screen", "task": "cart", "ok": False}]
+        rows = [{"exp": "screen2", "task": t, "ok": t not in ("cache", "tags")} for t in r2.TRAP2_IDS]
+        rows += [{"exp": "screen2", "task": "tags", "ok": False}, {"exp": "screen", "task": "rank", "ok": False}]
         picked = r2.coop_tasks(rows)
-        self.assertEqual(picked[:2], ["cart", "merge"])
+        self.assertEqual(picked[:2], ["tags", "cache"])
         self.assertEqual(len(picked), 7)
 
     def test_summary_pairs_arms_and_brier(self):

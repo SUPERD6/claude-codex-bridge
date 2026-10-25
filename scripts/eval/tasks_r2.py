@@ -517,6 +517,955 @@ TRAPS: list[dict] = [
     },
 ]
 
+# The first screen (luna low, 2 runs each) got 19/20 of TRAPS right: a brief that lists the rules is easy to follow.
+# TRAPS2 puts the trap in the code the change has to fit into: a second copy of the logic, a cache, a helper with
+# the wrong rounding, a subclass override, bool being an int, a slice taken before the filter.
+TRAPS2: list[dict] = [
+    _r1("inventory"),
+    {
+        "id": "dupparse",
+        "brief": "Dates without zero padding, like '2024-3-5', must be accepted wherever this project reads a date: "
+                 "dates.parse_date and the command line (cli.main, which returns the weekday name). Months and days "
+                 "may have 1 or 2 digits; everything else is still rejected as before.",
+        "files": {"dates.py": _d("""
+                      import re
+                      from datetime import date
+
+                      _RX = re.compile(r'(\\d{4})-(\\d{2})-(\\d{2})')
+
+
+                      def parse_date(s):
+                          m = _RX.fullmatch(s.strip())
+                          if not m:
+                              raise ValueError(f'bad date: {s!r}')
+                          return date(*map(int, m.groups()))
+                      """),
+                  "cli.py": _d("""
+                      import re
+                      import sys
+                      from datetime import date
+
+
+                      def _parse(s):
+                          m = re.fullmatch(r'(\\d{4})-(\\d{2})-(\\d{2})', s.strip())
+                          if not m:
+                              raise SystemExit(f'bad date: {s}')
+                          return date(*map(int, m.groups()))
+
+
+                      def main(argv=None):
+                          argv = sys.argv[1:] if argv is None else argv
+                          return _parse(argv[0]).strftime('%A')
+                      """)},
+        "visible": _d("""
+            from datetime import date
+
+            from dates import parse_date
+
+
+            def test_unpadded():
+                assert parse_date('2024-3-5') == date(2024, 3, 5)
+            """),
+        "hidden": _d("""
+            import pytest
+            from datetime import date
+
+            from cli import main
+            from dates import parse_date
+
+
+            def test_hidden():
+                assert main(['2024-3-5']) == 'Tuesday'
+                assert main(['2024-03-05']) == 'Tuesday'
+                assert parse_date('2024-03-05') == date(2024, 3, 5)
+                with pytest.raises(ValueError):
+                    parse_date('2024-123-5')
+                with pytest.raises(SystemExit):
+                    main(['24-3-5'])
+            """),
+        "solution": {"dates.py": _d("""
+                         import re
+                         from datetime import date
+
+                         _RX = re.compile(r'(\\d{4})-(\\d{1,2})-(\\d{1,2})')
+
+
+                         def parse_date(s):
+                             m = _RX.fullmatch(s.strip())
+                             if not m:
+                                 raise ValueError(f'bad date: {s!r}')
+                             return date(*map(int, m.groups()))
+                         """),
+                     "cli.py": _d("""
+                         import sys
+
+                         from dates import parse_date
+
+
+                         def _parse(s):
+                             try:
+                                 return parse_date(s)
+                             except ValueError:
+                                 raise SystemExit(f'bad date: {s}')
+
+
+                         def main(argv=None):
+                             argv = sys.argv[1:] if argv is None else argv
+                             return _parse(argv[0]).strftime('%A')
+                         """)},
+    },
+    {
+        "id": "cache",
+        "brief": "Add Catalog.set_price(sku, price) to catalog.py: it changes that item's price; an unknown sku "
+                 "raises KeyError and a negative price raises ValueError. Everything Catalog reports (get, "
+                 "total_value) must reflect the new price.",
+        "files": {"catalog.py": _d("""
+            class Item:
+                def __init__(self, sku, price):
+                    self.sku, self.price = sku, price
+
+
+            class Catalog:
+                def __init__(self):
+                    self._items = {}
+                    self._total = None
+
+                def add(self, item):
+                    self._items[item.sku] = item
+                    self._total = None
+
+                def get(self, sku):
+                    return self._items[sku]
+
+                def total_value(self):
+                    if self._total is None:
+                        self._total = sum(i.price for i in self._items.values())
+                    return self._total
+            """)},
+        "visible": _d("""
+            from catalog import Catalog, Item
+
+
+            def test_set_price():
+                c = Catalog()
+                c.add(Item('a', 5))
+                c.set_price('a', 7)
+                assert c.get('a').price == 7
+            """),
+        "hidden": _d("""
+            import pytest
+            from catalog import Catalog, Item
+
+
+            def test_hidden():
+                c = Catalog()
+                c.add(Item('a', 5))
+                c.add(Item('b', 1))
+                assert c.total_value() == 6
+                c.set_price('a', 10)
+                assert c.total_value() == 11
+                with pytest.raises(KeyError):
+                    c.set_price('zz', 1)
+                with pytest.raises(ValueError):
+                    c.set_price('a', -1)
+                assert c.total_value() == 11
+            """),
+        "solution": {"catalog.py": _d("""
+            class Item:
+                def __init__(self, sku, price):
+                    self.sku, self.price = sku, price
+
+
+            class Catalog:
+                def __init__(self):
+                    self._items = {}
+                    self._total = None
+
+                def add(self, item):
+                    self._items[item.sku] = item
+                    self._total = None
+
+                def get(self, sku):
+                    return self._items[sku]
+
+                def set_price(self, sku, price):
+                    item = self._items[sku]
+                    if price < 0:
+                        raise ValueError('negative price')
+                    item.price = price
+                    self._total = None
+
+                def total_value(self):
+                    if self._total is None:
+                        self._total = sum(i.price for i in self._items.values())
+                    return self._total
+            """)},
+    },
+    {
+        "id": "rounding",
+        "brief": "Implement invoice_total(lines) in invoice.py. lines is a list of (qty, unit_price) with qty an int "
+                 "and unit_price a decimal string in dollars, e.g. (3, '0.335'). Each line's amount is qty * "
+                 "unit_price rounded half UP to whole cents, line by line; the result is the sum in integer cents. "
+                 "The project's money helpers are in money.py.",
+        "files": {"money.py": _d("""
+                      from decimal import ROUND_HALF_EVEN, Decimal
+
+
+                      def to_cents(amount):
+                          \"\"\"A dollar amount (Decimal, str or int) -> integer cents.\"\"\"
+                          return int((Decimal(amount) * 100).quantize(Decimal('1'), rounding=ROUND_HALF_EVEN))
+                      """),
+                  "invoice.py": "def invoice_total(lines):\n    raise NotImplementedError\n"},
+        "visible": _d("""
+            from invoice import invoice_total
+
+
+            def test_basic():
+                assert invoice_total([(2, '1.50')]) == 300
+            """),
+        "hidden": _d("""
+            from invoice import invoice_total
+
+
+            def test_hidden():
+                assert invoice_total([(1, '0.125')]) == 13
+                assert invoice_total([(3, '0.335')]) == 101
+                assert invoice_total([(1, '0.105'), (1, '0.105')]) == 22
+                assert invoice_total([]) == 0
+            """),
+        "solution": {"invoice.py": _d("""
+            from decimal import ROUND_HALF_UP, Decimal
+
+
+            def invoice_total(lines):
+                return sum(int((q * Decimal(p) * 100).quantize(Decimal('1'), rounding=ROUND_HALF_UP)) for q, p in lines)
+            """)},
+    },
+    {
+        "id": "exporter",
+        "brief": "In export.py, a value that contains the separator, a double quote or a newline must be quoted: "
+                 "wrap it in double quotes and double every double quote inside ('a,b' -> '\"a,b\"', 'x\"y' -> "
+                 "'\"x\"\"y\"'). This applies to every exporter in export.py; other values are written as before.",
+        "files": {"export.py": _d("""
+            class Exporter:
+                sep = ','
+
+                def format_row(self, values):
+                    return self.sep.join(str(v) for v in values)
+
+                def export(self, rows):
+                    return '\\n'.join(self.format_row(r) for r in rows)
+
+
+            class CsvExporter(Exporter):
+                def format_row(self, values):
+                    # CSV writes None as an empty field
+                    return self.sep.join('' if v is None else str(v) for v in values)
+
+
+            class TsvExporter(Exporter):
+                sep = '\\t'
+            """)},
+        "visible": _d("""
+            from export import Exporter
+
+
+            def test_quote():
+                assert Exporter().format_row(['a,b', 1]) == '"a,b",1'
+            """),
+        "hidden": _d("""
+            from export import CsvExporter, Exporter, TsvExporter
+
+
+            def test_hidden():
+                assert CsvExporter().format_row(['a,b', None, 'x"y', 2]) == '"a,b",,"x""y",2'
+                assert TsvExporter().format_row(['a\\tb', 'c,d']) == '"a\\tb"\\tc,d'
+                assert Exporter().format_row(['line\\nbreak', 'ok']) == '"line\\nbreak",ok'
+            """),
+        "solution": {"export.py": _d("""
+            class Exporter:
+                sep = ','
+
+                def cell(self, v):
+                    s = str(v)
+                    if self.sep in s or '"' in s or '\\n' in s:
+                        return '"' + s.replace('"', '""') + '"'
+                    return s
+
+                def format_row(self, values):
+                    return self.sep.join(self.cell(v) for v in values)
+
+                def export(self, rows):
+                    return '\\n'.join(self.format_row(r) for r in rows)
+
+
+            class CsvExporter(Exporter):
+                def format_row(self, values):
+                    # CSV writes None as an empty field
+                    return self.sep.join('' if v is None else self.cell(v) for v in values)
+
+
+            class TsvExporter(Exporter):
+                sep = '\\t'
+            """)},
+    },
+    {
+        "id": "tags",
+        "brief": "Add Item.remove_tag(t) (removing a tag the item does not have is not an error) and Item.has_tag(t) "
+                 "to tags.py. Tag names are case-insensitive: 'Red' and 'red' are the same tag, and tags are stored "
+                 "lower-cased (also those given to the constructor). Each item's tags are its own.",
+        "files": {"tags.py": _d("""
+            class Item:
+                def __init__(self, name, tags=[]):
+                    self.name = name
+                    self.tags = tags
+
+                def add_tag(self, t):
+                    if t not in self.tags:
+                        self.tags.append(t)
+            """)},
+        "visible": _d("""
+            from tags import Item
+
+
+            def test_remove():
+                i = Item('a')
+                i.add_tag('x')
+                i.remove_tag('x')
+                assert not i.has_tag('x')
+            """),
+        "hidden": _d("""
+            from tags import Item
+
+
+            def test_hidden():
+                a, b = Item('a'), Item('b')
+                a.add_tag('Red')
+                a.add_tag('red')
+                assert a.has_tag('RED') and a.tags == ['red']
+                assert not b.has_tag('red') and b.tags == []
+                a.remove_tag('nope')
+                given = ['X']
+                c = Item('c', given)
+                c.add_tag('y')
+                assert c.has_tag('x') and c.tags == ['x', 'y'] and given == ['X']
+            """),
+        "solution": {"tags.py": _d("""
+            class Item:
+                def __init__(self, name, tags=None):
+                    self.name = name
+                    self.tags = []
+                    for t in tags or []:
+                        self.add_tag(t)
+
+                def add_tag(self, t):
+                    t = t.lower()
+                    if t not in self.tags:
+                        self.tags.append(t)
+
+                def remove_tag(self, t):
+                    if t.lower() in self.tags:
+                        self.tags.remove(t.lower())
+
+                def has_tag(self, t):
+                    return t.lower() in self.tags
+            """)},
+    },
+    {
+        "id": "config",
+        "brief": "Extend load() in config.py with a third source, cli (a dict, default None), that wins over "
+                 "everything: cli > environment > file > defaults; a cli value of None means 'not given'. Values "
+                 "from the environment are strings: convert each to the type of that key's default (bool: "
+                 "'true'/'1'/'yes' -> True and 'false'/'0'/'no' -> False, any case; int: int(); anything else stays "
+                 "a string). An environment value that cannot be converted raises ValueError naming the variable.",
+        "files": {"config.py": _d("""
+            DEFAULTS = {'debug': False, 'port': 8080, 'name': 'app'}
+
+
+            def load(env=None, file_values=None):
+                out = dict(DEFAULTS)
+                out.update(file_values or {})
+                for k in DEFAULTS:
+                    v = (env or {}).get('APP_' + k.upper())
+                    if v is not None:
+                        out[k] = v
+                return out
+            """)},
+        "visible": _d("""
+            from config import load
+
+
+            def test_cli():
+                assert load(cli={'port': 1})['port'] == 1
+            """),
+        "hidden": _d("""
+            import pytest
+            from config import load
+
+
+            def test_hidden():
+                assert load(env={'APP_DEBUG': 'Yes', 'APP_PORT': '9000'}) == {'debug': True, 'port': 9000, 'name': 'app'}
+                assert load(env={'APP_DEBUG': '0'})['debug'] is False
+                assert load(env={'APP_PORT': '9000'}, cli={'port': None})['port'] == 9000
+                assert load(env={'APP_PORT': '1'}, file_values={'port': 2}, cli={'port': 3})['port'] == 3
+                assert load(env={'APP_NAME': '7'})['name'] == '7'
+                with pytest.raises(ValueError) as e:
+                    load(env={'APP_PORT': 'x'})
+                assert 'APP_PORT' in str(e.value)
+                with pytest.raises(ValueError):
+                    load(env={'APP_DEBUG': 'maybe'})
+            """),
+        "solution": {"config.py": _d("""
+            DEFAULTS = {'debug': False, 'port': 8080, 'name': 'app'}
+            TRUE, FALSE = ('true', '1', 'yes'), ('false', '0', 'no')
+
+
+            def _conv(var, v, default):
+                if isinstance(default, bool):
+                    if v.lower() in TRUE:
+                        return True
+                    if v.lower() in FALSE:
+                        return False
+                    raise ValueError(f'{var}: not a bool: {v!r}')
+                if isinstance(default, int):
+                    try:
+                        return int(v)
+                    except ValueError:
+                        raise ValueError(f'{var}: not an int: {v!r}')
+                return v
+
+
+            def load(env=None, file_values=None, cli=None):
+                out = dict(DEFAULTS)
+                out.update(file_values or {})
+                for k in DEFAULTS:
+                    var = 'APP_' + k.upper()
+                    v = (env or {}).get(var)
+                    if v is not None:
+                        out[k] = _conv(var, v, DEFAULTS[k])
+                out.update({k: v for k, v in (cli or {}).items() if v is not None})
+                return out
+            """)},
+    },
+    {
+        "id": "pagefilter",
+        "brief": "Add an optional q argument to list_items in api.py: keep only the items whose name contains q, "
+                 "ignoring case. Filtering comes before pagination, 'total' counts the matching items, and the "
+                 "result also gets 'pages' (the number of pages for that total, at least 1). q None or '' means no "
+                 "filter.",
+        "files": {"api.py": _d("""
+            ITEMS = [{'id': i, 'name': n} for i, n in
+                     enumerate(['Apple', 'Banana', 'Cherry', 'apricot', 'Blueberry', 'Avocado'], 1)]
+
+
+            def list_items(page=1, size=2, items=None):
+                items = ITEMS if items is None else items
+                start = (page - 1) * size
+                return {'items': items[start:start + size], 'page': page, 'total': len(items)}
+            """)},
+        "visible": _d("""
+            from api import list_items
+
+
+            def test_filter():
+                assert [x['name'] for x in list_items(1, 2, q='ap')['items']] == ['Apple', 'apricot']
+            """),
+        "hidden": _d("""
+            from api import list_items
+
+
+            def test_hidden():
+                r = list_items(2, 2, q='A')
+                assert [x['name'] for x in r['items']] == ['apricot', 'Avocado']
+                assert (r['total'], r['pages'], r['page']) == (4, 2, 2)
+                r = list_items(1, 2, q='zzz')
+                assert (r['items'], r['total'], r['pages']) == ([], 0, 1)
+                assert list_items(1, 4)['pages'] == 2
+                assert list_items(1, 4, q='')['total'] == 6
+            """),
+        "solution": {"api.py": _d("""
+            ITEMS = [{'id': i, 'name': n} for i, n in
+                     enumerate(['Apple', 'Banana', 'Cherry', 'apricot', 'Blueberry', 'Avocado'], 1)]
+
+
+            def list_items(page=1, size=2, items=None, q=None):
+                items = ITEMS if items is None else items
+                if q:
+                    items = [x for x in items if q.lower() in x['name'].lower()]
+                start = (page - 1) * size
+                return {'items': items[start:start + size], 'page': page, 'total': len(items),
+                        'pages': max(1, -(-len(items) // size))}
+            """)},
+    },
+    {
+        "id": "rank",
+        "brief": "Implement rank(scores) in leader.py: scores maps player name -> points. Return a list of (rank, "
+                 "name, points), highest points first; players with equal points share a rank and are ordered by "
+                 "name ignoring case, and the next rank skips accordingly (1, 2, 2, 4). An empty dict gives [].",
+        "files": {"leader.py": "def rank(scores):\n    raise NotImplementedError\n"},
+        "visible": _d("""
+            from leader import rank
+
+
+            def test_basic():
+                assert rank({'a': 1, 'b': 3}) == [(1, 'b', 3), (2, 'a', 1)]
+            """),
+        "hidden": _d("""
+            from leader import rank
+
+
+            def test_hidden():
+                got = rank({'Bob': 5, 'al': 5, 'cy': 7, 'dee': 1})
+                assert got == [(1, 'cy', 7), (2, 'al', 5), (2, 'Bob', 5), (4, 'dee', 1)]
+                assert rank({}) == []
+                assert rank({'x': 2, 'y': 2}) == [(1, 'x', 2), (1, 'y', 2)]
+            """),
+        "solution": {"leader.py": _d("""
+            def rank(scores):
+                rows = sorted(scores.items(), key=lambda kv: (-kv[1], kv[0].lower()))
+                out = []
+                for i, (name, pts) in enumerate(rows):
+                    r = out[-1][0] if out and out[-1][2] == pts else i + 1
+                    out.append((r, name, pts))
+                return out
+            """)},
+    },
+]
+
+# The second screen got 16/18 right too; only `inventory` failed (2/2, and 6/6 in round 1). Its shape: one brief
+# with three numbered requirements over three files, one of them never touched by the visible test, and a detail in
+# what it returns and how it sorts. COMPOUND copies that shape in four other domains.
+
+def _pkg(name: str, models: str, store: str, report: str) -> dict:
+    return {f"{name}/__init__.py": "", f"{name}/models.py": _d(models), f"{name}/store.py": _d(store),
+            f"{name}/report.py": _d(report)}
+
+
+COMPOUND: list[dict] = [
+    _r1("inventory"),
+    {
+        "id": "bank",
+        "brief": "In the bank package: (1) Bank.withdraw(acct_id, amount) must raise ValueError when amount <= 0 or "
+                 "when the balance would go below -limit, leaving the balance unchanged. (2) Add overdrawn(bank) to "
+                 "report.py: the account ids whose balance is below 0, sorted by balance + limit ascending (the "
+                 "least room left first), ties by id. (3) summary(bank) gets an 'overdrawn' key: the total amount "
+                 "overdrawn, i.e. the sum of -balance over those accounts.",
+        "files": _pkg("bank", """
+            from dataclasses import dataclass
+
+
+            @dataclass
+            class Account:
+                id: str
+                owner: str
+                balance: int
+                limit: int = 0
+            """, """
+            class Bank:
+                def __init__(self):
+                    self._accts = {}
+
+                def add(self, acct):
+                    if acct.id in self._accts:
+                        raise KeyError(f'duplicate account: {acct.id}')
+                    self._accts[acct.id] = acct
+
+                def get(self, acct_id):
+                    return self._accts[acct_id]
+
+                def accounts(self):
+                    return list(self._accts.values())
+
+                def withdraw(self, acct_id, amount):
+                    a = self._accts[acct_id]
+                    a.balance -= amount
+                    return a.balance
+            """, """
+            def summary(bank):
+                accts = bank.accounts()
+                return {'accounts': len(accts), 'total': sum(a.balance for a in accts)}
+            """),
+        "visible": _d("""
+            from bank.models import Account
+            from bank.report import summary
+            from bank.store import Bank
+
+
+            def test_summary():
+                b = Bank()
+                b.add(Account('a', 'A', 100))
+                assert summary(b) == {'accounts': 1, 'total': 100, 'overdrawn': 0}
+            """),
+        "hidden": _d("""
+            import pytest
+            from bank.models import Account
+            from bank.report import overdrawn, summary
+            from bank.store import Bank
+
+
+            def test_hidden():
+                b = Bank()
+                for a in [Account('x', 'X', -50, 100), Account('w', 'W', -10, 20), Account('v', 'V', 5, 0),
+                          Account('u', 'U', -40, 50)]:
+                    b.add(a)
+                assert overdrawn(b) == ['u', 'w', 'x']
+                assert summary(b)['overdrawn'] == 100
+                with pytest.raises(ValueError):
+                    b.withdraw('v', 6)
+                assert b.get('v').balance == 5
+                with pytest.raises(ValueError):
+                    b.withdraw('v', 0)
+                assert b.withdraw('x', 50) == -100
+            """),
+        "solution": {"bank/store.py": _d("""
+                         class Bank:
+                             def __init__(self):
+                                 self._accts = {}
+
+                             def add(self, acct):
+                                 if acct.id in self._accts:
+                                     raise KeyError(f'duplicate account: {acct.id}')
+                                 self._accts[acct.id] = acct
+
+                             def get(self, acct_id):
+                                 return self._accts[acct_id]
+
+                             def accounts(self):
+                                 return list(self._accts.values())
+
+                             def withdraw(self, acct_id, amount):
+                                 a = self._accts[acct_id]
+                                 if amount <= 0 or a.balance - amount < -a.limit:
+                                     raise ValueError('bad withdrawal')
+                                 a.balance -= amount
+                                 return a.balance
+                         """),
+                     "bank/report.py": _d("""
+                         def overdrawn(bank):
+                             low = [a for a in bank.accounts() if a.balance < 0]
+                             return [a.id for a in sorted(low, key=lambda a: (a.balance + a.limit, a.id))]
+
+
+                         def summary(bank):
+                             accts = bank.accounts()
+                             return {'accounts': len(accts), 'total': sum(a.balance for a in accts),
+                                     'overdrawn': sum(-a.balance for a in accts if a.balance < 0)}
+                         """)},
+    },
+    {
+        "id": "board",
+        "brief": "In the todo package: (1) Board.complete(task_id) must raise KeyError for an unknown id and "
+                 "ValueError if the task is already done; it returns how many tasks are still open. (2) Add "
+                 "next_up(board, n) to report.py: the ids of the n open tasks to do next, by priority (1 is the "
+                 "highest), then by due day (a task without a due day comes after those with one), then by id. "
+                 "(3) summary(board, today=0) gets a 'late' key: how many OPEN tasks have a due day before today.",
+        "files": _pkg("todo", """
+            from dataclasses import dataclass
+
+
+            @dataclass
+            class Task:
+                id: str
+                title: str
+                priority: int
+                due: int | None = None
+                done: bool = False
+            """, """
+            class Board:
+                def __init__(self):
+                    self._tasks = {}
+
+                def add(self, task):
+                    self._tasks[task.id] = task
+
+                def get(self, task_id):
+                    return self._tasks[task_id]
+
+                def tasks(self):
+                    return list(self._tasks.values())
+
+                def complete(self, task_id):
+                    self._tasks[task_id].done = True
+            """, """
+            def summary(board, today=0):
+                ts = board.tasks()
+                return {'tasks': len(ts), 'open': sum(not t.done for t in ts)}
+            """),
+        "visible": _d("""
+            from todo.models import Task
+            from todo.report import summary
+            from todo.store import Board
+
+
+            def test_summary():
+                b = Board()
+                b.add(Task('a', 'A', 1))
+                assert summary(b) == {'tasks': 1, 'open': 1, 'late': 0}
+            """),
+        "hidden": _d("""
+            import pytest
+            from todo.models import Task
+            from todo.report import next_up, summary
+            from todo.store import Board
+
+
+            def test_hidden():
+                b = Board()
+                for t in [Task('e', 'E', 2, None), Task('d', 'D', 2, 5), Task('c', 'C', 1, None),
+                          Task('b', 'B', 2, 5), Task('a', 'A', 1, 3, True), Task('f', 'F', 3, 1)]:
+                    b.add(t)
+                assert next_up(b, 4) == ['c', 'b', 'd', 'e']
+                assert summary(b, today=4) == {'tasks': 6, 'open': 5, 'late': 1}
+                assert b.complete('c') == 4
+                with pytest.raises(ValueError):
+                    b.complete('c')
+                with pytest.raises(KeyError):
+                    b.complete('zz')
+            """),
+        "solution": {"todo/store.py": _d("""
+                         class Board:
+                             def __init__(self):
+                                 self._tasks = {}
+
+                             def add(self, task):
+                                 self._tasks[task.id] = task
+
+                             def get(self, task_id):
+                                 return self._tasks[task_id]
+
+                             def tasks(self):
+                                 return list(self._tasks.values())
+
+                             def complete(self, task_id):
+                                 t = self._tasks[task_id]
+                                 if t.done:
+                                     raise ValueError(f'already done: {task_id}')
+                                 t.done = True
+                                 return sum(not x.done for x in self._tasks.values())
+                         """),
+                     "todo/report.py": _d("""
+                         def next_up(board, n):
+                             open_ = [t for t in board.tasks() if not t.done]
+                             key = lambda t: (t.priority, t.due is None, t.due or 0, t.id)  # noqa: E731
+                             return [t.id for t in sorted(open_, key=key)[:n]]
+
+
+                         def summary(board, today=0):
+                             ts = board.tasks()
+                             return {'tasks': len(ts), 'open': sum(not t.done for t in ts),
+                                     'late': sum(not t.done and t.due is not None and t.due < today for t in ts)}
+                         """)},
+    },
+    {
+        "id": "fleet",
+        "brief": "In the fleet package: (1) Garage.drive(plate, km) must raise ValueError when km <= 0, leaving the "
+                 "odometer unchanged; it returns the new odometer reading. (2) Add due_for_service(garage) to "
+                 "report.py: the plates of the cars whose km since their last service is at least service_every, "
+                 "the most overdue (km past the service point) first, ties by plate. (3) summary(garage) gets a "
+                 "'due' key: how many cars are due.",
+        "files": _pkg("fleet", """
+            from dataclasses import dataclass
+
+
+            @dataclass
+            class Car:
+                plate: str
+                km: int
+                service_every: int
+                last_service_km: int = 0
+            """, """
+            class Garage:
+                def __init__(self):
+                    self._cars = {}
+
+                def add(self, car):
+                    self._cars[car.plate] = car
+
+                def get(self, plate):
+                    return self._cars[plate]
+
+                def cars(self):
+                    return list(self._cars.values())
+
+                def drive(self, plate, km):
+                    self._cars[plate].km += km
+            """, """
+            def summary(garage):
+                cars = garage.cars()
+                return {'cars': len(cars), 'km': sum(c.km for c in cars)}
+            """),
+        "visible": _d("""
+            from fleet.models import Car
+            from fleet.report import summary
+            from fleet.store import Garage
+
+
+            def test_summary():
+                g = Garage()
+                g.add(Car('A1', 100, 1000))
+                assert summary(g) == {'cars': 1, 'km': 100, 'due': 0}
+            """),
+        "hidden": _d("""
+            import pytest
+            from fleet.models import Car
+            from fleet.report import due_for_service, summary
+            from fleet.store import Garage
+
+
+            def test_hidden():
+                g = Garage()
+                for c in [Car('B2', 1500, 1000, 0), Car('A1', 2600, 1000, 1000), Car('C3', 900, 1000, 0),
+                          Car('D4', 3000, 1000, 2000)]:
+                    g.add(c)
+                assert due_for_service(g) == ['A1', 'B2', 'D4']
+                assert summary(g)['due'] == 3
+                with pytest.raises(ValueError):
+                    g.drive('C3', 0)
+                assert g.get('C3').km == 900
+                assert g.drive('C3', 100) == 1000
+                assert due_for_service(g)[-1] == 'D4'
+            """),
+        "solution": {"fleet/store.py": _d("""
+                         class Garage:
+                             def __init__(self):
+                                 self._cars = {}
+
+                             def add(self, car):
+                                 self._cars[car.plate] = car
+
+                             def get(self, plate):
+                                 return self._cars[plate]
+
+                             def cars(self):
+                                 return list(self._cars.values())
+
+                             def drive(self, plate, km):
+                                 if km <= 0:
+                                     raise ValueError('km must be > 0')
+                                 c = self._cars[plate]
+                                 c.km += km
+                                 return c.km
+                         """),
+                     "fleet/report.py": _d("""
+                         def _over(c):
+                             return c.km - c.last_service_km - c.service_every
+
+
+                         def due_for_service(garage):
+                             due = [c for c in garage.cars() if _over(c) >= 0]
+                             return [c.plate for c in sorted(due, key=lambda c: (-_over(c), c.plate))]
+
+
+                         def summary(garage):
+                             cars = garage.cars()
+                             return {'cars': len(cars), 'km': sum(c.km for c in cars),
+                                     'due': sum(_over(c) >= 0 for c in cars)}
+                         """)},
+    },
+    {
+        "id": "courses",
+        "brief": "In the school package: (1) School.enroll(code, student) must raise ValueError when the course is "
+                 "full or the student is already in it, leaving the course unchanged; it returns the seats left. "
+                 "(2) Add nearly_full(school) to report.py: the codes of the courses at least 80% full, the fullest "
+                 "(enrolled / capacity) first, ties by code. (3) summary(school) gets a 'seats_left' key: the free "
+                 "seats over all courses.",
+        "files": _pkg("school", """
+            from dataclasses import dataclass, field
+
+
+            @dataclass
+            class Course:
+                code: str
+                capacity: int
+                students: list = field(default_factory=list)
+            """, """
+            class School:
+                def __init__(self):
+                    self._courses = {}
+
+                def add(self, course):
+                    self._courses[course.code] = course
+
+                def get(self, code):
+                    return self._courses[code]
+
+                def courses(self):
+                    return list(self._courses.values())
+
+                def enroll(self, code, student):
+                    self._courses[code].students.append(student)
+            """, """
+            def summary(school):
+                cs = school.courses()
+                return {'courses': len(cs), 'students': sum(len(c.students) for c in cs)}
+            """),
+        "visible": _d("""
+            from school.models import Course
+            from school.report import summary
+            from school.store import School
+
+
+            def test_summary():
+                s = School()
+                s.add(Course('c1', 10, ['ann']))
+                assert summary(s) == {'courses': 1, 'students': 1, 'seats_left': 9}
+            """),
+        "hidden": _d("""
+            import pytest
+            from school.models import Course
+            from school.report import nearly_full, summary
+            from school.store import School
+
+
+            def test_hidden():
+                s = School()
+                for c in [Course('b', 5, list('pqrs')), Course('a', 10, list('abcdefghi')), Course('c', 4, list('wxyz')),
+                          Course('d', 10, list('abcdefg')), Course('e', 2, list('mn'))]:
+                    s.add(c)
+                assert nearly_full(s) == ['c', 'e', 'a', 'b']
+                assert summary(s)['seats_left'] == 5
+                with pytest.raises(ValueError):
+                    s.enroll('c', 'new')
+                with pytest.raises(ValueError):
+                    s.enroll('a', 'a')
+                assert s.get('a').students == list('abcdefghi')
+                assert s.enroll('a', 'zed') == 0
+            """),
+        "solution": {"school/store.py": _d("""
+                         class School:
+                             def __init__(self):
+                                 self._courses = {}
+
+                             def add(self, course):
+                                 self._courses[course.code] = course
+
+                             def get(self, code):
+                                 return self._courses[code]
+
+                             def courses(self):
+                                 return list(self._courses.values())
+
+                             def enroll(self, code, student):
+                                 c = self._courses[code]
+                                 if len(c.students) >= c.capacity or student in c.students:
+                                     raise ValueError('cannot enroll')
+                                 c.students.append(student)
+                                 return c.capacity - len(c.students)
+                         """),
+                     "school/report.py": _d("""
+                         def nearly_full(school):
+                             full = [c for c in school.courses() if len(c.students) >= 0.8 * c.capacity]
+                             return [c.code for c in sorted(full, key=lambda c: (-len(c.students) / c.capacity, c.code))]
+
+
+                         def summary(school):
+                             cs = school.courses()
+                             return {'courses': len(cs), 'students': sum(len(c.students) for c in cs),
+                                     'seats_left': sum(c.capacity - len(c.students) for c in cs)}
+                         """)},
+    },
+]
+
 # ------------------------------------------------------------------ the parallel-scale task: ten independent pieces
 
 _PIECES = [
@@ -645,7 +1594,7 @@ QUEUE = {
 
 
 def by_id(task_id: str) -> dict:
-    for t in [*TRAPS, PAR10, QUEUE]:
+    for t in [*TRAPS, *TRAPS2, *COMPOUND, PAR10, QUEUE]:
         if t["id"] == task_id:
             return t
     return _r1(task_id)

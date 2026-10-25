@@ -45,3 +45,9 @@ Estimated total about $5.0; run in priority order and stop to ask at $6.
 - Gemini (not installed here); DeepSeek as the lead (the ccx-vendors session covers it).
 - How much a long real lead conversation saves (round 1 only extrapolated; not measured here either).
 - Writing shared memory (H5), which would write the person's real hub.
+
+## 4. Change log (design changes before the runs, in order)
+
+- **10/25, after group 1 and the screen**: luna low got 19/20 of the first ten trap tasks right — too easy. Two more batches: `TRAPS2` (the trap sits in the code the change must fit into: a second copy of the logic, a cache, a helper with the wrong rounding, a subclass override, bool being an int, a slice before the filter; 8 + inventory) 16/18 right (only inventory failed, 2/2); `COMPOUND` (inventory's shape: three numbered requirements over three files; 4) 8/8 right. Over the three batches luna low was right 47 times out of 49; only inventory fails.
+- So: 4-B uses, by the fallback rule fixed in section 2, the 7 most-failed tasks of `screen2` (inventory + dupparse, cache, rounding, exporter, tags, config); 4-C uses the 9 `TRAPS2` tasks + 3 of the first batch as controls (merge, version, ini), 12 × 3 rounds; the 6 trap tasks among the 12 of (b') and "more accurate with use" become the first 6 of `TRAPS2`. Correctness in these groups will likely sit near the ceiling, so spend and time carry most of the information; the report says so and does not read it as "dividing never helps".
+- 4-A: 6/6 formats right; `ccx/ways.py`'s parsing was not changed.

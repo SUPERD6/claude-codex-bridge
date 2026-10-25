@@ -44,7 +44,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import seven_ab as S  # noqa: E402
 from common import HIDDEN, ROOT, append_jsonl, ccx_verify, git, lead_env, make_repo, read_jsonl, score  # noqa: E402
-from tasks_r2 import PAR10, PIECES, QUEUE, TRAPS, by_id, piece_brief  # noqa: E402
+from tasks_r2 import COMPOUND, PAR10, PIECES, QUEUE, TRAPS, TRAPS2, by_id, piece_brief  # noqa: E402
 
 from ccx import ledger  # noqa: E402
 from ccx.config import Paths  # noqa: E402
@@ -72,9 +72,12 @@ daily_usd = 1000.0
 daily_usd = 1000.0
 """
 SMALL = ["slugify", "duration", "intervals", "cli-json"]
-TRAP_IDS = [t["id"] for t in TRAPS]
-ROUTE_TASKS = SMALL + ["csvstats", "lru"] + TRAP_IDS[:6]      # 12: inventory, merge, version, wrap, groupby, cart
-MINUTES = {**{t: 5 for t in SMALL}, **{t: 15 for t in ["csvstats", "lru", *TRAP_IDS]}}
+TRAP_IDS = [t["id"] for t in TRAPS]           # first screen: 19/20 right, too easy (kept as review controls)
+TRAP2_IDS = [t["id"] for t in TRAPS2]
+COMP_IDS = [t["id"] for t in COMPOUND][1:]    # inventory is already in TRAPS2
+EASY = ["merge", "version", "ini"]
+ROUTE_TASKS = SMALL + ["csvstats", "lru"] + TRAP2_IDS[:6]     # 12: inventory, dupparse, cache, rounding, exporter, tags
+MINUTES = {**{t: 5 for t in SMALL}, **{t: 15 for t in ["csvstats", "lru", *TRAP_IDS, *TRAP2_IDS, *COMP_IDS]}}
 DRAFT_REVIEW = """[eval draft review] A lead wrote the plan below before handing the task to a builder. Check the plan
 against EVERY requirement in the task: is one missing, misread or contradicted? Do not edit anything.
 
@@ -91,8 +94,10 @@ summary: `ok` or one sentence. open_questions: `[must] ...` for each requirement
 GROUPS = {
     "way": {"arms": ("visible", "critical"), "tasks": ["inventory", "cart", "merge"], "rounds": 1},
     "screen": {"arms": ("single",), "tasks": TRAP_IDS, "rounds": 2},
-    "review": {"arms": ("off", "on", "auto"), "tasks": TRAP_IDS + ["slugify", "duration", "lru"], "rounds": 3},
-    "coop": {"arms": ("single", "way", "draft"), "tasks": TRAP_IDS, "rounds": 2},
+    "screen2": {"arms": ("single",), "tasks": TRAP2_IDS, "rounds": 2},
+    "screen3": {"arms": ("single",), "tasks": COMP_IDS, "rounds": 2},
+    "review": {"arms": ("off", "on", "auto"), "tasks": TRAP2_IDS + EASY, "rounds": 3},
+    "coop": {"arms": ("single", "way", "draft"), "tasks": TRAP2_IDS, "rounds": 2},
     "par": {"arms": ("p1", "p3", "p10", "native", "c_off", "c_on"), "tasks": ["par10"], "rounds": 2},
     "route": {"arms": ("fixed", "warm", "cold"), "tasks": ROUTE_TASKS, "rounds": 1},
     "learn": {"arms": ("phase1", "phase2"), "tasks": ROUTE_TASKS, "rounds": 1},
@@ -410,7 +415,7 @@ def run_unit(u: dict, a, work: Path) -> dict:
     exp, arm = u["exp"], u["arm"]
     if exp == "way":
         return way_unit(u, a, work, arm)
-    if exp == "screen" or (exp in ("review", "coop") and arm in ("off", "single")):
+    if exp.startswith("screen") or (exp in ("review", "coop") and arm in ("off", "single")):
         return direct(u, a, work, [*LUNA, "--no-escalate", "--review", "off"])
     if exp == "review":
         return direct(u, a, work, [*LUNA, "--no-escalate", "--review", arm])
@@ -493,12 +498,13 @@ def spent(rows: list[dict]) -> float:
 
 
 def coop_tasks(rows: list[dict], k: int = 7) -> list[str]:
-    """The trap tasks the cheap single run got wrong most often in the screen (at least k, ties by task order)."""
-    fails = {t: 0 for t in TRAP_IDS}
+    """The trap tasks the cheap single run got wrong most often in the second screen (at least k, ties by task
+    order)."""
+    fails = {t: 0 for t in TRAP2_IDS}
     for r in rows:
-        if r.get("exp") == "screen":
+        if r.get("exp") == "screen2":
             fails[r["task"]] += not r["ok"]
-    order = sorted(TRAP_IDS, key=lambda t: (-fails[t], TRAP_IDS.index(t)))
+    order = sorted(TRAP2_IDS, key=lambda t: (-fails[t], TRAP2_IDS.index(t)))
     keep = [t for t in order if fails[t]]
     return keep if len(keep) >= k else order[:k]
 
