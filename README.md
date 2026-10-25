@@ -132,6 +132,11 @@ Codex's sandbox decides whether that works: ccx writes its run records into the 
 network. `ccx doctor` checks it (row "Codex as lead (sandbox)"). On Windows only `danger-full-access` worked in real
 runs (codex-cli 0.164): in `workspace-write` the commands run as a separate sandbox account, and a Claude sub-agent
 started there refused every edit, even with the hub and `~/.claude` as writable roots and the network on.
+**Safety:** full access means every command the Codex lead runs has your rights, with no sandbox (your files, the
+network, your credentials); use it only for a lead you would trust at your own keyboard. A narrower way, by Codex's
+docs but **not yet checked on a real run**: keep `workspace-write` and let only ccx's hand-out commands
+(`run`, `ask`, `resume`, `discuss`) run outside the sandbox with a Codex rule: `ccx doctor --codex-rule >>
+~/.codex/rules/ccx.rules` (rules are experimental in Codex; `ccx doctor` then says Unknown, not ok).
 
 **Does the sub-agent know what you discussed with the lead?** Not directly: copying a long conversation into every
 sub-agent would be expensive, and Claude and Codex can't share a context window anyway. The sub-agent gets the

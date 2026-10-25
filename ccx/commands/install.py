@@ -221,7 +221,10 @@ def cmd_uninstall(a) -> int:
 
 
 def cmd_doctor(a) -> int:
-    from ..doctor import doctor
+    from ..doctor import codex_lead_rule, doctor
+    if a.codex_rule:
+        print(codex_lead_rule(), end="")
+        return 0
     ok = doctor(paths())
     return 0 if ok else 1
 
@@ -258,7 +261,11 @@ def register(sub) -> None:
     stp.add_argument("--yes", action="store_true", help="accept every step (scripts / CI)")
     stp.add_argument("--hub", help="hub folder (default: the one already set, or ~/.ccx-hub)")
     stp.set_defaults(fn=lambda a: __import__("ccx.setup", fromlist=["run"]).run(yes=a.yes, hub=a.hub))
-    sub.add_parser("doctor", help="check installs, logins and wiring").set_defaults(fn=cmd_doctor)
+    dr = sub.add_parser("doctor", help="check installs, logins and wiring")
+    dr.add_argument("--codex-rule", action="store_true",
+                    help="print a Codex rule (for ~/.codex/rules/ccx.rules) that lets a sandboxed Codex lead run this "
+                         "ccx's run/ask/resume/discuss outside the sandbox; not yet checked on a real run")
+    dr.set_defaults(fn=cmd_doctor)
     u = sub.add_parser("uninstall", help="remove ccx hooks/blocks/links from both tools (dry run unless --apply)")
     u.add_argument("--apply", action="store_true")
     u.set_defaults(fn=cmd_uninstall)
