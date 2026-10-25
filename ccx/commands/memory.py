@@ -9,7 +9,7 @@ from pathlib import Path
 from .. import learn, memory
 from ..config import AGENTS, DELEGATE_AGENTS, data_dir, paths
 from ..agents import leads
-from .common import _caller, _out
+from .common import _caller, _out, hook_text
 
 
 def cmd_handoff(a) -> int:
@@ -258,7 +258,7 @@ def cmd_mem(a) -> int:
             pass
         out = "\n\n".join(x for x in parts if x)
         if out:
-            print(out)
+            print(hook_text(out, a.as_))
         if not a.peek:
             try:                       # quiet: probable verdicts for runs nobody judged (H13); never blocks the start
                 from ..delegate import soft_verdicts
