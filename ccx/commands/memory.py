@@ -210,10 +210,11 @@ def cmd_mem(a) -> int:
         from .. import project
         root = project.find_root()
         shown: list[int] = []
-        parts = [memory.format_delta(memory.delta(p, a.as_, advance=not a.peek),
+        me = _lead_as(a.as_)
+        parts = [memory.format_delta(memory.delta(p, me, advance=not a.peek),
                                      project=(root or Path.cwd()).name, shown=shown)]
         if not a.peek:
-            memory.mark_used(p, shown, by=a.as_, project=(root or Path.cwd()).name, via="start")
+            memory.mark_used(p, shown, by=me, project=(root or Path.cwd()).name, via="start")
         old = memory.stale(p)
         if old:
             from ..lang import say
@@ -387,6 +388,16 @@ def cmd_ctx(a) -> int:
             fh.write(f"- {' '.join(a.text)}\n")
         print("ok")
     return 0
+
+
+def _lead_as(tool: str) -> str:
+    """The tool's hook says `--as claude`; when that Claude Code (or Codex) runs a provider's model, the notes it
+    has seen are counted for the provider (deepseek), the vendor actually reading them."""
+    from ..config import load_config
+    from .common import lead_identity
+    who = lead_identity()
+    pv = (load_config().get("providers") or {}).get(who) if who not in (tool, "user") else None
+    return who if pv and (pv.get("agent") or "claude") == tool else tool
 
 
 def register(sub) -> None:

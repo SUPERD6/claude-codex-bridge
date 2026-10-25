@@ -210,6 +210,8 @@ def doctor(p: Paths) -> bool:
             f"{ver} (flags checked against {ad.tested_version}; {ad.support}; {ad.vendor}; {can})")
         if rc == 0 and (drift := version_drift(ver, ad.tested_version, official)):
             add(f"{agent} version", *drift)
+        if ad.locate and find_bin(agent) == ad.locate():        # not on PATH: say where ccx found it
+            add(f"{agent} location", "ok", f"{find_bin(agent)} (found from the installed app, not on PATH)")
         if not ad.login_argv:
             add(f"{agent} login", "Unknown", "ccx can't check this tool's login; its first run will tell")
             continue

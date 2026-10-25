@@ -18,6 +18,14 @@ new work, hand over to a fresh one (section 5). Run long-output commands as `ccx
 `git diff`): you get the failures or the per-file summary, the full output stays on disk. `ccx lead` shows what a
 turn costs you now; `ccx lead --breakdown` what it is made of.
 
+**If you are DeepSeek.** ccx tells who leads from the environment, so `--from` is not needed: DeepSeek Harness
+(dsh) sets `DSH_SESSION_ID`; Claude Code on DeepSeek is known by its `ANTHROPIC_BASE_URL`; Codex on DeepSeek only by
+`model_provider` in its config.toml, otherwise set `CCX_LEAD=deepseek-codex`. As dsh on Windows your shell is
+Windows PowerShell 5.1: call the configured command as `& "<python>" "<ccx.py>" run ...`, and put a brief longer than
+a line in a file (`--brief-file`). dsh must run with `DSH_PERMISSION_MODE=danger-full-access`: in `workspace-write`
+ccx cannot write its run records and headless dsh has no one to approve more (0.2.1-rc.3, real run). That gives every
+command you run the person's rights; say so before asking for it.
+
 ## 0. Offer it; the person decides
 
 Nobody asked you to delegate, but the next piece is large and checkable: about 15 minutes or more for a skilled

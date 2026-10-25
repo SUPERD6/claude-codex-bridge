@@ -19,6 +19,57 @@ def _out(obj) -> None:
     print(json.dumps(obj, ensure_ascii=False, indent=2))
 
 
+def _provider_lead(cli: str, env, cfg: dict | None = None) -> str | None:
+    """The [providers] entry this Claude Code / Codex lead is pointed at, so a DeepSeek model behind Claude Code
+    counts as DeepSeek. Claude Code: its ANTHROPIC_BASE_URL equals the provider's. Codex: config.toml's top-level
+    model_provider is one a provider selects (`-c model_provider=...` given on Codex's own command line is not
+    visible to the commands it runs; set CCX_LEAD then)."""
+    from ..config import codex_home, load_config
+    want = ""
+    if cli == "claude":
+        want = (env.get("ANTHROPIC_BASE_URL") or "").rstrip("/")
+        if not want or "api.anthropic.com" in want:
+            return None
+    elif cli == "codex":
+        import tomllib
+        try:
+            want = str(tomllib.loads((codex_home() / "config.toml").read_text(encoding="utf-8"))
+                       .get("model_provider") or "")
+        except (OSError, ValueError):
+            return None
+        if not want or want == "openai":
+            return None
+    try:
+        provs = (cfg or load_config()).get("providers") or {}
+    except Exception:  # noqa: BLE001
+        return None
+    for name, pv in provs.items():
+        if (pv.get("agent") or "claude") != cli:
+            continue
+        if cli == "claude" and str((pv.get("env") or {}).get("ANTHROPIC_BASE_URL") or "").rstrip("/") == want:
+            return name
+        if cli == "codex" and f'model_provider="{want}"' in [str(x) for x in pv.get("args") or []]:
+            return name
+    return None
+
+
+def lead_identity(env=None, cfg: dict | None = None) -> str:
+    """Who is running this command, from the environment: a lead tool (claude, codex, dsh), the provider behind
+    one (deepseek through Claude Code, deepseek-codex through Codex), or "user" at a plain terminal. CCX_LEAD
+    names it outright. DeepSeek Harness gives the commands it runs DSH_SESSION_ID (0.2.1-rc.3, checked on a real
+    run); it is checked first because a dsh started from another tool's terminal is the innermost one."""
+    env = os.environ if env is None else env
+    if env.get("CCX_LEAD"):
+        return env["CCX_LEAD"]
+    if env.get("DSH_SESSION_ID"):
+        return "dsh"
+    if env.get("CLAUDECODE") or env.get("CLAUDE_CODE_ENTRYPOINT"):
+        return _provider_lead("claude", env, cfg) or "claude"
+    if any(k.startswith("CODEX_") and k not in ("CODEX_HOME",) for k in env):
+        return _provider_lead("codex", env, cfg) or "codex"
+    return "user"
+
+
 def detach(args: list[str], log: Path, env: dict) -> None:
     """Start `ccx <args>` detached (hidden console), its output into `log`: `ccx run --bg`, `ccx discuss --bg`."""
     import subprocess
@@ -31,13 +82,7 @@ def detach(args: list[str], log: Path, env: dict) -> None:
 
 
 def _caller(explicit: str | None) -> str:
-    if explicit:
-        return explicit
-    if os.environ.get("CLAUDECODE") or os.environ.get("CLAUDE_CODE_ENTRYPOINT"):
-        return "claude"
-    if any(k.startswith("CODEX_") and k not in ("CODEX_HOME",) for k in os.environ):
-        return "codex"
-    return "user"
+    return explicit or lead_identity()
 
 
 def _brief(args) -> str:
@@ -74,7 +119,8 @@ def _agent_of_model(model: str) -> str | None:
     return None
 
 
-LEAD_VARS = {"claude": ("CLAUDE_CODE_SESSION_ID",), "codex": ("CODEX_THREAD_ID", "CODEX_SESSION_ID")}
+LEAD_VARS = {"claude": ("CLAUDE_CODE_SESSION_ID",), "codex": ("CODEX_THREAD_ID", "CODEX_SESSION_ID"),
+             "dsh": ("DSH_SESSION_ID",)}
 
 
 def lead_session_id(caller: str | None = None) -> str | None:
@@ -94,9 +140,18 @@ CONTINUE_WINDOW_SEC = 3600      # the prompt cache lives 1 h: older sessions wou
 CONTINUE_MAX_DEPTH = 5          # after 5 tasks in one sub-session, start fresh (its context keeps growing)
 
 
-def find_continuable(p, lead: str | None, cwd: Path, to: str) -> str | None:
+def _session_keeps_mode(agent: str) -> bool:
+    """The agent's read-only / write is set when its session starts (dsh: an environment variable) and a resumed
+    session keeps it: seen on a real dsh 0.2.1-rc.3 run, where a write task continued in a read-only session could
+    not edit (2026-10-25). Claude and Codex take their permission flags on every call."""
+    from ..agents import NAMES, get
+    return agent in NAMES and get(agent).run_env is not None
+
+
+def find_continuable(p, lead: str | None, cwd: Path, to: str, mode: str | None = None) -> str | None:
     """Same lead conversation + same folder + same agent + recent + ended cleanly -> its session can take the
-    next task, so the sub-agent keeps what it already read instead of re-reading the repo."""
+    next task, so the sub-agent keeps what it already read instead of re-reading the repo. Not across read/write
+    for an agent whose session keeps the permission it started with."""
     if not lead:
         return None
     from ..archive import archived_ids
@@ -112,6 +167,8 @@ def find_continuable(p, lead: str | None, cwd: Path, to: str) -> str | None:
         if r.get("kind") in ("quota", "auth", "timeout", "user_stopped", "interrupted") or not r.get("session_id")                 or r["run_id"] in gone:
             return None
         if int(r.get("continue_depth") or 0) + 1 >= CONTINUE_MAX_DEPTH:
+            return None
+        if mode and r.get("mode") and r["mode"] != mode and _session_keeps_mode(to):
             return None
         return r["run_id"]
     return None

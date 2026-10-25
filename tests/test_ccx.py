@@ -26,19 +26,21 @@ class Env(unittest.TestCase):
         for d in (self.hub, self.home_codex, self.home_claude, self.work):
             d.mkdir()
         self.env = {**os.environ, "CCX_HUB": str(self.hub), "CODEX_HOME": str(self.home_codex),
-                    "CLAUDE_CONFIG_DIR": str(self.home_claude),
+                    "CLAUDE_CONFIG_DIR": str(self.home_claude), "DSH_HOME": str(t / "dsh"),
                     "CCX_CODEX_BIN": str(FAKES / "fake_codex.py"),
                     "CCX_CLAUDE_BIN": str(FAKES / "fake_claude.py"),
                     "FAKE_LOG": str(self.log), "CCX_AB_RATE": "0", "CCX_NO_BENCH_REFRESH": "1", "CCX_NO_QUOTA_PROBE": "1",
                     "CCX_CONFIG": str(t / "user-config.toml")}       # never the real ~/.ccx/config.toml
         for k in ("CCX_DEPTH", "CCX_ROLE", "FAKE_STATUS", "TASK_SPLIT_HOME", "TASK_ROUTING_HOME",
                   "CHECKPOINT_ROOT", "CLAUDE_CODE_SESSION_ID", "CODEX_THREAD_ID", "CODEX_SESSION_ID",
-                  "CCX_LEAD_SESSION", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT"):
-            self.env.pop(k, None)
+                  "CCX_LEAD_SESSION", "CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CCX_LEAD", "DSH_SESSION_ID",
+                  "ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY", "CLAUDE_CODE_SIMPLE",
+                  "DEEPSEEK_API_KEY", "MOONSHOT_API_KEY", "ZAI_API_KEY", "DASHSCOPE_API_KEY", "OPENROUTER_API_KEY"):
+            self.env.pop(k, None)          # no real keys or lead identity from the machine running the tests
         for k in [k for k in self.env if k.startswith("CODEX_") and k != "CODEX_HOME"]:
             self.env.pop(k)              # run as CI does: no lead tool around, unless a test sets one
         self._old = dict(os.environ)
-        os.environ.update({k: v for k, v in self.env.items() if k.startswith(("CCX_", "CODEX_HOME", "CLAUDE_CONFIG"))})
+        os.environ.update({k: v for k, v in self.env.items() if k.startswith(("CCX_", "CODEX_HOME", "CLAUDE_CONFIG", "DSH_HOME"))})
 
     def tearDown(self):
         os.environ.clear()

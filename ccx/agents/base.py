@@ -32,6 +32,7 @@ class Adapter:
     pay_per_token: bool = False       # billed in real money per token (an API key, no subscription quota):
                                       # never picked by a quota fallback or as a reviewer on its own
     run_env: Callable | None = None   # (mode) -> extra environment for one run, e.g. read-only via a variable
+    locate: Callable | None = None    # () -> path of the CLI when it is installed but not on PATH (a desktop app's own)
 
     def capabilities(self) -> dict:
         return {k: getattr(self, k) for k in ("can_lead", "can_work", "can_resume", "builtin_subagents",

@@ -117,9 +117,12 @@ IMPORTS = {"claude"}       # context files that load `@path` themselves, so the 
 
 
 def memory_targets() -> list[tuple[str, Path]]:
-    """(agent, its context file) for every tool that can sit in the lead's chair (I6: from the adapters)."""
+    """(agent, its context file) for every tool that can sit in the lead's chair (I6: from the adapters); a
+    community one only when it is installed, so no folder of a tool the person never installed is created."""
     from . import agents
-    return [(ad.name, ad.home() / ad.context_file) for ad in agents.all_adapters() if ad.can_lead and ad.home]
+    from .runners import find_bin
+    return [(ad.name, ad.home() / ad.context_file) for ad in agents.all_adapters()
+            if ad.can_lead and ad.home and (ad.support == "official" or find_bin(ad.name))]
 
 
 def sync_memory(p: Paths, plan: Plan) -> None:
@@ -129,6 +132,14 @@ def sync_memory(p: Paths, plan: Plan) -> None:
         if not p.memory_index.exists():
             plan.warnings.append(f"external snapshot {p.memory_index} does not exist")
         plan.actions.append(f"(skip) snapshot {p.memory_index} is external: both tools already load it")
+        from .runners import find_bin
+        for agent, cf in memory_targets():
+            if agent in ("claude", "codex") or not find_bin(agent):
+                continue
+            text = cf.read_text(encoding="utf-8") if cf.exists() else ""
+            if p.memory_index.name not in text:     # a lead the person's own setup may not reach yet (dsh)
+                plan.warnings.append(f"{agent} leads with {cf} only; it does not load the external snapshot "
+                                     f"{p.memory_index}: add it there through your own sync (ccx leaves it alone)")
         if not p.memory.exists():
             plan.do(f"create journal folder {p.memory}", lambda: memory.ensure(p))
         return

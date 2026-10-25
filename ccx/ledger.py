@@ -28,7 +28,7 @@ def append(p: Paths, record: dict) -> None:
 
 
 def _slim(record: dict) -> dict:
-    slim = {k: record.get(k) for k in ("run_id", "label", "to", "caller", "tier", "start_tier",
+    slim = {k: record.get(k) for k in ("run_id", "label", "to", "caller", "caller_vendor", "tier", "start_tier",
                                        "mode", "ok", "ts", "kind", "task", "step", "cwd", "session_id",
                                        "lead_session", "continue_depth", "ephemeral", "mode_source")}
     slim["rungs"] = [a.get("rung") for a in record["attempts"]]

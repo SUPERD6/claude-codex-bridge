@@ -43,4 +43,4 @@ DeepSeek 经 Claude Code（`--bare`）· Windows 11 · 数据：[data/2026-10-25
 
 ## 没跑的（I5）
 
-这台机器上没装 Gemini CLI 和 DeepSeek Harness（`dsh`），也没有 Kimi（`MOONSHOT_API_KEY`）、GLM（`ZAI_API_KEY`）、Qwen（`DASHSCOPE_API_KEY`）、OpenRouter（`OPENROUTER_API_KEY`）的 key，所以都没跑：**Gemini：未跑。dsh：未跑。Kimi、GLM、Qwen、OpenRouter：未跑。**DeepSeek 经 Claude Code 在上面当裁判跑过。
+这台机器上没装 Gemini CLI 和 DeepSeek Harness（`dsh`），也没有 Kimi（`MOONSHOT_API_KEY`）、GLM（`ZAI_API_KEY`）、Qwen（`DASHSCOPE_API_KEY`）、OpenRouter（`OPENROUTER_API_KEY`）的 key，所以都没跑：**Gemini：未跑。dsh：未跑。Kimi、GLM、Qwen、OpenRouter：未跑。**DeepSeek 经 Claude Code 在上面当裁判跑过。*同一天稍后用户装了 DeepSeek Harness 桌面版：`dsh` 的只读、可写、续接随后都真跑过，见 [2026-10-25-deepseek-lead.zh.md](2026-10-25-deepseek-lead.zh.md)；Gemini CLI 用户决定不装。*
