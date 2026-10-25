@@ -165,3 +165,45 @@ def test_roots_setting_and_commands(tmp_path):
 def test_scan_without_roots_says_how(tmp_path):
     with pytest.raises(ValueError, match="projects.roots"):
         projects.refresh(paths(), load_config(paths()))
+
+
+# ---- ccx where ----
+
+def catalog(tmp_path):
+    cat = projects.scan([str(tree(tmp_path))])
+    projects.save(paths(), cat)
+    return cat
+
+
+def test_where_chinese_name_from_title_or_commits(tmp_path):
+    cat = catalog(tmp_path)
+    r = projects.where(cat, "改一下那个桌宠")
+    assert r["terms"] == ["桌宠"] and r["pick"] == "desk-pet"
+    assert "桌宠" in r["candidates"][0]["why"][0]
+    assert projects.where(cat, "桌面伙伴 的问题")["pick"] == "fish"        # a README one level down
+
+
+def test_where_english_typo_and_remote_name(tmp_path):
+    cat = catalog(tmp_path)
+    assert projects.where(cat, "the pet-repo PR")["pick"] == "desk-pet"   # git remote name
+    assert projects.where(cat, "fix the notse site")["pick"] == "notes-site"   # one letter off
+
+
+def test_where_lists_when_several_fit(tmp_path):
+    cat = catalog(tmp_path)
+    r = projects.where(cat, "wrapper ui")
+    assert r["pick"] is None
+    assert {"wrapper", "ui"} <= {c["name"] for c in r["candidates"]}
+
+
+def test_where_nothing(tmp_path):
+    cat = catalog(tmp_path)
+    r = projects.where(cat, "完全无关 quantum")
+    assert r["pick"] is None and r["candidates"] == []
+
+
+def test_where_command(tmp_path):
+    catalog(tmp_path)
+    out = ccx("where", "那个", "桌宠")
+    assert out["pick"] == "desk-pet" and out["candidates"][0]["path"].endswith("desk-pet")
+    assert out["read_first"][0].endswith("CLAUDE.md")
