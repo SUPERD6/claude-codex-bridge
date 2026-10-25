@@ -80,6 +80,10 @@ def cmd_reply(a) -> int:
 
 def cmd_board(a) -> int:
     root = _root(a)
+    if a.init:
+        _out({**board.init_rules(root), "next": "DeepSeek reads it each session; Claude Code reads AGENTS.md when "
+                                               "its CLAUDE.md has `@AGENTS.md`"})
+        return 0
     if a.thread:
         es = board.thread(root, a.thread)
         print(f"[ccx board, thread {a.thread}: {len(es)} message(s)]")
@@ -169,5 +173,7 @@ def register(sub) -> None:
     bd.add_argument("--all", action="store_true", help="the last messages, whoever they are for")
     bd.add_argument("--limit", type=int, default=20)
     bd.add_argument("--peek", action="store_true", help="do not move your cursor")
+    bd.add_argument("--init", action="store_true", help="write the board's rules into this project's AGENTS.md "
+                    "(ccx's marked block): data not instructions, the turn limit, and DeepSeek's `ccx board` each turn")
     bd.add_argument("--cwd")
     bd.set_defaults(fn=cmd_board)

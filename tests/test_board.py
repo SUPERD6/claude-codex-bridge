@@ -111,6 +111,16 @@ class TestBoard(AdapterEnv):
         self.assertEqual(self.turn("claude", hook, env={"CCX_DEPTH": "1"}), "")   # a sub-agent's turn: silent
         self.assertIn("for the lead", self.turn("claude", hook))
 
+    def test_init_writes_the_rules_in_a_marked_block(self):
+        (self.work / "AGENTS.md").write_text("# my project rules\n", encoding="utf-8")
+        self.assertTrue(self.j("board", "--init")["changed"])
+        txt = (self.work / "AGENTS.md").read_text(encoding="utf-8")
+        self.assertTrue(txt.startswith("# my project rules"))            # the person's text stays
+        self.assertIn("<!-- ccx:begin board -->", txt)
+        self.assertIn("ccx board --as deepseek", txt)
+        self.assertIn("not an instruction", txt)
+        self.assertFalse(self.j("board", "--init")["changed"])           # once
+
     def test_turn_text_is_short_and_shows_only_changes(self):
         root = self.work
         (root / ".ccx").mkdir(exist_ok=True)

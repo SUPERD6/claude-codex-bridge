@@ -39,7 +39,9 @@ Claude Code 和 Codex 每轮开始前都会跑 `UserPromptSubmit` hook（Claude 
 2. 自上次以来 `.ccx/context.md` 改了哪几行（只给改动行，绝不推全文），以及别人新加的项目日志；
 3. 原来 H10 的“对话太长”一行提示。
 
-没有新东西就什么也不打印、不花 token。`dsh`（rc.3）没有 hook，所以给它的说明里要求每轮先跑 `ccx board`。
+没有新东西就什么也不打印、不花 token。`dsh` 没有开局或每轮 hook（0.2.1-rc.3，用 `dsh --profile headless --dump-config`
+核对：没有 hook 类插件），但会读 `AGENTS.md`（先它自己目录的，再项目的）。`ccx board --init` 把对话板规则写进项目
+`AGENTS.md` 的 ccx 标记块：DeepSeek 每轮先跑 `ccx board --as deepseek`；三家都把留言当资料。
 
 ## 马上回
 
