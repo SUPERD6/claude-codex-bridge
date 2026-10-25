@@ -223,6 +223,8 @@ SETTINGS = {   # key -> (type, help). Only these can be set with `ccx config set
                                   "(the catalog stays in the hub, on this machine)"),
     "autonomy.level": (str, "L0 | L1 | L2: how much the project manager does without asking (default L1; "
                             "per project: `ccx autonomy set`)"),
+    "hooks.timeout_s": (float, "seconds a session hook (ccx mem delta / turn) may run before it prints nothing and "
+                               "exits 0; logged, shown by `ccx doctor` (0 = no limit)"),
     "ui.lang": (str, "zh | en: language of `ccx ui` and of the lines ccx writes into conversations (unset: the "
                      "page follows the browser, the lines stay English)"),
 }

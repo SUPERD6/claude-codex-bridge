@@ -22,6 +22,8 @@ def _own_hub(tmp_path, monkeypatch):
     # switch it back on (tests/test_archive_after_run.py)
     monkeypatch.setenv("CCX_NO_AUTO_ARCHIVE", "1")
     monkeypatch.setenv("CCX_DSH_DESKTOP", "closed")     # whether this machine's dsh desktop app is open is no input
+    # a slow CI machine must not turn a hook test's output into nothing (L4); tests/test_hooks_skills.py sets its own
+    monkeypatch.setenv("CCX_HOOK_TIMEOUT_S", "0")
     for var in ("CCX_DEPTH", "CCX_ROLE", "CCX_RUN_ID", "CCX_PARENT_RUN"):     # never inherit a live ccx run
         monkeypatch.delenv(var, raising=False)
     for var in ("CCX_LEAD", "DSH_SESSION_ID", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_SIMPLE"):   # nor a lead's identity

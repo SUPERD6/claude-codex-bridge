@@ -6,7 +6,7 @@ import shutil
 import sys
 import textwrap
 
-from . import __version__, commands
+from . import __version__, commands, hooktimeout
 from .commands.common import _out
 
 DESCRIPTION = ("A cost-saving team of AI coding agents: Claude Code, Codex and DeepSeek hand work to each other, "
@@ -68,8 +68,12 @@ def main(argv: list[str] | None = None) -> int:
             s.reconfigure(encoding="utf-8")
         except Exception:
             pass
+    argv = sys.argv[1:] if argv is None else argv
     a = build_parser().parse_args(argv)
     try:
+        if name := hooktimeout.hook_name(argv):          # L4: a slow hook prints nothing instead of holding the turn
+            from .config import paths
+            return hooktimeout.run(name, lambda: a.fn(a), paths())
         return a.fn(a)
     except (PermissionError, FileNotFoundError, ValueError, RuntimeError) as e:
         out = {"ok": False, "error": str(e)}

@@ -310,6 +310,8 @@ def doctor(p: Paths) -> bool:
             f"again in Codex with /hooks ({ct})")
     else:
         add("Codex SessionStart hook", "ok (trust once via /hooks)" if has else "missing", str(ct))
+    from . import hooktimeout
+    add("hook timeouts", *hooktimeout.doctor_row(p))
     if find_bin("codex"):
         add("Codex as lead (sandbox)", *codex_lead_sandbox(ct.read_text(encoding="utf-8") if ct.exists() else "", p.hub,
                                                            rule=codex_rule_allows(codex_home() / "rules")))

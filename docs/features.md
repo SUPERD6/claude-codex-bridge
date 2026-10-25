@@ -120,6 +120,18 @@ to the new one; one nobody has checked for 30 days is shown as "to check" (`ccx 
 `ccx mem search` finds older ones, and a session start carries at most ~600 tokens of new lines. Each tool's own
 automatic memory stays its own: ccx doesn't copy one into the other.
 
+**Hooks never hold up a turn.** The session-start hook (`ccx mem delta`) and the per-turn hook (`ccx turn`) stop at
+`[hooks] timeout_s` (default 2 s; `ccx config set hooks.timeout_s N`, 0 = no limit): past it they print nothing and
+exit 0, and `ccx/hook-timeouts.jsonl` gets one line (command, seconds, the step it was in). `ccx doctor` shows how
+many there were in the last 7 days.
+
+**Which shared skills are used.** `ccx skills stats [--days N] [--json]` counts, from the Claude Code and Codex
+session files, how often each shared skill (hub `skills/` plus this repo's) was loaded in each tool and when last,
+and lists the ones never loaded with an estimate of the tokens their descriptions take every turn (from characters,
+not a tokenizer). Read only: it suggests, it deletes nothing. A first `ccx setup` also offers, once and only on a
+terminal, to look through the last 7 days of sessions with `ccx mem suggest`'s rules (no model) and asks about each
+preference or pitfall it finds; only the ones you say yes to are written (`ccx mem accept`'s path).
+
 ## Tiers (`config/tiers.toml`, override in `hub/ccx/tiers.toml`)
 
 Fixed tiers are the fallback. With rubric flags, task-routing picks by success probability and cost per success,

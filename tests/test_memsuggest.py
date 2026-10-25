@@ -61,6 +61,18 @@ class TestGather(unittest.TestCase):
         self.assertEqual(got, [("preference", "原生能力优先、约束只放在边界上。"),
                                ("pitfall", "The root cause was a race on run.json while it is replaced。")])
 
+    def test_one_off_instructions_fragments_and_questions_are_not_notes(self):
+        users = ["#41、#42 绿了就默认 squash 合并。", "修这次的小问题：默认不要预演。", "然后每天你可以默认更新一次。",
+                 "这个以后不要了，为什么 CI 没动过，不是自动的吗。", "Fix the build by default, please.",
+                 "commit 9f3c2ab 以后不要回滚。", "以后不要弹出命令行窗口，默认隐藏。",
+                 "就比如说我有几十个项目，我说得不准确，他以后也要能找到是哪个。"]
+        texts = ["我们决定要不要再开一个会话，还在等你决定。", "Right now the quota is careful at 80% this week.",
+                 "F9 推翻了提案 C4 的决定，要在记录里写一笔。", "还有一点要注意：评测时用的是最高思考强度，派活时只用 low。",
+                 "注意：`.ccx/` 在 `.gitignore` 里，这个文件不会上传。", "发现 0.164 关掉开关后照样起子智能体，原来其实没起作用。"]
+        d = {"agent": "claude", "users": users, "texts": texts}
+        got = [c["text"] for c in memsuggest.gather(d, Path("x.jsonl"), limit=20)]
+        self.assertEqual(got, [users[6], users[7], texts[3], texts[4], texts[5]])
+
 
 class TestFlow(Env):
     def write_session(self):

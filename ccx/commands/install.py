@@ -132,6 +132,15 @@ def cmd_skills(a) -> int:
     p = paths()
     if a.skills_cmd == "install":
         return _skills_install(p, a.replace, a.apply)
+    if a.skills_cmd == "stats":
+        from .. import skillstats
+        from ..config import claude_home, codex_home
+        s = skillstats.stats([p.skills, data_dir("skills")], claude_home(), codex_home(), a.days)
+        if a.json:
+            _out(s)
+        else:
+            print(skillstats.render(s))
+        return 0
     roots = [p.skills, data_dir("skills")]
     words = [w.lower() for w in a.query]
     seen, hits = set(), []
@@ -236,6 +245,10 @@ def register(sub) -> None:
     ski = sks.add_parser("install", help="link this repo's skills into the hub (git pull = upgrade)")
     ski.add_argument("--replace", action="store_true", help="back up existing copies and link instead")
     ski.add_argument("--apply", action="store_true", help="make the changes (default: dry run)")
+    sks_ = sks.add_parser("stats", help="how often each shared skill was loaded in Claude Code and Codex, the ones "
+                          "never loaded and the estimated tokens their descriptions take each turn (read only)")
+    sks_.add_argument("--days", type=float, default=30)
+    sks_.add_argument("--json", action="store_true")
     sk.set_defaults(fn=cmd_skills)
     im = sub.add_parser("improve", help="log a concrete problem + fix for a skill/tool (ccx improve add ...)")
     ims = im.add_subparsers(dest="improve_cmd", required=True)
