@@ -13,12 +13,11 @@ import difflib
 import json
 import os
 import re
-import subprocess
 import time
 from contextlib import contextmanager
 from pathlib import Path
 
-from . import ledger
+from . import ghpriv, ledger
 
 VENDORS = ("claude", "codex", "deepseek")
 ALIASES = {"dsh": "deepseek", "deepseek-codex": "deepseek", "human": "user", "person": "user"}
@@ -315,36 +314,8 @@ GH_EVERY = 600                     # seconds between pulls
 _TAG = re.compile(r"<!-- ccx:board host=(\S+) id=(\d+) -->")
 
 
-def _gh(args: list[str], timeout: int = 30) -> subprocess.CompletedProcess:
-    from .runners import bin_argv
-    return subprocess.run([*bin_argv("gh"), *args], capture_output=True, text=True, encoding="utf-8", errors="replace",
-                          stdin=subprocess.DEVNULL, timeout=timeout)
-
-
-def _own_remotes(root: Path) -> set[str]:
-    """owner/repo of every remote of the project itself: the board must never go there."""
-    try:
-        r = subprocess.run(["git", "remote", "-v"], cwd=root, capture_output=True, text=True, encoding="utf-8",
-                           errors="replace", stdin=subprocess.DEVNULL, timeout=20)
-    except (OSError, subprocess.TimeoutExpired):
-        return set()
-    out = set()
-    for m in re.finditer(r"github\.com[:/]([\w.-]+/[\w.-]+?)(?:\.git)?\s", r.stdout + "\n"):
-        out.add(m.group(1).lower())
-    return out
-
-
 def check_repo(root: Path, repo: str) -> None:
-    if not re.fullmatch(r"[\w.-]+/[\w.-]+", repo or ""):
-        raise ValueError(f"board.github must be owner/repo, got {repo!r}")
-    if repo.lower() in _own_remotes(root):
-        raise ValueError(f"{repo} is this project's own repository; the board goes to a separate private one")
-    r = _gh(["repo", "view", repo, "--json", "visibility", "-q", ".visibility"])
-    if r.returncode != 0:
-        raise RuntimeError(f"gh repo view {repo} failed: {(r.stderr or r.stdout).strip()[-300:]}")
-    if r.stdout.strip().upper() != "PRIVATE":
-        raise ValueError(f"{repo} is {r.stdout.strip() or 'not private'}; the board only syncs to a PRIVATE "
-                         "repository")
+    ghpriv.check_private(repo, "board.github", "the board", root)
 
 
 def sync_due(root: Path, claim: bool = False) -> bool:
@@ -369,14 +340,14 @@ def sync(root: Path, repo: str, host: str, force: bool = False) -> dict:
     title = f"ccx board: {root.name}"
     num = st.get("issue")
     if not num:
-        r = _gh(["issue", "list", "-R", repo, "--search", f'"{title}" in:title', "--state", "all", "--json",
+        r = ghpriv.gh(["issue", "list", "-R", repo, "--search", f'"{title}" in:title', "--state", "all", "--json",
                  "number,title", "--limit", "20"])
         hit = next((i for i in json.loads(r.stdout or "[]") if i.get("title") == title), None) \
             if r.returncode == 0 else None
         if hit:
             num = hit["number"]
         else:
-            r = _gh(["issue", "create", "-R", repo, "--title", title, "--body",
+            r = ghpriv.gh(["issue", "create", "-R", repo, "--title", title, "--body",
                      "Messages between agent sessions, synced by ccx. Keep this repository private."])
             if r.returncode != 0:
                 raise RuntimeError(f"gh issue create failed: {(r.stderr or r.stdout).strip()[-300:]}")
@@ -386,11 +357,9 @@ def sync(root: Path, repo: str, host: str, force: bool = False) -> dict:
     mine = [e for e in es if e["id"] > pushed_upto and not e.get("remote")]
     for e in mine:
         body = f"<!-- ccx:board host={host} id={e['id']} -->\n" + json.dumps(e, ensure_ascii=False)
-        r = _gh(["issue", "comment", str(num), "-R", repo, "--body", body])
-        if r.returncode != 0:
-            raise RuntimeError(f"gh issue comment failed: {(r.stderr or r.stdout).strip()[-300:]}")
+        ghpriv.comment(repo, num, body)
         pushed_upto = e["id"]
-    r = _gh(["api", f"repos/{repo}/issues/{num}/comments", "--paginate", "-q", ".[].body"], timeout=60)
+    r = ghpriv.gh(["api", f"repos/{repo}/issues/{num}/comments", "--paginate", "-q", ".[].body"], timeout=60)
     pulled = []
     if r.returncode == 0:
         known = {(e.get("remote"), e.get("remote_id")) for e in es if e.get("remote")}

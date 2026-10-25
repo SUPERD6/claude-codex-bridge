@@ -218,6 +218,9 @@ SETTINGS = {   # key -> (type, help). Only these can be set with `ccx config set
     "report.publish_dir": (str, "local clone of your private usage repo; `ccx report --publish` commits there"),
     "board.github": (str, "owner/repo of a PRIVATE repository of yours: the board's fallback between computers "
                           "(empty = off, no network)"),
+    "intake.github": (str, "owner/repo of a PRIVATE repository of yours whose labelled issues are tasks for "
+                           "`ccx intake pull` (empty = off, no network)"),
+    "intake.label": (str, "the label that makes an issue there a task (default ccx-task)"),
     "board.max_machine_turns": (int, "machine messages in a row in one board thread before a person must speak"),
     "projects.roots": (path_list, "folders `ccx projects scan` looks for your projects in, separated by ';' "
                                   "(the catalog stays in the hub, on this machine)"),
