@@ -258,7 +258,7 @@ def format_delta(new: list[dict], budget: int = DELTA_CHARS, project: str | None
 
 
 BRIEF_NOTES = 4
-BRIEF_CHARS = 1200          # ~300 tokens: what a brief may spend on notes for a tool with no start hook
+BRIEF_CHARS = 1200          # ~300 tokens: what a sub-agent's brief may spend on shared notes
 
 
 def _words(text: str) -> set[str]:
@@ -272,8 +272,8 @@ def _words(text: str) -> set[str]:
 
 def for_brief(p: Paths, brief: str, project: str | None = None, k: int = BRIEF_NOTES,
               budget: int = BRIEF_CHARS) -> list[dict]:
-    """I6: the few notes a task is about (shared words; this project's notes win ties), for a sub-agent whose tool
-    has no start hook to show memory. No shared word, no note: an unrelated note costs tokens and helps nothing."""
+    """I6: the few notes a task is about (shared words; this project's notes win ties), for a sub-agent's brief
+    (sub-agents don't get the start hook's delta). No shared word, no note: an unrelated note costs tokens and helps nothing."""
     bw = _words(brief)
     scored = []
     for e in live_entries(p):

@@ -96,13 +96,11 @@ def _project_context(cwd: Path) -> Path | None:
 
 
 def _brief_notes(p: Paths, cfg: dict, to: str, brief: str, cwd: Path) -> str:
-    """I6: a tool with no start hook never sees shared memory on its own, so its brief carries the few notes the
-    task is about. Tools with a hook skip this (their sub-agent runs read the background index if needed)."""
-    from . import agents, memory
-    name = (provider_of(cfg, to) or {}).get("agent", to)
+    """I6: every sub-agent's brief carries the few shared notes the task is about. A sub-agent never sees the start
+    hook's memory delta (`ccx mem delta` prints nothing under CCX_ROLE=subagent, and the hook moves the lead's
+    cursor, not the sub-agent's), so with a hook or without, the brief is the only way hub notes reach it."""
+    from . import memory
     try:
-        if agents.get(name).start_hook:
-            return ""
         notes = memory.for_brief(p, brief, project=cwd.name)
     except (KeyError, OSError, ValueError):
         return ""
