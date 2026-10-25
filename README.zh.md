@@ -168,6 +168,7 @@ ccx lead                                     # 主会话每一轮要重读多少
 ccx lead --breakdown | --cache | --suggest   # 每轮重读的东西逐项拆开 / 缓存断在哪 / 主智能体自己该用哪档
 ccx sum -- python -m pytest -q               # 跑命令，只给主智能体看要紧的（测试只看失败），完整输出留在 .ccx/sum/
 ccx fresh [--launch]                         # 长对话交给同一工具的新对话：从这段对话的文件生成交接
+ccx propose --lead claude:opus:high --minutes 30 "…"  # 提议派活前：估算、一句话怎么说、记一笔（--no ID、--stats）
 ccx trial start | stop | report              # 一周正式对比：一半可派的活主智能体自己做，一半派出去，同样口径量
 ccx trial tag --arm native --session ID      # 把用了 Claude Code 自带子智能体 / workflow 的对话记为第三组
 ccx agents                                   # 每家命令行：厂商、能做什么、测过的版本、官方还是社区
