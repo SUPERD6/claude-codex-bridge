@@ -116,6 +116,9 @@ ccx improve add <技能> "遇到的具体问题" --fix "怎么改"   # 只记真
 ccx mem add "一句话" --by claude     # 写入共享记忆
 ccx mem delta --as codex            # 拿对方新增的条目（hook 会自动运行）
 ccx mem compact                     # 把日志合并进快照
+ccx mem search gradle 签名           # 最相关的排前面（BM25）；--all-words：只要每个词都有的
+ccx mem add "..." --kind 坑          # 偏好|约束|事实|坑|事件；`ccx mem kinds --list` 看归类
+ccx mem compact --by project        # 每个项目一小段场景块，写到 memory/scenes.md
 ccx ctx init | add "…" | show       # 项目背景文件
 ccx config set projects.roots "目录;目录" ; ccx projects scan   # 本机项目目录（只存在 hub，不进仓库）
 ccx projects | projects show <名字>        # 列出项目 / 看一个：路径、简介、先读的规则、最近在做什么

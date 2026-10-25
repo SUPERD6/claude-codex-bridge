@@ -187,15 +187,15 @@ def cmd_mem(a) -> int:
             if not root:
                 raise ValueError("no project here: run `ccx project init` in the project folder first")
             e = memory.add(project.ProjectPaths(root), " ".join(a.text), by=a.by or _caller(None), topic=a.topic,
-                           source=a.source, supersedes=a.supersedes)
+                           source=a.source, supersedes=a.supersedes, kind=a.kind)
         else:
             e = memory.add(p, " ".join(a.text), by=a.by or _caller(None), topic=a.topic, source=a.source,
-                           supersedes=a.supersedes)
+                           supersedes=a.supersedes, kind=a.kind)
         _out(e)
     elif a.mem_cmd == "verify":
         _out(memory.verify(p, a.seq, by=_caller(None)))
     elif a.mem_cmd == "search":
-        hits = memory.search(p, a.words)
+        hits = memory.search(p, a.words, all_words=a.all_words, limit=a.limit or None)
         from .. import project
         memory.mark_used(p, [h["seq"] for h in hits if h.get("seq")], by=_caller(None),
                          project=(project.find_root() or Path.cwd()).name, via="search")
@@ -211,8 +211,11 @@ def cmd_mem(a) -> int:
         root = project.find_root()
         shown: list[int] = []
         me = _lead_as(a.as_)
-        parts = [memory.format_delta(memory.delta(p, me, advance=not a.peek),
-                                     project=(root or Path.cwd()).name, shown=shown)]
+        by_kind = memory.by_kind_on(p)          # L2: off until the H11 trial ends (2026-11-01)
+        parts = [memory.format_delta(memory.delta(p, me, advance=not a.peek), project=(root or Path.cwd()).name,
+                                     shown=shown, kinds=memory.START_KINDS if by_kind else None)]
+        if memory.start_scene_on(p):            # L3: optional, this project's scene block only
+            parts.append(memory.scene_block(p, (root or Path.cwd()).name))
         if not a.peek:
             memory.mark_used(p, shown, by=me, project=(root or Path.cwd()).name, via="start")
         old = memory.stale(p)
@@ -326,6 +329,18 @@ def cmd_mem(a) -> int:
             _out(r)
         else:
             print(memory.format_use_report(r))
+    elif a.mem_cmd == "kinds":
+        es = memory.live_entries(p)
+        counts = {k: 0 for k in memory.KINDS}
+        for e in es:
+            counts[memory.kind_of(e)] += 1
+        out = {"counts": counts, "by_kind": memory.by_kind_on(p)}
+        if a.list:                              # `set`: given with --kind; otherwise guessed from topic or words
+            out["notes"] = [{"seq": e["seq"], "kind": memory.kind_of(e), "set": "kind" in e, "text": e["text"][:80]}
+                            for e in es]
+        _out(out)
+    elif a.mem_cmd == "compact" and a.by == "project":
+        _out(memory.compact_by_project(p))
     elif a.mem_cmd == "compact":
         res = memory.compact(p)
         from ..sync import Plan, sync_memory
@@ -448,17 +463,25 @@ def register(sub) -> None:
     ma.add_argument("--project", action="store_true", help="add to this project's journal instead of the personal one")
     ma.add_argument("--source", help="where the fact came from (file, command, page) — shown with it")
     ma.add_argument("--supersedes", type=int, metavar="N", help="this note replaces note #N")
+    ma.add_argument("--kind", help="preference|constraint|fact|pitfall|event|other (偏好/约束/事实/坑/事件/其他); "
+                    "unset: guessed from the words when read")
     mv = msub.add_parser("verify", help="mark note #N as checked today")
     mv.add_argument("seq", type=int)
-    ms = msub.add_parser("search", help="notes containing every word")
+    ms = msub.add_parser("search", help="notes best matching the words (BM25: rare words count more)")
     ms.add_argument("words", nargs="+")
+    ms.add_argument("--all-words", action="store_true", help="only notes containing every word (the old filter)")
+    ms.add_argument("--limit", type=int, default=10, help="at most N hits (0 = all; default 10)")
     msub.add_parser("stale", help="notes not written or checked for 30 days")
     md = msub.add_parser("delta")
     md.add_argument("--as", dest="as_", choices=leads(), required=True)
     md.add_argument("--peek", action="store_true", help="do not move the cursor")
     msub.add_parser("show")
     msub.add_parser("status")
-    msub.add_parser("compact")
+    mc = msub.add_parser("compact", help="fold the journal into the snapshot by topic; --by project: write "
+                         "memory/scenes.md, one short block per project (journal and snapshot left as they are)")
+    mc.add_argument("--by", choices=["topic", "project"], default="topic")
+    mk = msub.add_parser("kinds", help="how many notes of each kind (preference, constraint, fact, pitfall, event)")
+    mk.add_argument("--list", action="store_true", help="each note with its kind")
     mr = msub.add_parser("report", help="who wrote the shared notes that were used, and who used them (H6)")
     mr.add_argument("--days", type=float, default=14)
     mr.add_argument("--json", action="store_true")
