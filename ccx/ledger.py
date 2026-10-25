@@ -34,7 +34,7 @@ def _slim(record: dict) -> dict:
     slim["rungs"] = [a.get("rung") for a in record["attempts"]]
     slim["sessions"] = sorted({a["session_id"] for a in record["attempts"] if a.get("session_id")})
     slim["b"] = (record.get("route") or {}).get("b")
-    for k in ("trial", "bucket"):                    # H11: which half of a formal comparison this run is in
+    for k in ("trial", "bucket", "no_ab"):           # H11: which half of a formal comparison this run is in
         if (record.get("route") or {}).get(k):
             slim[k] = record["route"][k]
     ae = [a["ae_usd"] for a in record["attempts"] if a.get("ae_usd") is not None]
@@ -84,7 +84,27 @@ def spent_today(p: Paths, agent: str) -> float:
     return sum((r.get("ae_by_agent") or {}).get(agent, 0.0) for r in rows(p) if (r.get("ts") or 0) >= midnight)
 
 
-SOFT_MAX_OVERTURN = 0.2     # J7: above this share of overturned probable verdicts they stop feeding routing ...
+EVAL_PREFIX = "eval-"                       # runs an evaluation script made (scripts/eval, A/B rounds)
+SELFTEST_LABELS = ("selftest", "quota-probe")   # ccx's own probes: say nothing about how good a rung is
+
+
+def is_eval(row: dict, runs: dict[str, dict] | None = None) -> bool:
+    """True for a run that measured ccx rather than did the person's work: label `eval-...`, started with
+    `--no-ab`, or one of ccx's own probes. Statistics that learn or judge from real use leave these out.
+    A verdict row has no label of its own: pass `runs` (run_id -> run row, see `runs_by_id`) to judge it by
+    the run it points at."""
+    if row.get("type") and runs is not None:
+        row = runs.get(row.get("run_id") or "", row)
+    label = row.get("label") or ""
+    return bool(row.get("no_ab")) or label.startswith(EVAL_PREFIX) or label.startswith(SELFTEST_LABELS)
+
+
+def runs_by_id(rows_: list[dict]) -> dict[str, dict]:
+    """run_id -> run row (rows without a 'type'), for `is_eval` on the verdict rows that point at them."""
+    return {r["run_id"]: r for r in rows_ if not r.get("type") and r.get("run_id")}
+
+
+SOFT_MAX_OVERTURN = 0.2    # J7: above this share of overturned probable verdicts they stop feeding routing ...
 SOFT_MIN_RECHECKED = 5      # ... once at least this many were judged again by the person or the lead
 
 

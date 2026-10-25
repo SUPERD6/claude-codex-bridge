@@ -188,6 +188,8 @@ def resolve(spec: dict, caller: str, p, cfg: dict) -> tuple[dict | None, dict]:
     to = spec.get("to") or "auto"
     tradeoff = spec.get("tradeoff") or cfg["defaults"].get("tradeoff", "save")
     route = {"tradeoff": tradeoff}
+    if spec.get("no_ab"):                     # kept in the ledger: ledger.is_eval leaves such runs out
+        route["no_ab"] = True
     if spec.get("minutes"):
         route["minutes"] = float(spec["minutes"])
     rubric = {k: spec[k] for k in learn.RUBRIC_KEYS[1:] if spec.get(k)}
