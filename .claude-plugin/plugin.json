@@ -1,0 +1,11 @@
+{
+  "name": "relayline",
+  "version": "0.5.0",
+  "description": "Claude Code, Codex and DeepSeek as each other's lead or sub-agent: the delegation, routing, splitting and checkpoint skills, plus ccx's start-of-session and per-turn hooks.",
+  "author": { "name": "SUPERD6" },
+  "homepage": "https://github.com/SUPERD6/relayline",
+  "repository": "https://github.com/SUPERD6/relayline",
+  "license": "MIT",
+  "keywords": ["delegation", "sub-agent", "codex", "routing", "memory"],
+  "hooks": "./hooks/claude-hooks.json"
+}

@@ -1,0 +1,12 @@
+{
+  "name": "relayline",
+  "description": "relayline: Claude Code, Codex and DeepSeek as each other's lead or sub-agent.",
+  "owner": { "name": "SUPERD6" },
+  "plugins": [
+    {
+      "name": "relayline",
+      "source": "./",
+      "description": "The four relayline skills and ccx's start-of-session and per-turn hooks (ccx itself ships inside the plugin)."
+    }
+  ]
+}

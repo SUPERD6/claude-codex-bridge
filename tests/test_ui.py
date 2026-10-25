@@ -383,6 +383,45 @@ class TestLang(Env):
         put_run(self.hub, "r-probe", self.work, label="quota-probe")
         self.assertEqual(ui.waiting(p), 1)
 
+    def test_tests_and_evaluations_are_marked_and_left_out(self):
+        p = Paths(self.hub)
+        (self.work / ".git").mkdir()
+        scratch = self.work.parent / "scratch"
+        (scratch / "r" / ".git").mkdir(parents=True)
+        (self.work / ".ccx" / "f1-trial" / "repo2" / ".git").mkdir(parents=True)
+        put_run(self.hub, "r-real", self.work, label="feature")
+        put_run(self.hub, "r-two", self.work, label="two-way-c2x")
+        put_run(self.hub, "r-tmp", scratch / "r", label="fix-review-real")
+        put_run(self.hub, "r-trial", self.work / ".ccx" / "f1-trial" / "repo2")
+        put_run(self.hub, "r-ab", self.work, label="eval-7c:func:budget:codex")
+        with mock.patch.object(ui, "scratch_roots", return_value=[scratch.resolve()]),                 mock.patch.object(ui, "leads", return_value=[
+                    {"agent": "claude", "model": "m", "session": "s1", "cwd": str(scratch / "route-1-x"), "last": 1,
+                     "helpers": []},
+                    {"agent": "codex", "model": "m", "session": "s2", "cwd": str(self.work), "last": 1, "helpers": []}]):
+            self.assertEqual(ui.waiting(p), 1)                  # the session-start count: real work only
+            d = ui.collect(p, quota_wait=False)
+        by = {pc["run_id"]: pc["test"] for pc in pieces(d)}
+        self.assertEqual(by, {"r-real": False, "r-two": True, "r-tmp": True, "r-trial": True, "r-ab": True})
+        tests = {pr["name"]: pr["test"] for pr in d["projects"]}
+        self.assertFalse(tests[self.work.name])                 # a real project keeps its real pieces ...
+        self.assertTrue(tests["r"] and tests["repo2"])          # ... the scratch ones are set apart
+        self.assertEqual([l["test"] for l in d["leads"]], [True, False])
+        with mock.patch.object(ui, "scratch_roots", return_value=[scratch.resolve()]),                 mock.patch("ccx.discuss.recent", return_value=[{"id": "d1", "cwd": str(scratch / "q")},
+                                                               {"id": "d2", "cwd": str(self.work)}]):
+            talks = ui.collect(p, quota_wait=False)["discussions"]
+        self.assertEqual([x["test"] for x in talks], [True, False])
+        js = (STATIC / "app.js").read_text(encoding="utf-8")    # the page leaves them out unless asked
+        self.assertIn('data-do="tests"', js)
+        self.assertIn("function view(d)", js)
+        self.assertIn('localStorage.getItem("ccx-tests")', js)
+
+    def test_hub_in_the_temp_folder_sets_nothing_apart(self):
+        import tempfile
+        with mock.patch.object(tempfile, "gettempdir", return_value=str(self.hub.parent)):
+            self.assertEqual(ui.scratch_roots(Paths(self.hub)), [])
+        with mock.patch.object(tempfile, "gettempdir", return_value=str(self.work)):
+            self.assertEqual(ui.scratch_roots(Paths(self.hub)), [self.work.resolve()])
+
     def test_session_start_points_at_ccx_ui(self):
         r = self.ccx("run", "--to", "codex", "--tier", "T1", "--mode", "write", "--review", "off", "change x")
         self.assertEqual(r.returncode, 0, r.stderr + r.stdout)

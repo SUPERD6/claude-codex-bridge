@@ -27,6 +27,9 @@ block for the reason, the evidence and the `ccx` command to copy. Suggested note
 ccx picked from a session) have a yes / no button, the page's only write. It reads only files ccx and the tools already
 write — no model is called — listens on 127.0.0.1 only, and exits a minute after the page is closed.
 `ccx ui --export snapshot.html` writes a static copy; `ccx config set ui.lang zh|en` picks the language.
+Evaluations and tests (eval-* labels, `--no-ab`, ccx's probes, runs in the temporary folder or a project's `.ccx`
+folder) stay hidden until you press "show evaluations and tests"; `ccx verify RUN --dismiss --note why` clears a
+leftover from "waits for you" without counting it right or wrong, and routing never learns from it.
 
 <img alt="ccx ui task page in English, dark theme: a task as an org chart, one column per worker, the side panel showing why a piece needs your call (demo data)" src="assets/ui/task-en-dark.png" width="100%">
 

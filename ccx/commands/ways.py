@@ -40,7 +40,7 @@ def cmd_way(a) -> int:
               else "run the same command without --dry-run"})
         return 0
     out = ways.run(p, brief, choice, cwd=Path(a.cwd).resolve() if a.cwd else Path.cwd().resolve(), check=a.check,
-                   caller=caller, risk=a.risk, kind=kind, yes=a.yes)
+                   caller=caller, risk=a.risk, kind=kind, yes=a.yes, label=a.label or "")
     _out(out)
     return 0 if out.get("state") == "done" else 1
 
@@ -59,6 +59,7 @@ def register(sub) -> None:
     w.add_argument("--from", dest="caller")
     w.add_argument("--yes", action="store_true", help="the person agreed to two_versions (about twice the cost)")
     w.add_argument("--dry-run", action="store_true", help="which way and who, without running")
+    w.add_argument("--label", help="label of the build runs (eval-... keeps them out of H9 and probable verdicts)")
     w.add_argument("--stats", action="store_true", help="first-time-right and rework rates per kind and agent (H9)")
     w.add_argument("--days", type=float, default=90)
     w.add_argument("--include-evals", action="store_true", help="with --stats: also count evaluation runs (label "

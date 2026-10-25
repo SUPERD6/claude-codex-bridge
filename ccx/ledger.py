@@ -102,18 +102,20 @@ def spent_today(p: Paths, agent: str) -> float:
 
 
 EVAL_PREFIX = "eval-"                       # runs an evaluation script made (scripts/eval, A/B rounds)
-SELFTEST_LABELS = ("selftest", "quota-probe")   # ccx's own probes: say nothing about how good a rung is
+SELFTEST_LABELS = ("selftest", "quota-probe", "startup-probe", "two-way-")   # ccx's own probes: say nothing
+                                                                            # about how good a rung is
 
 
 def is_eval(row: dict, runs: dict[str, dict] | None = None) -> bool:
     """True for a run that measured ccx rather than did the person's work: label `eval-...`, started with
-    `--no-ab`, or one of ccx's own probes. Statistics that learn or judge from real use leave these out.
+    `--no-ab`, one of ccx's own probes, or dismissed (`ccx verify RUN --dismiss`: a test or leftover that counts
+    neither way). Statistics that learn or judge from real use leave these out.
     A verdict row has no label of its own: pass `runs` (run_id -> run row, see `runs_by_id`) to judge it by
     the run it points at."""
     if row.get("type") and runs is not None:
         row = runs.get(row.get("run_id") or "", row)
     label = row.get("label") or ""
-    return bool(row.get("no_ab")) or label.startswith(EVAL_PREFIX) or label.startswith(SELFTEST_LABELS)
+    return bool(row.get("no_ab") or row.get("dismissed")) or label.startswith(EVAL_PREFIX)         or label.startswith(SELFTEST_LABELS)
 
 
 def runs_by_id(rows_: list[dict]) -> dict[str, dict]:
@@ -219,7 +221,23 @@ def rows(p: Paths) -> list[dict]:
             out.append(json.loads(line))
         except json.JSONDecodeError:
             continue
-    return out
+    return _mark_dismissed(out)
+
+
+def _mark_dismissed(rows_: list[dict]) -> list[dict]:
+    """Run rows of runs dismissed later (a `dismiss` row; a later verdict of the person or the lead undoes it) get
+    `dismissed: True`, so `is_eval` leaves them out wherever real use is counted."""
+    gone: set[str] = set()
+    for r in rows_:
+        if r.get("type") == "dismiss" and r.get("run_id"):
+            gone.add(r["run_id"])
+        elif r.get("type") == "verify" and not r.get("soft"):
+            gone.discard(r.get("run_id"))
+    if gone:
+        for r in rows_:
+            if not r.get("type") and r.get("run_id") in gone:
+                r["dismissed"] = True
+    return rows_
 
 
 def stats(p: Paths) -> list[dict]:

@@ -7,6 +7,8 @@
                       (re-rendered on `ccx mem compact` / `ccx sync`)
   hooks  : SessionStart in both tools runs `ccx mem delta --as <tool>`
            (prints only the other side's new entries; usually nothing)
+  plugin : where the relayline plugin is enabled it brings the bundled skills (and in Claude
+           Code the hooks); sync then leaves those to it and drops its own earlier copies
   mcp    : <hub>/mcp/servers.json is the one registry; registered into each
            tool through its own CLI (`claude mcp add-json`, `codex mcp add`),
            never by hand-editing their config files.
@@ -180,6 +182,49 @@ def _is_turn_hook(cmd: str) -> bool:
     return "ccx" in cmd and ("lead --hint" in cmd or " turn --as" in cmd)
 
 
+PLUGIN = "relayline"       # the plugin this repo publishes as its own marketplace (.claude-plugin/)
+
+
+def plugin_tools() -> set[str]:
+    """The tools where the relayline plugin is enabled ("claude", "codex"). There the plugin brings the four
+    skills (as relayline:<skill>), and in Claude Code also the SessionStart / UserPromptSubmit hooks, so `ccx sync`
+    leaves those to it: a hook in settings.json and the same one in a plugin both run (DECISIONS, 2026-10-25)."""
+    out = set()
+    try:
+        data = json.loads((claude_home() / "settings.json").read_text(encoding="utf-8") or "{}")
+        if any(str(k).startswith(PLUGIN + "@") and v for k, v in (data.get("enabledPlugins") or {}).items()):
+            out.add("claude")
+    except (OSError, ValueError, AttributeError):
+        pass
+    try:
+        conf = tomllib.loads((codex_home() / "config.toml").read_text(encoding="utf-8"))
+        if any(str(k).startswith(PLUGIN + "@") and (v or {}).get("enabled", True)
+               for k, v in (conf.get("plugins") or {}).items()):
+            out.add("codex")
+    except (OSError, tomllib.TOMLDecodeError, AttributeError):
+        pass
+    return out
+
+
+CLAUDE_HOOKS = {"SessionStart": lambda c: "ccx" in c and "mem delta" in c, "UserPromptSubmit": _is_turn_hook}
+
+
+def drop_claude_hooks(data: dict) -> list[str]:
+    """Take ccx's own hooks out of a Claude settings.json dict; -> the events that changed."""
+    changed = []
+    for event, is_mine in CLAUDE_HOOKS.items():
+        groups = (data.get("hooks") or {}).get(event, [])
+        keep = [g for g in groups if not any(is_mine(h.get("command", "")) for h in g.get("hooks", []))]
+        if len(keep) != len(groups):
+            data["hooks"][event] = keep
+            if not keep:
+                del data["hooks"][event]
+            changed.append(event)
+    if changed and not data["hooks"]:
+        del data["hooks"]
+    return changed
+
+
 def sync_hooks(p: Paths, plan: Plan) -> None:
     # Claude Code: settings.json -> hooks.SessionStart
     sj = claude_home() / "settings.json"
@@ -190,6 +235,14 @@ def sync_hooks(p: Paths, plan: Plan) -> None:
         except json.JSONDecodeError:
             plan.warnings.append(f"{sj} is not valid JSON; skipped Claude hook")
             data = None
+    if data is not None and "claude" in plugin_tools():
+        if changed := drop_claude_hooks(data):
+            text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
+            plan.do(f"remove ccx {' and '.join(changed)} hook(s) from {sj}: the relayline plugin runs them",
+                    lambda: _write(sj, text))
+        else:
+            plan.actions.append("(skip) Claude hooks: the relayline plugin runs them")
+        data = None
     if data is not None:
         cmd = ccx_command("mem", "delta", "--as", "claude")
         groups = data.setdefault("hooks", {}).setdefault("SessionStart", [])
@@ -326,6 +379,7 @@ def sync_skills(p: Paths, plan: Plan) -> None:
             real.setdefault(name, (owner, d))
     lay = p.layout
     inc, exc = set(lay.get("skills_include") or []), set(lay.get("skills_exclude") or [])
+    bundled, plugged = set(_skill_dirs(data_dir("skills"))), plugin_tools()
     for name, (owner, src) in real.items():
         if (inc and name not in inc) or name in exc:
             continue                      # not linked: its description would cost tokens every session
@@ -333,6 +387,12 @@ def sync_skills(p: Paths, plan: Plan) -> None:
             if owner == tool:
                 continue
             dst = tdir / name
+            if tool in plugged and name in bundled:
+                # the relayline plugin brings it as relayline:<name>; a second copy would trigger twice
+                if _is_link(dst) and _norm(dst.resolve()) == _norm(src.resolve()):
+                    plan.do(f"remove skill link {dst}: the relayline plugin brings {name}",
+                            lambda d=dst: _unlink(d))
+                continue
             if dst.exists() or _is_link(dst):
                 try:
                     if dst.resolve() == src.resolve():
@@ -463,19 +523,7 @@ def uninstall(p: Paths, apply: bool) -> Plan:
             data = json.loads(sj.read_text(encoding="utf-8") or "{}")
         except json.JSONDecodeError:
             data = None
-        changed = []
-        mine = {"SessionStart": lambda c: "ccx" in c and "mem delta" in c, "UserPromptSubmit": _is_turn_hook}
-        for event, is_mine in mine.items():
-            groups = (data or {}).get("hooks", {}).get(event, [])
-            keep = [g for g in groups if not any(is_mine(h.get("command", "")) for h in g.get("hooks", []))]
-            if data is not None and len(keep) != len(groups):
-                data["hooks"][event] = keep
-                if not keep:
-                    del data["hooks"][event]
-                changed.append(event)
-        if changed:
-            if not data["hooks"]:
-                del data["hooks"]
+        if data is not None and (changed := drop_claude_hooks(data)):
             text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
             plan.do(f"remove ccx {' and '.join(changed)} hook(s) from {sj}", lambda: _write(sj, text))
     ct = codex_home() / "config.toml"

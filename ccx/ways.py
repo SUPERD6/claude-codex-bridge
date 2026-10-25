@@ -108,7 +108,8 @@ def pieces(p: Paths, days: float = 90, include_evals: bool = False) -> list[dict
     from .learn import task_kind
     recs = [r for r in _records(p, time.time() - days * 86400)
             if not r.get("ephemeral") and not str(r.get("label") or "").startswith(INTERNAL)
-            and (include_evals or not is_eval({"label": r.get("label"), "no_ab": (r.get("route") or {}).get("no_ab")}))]
+            and (include_evals or not is_eval({"label": r.get("label"), "no_ab": (r.get("route") or {}).get("no_ab"),
+                                                    "dismissed": r.get("dismissed")}))]
     by_id = {r["run_id"]: r for r in recs}
     follow: dict[str, int] = {}
     for r in recs:
@@ -240,8 +241,10 @@ def _diff(p: Paths, rec: dict) -> str:
 
 
 def run(p: Paths, brief: str, choice: dict, *, cwd: Path, check: str | None = None, caller: str = "unknown",
-        risk: str = "low", kind: str | None = None, yes: bool = False, runner=None, max_diff: int = 12000) -> dict:
-    """Carry out the chosen way. `runner(**request fields) -> run record` is delegate.run (tests pass a fake)."""
+        risk: str = "low", kind: str | None = None, yes: bool = False, runner=None, max_diff: int = 12000,
+        label: str = "") -> dict:
+    """Carry out the chosen way. `runner(**request fields) -> run record` is delegate.run (tests pass a fake).
+    `label` goes on the build runs (e.g. eval-... so H9 and probable verdicts leave an evaluation out)."""
     import uuid
     from . import review
     if runner is None:
@@ -263,7 +266,8 @@ def run(p: Paths, brief: str, choice: dict, *, cwd: Path, check: str | None = No
         return rec
 
     if way == "solo":
-        rec = step("build", runner(to=roles["builder"], brief=brief, mode="write", check=check, risk=risk, **common))
+        rec = step("build", runner(to=roles["builder"], brief=brief, mode="write", check=check, risk=risk, label=label,
+                                   **common))
         out.update(result=_brief_result(rec), run_id=rec["run_id"])
     elif way == "plan_build":
         plan = step("plan", runner(to=roles["planner"], brief=PLAN.format(wid=wid, task=brief), mode="read",
@@ -278,7 +282,7 @@ def run(p: Paths, brief: str, choice: dict, *, cwd: Path, check: str | None = No
         out["plan"] = {"summary": res.get("summary"), "items": items[:12]}
         build = step("build", runner(to=roles["builder"], brief=BUILD.format(task=brief, planner=roles["planner"],
                                                                              plan=plan_text),
-                                     mode="write", check=check, review="off", **common))
+                                     mode="write", check=check, review="off", label=label, **common))
         for rnd in (0, 1):
             diff = _diff(p, build)
             acc_brief = review.brief(build["run_id"], brief + "\n\n## The plan it was given\n" + plan_text,
@@ -298,7 +302,7 @@ def run(p: Paths, brief: str, choice: dict, *, cwd: Path, check: str | None = No
             issues = "\n".join(f"- {x}" for x in v["issues"])
             first = build
             build = step("fix", runner(to=roles["builder"], resume_run=build["run_id"], mode="write", check=check,
-                                       review="off", fallback=False,
+                                       review="off", fallback=False, label=label,
                                        brief=f"The planner checked your change against the plan and found:\n{issues}\n"
                                              "Fix the real ones (say which you think are wrong and why).",
                                        **common))
@@ -309,7 +313,8 @@ def run(p: Paths, brief: str, choice: dict, *, cwd: Path, check: str | None = No
         recs = {}
         for slot, agent in (("A", roles["builder"]), ("B", roles["second"])):
             recs[slot] = step(f"build {slot}", runner(to=agent, brief=brief, mode="write", check=check,
-                                                      worktree=True, review="off", fallback=False, **common))
+                                                      worktree=True, review="off", fallback=False,
+                                                      label=f"{label}:{slot}" if label else "", **common))
         done = {k: r for k, r in recs.items() if r.get("ok") and (r.get("result") or {}).get("status") == "done"}
         if len(done) < 2:
             out["pick"] = {"slot": next(iter(done), None), "why": "only one version finished" if done

@@ -1,0 +1,3 @@
+# shell scripts must keep LF: the plugin hooks run bin/ccx through sh, also on Windows checkouts
+bin/ccx text eol=lf
+*.sh text eol=lf
