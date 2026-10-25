@@ -1,4 +1,6 @@
-/* ccx ui: draws what /api/data returns. Read-only: buttons only show the ccx command to run and copy it.
+/* ccx ui: draws what /api/data returns. A button whose ccx command the server allows (`run`) asks the server to
+   prepare it, shows the exact command it answered and runs it only on a second click (K6); every other button,
+   and every button in a snapshot, shows the command to copy. The page never sends a command, only which button.
    Every visible word comes from strings.json (one table, zh + en). Data (titles, summaries, file names) is
    always escaped: it may contain text written by others. No inline handlers: one delegated click listener. */
 "use strict";
@@ -6,6 +8,7 @@
   let STR = {zh: {}, en: {}};
   let LANG = "en", D = null, ALL = null, TOKEN = "", SNAP = false, OFFLINE = false, lastOk = 0, TESTS = false, HIDDEN = 0;
   let filt = "all", sel = null, expanded = {}, query = "", histOpen = {}, drawerSig = "", drawerStable = "", pending = null, chosen = null;
+  let ACT = null, FLASH = null;     /* the one button being prepared / confirmed, and the last outcome line */
   const KNOWN = {claude: "Claude", codex: "Codex", deepseek: "DeepSeek", gemini: "Gemini"};
   const FIXED = {claude: "claude", codex: "codex", deepseek: "deepseek"};
   const SPARE = 4;
@@ -174,13 +177,14 @@
     }
     let h = banner() + `<h1>${t("ov_title")}</h1>`;
     if (!tasks) {
-      h += `<p class="lead">${t("empty")}</p>` + sugHTML() + leadsHTML() + discRecentHTML() + weekHTML();
+      h += `<p class="lead">${t("empty")}</p>` + sugHTML() + leadsHTML() + discRecentHTML() + othersHTML() + weekHTML();
       return h;
     }
     const parts = [t("ov_running", {n: running})], nsug = (D && D.suggestions_total) || ((D && D.suggestions) || []).length;
     parts.push(todos.length ? `<span class="warn">${t("ov_waiting", {n: todos.length})}</span>` : `<span class="good">${t("ov_nothing")}</span>`);
     if (nsug) parts.push(`<span class="warn">${t("ov_sug", {n: nsug})}</span>`);
     const qw = quotaWarn(); if (qw) parts.push(qw);
+    if (D.inbox) parts.push(`<span class="warn">${t("ov_inbox", {n: D.inbox})}</span>`);
     h += `<p class="lead">${parts.join(" · ")}</p>`;
     if (todos.length) {
       h += `<h2>${t("todo_all")}</h2><div class="todo">`;
@@ -193,11 +197,11 @@
     for (const pr of D.projects) {
       let n = 0, d = 0, need = 0; const ws = new Set();
       for (const tk of pr.tasks) { const s = stats(tk.pieces); n += s.n; d += s.d; need += acts(tk.pieces).length; walk(tk.pieces, p => { if (p.worker) ws.add(p.worker); }); }
-      h += `<a class="card pcard" href="${href([pr.id])}"><div class="top"><b>${esc(pr.name)}</b>${need ? `<span class="badge">${t("needs_n", {n: need})}</span>` : ""}</div>
+      h += `<a class="card pcard" href="${href([pr.id])}"><div class="top"><b>${esc(pr.name)}</b>${levelHTML(pr)}${need ? `<span class="badge">${t("needs_n", {n: need})}</span>` : ""}${(pr.rules || []).length ? `<span class="rulesb" title="${esc(t("rules_title"))}">${t("rules_n", {n: pr.rules.length})}</span>` : ""}</div>
         <div class="pbar"><i style="width:${n ? Math.round(100 * d / n) : 0}%"></i></div><div class="m">${t("tasks_pieces", {t: pr.tasks.length, d, n})}</div>
         <div class="whos">${[...ws].map(w => who(w)).join("")}</div></a>`;
     }
-    return h + `</div>` + weekHTML();
+    return h + `</div>` + othersHTML() + weekHTML();
   }
   /* H5: notes ccx suggests keeping, each waiting for a yes or no (the page's one write; a snapshot shows the command) */
   const SUG_KINDS = {preference: "sug_preference", decision: "sug_decision", pitfall: "sug_pitfall"};
@@ -240,8 +244,7 @@
   function shortPath(p) { if (!p) return ""; const s = String(p).replace(/\\/g, "/").split("/").filter(Boolean); return s[s.length - 1] || p; }
   function weekHTML() {
     const w = (D && D.week) || {runs: 0};
-    let h = `<h2>${t("worth")}</h2><p class="stat">${t("week_spent", {u: usd(w.usd || 0), n: w.runs || 0})}${w.cash_usd ? " " + t("week_cash", {u: usd(w.cash_usd)}) : ""}</p>`;
-    h += `<p class="stat">${w.verdicts >= w.verdicts_needed ? t("saved_see_report") : t("saved_unknown", {n: w.verdicts || 0, need: w.verdicts_needed || 30})}</p>`;
+    let h = `<h2>${t("worth")}</h2>` + monthHTML() + `<p class="stat">${t("week_spent", {u: usd(w.usd || 0), n: w.runs || 0})}${w.cash_usd ? " " + t("week_cash", {u: usd(w.cash_usd)}) : ""}</p>`;
     return h + trackHTML();
   }
   /* H9: who is right the first time, per kind of work (judged pieces only) */
@@ -257,7 +260,96 @@
   function banner() {
     if (SNAP) return `<div class="banner snap">${t("snap_banner", {at: clock(D.generated)})}</div>`;
     if (OFFLINE) return `<div class="banner">${t("offline_banner")}</div>`;
+    if (FLASH && Date.now() - FLASH.at < 20000) return `<div class="banner ${FLASH.ok ? "ok" : ""}" role="status">${FLASH.html}</div>`;
     return "";
+  }
+
+  /* ---------- K6: this month, the other projects, optional slots (autonomy level, inbox) ---------- */
+  function monthHTML() {
+    const m = D && D.month;
+    if (!m) return `<p class="stat">${t("month_wait")}</p>`;
+    const since = new Date(m.since * 1000), day = t("date_md", {m: since.getMonth() + 1, d: since.getDate()});
+    let h = `<p class="stat">${t("month_spent", {d: day, u: usd(m.sub_usd || 0), n: m.runs || 0})}</p>`;
+    if (m.saving == null) return h + `<p class="stat">${t("month_saving_none")}</p>`;
+    const ci = m.ci95 && m.ci95.length === 2 ? t("month_ci", {a: usd(Math.abs(m.ci95[0])) , b: usd(Math.abs(m.ci95[1])), neg: m.ci95[0] < 0 ? "−" : ""}) : "";
+    h += `<p class="stat"><b>${t(m.saving >= 0 ? "month_saving" : "month_extra", {u: usd(Math.abs(m.saving)), ci, n: m.n || 0})}</b></p>`;
+    return h + `<p class="stat cost">${t(m.kind === "measured" ? "month_measured" : "month_model")}</p>`;
+  }
+  function othersHTML() {
+    const os = ((D && D.others) || []).filter(o => TESTS || !o.test);
+    if (!os.length) return "";
+    const more = ((D && D.others_total) || 0) - os.length;
+    return `<h2>${t("others_title")}</h2><p class="stat">${t("others_lead")}</p><div class="others">`
+      + os.map(o => `<span class="chip" title="${esc(o.summary || o.path)}">${esc(o.name)}${o.last ? ` <i>${ago(o.last)}</i>` : ""}</span>`).join("")
+      + (more > 0 ? `<span class="chip more">${t("others_more", {n: more})}</span>` : "") + `</div>`;
+  }
+  function levelHTML(pr) { return pr.level ? `<span class="lvlb" title="${esc(t("level_title"))}">${esc(pr.level)}</span>` : ""; }
+  function rulesHTML(pr) {
+    if (!(pr.rules || []).length) return "";
+    return `<h2>${t("rules_title")}</h2><p class="stat">${t("rules_lead")}</p><ul class="files">`
+      + pr.rules.map(r => `<li><span class="mono">${esc(r.file)}:${esc(r.line)}</span> ${esc(r.text)}</li>`).join("") + `</ul>`;
+  }
+
+  /* ---------- K6: a button that runs its ccx command: prepare -> the exact command -> confirm -> run once ---------- */
+  function where(key) { const [project, task, piece] = key.split("|"); return {project, task, piece: piece === "_" ? null : piece}; }
+  function actBox(key, b) {
+    if (!ACT || ACT.key !== key) return "";
+    const cancel = `<button class="btn" data-do="act-cancel">${t("act_cancel")}</button>`;
+    if (ACT.stage === "usd") return `<div class="k">${t(b ? b.label : "b_budget")} — ${t("act_usd")}</div><div class="acts"><input type="number" id="usdin" min="0.01" max="10000" step="0.5" value="${esc(ACT.usd)}" aria-label="${esc(t("act_usd"))}"><button class="btn primary" data-do="act-usd">${t("act_next")}</button>${cancel}</div>`;
+    if (ACT.stage === "busy") return `<div class="k">${t("act_busy")}</div>`;
+    if (ACT.stage === "err") return `<div class="k"><span class="warn">${t("act_failed", {e: ACT.msg || ""})}</span></div><div class="acts">${cancel}</div>`;
+    if (ACT.stage === "confirm") return `<div class="k">${t(ACT.label)} — ${t("act_will")}</div><code class="mono" id="cmdtext">${esc(ACT.cmd)}</code>`
+      + `<p class="${ACT.spends ? "warn" : "cost"}" style="margin:6px 0">${t(ACT.spends ? "act_spends" : "act_records")}</p>`
+      + `<div class="acts"><button class="btn ${ACT.spends ? "bad" : "primary"}" data-do="act-run">${t(ACT.spends ? "act_confirm_spend" : "act_confirm")}</button>${cancel}<button data-do="copy">${t("copy")}</button></div>`;
+    return "";
+  }
+  function paintAct() {
+    const c = $("cmd");
+    if (c && ACT) { c.hidden = true; chosen = null; }      /* one box at a time: the copy-only one goes */
+    for (const el of document.querySelectorAll("[data-actbox]")) {
+      const key = el.dataset.actbox, h = actBox(key, ACT && ACT.key === key ? ACT.b : null);
+      el.innerHTML = h; el.hidden = !h;
+    }
+  }
+  async function prepare(key, btn, b, fill) {
+    ACT = {key, btn, b, label: b.label, stage: "busy"}; paintAct();
+    try {
+      const r = await post("/api/act/prepare", Object.assign(where(key), {btn, fill: fill || {}}));
+      Object.assign(ACT, {stage: "confirm", cmd: r.cmd, nonce: r.nonce, spends: r.spends});
+    } catch (e) { Object.assign(ACT, {stage: "err", msg: e.message}); }
+    paintAct();
+  }
+  async function runAct() {
+    if (!ACT || ACT.stage !== "confirm") return;
+    const a = ACT; a.stage = "busy"; paintAct();
+    try {
+      const r = await post("/api/act/run", {nonce: a.nonce});
+      const html = r.started ? t("act_started", {c: raw(`<code class="mono">${esc(r.cmd)}</code>`)})
+        : r.ok ? t("act_done", {c: raw(`<code class="mono">${esc(r.cmd)}</code>`)})
+        : t("act_exit", {c: raw(`<code class="mono">${esc(r.cmd)}</code>`), e: String(r.exit), m: (r.err || r.out || "").slice(-300)});
+      FLASH = {at: Date.now(), ok: !!r.ok, html}; ACT = null;
+      await refresh(); render();
+    } catch (e) { Object.assign(a, {stage: "err", msg: e.message}); paintAct(); }
+  }
+  async function post(path, body) {
+    const r = await fetch(path, {method: "POST", cache: "no-store", credentials: "omit",
+      headers: {"X-CCX-Token": TOKEN, "Content-Type": "application/json"}, body: JSON.stringify(body)});
+    let j = {}; try { j = await r.json(); } catch (e) { /* empty */ }
+    if (!r.ok) throw new Error(j.error || String(r.status));
+    return j;
+  }
+  /* a button was pressed: runnable ones go through prepare; the rest (and every one in a snapshot) show the command */
+  function pressBtn(key, holder, id) {
+    const b = (id[0] === "a" ? (holder.act || {}).buttons : holder.ctl || [])[+id.slice(1)];
+    if (!b) return;
+    if (SNAP || !b.run) { if (id[0] === "a") showCmd(holder, +id.slice(1), false); else fillCmd(b.label, b.cmd); return; }
+    if (b.cmd.includes("{reason}") || b.cmd.includes("{note}")) { showCmd(holder, +id.slice(1), false); return; }
+    if (b.cmd.includes("{usd}")) {
+      const tk = findTask(findProject(where(key).project), where(key).task) || {};
+      const base0 = holder === tk ? Math.max(tk.budget || 0, tk.spent || 0) : 0;
+      ACT = {key, btn: id, b, label: b.label, stage: "usd", usd: (Math.ceil(base0) + 5).toFixed(2)}; paintAct(); return;
+    }
+    prepare(key, id, b, {});
   }
 
   /* ---------- discussions (ccx discuss): turns drawn as a conversation ---------- */
@@ -298,7 +390,7 @@
 
   /* ---------- a project page ---------- */
   function renderProject(pr) {
-    let h = banner() + `<div class="crumbs"><a href="#/">${t("overview")}</a> › ${esc(pr.name)}</div><h1>${esc(pr.name)}</h1><p class="lead mono" style="font-size:13px">${esc(pr.path)}</p><h2>${t("tasks")}</h2><div class="grid">`;
+    let h = banner() + `<div class="crumbs"><a href="#/">${t("overview")}</a> › ${esc(pr.name)}</div><h1>${esc(pr.name)}${levelHTML(pr)}</h1><p class="lead mono" style="font-size:13px">${esc(pr.path)}</p>${rulesHTML(pr)}<h2>${t("tasks")}</h2><div class="grid">`;
     for (const tk of pr.tasks) {
       const s = stats(tk.pieces), k = acts(tk.pieces).length, ws = new Set();
       walk(tk.pieces, p => { if (p.worker) ws.add(p.worker); });
@@ -375,7 +467,9 @@
       const sent = list.filter(p => p.worker).length;
       const lead = tk.lead && tk.lead.agent ? who(tk.lead.agent, null).replace(/>[^<]*<\/span>$/, ">" + t("boss", {m: agentName(tk.lead.agent) + (tk.lead.model ? " · " + tk.lead.model : "")}) + "</span>") : `<span class="who">${t("boss_unknown")}</span>`;
       h += `<div class="box boss"><div>${lead}</div><div class="t">${t("boss_sum", {n: list.length, s: sent})}</div>`;
-      if (tk.spent) h += `<div class="cost">${tk.budget ? t("spent_budget", {u: usd(tk.spent), b: usd(tk.budget)}) : t("spent", {u: usd(tk.spent)})}</div>`;
+      if (tk.spent || tk.budget) h += `<div class="cost">${tk.budget ? t("spent_budget", {u: usd(tk.spent || 0), b: usd(tk.budget)}) : t("spent", {u: usd(tk.spent)})}</div>`;
+      const tkey = pr.id + "|" + tk.id + "|_";
+      if ((tk.ctl || []).length) h += `<div class="acts tctl">${tk.ctl.map((b, i) => `<button class="btn" data-tbtn="c${i}" data-key="${esc(tkey)}">${t(b.label)}</button>`).join("")}</div><div class="cmd" data-actbox="${esc(tkey)}" hidden></div>`;
       if (tk.helpers && tk.helpers.length) h += `<div class="helper">${t("helper", {n: tk.helpers.length})}</div>`;
       h += `</div>`;
     } else {
@@ -404,6 +498,7 @@
     const busy = old && (old.contains(document.activeElement) || !!(old.querySelector("#reasons") || {}).innerHTML);
     $("main").innerHTML = h;
     renderDrawer(list, base, old, busy);
+    paintAct();
   }
   /* the fields that change every poll while a run goes on: a panel someone is using keeps its old copy of them */
   function stableOf(p) { const c = Object.assign({}, p); for (const k of ["secs", "tokens", "beat", "ts", "_from"]) delete c[k]; return c; }
@@ -441,13 +536,18 @@
     if (p.files && p.files.length) h += `<h3>${t("ev_changed")}</h3><ul class="files mono">${p.files.slice(0, 12).map(x => `<li>${esc(x)}</li>`).join("")}</ul>`;
     if (p.review && p.review.issues && p.review.issues.length) h += `<h3>${t("issues")}</h3><ul class="files">${p.review.issues.map(x => `<li>${esc(x)}</li>`).join("")}</ul>`;
     if (p.native && p.native.length) h += `<h3>${t("d_native", {w: agentName(p.worker)})}</h3><ul class="nlist">${p.native.map(x => `<li><span class="mono">${esc(x.id)}</span><div class="m">${tok(x.tokens)} tokens</div></li>`).join("")}</ul>`;
-    if (a) {
-      h += `<div class="acts">${a.buttons.map((b, i) => `<button class="btn ${esc(b.style || "")}" data-btn="${i}">${t(b.label)}</button>`).join("")}</div>`;
-      h += `<div id="reasons"></div><div class="cmd" id="cmd" hidden></div>`;
+    const ctl = p.ctl || [], key = base[0] + "|" + base[1] + "|" + p.id;
+    if (a || ctl.length) {
+      const one = (b, id) => `<button class="btn ${esc(b.style || "")}" data-btn="${id}" data-key="${esc(key)}">${t(b.label)}${b.run && !SNAP ? (b.spends ? " ▸" : "") : ""}</button>`;
+      h += `<div class="acts">${(a ? a.buttons : []).map((b, i) => one(b, "a" + i)).join("")}${ctl.map((b, i) => one(b, "c" + i)).join("")}</div>`;
+      if (!a) h += `<p class="cost">${t("ctl_running")}</p>`;
+      h += `<div id="reasons"></div><div class="cmd" data-actbox="${esc(key)}" hidden></div><div class="cmd" id="cmd" hidden></div>`;
     }
     d.innerHTML = h;
+    paintAct();
+    if (ACT && ACT.key === key) return;
     if (a && chosen && chosen.sel === p.id) fillCmd(chosen.label, chosen.cmd);
-    else if (a) showCmd(p, 0, true);
+    else if (a && (SNAP || !a.buttons[0].run)) showCmd(p, 0, true);
   }
   function whyText(why) {
     const [k, p] = why; const q = Object.assign({}, p || {});
@@ -460,10 +560,11 @@
     const a = p.act, c = $("cmd"), r = $("reasons"); if (!a || !c) return;
     const b = a.buttons[i];
     if (r) r.innerHTML = "";
+    if (!quiet && ACT) { ACT = null; paintAct(); }
     if (a.reasons && b.style === "bad" && !quiet) {
       r.innerHTML = `<div class="reasons"><div style="font-size:13px;color:var(--muted);margin-bottom:4px">${t("why_bad")}</div>`
         + [["unfinished", "r1"], ["wrong", "r2"], ["overreach", "r3"]].map(([v, l]) => `<label><input type="radio" name="r" value="${v}"> ${t(l)}</label>`).join("")
-        + `<label><input type="radio" name="r" value="other" checked> ${t("r4")}<input type="text" id="rnote" maxlength="200"></label><button class="btn bad" style="margin-top:6px;min-height:32px" data-reason="${i}">${t("r_ok")}</button></div>`;
+        + `<label><input type="radio" name="r" value="other" checked> ${t("r4")}<input type="text" id="rnote" maxlength="200"></label><button class="btn bad" style="margin-top:6px;min-height:32px" data-reason="${i}">${t(b.run && !SNAP ? "act_next" : "r_ok")}</button></div>`;
       c.hidden = true; return;
     }
     if (b.cmd.includes("{reason}") || b.cmd.includes("{note}")) { if (quiet) { c.hidden = true; return; } }
@@ -521,9 +622,21 @@
 
   /* ---------- events (one listener; no inline handlers, the page's CSP forbids them) ---------- */
   document.addEventListener("click", (e) => {
-    const el = e.target.closest("[data-sel],[data-filt],[data-more],[data-btn],[data-reason],[data-do],[data-sug]");
+    const el = e.target.closest("[data-sel],[data-filt],[data-more],[data-btn],[data-tbtn],[data-reason],[data-do],[data-sug]");
     if (!el) return;
     if (el.dataset.sug !== undefined) { if (!SNAP && !el.disabled) decideSug(el.dataset.sug, el.dataset.ok === "1"); return; }
+    if (el.dataset.do === "act-cancel") { ACT = null; paintAct(); return; }
+    if (el.dataset.do === "act-run") { runAct(); return; }
+    if (el.dataset.do === "act-usd") {
+      const v = ($("usdin") || {}).value;
+      if (ACT) { ACT.usd = v; prepare(ACT.key, ACT.btn, ACT.b, {usd: v}); }
+      return;
+    }
+    if (el.dataset.tbtn !== undefined) {           /* a task's own control (the queue's budget) */
+      const w = where(el.dataset.key), tk = findTask(findProject(w.project), w.task);
+      if (tk) pressBtn(el.dataset.key, tk, el.dataset.tbtn);
+      return;
+    }
     if (el.dataset.do === "lang") { LANG = LANG === "zh" ? "en" : "zh"; try { localStorage.setItem("ccx-lang", LANG); } catch (x) { /* ok */ } render(); return; }
     if (el.dataset.do === "theme") {
       const root = document.documentElement, dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
@@ -540,15 +653,16 @@
       return;
     }
     if (!cur) return;
-    const f = sel ? findPiece(cur.list, sel) : null; if (!f || !f.p.act) return;
-    if (el.dataset.btn !== undefined) { showCmd(f.p, +el.dataset.btn, false); return; }
-    if (el.dataset.reason !== undefined) {
-      const b = f.p.act.buttons[+el.dataset.reason];
+    const f = sel ? findPiece(cur.list, sel) : null; if (!f || !(f.p.act || (f.p.ctl || []).length)) return;
+    if (el.dataset.btn !== undefined) { pressBtn(el.dataset.key, f.p, el.dataset.btn); return; }
+    if (el.dataset.reason !== undefined && f.p.act) {
+      const i = +el.dataset.reason, b = f.p.act.buttons[i];
       const pick = document.querySelector("#reasons input[name=r]:checked"), note = ($("rnote") || {}).value || "";
       const reason = pick ? pick.value : "other";
       const text = note || t("r_" + reason + "_note");
-      const cmd = b.cmd.split("{reason}").join(reason).split("{note}").join(quoteArg(b.cmd.includes("{reason}") ? text : reason + ": " + text));
       $("reasons").innerHTML = "";
+      if (b.run && !SNAP) { prepare(cur.base[0] + "|" + cur.base[1] + "|" + f.p.id, "a" + i, b, {reason, note: text}); return; }
+      const cmd = b.cmd.split("{reason}").join(reason).split("{note}").join(quoteArg(b.cmd.includes("{reason}") ? text : reason + ": " + text));
       fillCmd(b.label, cmd);
     }
   });
@@ -557,6 +671,7 @@
   });
   document.addEventListener("input", (e) => {
     if (e.target.id === "search") { query = e.target.value; const {r} = route(); renderSide(r); }
+    if (e.target.id === "usdin" && ACT) ACT.usd = e.target.value;
   });
   document.addEventListener("toggle", (e) => { if (e.target.dataset && e.target.dataset.hist) histOpen[e.target.dataset.hist] = e.target.open; }, true);
   addEventListener("hashchange", render);
@@ -584,12 +699,16 @@
     const f = sel ? findPiece(cur.list, sel) : null, d = $("drawer");
     if (f && f.p.status === "run" && d && !d.contains(document.activeElement)) { drawerSig = ""; renderDrawer(cur.list, cur.base, null, false); }
   }
+  /* one read of /api/data; true when something besides the ticking numbers changed */
+  async function refresh() {
+    const got = await api("/api/data");
+    const changed = stableSig(got) !== stableSig(ALL) || OFFLINE;
+    ALL = got; D = view(got); OFFLINE = false; lastOk = Date.now();
+    return changed;
+  }
   async function poll() {
     try {
-      const got = await api("/api/data");
-      const changed = stableSig(got) !== stableSig(ALL) || OFFLINE;
-      ALL = got; D = view(got); OFFLINE = false; lastOk = Date.now();
-      if (changed) render(); else patchLive();
+      if (await refresh()) render(); else patchLive();
     } catch (e) {
       if (!OFFLINE && Date.now() - lastOk > 8000) { OFFLINE = true; render(); }
     }

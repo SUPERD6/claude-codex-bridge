@@ -1,4 +1,4 @@
-"""ccx ui — the read-only live page on this machine (ccx/ui.py), or a static snapshot of it (--export)."""
+"""ccx ui — the live page and manager's board on this machine (ccx/ui.py), or a static snapshot of it (--export)."""
 from __future__ import annotations
 
 import sys
@@ -17,8 +17,8 @@ def cmd_ui(a) -> int:
         return 0
     srv = ui.UI(p, project, a.days, port=a.port)
     print(f"ccx ui: {srv.url}", flush=True)
-    print("read-only except yes/no on suggested notes; stops on its own about a minute after the page is closed "
-          "(or Ctrl+C)", file=sys.stderr, flush=True)
+    print("buttons that change something show their ccx command and run it on a second click; stops on its own "
+          "about a minute after the page is closed (or Ctrl+C)", file=sys.stderr, flush=True)
     if not a.no_open:
         ui.open_browser(srv.url)
     try:
@@ -30,8 +30,8 @@ def cmd_ui(a) -> int:
 
 
 def register(sub) -> None:
-    u = sub.add_parser("ui", help="a read-only live page on this machine: who works on what, what waits for you, "
-                       "quota (never calls a model)")
+    u = sub.add_parser("ui", help="a live page on this machine: who works on what across projects, what waits "
+                       "for you, quota, this month's saving; buttons run ccx commands after a second click")
     u.add_argument("--project", help="only this project folder (default: every project with recent runs)")
     u.add_argument("--no-open", action="store_true", help="print the address, don't open a browser")
     u.add_argument("--port", type=int, default=0, help="default: a random free port")
