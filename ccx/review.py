@@ -3,7 +3,8 @@ the task and answers pass / issues, so the lead reads a verdict and the problem 
 
 Only when it is worth it (`auto`, the default): the task was marked visible or critical, the change has 50+ changed
 code lines, the sub-agent listed things it is unsure of (open_questions), or its claimed files don't match the
-actual diff. `on` reviews every write run
+actual diff, or the only evidence is weak (H13: the acceptance command let wrong work through before, or there is
+none and only the sub-agent checked itself; at most `weak_daily` of these a day). `on` reviews every write run
 with changes, `off` never. The same model reviewing its own work misses its own mistakes, so the reviewer is always
 another vendor ([review] by in tiers.toml). Issues go back to the same sub-session for one fix round, which is
 reviewed again; still failing -> kind review_failed, for the lead to decide."""
@@ -115,6 +116,31 @@ def reason(mode: str, risk: str | None, result: dict, claimed: list[str], actual
     return None
 
 
+def weak_reason(p: Paths, rc: dict, record: dict, now: float | None = None) -> str | None:
+    """H13: in `auto`, also review when the evidence that the work is right is weak, up to `weak_daily` a day
+    (`weak = false` in [review] switches this off). Each such review is logged, which is how the cap is counted."""
+    import time
+    from . import ledger
+    if not rc.get("weak", True):
+        return None
+    check = record.get("check") or {}
+    res = record.get("result") or {}
+    if check.get("weak"):
+        why = "weak check: this acceptance command let wrong work through before"
+    elif not check and res.get("verification", "not-run") not in ("", "not-run"):
+        why = "only the sub-agent's own check"
+    else:
+        return None
+    now = now or time.time()
+    t = time.localtime(now)
+    midnight = time.mktime((t.tm_year, t.tm_mon, t.tm_mday, 0, 0, 0, 0, 0, -1))
+    today = sum(1 for r in ledger.rows(p) if r.get("type") == "weak_review" and (r.get("ts") or 0) >= midnight)
+    if today >= int(rc.get("weak_daily", 20)):
+        return None
+    ledger.append_event(p, {"type": "weak_review", "run_id": record.get("run_id"), "why": why, "ts": now})
+    return why
+
+
 REVIEW_B = 3.0           # a review reads one diff against one brief: routed like an easy read-only task
 
 
@@ -191,6 +217,8 @@ def review_run(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path, run_d
     res = record.get("result") or {}
     why = rv.reason(mode, req.risk, res, res.get("files_changed") or [], actual, rv.code_lines(diff),
                     int(rc.get("min_lines", 50)))
+    if not why and mode == "auto" and actual:
+        why = rv.weak_reason(p, rc, record)
     if not why:
         return
     cands = rv.reviewers(cfg, req.provider or req.to, find_bin, p)

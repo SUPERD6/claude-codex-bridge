@@ -62,14 +62,95 @@ def claude_readings(p, days: float = 8) -> list[dict]:
     return out
 
 
-def codex_readings(days: float = 8) -> list[dict]:
-    from .usage import codex_events
+TAIL_BYTES = 64 * 1024     # a session file's quota lines are near its end: read only this much of each
+RECENT_FILES = 40          # session files changed within RATE_HOURS, newest first, at most this many ...
+MORE_FILES = 5             # ... and when none of them has a quota line, up to this many older ones
+SAMPLE_BYTES = 32 * 1024
+
+
+def _tail_readings(f: Path) -> list[dict]:
+    """Quota readings in the last TAIL_BYTES of one Codex session file, plus small pieces further back at twice the
+    distance each time (128 KB, 256 KB, ... from the end, and the start): a session open for days keeps readings
+    from every age, which the pace over RATE_HOURS needs. Only lines with rate_limits are parsed."""
+    from .usage import _ts
+    lines = []
+    with open(f, "rb") as fh:
+        fh.seek(0, 2)
+        size = fh.tell()
+        spots = [(max(0, size - TAIL_BYTES), TAIL_BYTES)]
+        back = 2 * TAIL_BYTES
+        while back < size:
+            spots.append((size - back, SAMPLE_BYTES))
+            back *= 2
+        if size > TAIL_BYTES:
+            spots.append((0, SAMPLE_BYTES))
+        for at, n in spots:
+            fh.seek(at)
+            part = fh.read(n).decode("utf-8", errors="replace").splitlines()
+            lines += part[1:] if at else part        # a piece starts in the middle of a line
+    out = []
+    for line in lines:
+        if '"rate_limits"' not in line:
+            continue
+        try:
+            e = json.loads(line)
+        except ValueError:
+            continue
+        t = _ts(e.get("timestamp"))
+        rl = (e.get("payload") or {}).get("rate_limits") or {}
+        for win in ("primary", "secondary"):
+            w = rl.get(win) or {}
+            if t is not None and w.get("used_percent") is not None:
+                out.append({"ts": t, "agent": "codex", "window": win, "used": w["used_percent"] / 100,
+                            "resets_at": w.get("resets_at"), "window_minutes": w.get("window_minutes")})
+    return out
+
+
+def codex_readings(days: float = 8, p=None, home: Path | None = None, now: float | None = None) -> list[dict]:
+    """Codex's quota readings, read only from the end of its newest session files (seconds -> milliseconds: a week
+    of logs was read whole before, 9.65 of `ccx route`'s 10 s, PR #30). With a hub `p`, each file's readings are
+    kept by (path, mtime, size) in <hub>/ccx/codex-quota-cache.json, so a later call re-reads only changed files."""
+    from .config import codex_home
+    now = now or time.time()
+    root = (home or codex_home()) / "sessions"
+    files = []
+    for f in root.rglob("rollout-*.jsonl") if root.exists() else []:
+        try:
+            st = f.stat()
+        except OSError:
+            continue
+        if st.st_mtime >= now - days * 86400:
+            files.append((st.st_mtime, st.st_size, f))
+    files.sort(reverse=True)
+    cf = p.state / "codex-quota-cache.json" if p is not None else None
     try:
-        _, samples = codex_events(time.time() - days * 86400, set())
-    except Exception:  # noqa: BLE001
-        return []
-    return [{"ts": s["ts"], "agent": "codex", "window": s["window"], "used": s["used_percent"] / 100,
-             "resets_at": s.get("resets_at"), "window_minutes": s.get("window_minutes")} for s in samples]
+        cache = json.loads(cf.read_text(encoding="utf-8")) if cf else {}
+    except (OSError, ValueError):
+        cache = {}
+    new_cache, out, extra = {}, [], 0
+    for k, (mtime, size, f) in enumerate(files):
+        recent = mtime >= now - RATE_HOURS * 3600 and k < RECENT_FILES
+        if not recent:
+            if out or extra >= MORE_FILES:
+                break
+            extra += 1                     # nothing recent says anything: look a little further back
+        hit = cache.get(str(f))
+        if hit and hit[0] == mtime and hit[1] == size:
+            rs = hit[2]
+        else:
+            try:
+                rs = _tail_readings(f)
+            except OSError:
+                continue
+        new_cache[str(f)] = [mtime, size, rs]
+        out += rs
+    if cf and new_cache != cache:
+        try:
+            cf.parent.mkdir(parents=True, exist_ok=True)
+            cf.write_text(json.dumps(new_cache), encoding="utf-8")
+        except OSError:
+            pass
+    return [r for r in out if r["ts"] >= now - days * 86400]
 
 
 def pace(readings: list[dict], now: float | None = None) -> dict:
@@ -96,7 +177,8 @@ def pace(readings: list[dict], now: float | None = None) -> dict:
         span = (last["ts"] - recent[0]["ts"]) / 3600 if recent else 0
         row = {"used": round(last["used"], 3), "resets_at": reset,
                "hours_left": round(hours_left, 1) if hours_left is not None else None,
-               "reading_age_min": round((now - last["ts"]) / 60)}
+               "reading_age_min": round((now - last["ts"]) / 60),
+               "read_at": time.strftime("%Y-%m-%d %H:%M", time.localtime(last["ts"]))}   # when the reading was taken
         if span >= MIN_SPAN_HOURS and hours_left is not None:
             per_h = max(0.0, (last["used"] - recent[0]["used"]) / span)
             row.update(per_day=round(per_h * 24, 3), projected=round(last["used"] + per_h * hours_left, 3))
@@ -111,7 +193,7 @@ def pressure(p, given: dict | None = None) -> dict:
     Explicit values (--quota claude=0.8) win; else Codex from its logs and Claude from kept readings."""
     q = dict(given or {})
     detail = {}
-    for agent, readings in (("codex", codex_readings()), ("claude", claude_readings(p))):
+    for agent, readings in (("codex", codex_readings(p=p)), ("claude", claude_readings(p))):
         if agent in q or not readings:
             continue
         pc = pace(readings)
@@ -149,6 +231,60 @@ def backfill(p) -> int:
                                                  "window_minutes": WINDOW_MIN.get(win)}) + "\n")
                         n += 1
     return n
+
+
+def _stops_file(p) -> Path:
+    return p.state / "quota-stops.jsonl"
+
+
+def stop_evidence(cli: str, stdout: str, stderr: str, error: str | None) -> dict:
+    """Why an attempt was taken for a quota stop (H2): Claude's rejected rate_limit_event as it came, else the hint
+    in runners.QUOTA_HINTS that matched and the words around it. Kept so a wrong call ("quota" in a task's own
+    text, a new wording of a real limit) can be found and the hints corrected, without spending quota to test."""
+    from .runners import QUOTA_HINTS
+    if cli == "claude":
+        for line in stdout.splitlines():
+            if '"rate_limit_event"' not in line:
+                continue
+            try:
+                info = json.loads(line).get("rate_limit_info") or {}
+            except ValueError:
+                continue
+            if str(info.get("status", "")).lower() in ("rejected", "exceeded", "blocked"):
+                return {"by": "rate_limit_event", "event": {k: info.get(k) for k in (
+                    "status", "rateLimitType", "resetsAt", "overageStatus", "isUsingOverage") if k in info}}
+    text = " ".join(x for x in (error, stderr[-4000:], stdout[-4000:]) if x)
+    low = text.lower()
+    for h in QUOTA_HINTS:
+        i = low.find(h)
+        if i != -1:
+            return {"by": "hint", "hint": h, "text": " ".join(text[max(0, i - 160): i + 160].split())}
+    return {"by": "unknown"}
+
+
+def log_stop(p, run_id: str, attempt: dict, evidence: dict) -> None:
+    """One line per quota stop in <hub>/ccx/quota-stops.jsonl (shown by `ccx quota`)."""
+    row = {"ts": time.time(), "run_id": run_id, "agent": attempt.get("agent"), "model": attempt.get("model"),
+           "effort": attempt.get("effort"), "retry_after": attempt.get("retry_after"),
+           "seconds": attempt.get("seconds"), **evidence}
+    f = _stops_file(p)
+    f.parent.mkdir(parents=True, exist_ok=True)
+    with open(f, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+
+def recent_stops(p, n: int = 5) -> list[dict]:
+    try:
+        lines = _stops_file(p).read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return []
+    out = []
+    for line in lines[-n:]:
+        try:
+            out.append(json.loads(line))
+        except ValueError:
+            continue
+    return out
 
 
 def claude_reading_age(p) -> float | None:

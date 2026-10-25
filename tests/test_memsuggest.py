@@ -94,6 +94,23 @@ class TestRelevanceAndUse(Env):
         self.assertEqual(memory.unused(p), [])                                   # all recent
         self.assertEqual([e["seq"] for e in memory.unused(p, days=-1)], [a["seq"], b["seq"]])
 
+    def test_who_wrote_who_used_report(self):
+        p = Paths(self.hub)
+        n = memory.add(p, "the parser tests need the fixtures folder", "codex", topic="parser")
+        memory.add(p, "billing exports run on Fridays", "claude")
+        memory.mark_used(p, [n["seq"]])                                         # before `by` was kept
+        self.assertEqual(self.ccx("mem", "delta", "--as", "claude").returncode, 0)    # shows codex's note only
+        self.ccx("run", "--from", "claude", "--to", "codex", "--tier", "T2", "--mode", "read", "fix the parser tests")
+        r = json.loads(self.ccx("mem", "report", "--days", "14", "--json").stdout)
+        self.assertEqual(r["matrix"]["codex"], {"unknown": 1, "claude": 1, "codex": 1})   # start + brief
+        self.assertNotIn("claude", r["matrix"])                               # the billing note: nobody
+        self.assertEqual(r["via"], {"unknown": 1, "start": 1, "brief": 1})
+        self.assertEqual(r["by_project"][self.work.name]["codex"]["codex"], 1)
+        self.assertEqual((r["written"], r["written_never_used"]), ({"codex": 1, "claude": 1}, 1))
+        text = self.ccx("mem", "report").stdout
+        self.assertIn("written by \\ used by", text)
+        self.assertIn("3 time(s)", text)
+
 
 if __name__ == "__main__":
     unittest.main()

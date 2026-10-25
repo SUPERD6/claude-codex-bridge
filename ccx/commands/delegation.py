@@ -117,9 +117,6 @@ def cmd_run(a) -> int:
 def cmd_send(a) -> int:
     """Talk to a running *desktop/interactive* Codex session (the Codex app) instead of a headless one."""
     import subprocess
-    if a.to != "codex":
-        raise ValueError("sending into a live session is supported for Codex (codex queue); for Claude use "
-                         "`ccx resume <run_id>` or `claude --resume <session>`")
     codex = find_bin("codex")
     if not codex:
         raise FileNotFoundError("codex CLI not found")
@@ -260,8 +257,21 @@ def cmd_verify(a) -> int:
         _out({"recorded": done, "note": "probable verdicts from the evidence (soft); `ccx verify RUN --ok 0|1` "
               "overrides any of them"} if done else {"recorded": [], "note": "nothing old enough with clear evidence"})
         return 0
+    if a.sample:
+        import sys
+        from ..verdicts import review_sample, sample_soft
+        picks = sample_soft(paths(), a.sample, include_evals=a.include_evals)
+        if not picks:
+            _out({"sample": [], "note": "no probable verdict this week that nobody judged since"})
+        elif sys.stdin.isatty() and not a.list:
+            done = review_sample(paths(), picks)
+            _out({"judged": done, "overturned": sum(d["overturned"] for d in done)})
+        else:
+            _out({"sample": picks, "how": "look at each, then `ccx verify RUN_ID --ok 1|0` (run this in a terminal "
+                  "to answer one by one)"})
+        return 0
     if a.ok is None:
-        raise ValueError("give --ok 1 or --ok 0 (or --sweep)")
+        raise ValueError("give --ok 1 or --ok 0 (or --sweep, --sample N)")
     if a.builtin:
         from ..delegate import verify_builtin
         if a.b is None:
@@ -283,6 +293,8 @@ def cmd_plan(a) -> int:
 
 def cmd_resume(a) -> int:
     p = paths()
+    from ..recover import sweep
+    sweep(p)                            # closes it as interrupted first if its ccx process died mid-run
     req = Request(to="codex", brief=_brief(a), tier=a.tier, resume_run=a.run_id,
                   caller=_caller(a.caller), escalate=False if a.no_escalate else None,
                   model=a.model, effort=a.effort, budget_usd=a.budget)
@@ -349,6 +361,9 @@ def cmd_quota(a) -> int:
         lam = {ag: round(tr.shadow_lambda(v), 2) for ag, v in pr["quota"].items()}
     except Exception:  # noqa: BLE001
         pass
+    stops = quota.recent_stops(p)
+    if stops:
+        extra["recent_quota_stops"] = stops       # H2: why each was taken for a quota stop
     _out({"projected_at_reset": pr["quota"], "quota_price_share_of_api": lam, "windows": pr["pace"], **extra})
     return 0
 
@@ -526,7 +541,10 @@ def register(sub) -> None:
     tk.set_defaults(fn=cmd_task)
     se = sub.add_parser("send", help="send a message into a live Codex desktop/interactive session")
     se.add_argument("message", nargs="*")
-    se.add_argument("--to", choices=["codex", "claude"], default="codex")
+    # Codex only: `codex queue` is the one way in from outside. A Claude Code session (terminal or desktop app) has no
+    # entrance for another program's message; a Claude sub-agent is followed up with `ccx resume <run_id>`
+    se.add_argument("--to", choices=["codex"], default="codex",
+                    help="codex (the only one: Claude sessions take no message from outside; use ccx resume)")
     se.add_argument("--thread", help="Codex thread id (see --list)")
     se.add_argument("--list", action="store_true", help="list live sessions (codex agents)")
     se.add_argument("--wait", type=int, default=120, help="seconds to wait for the conversation to go idle (120)")
@@ -542,6 +560,10 @@ def register(sub) -> None:
                    "whose check or self-check passed and review (if any) passed (undone ones wait for you); also "
                    "runs quietly at session start. Your own verdict always overrides these")
     v.add_argument("--after-h", type=float, default=12.0, help="with --sweep: only runs at least this old (hours)")
+    v.add_argument("--sample", type=int, metavar="N", help="spot-check N random probable verdicts of this week: shows "
+                   "what changed and asks ok / wrong (J7: tells how far probable verdicts can be trusted)")
+    v.add_argument("--include-evals", action="store_true", help="with --sample: evaluation runs too")
+    v.add_argument("--list", action="store_true", help="with --sample: print the picks as JSON instead of asking")
     v.add_argument("--builtin", metavar="RUNG", help="work your own built-in sub-agent did, e.g. claude-builtin:haiku:low")
     v.add_argument("--b", type=float, help="with --builtin: the difficulty ccx route used")
     v.add_argument("--agent-id", help="with --builtin: the sub-agent's id, so its real cost is read and learned")

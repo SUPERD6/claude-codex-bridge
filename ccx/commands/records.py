@@ -3,15 +3,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .. import ledger, report
+from .. import ledger, recover, report
 from ..config import SETTINGS, daily_cap, load_config, paths, set_setting
+from ..agents import leads
 from ..delegate import compact, undo
 from .common import _out, lead_session_id, provider_agents
 
 
 def cmd_report(a) -> int:
     p = paths()
-    res = report.write(p, days=a.days, out=Path(a.out) if a.out else None, include_lead=not a.no_lead)
+    res = report.write(p, days=a.days, out=Path(a.out) if a.out else None, include_lead=not a.no_lead,
+                       include_evals=a.include_evals)
     if a.publish:
         res["publish"] = report.publish(p, Path(res["report"]).parent)
     _out(res)
@@ -57,6 +59,7 @@ def cmd_undo(a) -> int:
 
 def cmd_show(a) -> int:
     p = paths()
+    recover.sweep(p)                    # a run whose ccx process is gone shows as interrupted, not running
     rec = ledger.load_run(p, a.run_id)
     if a.full:
         _out(rec)
@@ -68,6 +71,7 @@ def cmd_show(a) -> int:
 
 
 def cmd_stats(a) -> int:
+    recover.sweep(paths())              # count runs whose ccx process died, with what they spent
     if a.summary:
         p = paths()
         s = report.summarize(p, report.collect(p, a.days))
@@ -241,7 +245,7 @@ def register(sub) -> None:
     ld.add_argument("--threshold", type=int, default=150_000, help="tokens a turn reads before advising")
     ld.add_argument("--hint", action="store_true", help="for a per-turn hook: read the hook's JSON on stdin and "
                     "print one line only when this conversation is long (at most once every 20 turns)")
-    ld.add_argument("--as", dest="as_", choices=["claude", "codex"])
+    ld.add_argument("--as", dest="as_", choices=leads())
     ld.add_argument("--breakdown", action="store_true", help="what every turn re-reads, part by part (system "
                     "prompt, tools, each MCP server, instruction files, skill list, hook output), with advice")
     ld.add_argument("--cache", action="store_true", help="turns where the prompt cache broke, the likely cause "
@@ -275,6 +279,7 @@ def register(sub) -> None:
     rp.add_argument("--out", help="output file (default <hub>/ccx/report/index.html)")
     rp.add_argument("--no-lead", action="store_true", help="skip reading the lead's own session logs")
     rp.add_argument("--publish", action="store_true", help="commit to report.publish_dir (your private repo)")
+    rp.add_argument("--include-evals", action="store_true", help="'where it was wrong' also counts evaluation runs")
     rp.set_defaults(fn=cmd_report)
     cf = sub.add_parser("config", help="settings, e.g. the save/fast knob: ccx config set defaults.tradeoff 0.3")
     cfs = cf.add_subparsers(dest="config_cmd", required=True)

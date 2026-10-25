@@ -164,14 +164,12 @@ def _how(choice: dict, b: float) -> str:
 
 def codex_quota(days: float = 7) -> float | None:
     """Latest share of Codex's primary (weekly) quota used, 0..1, from its session logs."""
-    import time
-    from .usage import codex_events
+    from .quota import codex_readings
     try:
-        _, samples = codex_events(time.time() - days * 86400, set())
+        prim = [s for s in codex_readings(days) if s.get("window") == "primary"]
     except Exception:  # noqa: BLE001
         return None
-    prim = [s for s in samples if s.get("window") == "primary"]
-    return round(max(prim, key=lambda s: s["ts"])["used_percent"] / 100, 3) if prim else None
+    return round(max(prim, key=lambda s: s["ts"])["used"], 3) if prim else None
 
 
 def refresh_benchmarks_later(p: Paths) -> bool:
@@ -315,7 +313,7 @@ def record_outcomes(p: Paths, record: dict, final_ok: bool) -> list[dict]:
     first_p = None
     for i, a in enumerate(atts):
         if a.get("kind") in ("quota", "auth", "timeout", "model", "policy", "needs_write", "split", "over_budget",
-                             "user_stopped"):
+                             "user_stopped", "killed", "interrupted"):
             continue                      # not the model's fault: says nothing about ability
         rung = f"{a['agent']}:{a['model']}:{a['effort']}"
         ok = final_ok if i == len(atts) - 1 else False

@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .. import learn, memory
 from ..config import AGENTS, DELEGATE_AGENTS, data_dir, paths
+from ..agents import leads
 from .common import _caller, _out
 
 
@@ -70,8 +71,8 @@ def cmd_fresh(a) -> int:
     from ..runners import bin_argv
     root = project.find_root() or learn.cp_root(Path.cwd())
     agent = a.as_ or _caller(None)
-    if agent not in ("claude", "codex"):
-        raise ValueError("say which lead: --as claude|codex")
+    if agent not in leads():
+        raise ValueError(f"say which lead: --as {'|'.join(leads())}")
     src = transcript_handoff(paths(), root, agent, a.session, a.max_chars, not a.no_model,
                              where=Path.cwd())
     if src is None:
@@ -195,7 +196,9 @@ def cmd_mem(a) -> int:
         _out(memory.verify(p, a.seq, by=_caller(None)))
     elif a.mem_cmd == "search":
         hits = memory.search(p, a.words)
-        memory.mark_used(p, [h["seq"] for h in hits if h.get("seq")])
+        from .. import project
+        memory.mark_used(p, [h["seq"] for h in hits if h.get("seq")], by=_caller(None),
+                         project=(project.find_root() or Path.cwd()).name, via="search")
         _out({"hits": hits})
     elif a.mem_cmd == "stale":
         _out({"stale": memory.stale(p), "unused": memory.unused(p),
@@ -210,7 +213,7 @@ def cmd_mem(a) -> int:
         parts = [memory.format_delta(memory.delta(p, a.as_, advance=not a.peek),
                                      project=(root or Path.cwd()).name, shown=shown)]
         if not a.peek:
-            memory.mark_used(p, shown)
+            memory.mark_used(p, shown, by=a.as_, project=(root or Path.cwd()).name, via="start")
         old = memory.stale(p)
         if old:
             from ..lang import say
@@ -294,6 +297,12 @@ def cmd_mem(a) -> int:
         _out({"snapshot": str(p.memory_index), "snapshot_seq": memory.snapshot_seq(p),
               "snapshot_bytes": p.memory_index.stat().st_size if p.memory_index.exists() else 0,
               "journal_entries": len(memory.entries(p)), "cursors": memory.load_cursors(p)})
+    elif a.mem_cmd == "report":
+        r = memory.use_report(p, a.days)
+        if a.json:
+            _out(r)
+        else:
+            print(memory.format_use_report(r))
     elif a.mem_cmd == "compact":
         res = memory.compact(p)
         from ..sync import Plan, sync_memory
@@ -375,7 +384,7 @@ def cmd_ctx(a) -> int:
 def register(sub) -> None:
     fr = sub.add_parser("fresh", help="hand this long conversation over to a fresh one of the same tool: the "
                         "handoff comes from this conversation's own file; the next conversation here starts with it")
-    fr.add_argument("--as", dest="as_", choices=["claude", "codex"])
+    fr.add_argument("--as", dest="as_", choices=leads())
     fr.add_argument("--session", help="a specific session id instead of the newest in this folder")
     fr.add_argument("--note", help="a line from the person to add")
     fr.add_argument("--no-model", action="store_true", help="code only, never a routed sub-agent reading the file")
@@ -412,12 +421,15 @@ def register(sub) -> None:
     ms.add_argument("words", nargs="+")
     msub.add_parser("stale", help="notes not written or checked for 30 days")
     md = msub.add_parser("delta")
-    md.add_argument("--as", dest="as_", choices=AGENTS, required=True)
+    md.add_argument("--as", dest="as_", choices=leads(), required=True)
     md.add_argument("--peek", action="store_true", help="do not move the cursor")
     msub.add_parser("show")
     msub.add_parser("status")
     msub.add_parser("compact")
-    sg = msub.add_parser("suggest", help="gather notes worth keeping from a lead session (the person's preferences, "
+    mr = msub.add_parser("report", help="who wrote the shared notes that were used, and who used them (H6)")
+    mr.add_argument("--days", type=float, default=14)
+    mr.add_argument("--json", action="store_true")
+    sg =msub.add_parser("suggest", help="gather notes worth keeping from a lead session (the person's preferences, "
                          "decisions, pitfalls); nothing is written until you accept")
     sg.add_argument("--from-transcript", choices=["claude", "codex"])
     sg.add_argument("--session", help="a session id instead of the newest here")

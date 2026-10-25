@@ -32,7 +32,47 @@ CODEX_LEAD_FIX_WIN = ('on Windows, give lead sessions full access, e.g. a profil
                       'sandbox_mode = "danger-full-access"\nthen start the lead with `codex -p lead`')
 
 
-def codex_lead_sandbox(config_text: str, hub, windows: bool | None = None) -> tuple[str, str]:
+# Safer than full access, not yet checked on a real run: keep workspace-write and let only ccx's hand-out commands run
+# outside the sandbox with a Codex rule (learn.chatgpt.com/docs/agent-configuration/rules, read 2026-10-25: "allow" =
+# "Run the command outside the sandbox without prompting"; rules are experimental). The pattern is an exact argv prefix,
+# so it names this copy of ccx exactly as the lead is told to call it (`codex execpolicy check` agrees, codex-cli 0.164).
+LEAD_VERBS = ("run", "ask", "resume", "discuss")
+FULL_ACCESS_NOTE = ("safety: in full access every command the lead runs has your rights, unsandboxed (files, network, "
+                    "credentials). Safer, not yet checked on a real run: keep workspace-write and let only ccx out of "
+                    "the sandbox with the rule `ccx doctor --codex-rule` prints")
+
+
+def codex_lead_rule(argv: list[str] | None = None) -> str:
+    """A ~/.codex/rules/ccx.rules entry that lets this copy of ccx hand work out from a sandboxed Codex lead."""
+    from .config import ccx_argv
+    pat = ", ".join(json.dumps(x) for x in (argv or ccx_argv())) + ", [" + ", ".join(json.dumps(v) for v in LEAD_VERBS) + "]"
+    return ("prefix_rule(\n"
+            f"    pattern = [{pat}],\n"
+            '    decision = "allow",\n'
+            '    justification = "ccx starts the sub-agent CLI as you, so it can edit files and keep its session",\n'
+            ")\n")
+
+
+def codex_rule_allows(rules_dir, argv: list[str] | None = None, check=None) -> bool:
+    """Does a rule in ~/.codex/rules let `ccx run` out of the sandbox? Asked of Codex itself (`codex execpolicy
+    check`), so the answer follows its own matching. `check(rules_file, argv) -> decision` for tests."""
+    from pathlib import Path
+    from .config import ccx_argv
+    files = sorted(Path(rules_dir).glob("*.rules")) if Path(rules_dir).is_dir() else []
+    if not files:
+        return False
+    cmd = [*(argv or ccx_argv()), "run", "--to", "claude", "x"]
+    if check is None:
+        def check(f, a):
+            rc, out = _run([*bin_argv("codex"), "execpolicy", "check", "--rules", str(f), "--", *a])
+            try:
+                return json.loads(out).get("decision") if rc == 0 else None
+            except ValueError:
+                return None
+    return any(check(f, cmd) == "allow" for f in files)
+
+
+def codex_lead_sandbox(config_text: str, hub, windows: bool | None = None, rule: bool = False) -> tuple[str, str]:
     """Can a Codex lead run `ccx run`? ccx writes its run records into the hub, and the sub-agent CLI it starts needs
     the network. In Codex's workspace-write sandbox both are blocked unless configured: a real headless Codex lead
     got `[WinError 5] Access is denied` on the hub's runs folder (seven-cores check, 2026-10-24)."""
@@ -47,10 +87,14 @@ def codex_lead_sandbox(config_text: str, hub, windows: bool | None = None) -> tu
     # not set: Codex picks read-only or workspace-write from the project's trust, so check as workspace-write
     mode = cfg.get("sandbox_mode") or "not set"
     if mode == "danger-full-access":
-        return "ok", "sandbox_mode = danger-full-access"
+        return "ok", f"sandbox_mode = danger-full-access; {FULL_ACCESS_NOTE}"
+    if rule and mode != "read-only":
+        return "Unknown", (f"sandbox_mode = {mode} and a rule lets `ccx run` out of the sandbox: by Codex's docs that "
+                           "should work, but it has not been checked on a real run (rules are experimental)")
     if windows:
         return "WARN", (f"sandbox_mode = {mode}: a Codex lead cannot hand work to Claude through `ccx run` in this "
-                        f"sandbox on Windows (checked on real runs); {CODEX_LEAD_FIX_WIN}")
+                        f"sandbox on Windows (checked on real runs); {CODEX_LEAD_FIX_WIN}\nor, safer but not yet "
+                        "checked on a real run: keep the sandbox and add the rule `ccx doctor --codex-rule` prints")
     fix = CODEX_LEAD_FIX.format(hub=Path(hub).as_posix())
     if mode == "read-only":
         return "WARN", f"sandbox_mode = read-only: a Codex lead cannot run `ccx run`; use workspace-write and add\n{fix}"
@@ -213,7 +257,8 @@ def doctor(p: Paths) -> bool:
     has = ct.exists() and "ccx:begin hooks" in ct.read_text(encoding="utf-8")
     add("Codex SessionStart hook", "ok (trust once via /hooks)" if has else "missing", str(ct))
     if find_bin("codex"):
-        add("Codex as lead (sandbox)", *codex_lead_sandbox(ct.read_text(encoding="utf-8") if ct.exists() else "", p.hub))
+        add("Codex as lead (sandbox)", *codex_lead_sandbox(ct.read_text(encoding="utf-8") if ct.exists() else "", p.hub,
+                                                           rule=codex_rule_allows(codex_home() / "rules")))
 
     skill = "agent-delegate"
     for tool, d in (("claude", claude_home() / "skills"), ("codex", codex_home() / "skills")):

@@ -46,7 +46,8 @@ ccx run ... --task <id> --step <n>   # session id saved into task-checkpoint at 
 ccx run ... --mode read          # analysis only (without --mode, ccx infers read/write from the brief; follow it)
 ccx run ... --check "CMD"        # acceptance command: the sub-agent runs it, ccx runs it again (failure = failure)
 ccx run ... --risk visible       # user-facing / critical work: another vendor's cheap model reviews the diff
-ccx run ... --review on|off      # force or skip that review (auto: risk, 50+ code lines, unsure, claims vs diff)
+ccx run ... --review on|off      # force or skip that review (auto: risk, 50+ code lines, unsure, claims vs diff,
+                                 # weak evidence: a check that passed wrong work before, or only a self-check)
 ccx run ... --worktree           # isolate edits on branch ccx/<run_id>
 ccx batch plan.json              # independent tasks in parallel (writers auto-isolated)
 ccx resume <run_id> "follow-up"  # same sub-session: no re-briefing, cache stays warm
@@ -109,8 +110,9 @@ automatic memory into the other.
 Hard to undo (a data format, a migration, a public interface, a dependency), touching safety or money, or the person
 said it matters: before committing to one answer, **ask the person** whether models from other vendors should talk
 it through. Say the question in one line and what it may cost (`ccx discuss --dry-run "question"`: who takes part,
-at most how many calls, estimated $). Only on their yes:
-`ccx discuss "question" [--context-file notes.md] [--with codex,claude,gemini] [--rounds 1-3]` — one proposes, one
+at most how many calls, estimated $, which model each uses). Only on their yes:
+`ccx discuss --confirmed "question" [--context-file notes.md] [--with codex,claude,gemini] [--rounds 1-3]` (without
+`--confirmed` you get only the estimate) — one proposes, one
 finds faults, one judges; only points travel between turns. Read `result` (recommendation, consensus,
 disagreements, reasons); the person sees the turns in `ccx ui`. It advises; the decision stays with you and the person.
 Not for routine choices: every turn is a full model call.

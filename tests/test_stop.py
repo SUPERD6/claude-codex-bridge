@@ -44,7 +44,14 @@ class StopEnv(Env):
     def tearDown(self):
         for run_id in getattr(self, "_bg", []):    # before the temp folder goes (cleanups run after it)
             self.reap(run_id)
-        super().tearDown()
+        for i in range(20):
+            try:
+                super().tearDown()
+                return
+            except PermissionError:      # Windows lets go of a dead process's cwd a moment later
+                if i == 19:
+                    raise
+                time.sleep(0.25)
 
     def reap(self, run_id):
         """Let the background ccx finish before the temp folder goes (Windows can't delete a process's cwd)."""
@@ -52,7 +59,7 @@ class StopEnv(Env):
         if not wait_for(lambda: not pid_alive(rec.get("ccx_pid")), 15):
             kill_tree(rec.get("ccx_pid"))
         kill_tree(rec.get("pid"))
-        wait_for(lambda: not pid_alive(rec.get("ccx_pid")), 5)
+        wait_for(lambda: not pid_alive(rec.get("ccx_pid")) and not pid_alive(rec.get("pid")), 10)
 
 
 class TestStop(StopEnv):

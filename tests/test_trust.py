@@ -99,5 +99,62 @@ class TestWeakCheck(Env):
         self.assertEqual([(w["cmd"], w["wrong"], w["judged"]) for w in weak], [("exit 0", 3, 3)])
 
 
+class TestWeekly(unittest.TestCase):
+    """H14: where it was wrong, this week next to last week."""
+    NOW = 1_800_000_000.0
+
+    def piece(self, days_ago, ok, tier="luna:low", kind="code", p=None, attempts=1, rework=False, judged=True):
+        return {"agent": "codex", "tier": tier, "kind": kind, "judged": judged, "ok": ok, "rework": rework or not ok,
+                "p": p, "attempts": attempts, "ts": self.NOW - days_ago * 86400}
+
+    def test_tiers_by_week(self):
+        from ccx import accuracy
+        pcs = [self.piece(1, True), self.piece(2, False), self.piece(3, True, rework=True), self.piece(9, False),
+               self.piece(1, True, tier="gpt-6:high"), self.piece(1, True, judged=False), self.piece(20, False)]
+        t = {(x["tier"], x["kind"]): x for x in accuracy.tiers(pcs, self.NOW)}
+        self.assertEqual(t[("luna:low", "code")]["this"], {"judged": 3, "wrong": 0.333, "rework": 0.667})
+        self.assertEqual(t[("luna:low", "code")]["last"], {"judged": 1, "wrong": 1.0, "rework": 1.0})
+        self.assertEqual(t[("gpt-6:high", "code")]["last"], {"judged": 0, "wrong": None, "rework": None})
+
+    def test_brier_and_bins(self):
+        from ccx import accuracy
+        pcs = [self.piece(1, True, p=0.9), self.piece(1, False, p=0.6), self.piece(1, True, p=0.6, attempts=2),
+               self.piece(8, True, p=0.99), self.piece(1, True)]                 # no p: not counted
+        c = accuracy.calibration(pcs, self.NOW)
+        # this week: (0.9-1)^2 + (0.6-0)^2 + (0.6-0)^2 (escalated: the picked rung did not do it) over 3
+        self.assertEqual((c["this"]["n"], c["this"]["brier"]), (3, round((0.01 + 0.36 + 0.36) / 3, 4)))
+        self.assertEqual([(b["bin"], b["n"], b["actual"]) for b in c["this"]["bins"]],
+                         [("0.50-0.70", 2, 0.0), ("0.85-0.95", 1, 1.0)])
+        self.assertEqual((c["last"]["n"], c["last"]["bins"][0]["bin"]), (1, "0.95-1.00"))
+
+    def test_soft_overturned_by_week_without_evals(self):
+        from ccx import accuracy
+        ts = lambda d: self.NOW - d * 86400  # noqa: E731
+        rows = [{"run_id": "a", "label": "x"}, {"run_id": "b", "label": "x"}, {"run_id": "e", "label": "eval-1"},
+                {"type": "verify", "run_id": "a", "ok": True, "soft": True, "ts": ts(3)},
+                {"type": "verify", "run_id": "a", "ok": False, "ts": ts(2)},
+                {"type": "verify", "run_id": "b", "ok": True, "soft": True, "ts": ts(10)},
+                {"type": "verify", "run_id": "b", "ok": True, "ts": ts(9)},
+                {"type": "verify", "run_id": "e", "ok": True, "soft": True, "ts": ts(3)},
+                {"type": "verify", "run_id": "e", "ok": False, "ts": ts(2)}]
+        o = accuracy.overturned(rows, self.NOW)
+        self.assertEqual(o["this"], {"rechecked": 1, "overturned": 1, "rate": 1.0})
+        self.assertEqual(o["last"], {"rechecked": 1, "overturned": 0, "rate": 0.0})
+        self.assertEqual(accuracy.overturned(rows, self.NOW, include_evals=True)["this"]["rechecked"], 2)
+
+    def test_card(self):
+        from ccx import accuracy
+        acc = {"tiers": accuracy.tiers([self.piece(1, False)], self.NOW),
+               "calibration": accuracy.calibration([self.piece(1, True, p=0.8)], self.NOW),
+               "soft": {"this": {"rechecked": 0, "overturned": 0, "rate": None},
+                        "last": {"rechecked": 0, "overturned": 0, "rate": None}},
+               "checks": {"judged": 0, "wrong": 0, "weak": []}, "evals": False}
+        h = accuracy.card_html(acc)
+        self.assertIn("this week vs last week", h)
+        self.assertIn("luna:low", h)
+        self.assertIn("Brier", h)
+        self.assertIn("--include-evals", h)
+
+
 if __name__ == "__main__":
     unittest.main()

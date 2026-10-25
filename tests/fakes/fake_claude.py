@@ -42,7 +42,13 @@ if stream:
         sys.exit(1)
     print(json.dumps({"type": "system", "subtype": "init", "session_id": sid, "model": "fake"}), flush=True)
 if mode == "hang":
-    time.sleep(30)
+    if stream:   # one request already answered (as stream-json prints it, twice for one message) before it hangs
+        msg = {"type": "assistant", "session_id": sid, "message": {"id": "msg_1", "model": "claude-sonnet", "usage": {
+            "input_tokens": 10, "cache_creation_input_tokens": 2000, "cache_read_input_tokens": 5000,
+            "output_tokens": 300}}}
+        print(json.dumps(msg), flush=True)
+        print(json.dumps(msg), flush=True)
+    time.sleep(float(os.environ.get("FAKE_HANG_S") or 30))
 if mode == "quota":
     if stream:
         print(json.dumps({"type": "rate_limit_event", "session_id": sid,

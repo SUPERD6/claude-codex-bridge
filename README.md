@@ -47,7 +47,7 @@ ccx run --to codex --mode read "Summarise README.md in three lines"
 | | What | Where it stands |
 |---|---|---|
 | **1. Each other's lead and sub-agent** | Claude Code leads and Codex works, or the other way round; Gemini CLI and DeepSeek (through Claude Code, Codex, or DeepSeek Harness `dsh`) take work. One adapter per CLI; `ccx agents` lists what each can do, the version tested, official or community. | Both directions run for real; DeepSeek through Claude Code and Codex for real; Gemini and `dsh` only with stand-ins |
-| **2. Two models talking directly** | `ccx ask` gets a quick second opinion from the other vendor; `ccx resume` follows up in the same sub-session; `ccx send` puts a message into a live Codex session; `ccx discuss` lets 2–3 models from different vendors talk a costly decision through (propose, find faults, judge; at most 3 rounds) and shows it as a conversation in `ccx ui`. | The first three work for real; `ccx discuss` only with stand-ins |
+| **2. Two models talking directly** | `ccx ask` gets a quick second opinion from the other vendor; `ccx resume` follows up in the same sub-session; `ccx send` puts a message into a live Codex session; `ccx discuss` lets 2–3 models from different vendors talk a costly decision through (propose, find faults, judge; at most 3 rounds) and shows it as a conversation in `ccx ui`. | The first three work for real; `ccx discuss` ran for real twice, two vendors and then three (Codex, Claude, DeepSeek; [notes](docs/research/2026-10-25-discuss-three-vendors.md)) |
 | **3. Shared memory** | A personal layer (your hub: memory, skills, MCP, ledger) and a project layer (`.ccx/`: context, journal, handoffs, checkpoints). The session-start hook brings only the other side's new lines; `ccx handoff` passes the baton, `ccx fresh` moves a long conversation to a fresh one of the same tool. | Works for real; fuller shared memory in progress |
 | **4. Splitting the work** | A five-question difficulty score → agent, model, effort and the odds; when doing it yourself is cheaper, or the task should be split first, it says so instead of delegating. `ccx batch` / `ccx q` run pieces in parallel; `ccx task resume` continues a long task after a stop. | Routing works for real but priors are uncalibrated; the queue only with stand-ins |
 | **5. Cheap and fast** | Slim sub-agent start-up; `ccx lead` shows what every turn of the lead re-reads (`--breakdown` part by part, `--cache` where the prompt cache broke, `--suggest` a model for the lead itself); `ccx sum` gives the lead only what matters of a big output. | The tools exist; how much they save depends on the lead using them (see below) |
@@ -132,6 +132,11 @@ Codex's sandbox decides whether that works: ccx writes its run records into the 
 network. `ccx doctor` checks it (row "Codex as lead (sandbox)"). On Windows only `danger-full-access` worked in real
 runs (codex-cli 0.164): in `workspace-write` the commands run as a separate sandbox account, and a Claude sub-agent
 started there refused every edit, even with the hub and `~/.claude` as writable roots and the network on.
+**Safety:** full access means every command the Codex lead runs has your rights, with no sandbox (your files, the
+network, your credentials); use it only for a lead you would trust at your own keyboard. A narrower way, by Codex's
+docs but **not yet checked on a real run**: keep `workspace-write` and let only ccx's hand-out commands
+(`run`, `ask`, `resume`, `discuss`) run outside the sandbox with a Codex rule: `ccx doctor --codex-rule >>
+~/.codex/rules/ccx.rules` (rules are experimental in Codex; `ccx doctor` then says Unknown, not ok).
 
 **Does the sub-agent know what you discussed with the lead?** Not directly: copying a long conversation into every
 sub-agent would be expensive, and Claude and Codex can't share a context window anyway. The sub-agent gets the
@@ -243,6 +248,7 @@ ccx way "brief" --risk low|visible|critical  # the risk picks the way: one agent
 ccx way --stats [--include-evals]           # per kind of work and tier: who is right the first time, how often rework
 ccx discuss "question" [--dry-run]           # 2-3 vendors talk a costly decision through: propose, find faults, judge
 ccx verify <run_id> --ok 0 --reason wrong     # your verdict (unjudged runs get a probable one after 12 h)
+ccx verify --sample 5                        # spot-check 5 probable verdicts of this week: ok / wrong
 ccx handoff --from-transcript codex --to claude   # the old lead can't write it (quota out): built from its session file
                                                   # (by code; a format the code can't read goes to a routed sub-agent, --no-model to skip)
 ccx undo <run_id> [--apply] [--wrong]   # put back what a write run changed (new files moved aside); --wrong: also judge it wrong
@@ -260,7 +266,9 @@ ccx ui [--project DIR] [--no-open] [--export FILE]   # read-only live page on 12
 ccx config set ui.lang zh            # language of ccx ui and of the lines ccx writes into conversations
 ccx config set defaults.tradeoff 0.3  # the save <-> fast knob: save / balanced / fast, or 0..1
 ccx ab done <id> --ok 1               # close an A/B sample (the ~10% the lead does itself)
-ccx send --list | --thread <id> "msg" # message a live Codex desktop / interactive session
+ccx send --list | --thread <id> "msg" # message a live Codex desktop / interactive session (Codex only: a Claude Code
+                                      # session, terminal or desktop app, has no way in for an outside message;
+                                      # follow up a Claude sub-agent with ccx resume <run_id>)
 ccx skills find pdf table             # search the shared skill library before writing a new skill
 ccx skills install [--replace] [--apply]   # link this repo's skills into the hub (dry run first), so `git pull` upgrades them
 ccx improve add <skill> "concrete problem" --fix "what to change"   # log real problems only

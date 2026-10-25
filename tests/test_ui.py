@@ -326,6 +326,15 @@ class TestLang(Env):
         bad = self.ccx("config", "set", "ui.lang", "fr")
         self.assertNotEqual(bad.returncode, 0)
 
+    def test_start_count_leaves_out_evaluation_runs(self):
+        p = Paths(self.hub)
+        put_run(self.hub, "r-real", self.work)                                      # done, nobody judged it
+        self.assertEqual(ui.waiting(p), 1)
+        put_run(self.hub, "r-eval", self.work, label="eval-7c:r1:memory:1:mem-log:hubmem")
+        put_run(self.hub, "r-noab", self.work, route={"no_ab": True})
+        put_run(self.hub, "r-probe", self.work, label="quota-probe")
+        self.assertEqual(ui.waiting(p), 1)
+
     def test_session_start_points_at_ccx_ui(self):
         r = self.ccx("run", "--to", "codex", "--tier", "T1", "--mode", "write", "--review", "off", "change x")
         self.assertEqual(r.returncode, 0, r.stderr + r.stdout)

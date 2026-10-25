@@ -38,7 +38,7 @@ ccx run --to codex --mode read "用三行总结 README.md"
 | | 做什么 | 现在的状态 |
 |---|---|---|
 | **1. 互为主子** | Claude Code 当主、Codex 干活，或者反过来；Gemini CLI、DeepSeek（经 Claude Code、经 Codex，或 DeepSeek Harness `dsh`）可以接活。每家一个适配器，`ccx agents` 列出每家能做什么、测过哪个版本、官方还是社区。 | 两个方向真机跑通；DeepSeek 经 Claude Code 和经 Codex 真跑过；Gemini 和 `dsh` 只有模拟测试 |
-| **2. 两个模型直接对话** | `ccx ask` 让另一家快速给个第二意见；`ccx resume` 在同一个子会话里追问；`ccx send` 把消息发进正在运行的 Codex 会话；`ccx discuss` 让 2–3 家不同厂商的模型把选错代价高的决定讨论清楚（出方案、挑错、裁判，最多 3 轮），在 `ccx ui` 里显示成对话。 | 前三个真机可用；`ccx discuss` 只有模拟测试 |
+| **2. 两个模型直接对话** | `ccx ask` 让另一家快速给个第二意见；`ccx resume` 在同一个子会话里追问；`ccx send` 把消息发进正在运行的 Codex 会话；`ccx discuss` 让 2–3 家不同厂商的模型把选错代价高的决定讨论清楚（出方案、挑错、裁判，最多 3 轮），在 `ccx ui` 里显示成对话。 | 前三个真机可用；`ccx discuss` 真跑过两次，先两家、后三家（Codex、Claude、DeepSeek；[记录](docs/research/2026-10-25-discuss-three-vendors.zh.md)） |
 | **3. 共享记忆** | 个人层（你的 hub：记忆、技能、MCP、账本）和项目层（`.ccx/`：背景、日志、交接、断点）。开局 hook 只推对方新写的几行；`ccx handoff` 换主智能体接力，`ccx fresh` 把长对话交给同一工具的新对话。 | 真机可用；更完整的共享记忆在做 |
 | **4. 分工合作** | 5 个问题打出难度 → 选智能体、模型、强度并给出成功率；算下来自己做更划算或该先拆，就直接说不派。`ccx batch` / `ccx q` 并行，长任务断了 `ccx task resume` 接着做。 | 选模型真机可用，但先验没校准；队列只有模拟测试 |
 | **5. 省和高效** | 子智能体精简启动；`ccx lead` 看主智能体每轮重读多少（`--breakdown` 拆开看、`--cache` 找缓存断在哪、`--suggest` 给主智能体自己的档位建议）；`ccx sum` 只把大段输出里要紧的给主智能体。 | 工具都在；省多少取决于主智能体怎么用（见实测） |
@@ -97,7 +97,7 @@ ccx run --to codex --mode read "用三行总结 README.md"
 6. 每次运行都写进账本，结果自动记回 task-routing / task-split，下次选得更准。`ccx report` 生成看板网页：谁花了多少 token、什么类型的 token、额度用了多少、估计省了多少。
 
 反过来，在 Codex 里用同样的命令加 `--to claude`，就是 Codex 当主、Claude Code 当子。
-能不能用要看 Codex 的沙箱：ccx 要把运行记录写进 hub，子智能体要联网。`ccx doctor` 会检查这一点（“Codex as lead (sandbox)”那一行）。在 Windows 上真跑只有 `danger-full-access` 能用（codex-cli 0.164）：`workspace-write` 下命令用一个单独的沙箱账号运行，在里面启动的 Claude 子智能体每次改文件都被拒，把 hub 和 `~/.claude` 加进可写目录、打开网络也一样。
+能不能用要看 Codex 的沙箱：ccx 要把运行记录写进 hub，子智能体要联网。`ccx doctor` 会检查这一点（“Codex as lead (sandbox)”那一行）。在 Windows 上真跑只有 `danger-full-access` 能用（codex-cli 0.164）：`workspace-write` 下命令用一个单独的沙箱账号运行，在里面启动的 Claude 子智能体每次改文件都被拒，把 hub 和 `~/.claude` 加进可写目录、打开网络也一样。**安全提醒：**完全访问意味着 Codex 组长跑的每条命令都带着你的全部权限、没有沙箱（你的文件、网络、凭据）；只在你愿意让它像你本人一样操作电脑时用。更窄的做法（按 Codex 官方文档可行，**还没真跑验证**）：保持 `workspace-write`，用一条 Codex 规则只让 ccx 派活的命令（`run`、`ask`、`resume`、`discuss`）在沙箱外运行：`ccx doctor --codex-rule >> ~/.codex/rules/ccx.rules`（Codex 的 rules 还是实验功能；装上后 `ccx doctor` 显示 Unknown 而不是 ok）。
 
 **子智能体知道你和主智能体聊过什么吗？** 不直接知道：把一长段对话塞给每个子智能体太贵，而且 Claude 和 Codex 本来就不能共享上下文。子智能体拿到的是简报（主智能体浓缩的结论）、项目背景、共享记忆和原文件。连续性靠**子会话**：同一个对话、同一个目录、同一个智能体，1 小时内的下一个任务会自动接回上一个子会话，它记得已经读过、做过什么（`--new` 强制新开）。从 Claude Code 派给 Claude 子智能体时，还可以用 `--fork` 让它从你整段对话的副本开始。
 
@@ -176,6 +176,7 @@ ccx way "任务" --risk low|visible|critical   # 按风险选合作方式：一�
 ccx way --stats [--include-evals]           # 每类活每家（分档位）的一次做对率和返工率，默认不算评测
 ccx discuss "问题" [--dry-run]              # 2-3 家不同厂商讨论选错代价高的决定：出方案、挑错、裁判
 ccx verify <run_id> --ok 0 --reason wrong     # 你的判断（没人判断的，12 小时后按证据自动记“大概率对/错”）
+ccx verify --sample 5                        # 抽查本周 5 个自动判定：看改动，回答对 / 错
 ccx handoff --from-transcript codex --to claude   # 原主智能体写不了（额度用完）：从它的会话文件生成交接
                                                   # （先用代码提取；格式认不出时交给自动选出的子智能体整理，--no-model 不用模型）
 ccx undo <run_id> [--apply] [--wrong]   # 撤回某次可写运行改动的文件（新建的挪到一边）；--wrong 同时记成做错
@@ -197,7 +198,8 @@ ccx run "任务" --provider deepseek-codex   # 同一个模型经 Codex（用 -c
 ccx run "任务" --to dsh --tier T2          # DeepSeek 自己的智能体 DeepSeek Harness（无头模式）
 ccx run "任务" --provider glm              # 较新的 API 经 Claude Code：kimi、glm、qwen、openrouter（要有密钥）
 ccx run "任务" ... --bg             # 后台跑，马上返回 run_id；用 ccx show 查看
-ccx send --list | --thread <id> "消息"   # 发消息给正在运行的 Codex 桌面/交互会话
+ccx send --list | --thread <id> "消息"   # 发消息给正在运行的 Codex 桌面/交互会话（只有 Codex：Claude Code 的终端
+                                        # 和桌面会话都没有接收外部消息的入口；Claude 子智能体用 ccx resume <run_id> 追问）
 ccx skills find pdf 表格             # 先在共享技能库里找，别重复写
 ccx skills install [--replace] [--apply]   # 把仓库里的技能链接进 hub（默认先预演），以后 git pull 就是升级
 ccx improve add <技能> "遇到的具体问题" --fix "怎么改"   # 只记真实遇到的问题

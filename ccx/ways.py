@@ -135,8 +135,10 @@ def pieces(p: Paths, days: float = 90, include_evals: bool = False) -> list[dict
         review_fix = (r.get("review") or {}).get("verdict") == "issues"
         row = {"run_id": r["run_id"], "agent": r.get("provider") or r.get("to"), "tier": _tier(r),
                "kind": (r.get("route") or {}).get("kind") or task_kind(r.get("mode")),
-               "judged": v is not None, "follow_ups": n_follow}
+               "judged": v is not None, "follow_ups": n_follow, "ts": r.get("ts"),
+               "p": (r.get("route") or {}).get("p"), "attempts": len(r.get("attempts") or [])}
         if v is not None:
+            row["ok"] = bool(v.get("ok"))
             first_v = verdicts.get(r["run_id"])
             row["first_right"] = bool(first_v and first_v.get("ok")) and not n_follow and not review_fix
             row["rework"] = bool(n_follow or review_fix or not v.get("ok"))
