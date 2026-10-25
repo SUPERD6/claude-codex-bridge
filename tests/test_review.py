@@ -101,6 +101,70 @@ class TestReason(unittest.TestCase):
         self.assertIn("cannot run commands", b)
 
 
+STORE = "class Store:\n    def get(self, k):\n        return 1\n\n    def remove(self, k, n):\n        return n\n"
+
+
+class TestCheckGap(unittest.TestCase):
+    """H13 without history: is a passed acceptance command evidence for *this* change?"""
+    START = {"inv/__init__.py": "", "inv/store.py": STORE, "inv/report.py": "def summary(s):\n    return {}\n",
+             "tests/test_inv.py": "from inv.report import summary\n\n\ndef test_s():\n    assert summary(None) == {}\n"}
+
+    def change(self, files: dict) -> tuple[Path, list[str], str]:
+        import tempfile
+        d = Path(tempfile.mkdtemp())
+        g = ["git", "-c", "user.name=t", "-c", "user.email=t@t"]
+        subprocess.run(["git", "init", "-q"], cwd=d, check=True)
+        for f, c in self.START.items():
+            (d / f).parent.mkdir(parents=True, exist_ok=True)
+            (d / f).write_text(c, encoding="utf-8")
+        subprocess.run(["git", "add", "-A"], cwd=d, check=True)
+        subprocess.run([*g, "commit", "-qm", "i"], cwd=d, check=True)
+        base = subprocess.run(["git", "rev-parse", "HEAD"], cwd=d, capture_output=True, text=True).stdout.strip()
+        for f, c in files.items():
+            (d / f).write_text(c, encoding="utf-8")
+        actual, diff = review.changes(d, {"base": base, "untracked": [], "repo": str(d)})
+        return d, actual, diff
+
+    def test_commands_that_run_no_tests(self):
+        for cmd in ("exit 0", "ruff check .", 'python -c "import inv"', "flake8", "mypy ."):
+            self.assertIn("runs no tests", review.check_gap(cmd, Path("."), ["a.py"], ""), cmd)
+        for cmd in ("python -m pytest -q", "npm test", "go test ./...", "cargo test", "python -m unittest",
+                    "python tests/test_inv.py", "make check", "pnpm run test"):
+            self.assertIsNotNone(review._TEST_CMD.search(cmd), cmd)
+
+    def test_tests_that_miss_the_change(self):
+        # like r2's inventory: the visible test imports the package but never calls what changed
+        d, actual, diff = self.change({"inv/store.py": STORE.replace("        return n\n",
+                                                                     "        if n < 1:\n            raise ValueError(n)\n"
+                                                                     "        return n\n")})
+        self.assertEqual(review.check_gap("python -m pytest -q", d, actual, diff),
+                         "the tests it runs don't touch inv/store.py (never named)")
+        d, actual, diff = self.change({"inv/report.py": "def summary(s):\n    return {}\n\n\ndef low(s):\n    return []\n"})
+        self.assertEqual(review.check_gap("python -m pytest -q", d, actual, diff),
+                         "the tests it runs don't touch inv/report.py: low")
+
+    def test_tests_that_reach_the_change_are_strong(self):
+        test = "from inv.report import summary\n\n\ndef test_s():\n    assert summary(None) == {'n': 0}\n"
+        d, actual, diff = self.change({"inv/report.py": "def summary(s):\n    return {'n': 0}\n",
+                                       "tests/test_inv.py": test})
+        self.assertIsNone(review.check_gap("python -m pytest -q", d, actual, diff))
+        self.assertIsNone(review.check_gap("python -m pytest -q", d, ["README.md"], ""))   # no code changed
+
+    def test_only_the_named_tests_count(self):
+        d, actual, diff = self.change({"inv/report.py": "def summary(s):\n    return {'n': 0}\n"})
+        (d / "tests" / "test_other.py").write_text("def test_x():\n    pass\n", encoding="utf-8")
+        self.assertIn("report.py", review.check_gap("python -m pytest tests/test_other.py", d, actual, diff))
+        self.assertIsNone(review.check_gap("python -m pytest tests/test_inv.py", d, actual, diff))
+
+    def test_changed_symbols(self):
+        src = ("class A:\n    def f(self):\n        x = 1\n\n        return x\n\n    def _g(self):\n        pass\n"
+               "\n\ndef h():\n    pass\nY = 2\n")
+        self.assertEqual(review.changed_symbols(src, [3]), ["f"])
+        self.assertEqual(review.changed_symbols(src, [8]), [])                 # a private helper: not asked for
+        self.assertEqual(review.changed_symbols(src, [11, 12, 13]), ["h"])     # Y = 2 is module level
+        self.assertEqual(review.changed_symbols(src, [1]), ["A"])
+
+
 class TestReviewRun(Env):
     def setUp(self):
         super().setUp()
@@ -120,9 +184,26 @@ class TestReviewRun(Env):
     def reviews(self):
         return [c for c in self.calls() if c["agent"] == "claude" and "[ccx review" in c["prompt"]]
 
-    def test_low_risk_matching_claims_not_reviewed(self):
-        out = self.go("--check", "exit 0")
+    def test_strong_check_not_reviewed(self):
+        # a passed acceptance command that runs a test naming the changed file: strong evidence, no review
+        (self.work / "test_a.py").write_text("import a\nassert a.x == 2\n", encoding="utf-8")
+        out = self.go("--check", f'"{sys.executable}" test_a.py')
+        self.assertTrue(out["check"]["passed"], out)
         self.assertNotIn("review", out)
+        self.assertEqual(self.reviews(), [])
+
+    def test_check_without_tests_is_reviewed_with_no_history(self):
+        # seven-cores r2: `--review auto` never fired in 36 runs because weak evidence needed history; a fresh hub
+        # and a check that runs no tests now get one review, on the other vendor's cheapest rung only
+        out = self.go("--check", "exit 0")
+        self.assertEqual((out["review"]["reason"], out["review"]["by"]),
+                         ("the acceptance command `exit 0` runs no tests", "claude:haiku:low"))
+        self.assertEqual(len(self.reviews()), 1)
+
+    def test_read_only_run_not_reviewed(self):
+        r = self.ccx("run", "--to", "codex", "--model", "gpt-6-luna", "--effort", "low", "--mode", "read",
+                     "--no-fallback", "look at a.py", env={"FAKE_REVIEW": "pass"})
+        self.assertNotIn("review", json.loads(r.stdout))
         self.assertEqual(self.reviews(), [])
 
     def test_weak_evidence_gets_one_cheap_review(self):
@@ -148,9 +229,11 @@ class TestReviewRun(Env):
         p = Paths(self.hub)
         rec = {"run_id": "r", "result": {"verification": "ran pytest"}}
         self.assertEqual(review.weak_reason(p, {"weak": False}, rec), None)
-        self.assertEqual(review.weak_reason(p, {}, {"run_id": "r", "result": {"verification": "not-run"}}), None)
-        self.assertEqual(review.weak_reason(p, {}, {**rec, "check": {"passed": True}}), None)   # a trusted check
-        rc = {"weak_daily": 2}
+        self.assertEqual(review.weak_reason(p, {"weak": False}, {"run_id": "r"}), None)
+        self.assertEqual(review.weak_reason(p, {}, {"run_id": "r", "result": {"verification": "not-run"}}),
+                         "no acceptance command")
+        self.assertEqual(review.weak_reason(p, {}, {**rec, "check": {"passed": True}}), None)   # nothing to judge with
+        rc = {"weak_daily": 3}                                   # the "no acceptance command" one above counts
         self.assertEqual([review.weak_reason(p, rc, rec) is not None for _ in range(3)], [True, True, False])
 
     def test_issues_fixed_then_pass(self):

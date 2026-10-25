@@ -1,5 +1,5 @@
 {
   "name": "relayline",
   "version": "0.5.0",
-  "description": "The four relayline skills: delegation, routing, splitting and checkpoints. Codex's hooks stay with `ccx sync`."
+  "description": "The five relayline skills: delegation, routing, splitting, checkpoints and the project manager. Codex's hooks stay with `ccx sync`."
 }
