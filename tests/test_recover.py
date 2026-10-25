@@ -42,6 +42,26 @@ class TestKilledUsage(RecoverEnv):
         self.assertEqual(row["usage4"]["output_tokens"], a["usage"]["output_tokens"])
         self.assertGreater(row["ae_usd"], 0)
 
+    def test_codex_0164_stopped_in_its_first_request_counts_the_request_records(self):
+        # real run 2026-10-25 (codex-cli 0.164): stopped during the first request, the session file had a
+        # token_usage_record for it and no token_count; the attempt was counted as 0 tokens
+        self.tiers("[defaults]\ntimeout_sec = 3\n")
+        r = self.ccx("run", "--from", "claude", "--to", "codex", "--model", "gpt-6-luna", "--effort", "low",
+                     "--no-fallback", "x", env={"FAKE_STATUS": "hang", "FAKE_HANG_S": "60", "FAKE_RECORDS": "1"})
+        out = json.loads(r.stdout)
+        rec = self.record(out["run_id"])
+        a = rec["attempts"][-1]
+        self.assertEqual((a["kind"], a["recovered"]), ("timeout", True))
+        n = a["usage"]["input_tokens"] // 19245
+        self.assertGreaterEqual(n, 1)
+        self.assertEqual(a["usage"], {"input_tokens": 19245 * n, "cache_write_tokens": 0, "cache_write_1h_tokens": 0,
+                                      "cached_input_tokens": 0, "output_tokens": 207 * n})
+        self.assertNotIn("codex_total", a)
+        # resumed: the new turn's own total counts in full (the killed request is not taken as a running total)
+        r = self.ccx("resume", out["run_id"], "go on", env={"FAKE_STATUS": "done"})
+        res = json.loads(r.stdout)
+        self.assertEqual(res["tokens"], {"input": 400, "cache_write": 0, "cached": 800, "output": 150})
+
     def test_claude_stopped_counts_its_streamed_messages_once(self):
         r = self.ccx("run", "--from", "codex", "--to", "claude", "--model", "sonnet", "--effort", "low", "--bg",
                      "--no-ab", "x", env={"FAKE_STATUS": "hang", "FAKE_HANG_S": "60"})
