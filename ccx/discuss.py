@@ -341,7 +341,7 @@ def run(p: Paths, question: str, names: list[str], *, rounds: int = MAX_ROUNDS, 
         try:
             rec = runner(agent, text, label, resume=resume) if resume else runner(agent, text, label)
         except Exception as e:  # noqa: BLE001 — one failed turn ends the talk, the record keeps what was said
-            rec = {"ok": False, "error": str(e)[:300]}
+            rec = {"ok": False, "error": f"{type(e).__name__}: {e}"[:300]}   # some exceptions have no message
         usd = sum(a.get("ae_usd") or 0 for a in rec.get("attempts") or [])
         d["usd"] = round(d["usd"] + usd, 6)
         ok = rec.get("ok") and (rec.get("result") or {}).get("status") == "done"
