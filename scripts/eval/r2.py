@@ -384,7 +384,7 @@ def queue_unit(u: dict, a, work: Path) -> dict:
     make_repo(QUEUE, repo)
     hinfo = make_hub(hub)
     pf = work / "queue-plan.json"
-    pf.write_text(json.dumps([{**it, "title": it["id"], "to": "claude", "minutes": 5} for it in QUEUE["items"]]),
+    pf.write_text(json.dumps({"tasks": [{**it, "title": it["id"], "to": "claude", "minutes": 5} for it in QUEUE["items"]]}),
                   encoding="utf-8")
     added, _, _, _ = ccx(["q", "--cwd", str(repo), "add", "--plan", str(pf)], repo, hub, 120)
     env = env_for(hub)
@@ -397,7 +397,7 @@ def queue_unit(u: dict, a, work: Path) -> dict:
         time.sleep(3)
         ls, _, _, _ = ccx(["q", "--cwd", str(repo), "ls"], repo, hub, 60)
         items = ls.get("items") if isinstance(ls, dict) else ls
-        states = {str(i.get("id")): i.get("state") for i in (items or []) if isinstance(i, dict)}
+        states = {str(i.get("title")): i.get("status") for i in (items or []) if isinstance(i, dict)}
         if any(s == "done" for s in states.values()) and any(s != "done" for s in states.values()):
             killed_at = round(time.time() - t0, 1)
             if os.name == "nt":
@@ -417,7 +417,7 @@ def queue_unit(u: dict, a, work: Path) -> dict:
         if not r.get("type"):
             per_item[str(r.get("label"))] = per_item.get(str(r.get("label")), 0) + 1
     return {**u, "added": bool(added), "killed_at_s": killed_at, "states_at_kill": before,
-            "states_after": {str(i.get("id")): i.get("state") for i in (items or []) if isinstance(i, dict)},
+            "states_after": {str(i.get("title")): i.get("status") for i in (items or []) if isinstance(i, dict)},
             "runs_per_label": per_item, "ok": sc["ok"], "pytest": sc["pytest"], "rc": rc,
             "wall_s": round(time.time() - t0, 1), "hub": hinfo, "stderr": err if rc else "", **cost}
 

@@ -18,9 +18,10 @@ Plan (written before the runs, with its change log): [2026-10-25-seven-cores-r2-
 | 4 / 5 | Auto routing vs fixed sonnet | **Equally right; the saving comes from the test setup** | 36/36 right. Routing picked deepseek-flash for the 4 five-minute tasks (about 25× cheaper), total spend 0.69–0.74×; but only because the hub did not know Claude's quota: with the quota known and below 70%, the same tasks got sonnet (seen in group 9) |
 | 4-D | Tiers by difficulty | **Only two tiers** | 5 min → deepseek-flash low, 15 and 30 min both sonnet medium; the brief's content changes nothing; luna low, right 97% of the time on 15-minute tasks here, was never picked |
 | 6 | More accurate with use | **No evidence** | The learning hub ran sonnet all 24 times, all right; Brier 0.005 → 0.003, but with everything right Brier only measures how far the prediction is from 1 |
-| 7 | F11 Claude-side cap, 4-I queue killed and resumed | **Not run** | The first eight groups cost $5.89, leaving $0.11; waiting for the person's decision |
+| 7 | F11 Claude-side spending cap | **Did not fire** | Run after the person raised the cap to $6.3: Claude sonnet, explicitly told to work in parallel with a $0.0001 budget, started no sub-agent, so the cap had nothing to stop; it finished alone (10/10, $0.256) |
+| 7 | 4-I queue killed mid-way, then `q resume` | **Passes, with two problems** | Process tree killed at 36.6 s (a in progress, d done); after resume all 4 pieces done, hidden test passes, d not redone; but the killed run stays `running` with its spend missing from the ledger, and a was redone from scratch instead of continuing its session |
 
-**Total spend $5.89** (4-A $0.58, three screens $0.11, 4-C $0.59, 4-B $2.00, parallel + 4-H $0.18, routing $1.33, learning $1.09), under the $6 cap.
+**Total spend $6.18** (4-A $0.58, three screens $0.11, 4-C $0.59, 4-B $2.00, parallel + 4-H $0.18, routing $1.33, learning $1.09, F11 + 4-I $0.29). The run stopped at $5.89 after the first eight groups; group 9 ran only after the person agreed in the chat to raise the cap to $6.3.
 
 **The most important result**: on medium tasks with a clear brief, the cheap model (gpt-6-luna low) is already near the ceiling: screening three batches of 22 purpose-built "trap" tasks, it was right 47 times out of 49, and only inventory trips it. So every "dividing / reviewing makes it more correct" comparison this round turns on one task, too small a sample to be significant; what is certain is the price: review 3.9×, dividing 20–39×. On this kind of task, **a cheap model plus the other vendor's cheapest review** ($0.006 per task) matched the divided arms' correctness at about 7% of `ccx way`'s cost.
 
@@ -130,9 +131,20 @@ The three different briefs (slugify, csvstats, cart) got exactly the same picks:
 
 - The routing state changed after every `ccx verify` (hash changed 24/24 times), the picks did not. With everything right, Brier only measures how far the prediction is from 1; 0.005 → 0.003 just means sonnet's prediction rose from about 0.93 to about 0.95. The frozen arm picked other tiers and is not directly comparable. By the rule fixed in advance: **no evidence of becoming more accurate with use**. A real test needs tasks that fail (so routing sees failures) and more time.
 
-### 2.9 F11 + 4-I
+### 2.9 F11 + 4-I (run after the person raised the cap to $6.3; n = 1 each)
 
-Not run. The first eight groups spent $5.89, leaving $0.11; F11 needs Claude sonnet to really start sub-agents and 4-I is a four-piece queue, together an estimated $0.08–0.3 that may cross $6, so by the rules the person decides first.
+**F11**: Claude sonnet medium, `--parallel --budget 0.0001 --no-escalate`, on PAR10. The brief explicitly asked for one sub-agent per independent part, but it started none (0 `subagents/*.jsonl`) and wrote the ten modules and 24 tests itself: 10/10 right, $0.256, 83 s. The cap only counts its own sub-agents' spend, so it **did not fire**. Claude's cap has still never fired in a real run (round 1's haiku started none either).
+
+**4-I**: QUEUE (a → b → c, d alone), each piece `to: claude`, 5 minutes, `ccx q run --max 2`; as soon as one piece was done and another was not, the whole process tree was killed (Windows `taskkill /T /F`), then `ccx q resume`.
+
+| When | What happened |
+|---|---|
+| 0–36.6 s | a and d in parallel; d done; a's first run finished, its review (codex luna low) said issues, the fix round running |
+| 36.6 s | killed: a = doing, b, c = todo, d = done |
+| after resume | a started over **in a new session** (another review with issues + fix), then b and c in turn |
+| end | all 4 done, hidden test passes, d not redone; 13 runs in all (6 of them reviews), $0.038, 128 s |
+
+By the rule fixed in advance (all done after resume, hidden test passes, no finished piece redone) this **passes**. Two problems: (1) the killed fix-round run is still `running` at the end and its tokens never reached the ledger (#54 covers the case where ccx can still close the run; killing the whole tree gives it no chance); (2) `q resume` treats a doing piece as new and starts it over instead of continuing its session, so the first attempt and its review were wasted (about $0.007). Also, `ccx q add --plan`'s help says "tasks JSON: [ ... ]" but the code wants `{"tasks": [...]}`.
 
 ## 3. Problems found
 
@@ -146,6 +158,9 @@ Not run. The first eight groups spent $5.89, leaving $0.11; F11 needs Claude son
 | 6 | Routing picks sonnet medium at 15 and 30 minutes and never luna low, which is right 97% of the time on these tasks | 4-D, screens | Not fixed. luna low's prior (about 52% at b ≈ 3.9) is far below what was measured here; these verdicts need to reach learning (this round ran in throwaway hubs and did not touch the person's routing state) |
 | 7 | `scripts/eval/common.read_jsonl` used `splitlines()`; a U+2028 inside a JSON string cut a row in two | 4-C stopped mid-way | **Fixed in this PR** |
 | 8 | Read-only git files left by a killed unit made deleting its folder fail on re-run | 4-C | **Fixed in this PR** (eval script) |
+| 9 | Told explicitly to work in parallel, Claude sonnet starts no sub-agents either; Claude's spending cap has never fired in a real run | F11 | Not fixed; testing the cap needs a case where the model really starts sub-agents |
+| 10 | After the `q run` process tree is killed, the run in progress stays `running` and its spend never reaches the ledger; `q resume` does not continue its session and redoes the piece from scratch | 4-I | Not fixed. Suggestion: `q resume` first runs `recover.sweep` on doing pieces (close as interrupted, read back the tokens spent) and continues with `ccx resume` when there is a session id |
+| 11 | `ccx q add --plan`'s help says a list, the code wants `{"tasks": [...]}` | preparing 4-I | Not fixed (align the help or the code) |
 
 ## 4. Uncertainty
 

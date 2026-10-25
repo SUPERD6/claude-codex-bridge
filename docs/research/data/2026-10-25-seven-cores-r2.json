@@ -8881,6 +8881,97 @@ true
 "route_rung": "claude:sonnet:medium",
 "pytest": "2 passed in 0.01s",
 "state_sha256": "c8749b594af60b7e7a05b97cb741b337494414e7c1d67fd9933324cf51c89e1a"
+},
+{
+"exp": "func",
+"tag": "r2",
+"round": 1,
+"task": "par10",
+"arm": "queue",
+"ok": true,
+"usd": 0.038194,
+"tokens": 821660,
+"wall_s": 128.2,
+"n_runs": 13,
+"rungs": [
+"codex:gpt-6-luna:low",
+"claude:haiku:low",
+"codex:gpt-6-luna:low",
+"claude:haiku:low",
+"codex:gpt-6-luna:low",
+"claude:haiku:low",
+"claude:haiku:low",
+"codex:gpt-6-luna:low",
+"claude:haiku:low",
+"codex:gpt-6-luna:low",
+"claude:haiku:low",
+"codex:gpt-6-luna:low",
+"claude:haiku:low"
+],
+"agents": [
+"claude",
+"codex"
+],
+"review_usd": 0.008273,
+"pytest": "1 passed in 0.01s",
+"killed_at_s": 36.6,
+"states_at_kill": {
+"a": "doing",
+"b": "todo",
+"c": "todo",
+"d": "done"
+},
+"states_after": {
+"a": "done",
+"b": "done",
+"c": "done",
+"d": "done"
+},
+"runs_per_queue_item": {
+"q:q1": 3,
+"q:q4": 1,
+"q:q2": 1,
+"q:q3": 2
+}
+},
+{
+"exp": "func",
+"tag": "r2",
+"round": 1,
+"task": "par10",
+"arm": "f11",
+"ok": true,
+"ccx_ok": true,
+"usd": 0.255507,
+"tokens": 206505,
+"wall_s": 83.1,
+"n_runs": 2,
+"rungs": [
+"codex:gpt-6-luna:low",
+"claude:sonnet:medium"
+],
+"agents": [
+"claude",
+"codex"
+],
+"model": "sonnet/medium",
+"escalated": null,
+"kind": null,
+"review_usd": 0.001056,
+"route_p": null,
+"route_rung": null,
+"n_ok": 10,
+"tests_written": 10,
+"conflicts": 0,
+"children": 0,
+"pytest": "24 passed in 0.04s",
+"review": {
+"verdict": "pass",
+"by": "codex:gpt-6-luna:low",
+"n_issues": 0,
+"first_round": null
+},
+"check_passed": true
 }
 ],
 "tiers_4d": {
