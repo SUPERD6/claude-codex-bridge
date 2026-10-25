@@ -76,7 +76,8 @@ ccx run ... --mode read          # analysis only (without --mode, ccx infers rea
 ccx run ... --check "CMD"        # acceptance command: the sub-agent runs it, ccx runs it again (failure = failure)
 ccx run ... --risk visible       # user-facing / critical work: another vendor's cheap model reviews the diff
 ccx run ... --review on|off      # force or skip that review (auto: risk, 50+ code lines, unsure, claims vs diff,
-                                 # weak evidence: a check that passed wrong work before, or only a self-check)
+                                 # weak evidence: no check, a check running no tests, tests not naming the
+                                 # changed files/functions, or a check that passed wrong work before)
 ccx run ... --worktree           # isolate edits on branch ccx/<run_id>
 ccx batch plan.json              # independent tasks in parallel (writers auto-isolated)
 ccx resume <run_id> "follow-up"  # same sub-session: no re-briefing, cache stays warm

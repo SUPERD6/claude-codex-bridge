@@ -3,8 +3,9 @@ the task and answers pass / issues, so the lead reads a verdict and the problem 
 
 Only when it is worth it (`auto`, the default): the task was marked visible or critical, the change has 50+ changed
 code lines, the sub-agent listed things it is unsure of (open_questions), or its claimed files don't match the
-actual diff, or the only evidence is weak (H13: the acceptance command let wrong work through before, or there is
-none and only the sub-agent checked itself; at most `weak_daily` of these a day). `on` reviews every write run
+actual diff, or the evidence is weak (H13, judged from the run itself: no acceptance command, a command that runs
+no tests, tests that never name a changed file or public function, or a command that let wrong work through before;
+at most `weak_daily` of these a day, on the other vendors' cheapest rung). `on` reviews every write run
 with changes, `off` never. The same model reviewing its own work misses its own mistakes, so the reviewer is always
 another vendor ([review] by in tiers.toml). Issues go back to the same sub-session for one fix round, which is
 reviewed again; still failing -> kind review_failed, for the lead to decide."""
@@ -117,20 +118,152 @@ def reason(mode: str, risk: str | None, result: dict, claimed: list[str], actual
     return None
 
 
-def weak_reason(p: Paths, rc: dict, record: dict, now: float | None = None) -> str | None:
-    """H13: in `auto`, also review when the evidence that the work is right is weak, up to `weak_daily` a day
-    (`weak = false` in [review] switches this off). Each such review is logged, which is how the cap is counted."""
+# an acceptance command that runs tests (not only a linter, an import or `exit 0`)
+_TEST_CMD = re.compile(
+    r"\b(py\.?test|unittest|nose2?|tox|nox|jest|vitest|mocha|jasmine|karma|playwright|cypress|rspec|phpunit|ctest"
+    r"|bats|go\s+test|cargo\s+(test|nextest)|dotnet\s+test|deno\s+test|swift\s+test|mix\s+test"
+    r"|(npm|pnpm|yarn|bun)\s+(run\s+)?test|make\s+(test|check)|(mvn|gradlew?)\b.*\btest"
+    r"|test_\w+\.py|\w+_test\.\w+)\b", re.I)
+CODE_SUFFIXES = (".py", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".go", ".rs", ".java", ".kt", ".rb", ".php",
+                 ".cs", ".c", ".cc", ".cpp", ".h", ".hpp", ".swift", ".scala")
+_DEF = re.compile(r"^(\s*)(?:export\s+)?(?:pub(?:\(\w+\))?\s+)?(?:async\s+)?"
+                  r"(?:def|class|function|func|fn)\s+(?:\([^)]*\)\s*)?([A-Za-z_]\w*)")
+_HUNK = re.compile(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@")
+
+
+def is_test_file(f: str) -> bool:
+    f = _norm(f)
+    name = f.rsplit("/", 1)[-1]
+    return (bool(re.search(r"(^|/)(tests?|__tests__|spec)/", f)) or name.startswith("test_")
+            or bool(re.search(r"(_test|\.test|\.spec|test)\.\w+$", name)))
+
+
+def _per_file(diff: str) -> dict[str, list[int]]:
+    """{path: new-side line numbers added or changed} from a unified diff."""
+    out: dict[str, list[int]] = {}
+    cur, n = None, 0
+    for ln in diff.splitlines():
+        if ln.startswith("+++ "):
+            cur = ln[4:].strip()
+            cur = None if cur == "/dev/null" else cur[2:] if cur.startswith("b/") else cur
+            n = 0
+            if cur:
+                out.setdefault(cur, [])
+        elif (m := _HUNK.match(ln)):
+            n = int(m.group(1))
+        elif cur and ln.startswith("+"):
+            out[cur].append(n)
+            n += 1
+        elif cur and ln.startswith("-") and not ln.startswith("---"):
+            out[cur].append(n)            # a removed line: the code around it changed
+        elif cur and not ln.startswith("\\"):
+            n += 1
+    return out
+
+
+def changed_symbols(text: str, lines: list[int]) -> list[str]:
+    """Public functions / classes that contain (or are) the changed lines: the nearest less-indented def above."""
+    src = text.splitlines()
+    out: list[str] = []
+    for no in sorted(set(lines)):
+        i = min(no, len(src)) - 1
+        while i >= 0 and not src[i].strip():
+            i -= 1
+        if i < 0:
+            continue
+        ind = len(src[i]) - len(src[i].lstrip()) + 1      # the changed line itself may be the def
+        for s in reversed(src[:i + 1]):
+            if not s.strip():
+                continue
+            d = len(s) - len(s.lstrip())
+            if d >= ind:
+                continue
+            m = _DEF.match(s)
+            if m:
+                if not m.group(2).startswith("_") and m.group(2) not in out:
+                    out.append(m.group(2))
+                break
+            ind = d
+            if d == 0:                                    # reached module level outside any def
+                break
+    return out
+
+
+def _test_texts(cwd: Path, cmd: str) -> list[str]:
+    """The tests the acceptance command runs: the test paths it names, else every test file in the tree."""
+    files = [f for f in (_git(cwd, "ls-files").splitlines() + _git(cwd, "ls-files", "--others", "--exclude-standard")
+                         .splitlines()) if f and not f.startswith(".ccx/")]
+    named = [t.strip("'\"") for t in re.split(r"\s+", cmd) if t.strip("'\"") and (cwd / t.strip("'\"")).exists()
+             and t.strip("'\"") not in (".", "./")]
+    if named:
+        keep = {_norm(t).rstrip("/") for t in named}
+        files = [f for f in files if any(_norm(f) == k or _norm(f).startswith(k + "/") for k in keep)]
+    texts = []
+    for f in files:
+        if is_test_file(f) and f.lower().endswith(CODE_SUFFIXES):
+            try:
+                texts.append((cwd / f).read_text(encoding="utf-8", errors="replace")[:200_000])
+            except OSError:
+                pass
+        if len(texts) >= 300:
+            break
+    return texts
+
+
+def check_gap(cmd: str, cwd: Path, actual: list[str], diff: str) -> str | None:
+    """Why a passed acceptance command is weak evidence for this change, with no history needed: it runs no tests,
+    or the tests it runs never name a changed code file or a changed public function (seven-cores r2: inventory's
+    visible test imported the module but never called low_stock or remove_stock, the two places it was wrong)."""
+    if not _TEST_CMD.search(cmd or ""):
+        return f"the acceptance command `{cmd[:60]}` runs no tests"
+    code = [f for f in actual if _norm(f).endswith(CODE_SUFFIXES) and not is_test_file(f)]
+    if not code:
+        return None
+    texts = _test_texts(cwd, cmd)
+    if not texts:
+        return "the acceptance command found no test files"
+    blob = "\n".join(texts)
+    said = lambda w: re.search(rf"\b{re.escape(w)}\b", blob) is not None  # noqa: E731
+    per, gaps = _per_file(diff), []
+    for f in code:
+        stem = Path(f).stem if Path(f).stem != "__init__" else Path(f).parent.name
+        if stem and not said(stem):
+            gaps.append(f"{f} (never named)")
+            continue
+        try:
+            text = (cwd / f).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        lines = next((v for k, v in per.items() if _norm(k) == _norm(f)), [])
+        miss = [s for s in changed_symbols(text, lines) if not said(s)]
+        if miss:
+            gaps.append(f"{f}: {', '.join(miss[:4])}")
+    if gaps:
+        return "the tests it runs don't touch " + "; ".join(gaps[:3])
+    return None
+
+
+def weak_reason(p: Paths, rc: dict, record: dict, now: float | None = None, cwd: Path | None = None,
+                actual: list[str] | None = None, diff: str = "") -> str | None:
+    """H13: in `auto`, also review a write run when the evidence that the work is right is weak, up to `weak_daily`
+    a day (`weak = false` in [review] switches this off). Weak, judged from this run alone (no history needed):
+    no acceptance command; or it runs no tests; or its tests never name a changed file / public function. Also weak:
+    this command let wrong work through before (J7, needs history). A passed command whose tests reach the change is
+    strong and not reviewed. Each such review is logged, which is how the cap is counted."""
     import time
     from . import ledger
     if not rc.get("weak", True):
         return None
     check = record.get("check") or {}
-    res = record.get("result") or {}
     if check.get("weak"):
         why = "weak check: this acceptance command let wrong work through before"
-    elif not check and res.get("verification", "not-run") not in ("", "not-run"):
-        why = "only the sub-agent's own check"
+    elif not check:
+        res = record.get("result") or {}
+        why = ("only the sub-agent's own check" if res.get("verification", "not-run") not in ("", "not-run")
+               else "no acceptance command")
     else:
+        why = check_gap(check.get("cmd", ""), cwd, actual or [], diff) if cwd is not None else None
+    if not why:
         return None
     now = now or time.time()
     t = time.localtime(now)
@@ -145,12 +278,12 @@ def weak_reason(p: Paths, rc: dict, record: dict, now: float | None = None) -> s
 REVIEW_B = 3.0           # a review reads one diff against one brief: routed like an easy read-only task
 
 
-def reviewers(cfg: dict, worker: str, installed, p=None) -> list[tuple[str, str, str]]:
+def reviewers(cfg: dict, worker: str, installed, p=None, cheapest: bool = False) -> list[tuple[str, str, str]]:
     """(agent, model, effort) candidates for reviewing `worker`'s work, best first: models of another vendor (I3),
     never a cash provider. Order: what the person pinned in [review] by; then, per installed agent of another
     vendor, the rung routing finds cheapest for an easy read (I4: from data, not a fixed table); then
     [review] also. The next one is tried when a review can't finish (haiku ran out of structured-output retries
-    twice in the 2026-10-24 trial)."""
+    twice in the 2026-10-24 trial). `cheapest`: only the pinned and T1 rungs, no routing pick and no [review] also."""
     from .agents import NAMES, get, others, same_vendor
     rc = cfg.get("review") or {}
     by = rc.get("by") or {}
@@ -169,7 +302,7 @@ def reviewers(cfg: dict, worker: str, installed, p=None) -> list[tuple[str, str,
             except Exception:  # noqa: BLE001 — no routing data for it: the pinned ones still apply
                 pass
     out, pinned = [], set(filter(None, by.values()))
-    for rung in filter(None, rungs + list(rc.get("also") or [])):
+    for rung in filter(None, rungs + ([] if cheapest else list(rc.get("also") or []))):
         agent, model, effort = rung.split(":", 2)
         cash = agent in NAMES and get(agent).pay_per_token and rung not in pinned   # real money: only if pinned
         if (agent in NAMES and not cash and not same_vendor(agent, worker, cfg) and installed(agent)
@@ -231,11 +364,14 @@ def review_run(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path, run_d
     res = record.get("result") or {}
     why = rv.reason(mode, req.risk, res, res.get("files_changed") or [], actual, rv.code_lines(diff),
                     int(rc.get("min_lines", 50)))
+    weak = False
     if not why and mode == "auto" and actual:
-        why = rv.weak_reason(p, rc, record)
+        why = rv.weak_reason(p, rc, record, cwd=cwd, actual=actual, diff=diff)
+        weak = bool(why)
     if not why:
         return
-    cands = rv.reviewers(cfg, req.provider or req.to, find_bin, p)
+    # a weak-evidence review is the routine one (most write runs): only the other vendors' cheapest rung
+    cands = rv.reviewers(cfg, req.provider or req.to, find_bin, None if weak else p, cheapest=weak)
     if not cands:
         record["review"] = {"verdict": "not-run", "reason": why, "error": "no reviewer from another vendor installed"}
         return
