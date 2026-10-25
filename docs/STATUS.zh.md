@@ -1,12 +1,12 @@
 # 进度
 
-[English](STATUS.md) · 中文 · 更新于 2026-10-25 · 版本 0.5.0 · 491 个测试
+[English](STATUS.md) · 中文 · 更新于 2026-10-25 · 版本 0.5.0 · 493 个测试
 
 这一页故意只写一页：智能体开局读进来的东西，之后每一轮都要跟着重读。以前的页面、完整的把握程度表、验收检查和完成列表在 [STATUS-archive.zh.md](STATUS-archive.zh.md)；改了什么写在 [CHANGELOG.md](../CHANGELOG.md)。请保持简短：做完一项就在这里写一行，细节放进更新记录。这一页只由主会话改；各个 PR 改为加一个 `changes/<PR>.md`。
 
 ## 现在
 
-0.5.0 收进了 0.4.0 之后的全部改动（PR 到 #90 为止）（见 CHANGELOG，按主题分组：省钱、更准、分工、共享、可控、Windows）。实测结论如下，每条都有原始记录：
+0.5.0 收进了 0.4.0 之后的全部改动（PR 到 #92 为止）（见 CHANGELOG，按主题分组：省钱、更准、分工、共享、可控、Windows）。实测结论如下，每条都有原始记录：
 
 | 结论 | 数字 | 出处 |
 |---|---|---|
@@ -31,4 +31,4 @@
 
 - **real**：双向派活、`--check`、审查（新默认值，3 次）、`ccx stop` → `ccx resume` 以及被杀的运行也记账、跑完即归档、DeepSeek 当组长（dsh，以及用 DeepSeek 模型的 Claude Code）、三家一起的 `ccx discuss`、对话板经 `ccx say --resume`（Codex、dsh）、共享工作上下文 A/B、项目目录扫描（31 个项目）、非 ASCII 路径、不再弹控制台窗口、发版前检查（只测了 Codex，$0.013）。
 - **只有 fake**：worktree、`ccx batch`、额度回退、队列与席位、`--fork`、Gemini CLI、真实的额度用尽（还没遇到过）。
-- **未验证**：Codex 桌面版每轮 hook 和 `ccx say --now` 推进正在进行的对话；修复后 Codex hook 在 Windows 上的效果（H7，等用户检查）；`ccx doctor --codex-rule` 给出的 Codex 规则；dsh 桌面版会不会保留归档 id；子智能体自己的子智能体上限（F10–F14）真机；建议笔记的筛选规则（留出集一致 13/30，不算准确率结果）；路由先验和 “save” 默认值在第一轮任务之外的表现。
+- **未验证**：Codex 桌面版每轮 hook 和 `ccx say --now` 推进正在进行的对话；Codex hook 在 Windows 上（H7）：#82 之后 hook 确实跑了（游标、使用记录都动了，真机），#92 之后输出应能进对话——待真机确认（等用户在自己的 Codex 里看到一次 `From ccx …`）；`ccx doctor --codex-rule` 给出的 Codex 规则；dsh 桌面端关掉后再写归档（#91；桌面端开着时实测会把 id 覆盖掉）；子智能体自己的子智能体上限（F10–F14）真机；建议笔记的筛选规则（留出集一致 13/30，不算准确率结果）；路由先验和 “save” 默认值在第一轮任务之外的表现。

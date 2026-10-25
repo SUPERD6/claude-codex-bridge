@@ -3,7 +3,7 @@
 ## Unreleased
 
 ## 0.5.0 — 2026-10-25 (save, check, split, share, control: cheaper defaults, review that checks the task, project catalog, shared work context, the board, stop and archive)
-- Highlights: everything since 0.4.0 (PRs up to #90), grouped by theme below; 491 tests. Measured on real CLIs:
+- Highlights: everything since 0.4.0 (PRs up to #92), grouped by theme below; 493 tests. Measured on real CLIs:
   shared work context, right the first time 36/36 vs 7/36 and 63 % less spend
   ([report](docs/research/2026-10-25-shared-context-ab.md)); project memory 9/9 vs 0/9 and hub memory 9/9 vs 0/9;
   seven-cores round 1 ([report](docs/research/2026-10-24-seven-cores-ab.md)): delegating cut the lead's tokens 32 %
@@ -440,6 +440,10 @@
   atomically, and a missing file is skipped. Session folders are never moved.
   Checked once with the desktop app open: the added id stayed for 5 minutes. Not checked: whether the app's next
   own write keeps it, and whether an open window shows it without a restart.
+- dsh: while the desktop app is open, archiving (and un-archiving) a session is queued in
+  `workspace.json.ccx-pending.json` and written by the first ccx call that finds the app closed (session start,
+  the next archive). Checked with the app open (2026-10-25): its next change of its own wrote its in-memory list
+  back and dropped the id ccx had added, though the id had stayed 5 minutes while the app was idle.
 - Evals archive what their throwaway hubs leave: `scripts/eval/preflight_e2e.py` and the memory units of
   `scripts/eval/seven_ab.py` run `ccx archive --apply` in their own hub at the end (`common.archive_hub`), final or
   not, since nothing continues those sessions and the person's hub never sees them. Sessions from such runs had
@@ -489,6 +493,12 @@
   output (seen live: the desktop app started and finished them; nothing reached the conversation). `ccx sync` now
   writes them with the call operator (`& "python" "ccx.py" ...`) on Windows. `ccx doctor` warns about a block written
   before this fix: run `ccx sync --apply`, then trust the hooks again in Codex with `/hooks`.
+- Codex hooks show ccx's lines (H7, second half): Codex 0.164 reads hook output that starts with `[` or `{` as JSON,
+  and when it isn't, counts the hook as failed and drops the output. Every ccx start line begins with `[ccx`, so even
+  with the PowerShell fix (#82) Codex saw nothing. `ccx mem delta --as codex` and `ccx turn --as codex` now start with
+  a plain line ("From ccx (shared memory and delegated work):"); Claude Code's output is unchanged. Checked with a
+  throwaway CODEX_HOME and hub: before, `hook: SessionStart Failed`; after, Completed and the note (Chinese included)
+  is in the conversation.
 - Paths with non-ASCII characters no longer crash ccx. In a Codex desktop thread whose folder was `...\玩`, the
   start-up hook (`ccx mem delta --as codex`) died: git printed the path in UTF-8, Python decoded it with the system
   code page (GBK), `stdout` came back `None`, and `find_root` raised `AttributeError`. All eleven text-mode
