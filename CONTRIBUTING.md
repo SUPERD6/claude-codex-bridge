@@ -36,7 +36,7 @@ the installed `ccx` (`tests/smoke_installed.py`).
   `CHANGELOG.md` (see [changes/README.md](changes/README.md)); they are folded in when releasing, so parallel PRs
   don't conflict. `docs/STATUS.md` is kept by the maintainers.
 - **Check external facts**: a flag, event field or price you rely on must be confirmed with `--help` or official docs;
-  note the version you checked (`TESTED_VERSIONS` in `ccx/runners.py`, the "External facts" section of the README).
+  note the version you checked (`TESTED_VERSIONS` in `ccx/runners.py`, the "External facts" section of [docs/measured.md](docs/measured.md)).
 - **Never touch credentials**, and never edit a tool's config outside ccx's marked blocks.
 - Small commits with clear messages; behaviour changes go in the PR's change note.
 
