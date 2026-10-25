@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 
 from . import memory
 from .config import Paths, claude_home, codex_home, load_config
 from .runners import bin_argv, find_bin
-from .sync import BEGIN
+from .sync import BEGIN, codex_hook_needs_call_operator
 
 
 def _run(argv, timeout=20):
@@ -279,7 +280,12 @@ def doctor(p: Paths) -> bool:
         add("codex-plugin-cc", *cp)
     ct = codex_home() / "config.toml"
     has = ct.exists() and "ccx:begin hooks" in ct.read_text(encoding="utf-8")
-    add("Codex SessionStart hook", "ok (trust once via /hooks)" if has else "missing", str(ct))
+    if has and os.name == "nt" and codex_hook_needs_call_operator(ct.read_text(encoding="utf-8")):
+        add("Codex SessionStart hook", "WARN", "written before the Windows fix: Codex runs hooks through PowerShell and "
+            "this command starts with a quoted path, so it runs nothing. Run `ccx sync --apply`, then trust the hooks "
+            f"again in Codex with /hooks ({ct})")
+    else:
+        add("Codex SessionStart hook", "ok (trust once via /hooks)" if has else "missing", str(ct))
     if find_bin("codex"):
         add("Codex as lead (sandbox)", *codex_lead_sandbox(ct.read_text(encoding="utf-8") if ct.exists() else "", p.hub,
                                                            rule=codex_rule_allows(codex_home() / "rules")))

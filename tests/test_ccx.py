@@ -385,6 +385,27 @@ class TestSync(Env):
         again = sync_all(p, apply=True, parts=["skills", "memory", "hooks"])
         self.assertEqual(again.actions, [])
 
+    def test_codex_hooks_use_the_call_operator_on_windows(self):
+        """H7: Codex runs hook commands through PowerShell on Windows; a quoted path first is a string, not a call."""
+        from ccx.sync import TOML_END, codex_hook_command, codex_hook_needs_call_operator, ccx_command
+        self.assertEqual(codex_hook_command("mem", "delta", windows=True), "& " + ccx_command("mem", "delta"))
+        self.assertEqual(codex_hook_command("mem", "delta", windows=False), ccx_command("mem", "delta"))
+        old = f"x = 1\n{TOML_BEGIN}\ncommand = '{ccx_command('mem', 'delta')}'\n{TOML_END}\n"
+        self.assertTrue(codex_hook_needs_call_operator(old))
+        self.assertFalse(codex_hook_needs_call_operator(old.replace("command = '", "command = '& ")))
+        self.assertFalse(codex_hook_needs_call_operator("command = '\"x\" y'\n"))       # not ccx's block
+        ct = self.home_codex / "config.toml"
+        ct.write_text(old, encoding="utf-8")                                             # a block from before the fix
+        sync_all(Paths(self.hub), apply=True, parts=["hooks"])
+        conf = tomllib.loads(ct.read_text(encoding="utf-8"))
+        for ev in ("SessionStart", "UserPromptSubmit"):
+            self.assertEqual(conf["hooks"][ev][0]["hooks"][0]["command"].startswith("& "), os.name == "nt", ev)
+        # elsewhere the quoted path stays (no PowerShell), which is why doctor only checks this on Windows
+        self.assertEqual(codex_hook_needs_call_operator(ct.read_text(encoding="utf-8")), os.name != "nt")
+        ct.write_text(old, encoding="utf-8")
+        line = next(x for x in self.ccx("doctor").stdout.splitlines() if x.startswith("Codex SessionStart hook"))
+        self.assertIn("WARN" if os.name == "nt" else "ok", line)
+
     def test_upsert_block(self):
         t = upsert_block("a\n", "x", "one")
         t2 = upsert_block(t, "x", "two")
