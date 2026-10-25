@@ -75,6 +75,15 @@
 
 **找记忆和分类。** `ccx mem search` 按 BM25 排序：少见的词比常见的词分量重，也不要求每个词都出现（`--all-words` 保留旧的“每个词都要有”，`--limit N` 限条数）。每条记忆属于五类之一——偏好、约束、事实、坑、事件（preference / constraint / fact / pitfall / event），都不是就算“其他”：`ccx mem add --kind` 指定；旧记录读取时按 topic 或关键词自动归类（`ccx mem kinds --list` 查看；不改写日志）。打开 `[memory] by_kind = true` 后：开局只推新的偏好和约束，子智能体简报按 BM25 挑相关的坑、事实和其他，事件只能搜到。一周试用到 2026-11-01 结束，在那之前默认关闭，开局和简报的内容不变。`ccx mem compact --by project` 给每个项目写一小段场景块到 `memory/scenes.md`；`[memory] start_scene = true` 让开局再带当前项目那一块（默认关：开局的记忆本来就封顶约 600 token）。
 
+**hook 不拖住每一轮。** 开局 hook（`ccx mem delta`）和每轮 hook（`ccx turn`）最多跑 `[hooks] timeout_s` 秒（默认 2 秒；
+`ccx config set hooks.timeout_s N`，0 = 不限）：超时就什么都不输出、退出码 0，在 `ccx/hook-timeouts.jsonl` 记一行（命令、用时、
+卡在哪一步）。`ccx doctor` 显示最近 7 天的次数。
+
+**共享技能用了没有。** `ccx skills stats [--days N] [--json]` 从 Claude Code 和 Codex 的会话文件里数每个共享技能（hub 的
+`skills/` 加本仓库的）在两边各被加载几次、最近一次是什么时候，并列出从没加载过的技能、它们的描述每轮大约占多少 token
+（按字符数估算，不是分词器计数）。只读：只给建议，不删任何东西。第一次 `ccx setup` 还会问一次（只在终端里）：要不要用
+`ccx mem suggest` 的规则（不调模型）扫最近 7 天的会话，把找到的偏好和坑逐条问你，你说要的才写进记忆（走 `ccx mem accept` 的流程）。
+
 ## 分级（`config/tiers.toml`，可在 `hub/ccx/tiers.toml` 覆盖）
 
 固定分级是后备方案；带打分参数时由 task-routing 按成功率和每次成功的花费来选，并且会根据实际结果自动校准。

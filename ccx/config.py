@@ -248,6 +248,8 @@ SETTINGS = {   # key -> (type, help). Only these can be set with `ccx config set
                               "false until the H11 trial ends on 2026-11-01)"),
     "memory.start_scene": (_bool, "true | false: a session start also carries this project's block from "
                                   "`ccx mem compact --by project` (default false)"),
+    "hooks.timeout_s": (float, "seconds a session hook (ccx mem delta / turn) may run before it prints nothing and "
+                               "exits 0; logged, shown by `ccx doctor` (0 = no limit)"),
     "ui.lang": (str, "zh | en: language of `ccx ui` and of the lines ccx writes into conversations (unset: the "
                      "page follows the browser, the lines stay English)"),
 }

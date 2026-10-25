@@ -32,6 +32,22 @@ PITFALL = re.compile(r"\b(turned out|gotcha|pitfall|found that|careful|the cause
 # fragment too short to stand alone ("还没做 / 需要注意"). A "pitfall" said to "你" is about this conversation.
 REPORT = re.compile(r"已推送|已提交|已合并|都过了|测试通过|\b(?:pushed|merged|tests? pass(?:ed)?)\b|"
                     r"`[0-9a-f]{7,40}`|^#", re.I)
+# L6: what still came through on real hubs was mostly one-off (the coordinating session's check of 8 waiting
+# suggestions, 2026-10-25): a sentence that names a PR / issue / commit / proposal is about that piece of work; one that
+# opens with a work verb is an instruction ("修这次发现的小 bug", "fix the flaky test"); one that opens with a
+# connective is a fragment of the person's speech ("然后每天…", "就是这样的话…"; the lead's "还有一点要注意" is not); a question, or a choice still open
+# ("要不要…", "等你决定"), is not settled; "现在 / 今天 / this week" is a status.
+REF = re.compile(r"(?<![\w])#\d+|\bPR\s*#?\d+|\bissues?\s*#?\d+|\bcommit\s+[0-9a-f]{7,40}\b|"
+                 r"\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b|提案\s*[A-Z]|"
+                 r"(?<![A-Za-z0-9_.-])[A-Z]{1,2}\d{1,2}(?:\s*[-–]\s*[A-Z]{0,2}\d{1,2})?(?![A-Za-z0-9_.-])")
+WORK_VERB = re.compile(r"^(?:修|合并|跑|做|改|加|删|提交|推|查|测|写|装|把|先|帮我?|给我|去|再|接着)|"
+                       r"^(?:fix|merge|run|open|add|remove|delete|commit|push|check|test|write|install|update)\b", re.I)
+FRAGMENT = re.compile(r"^(?:然后|就是|那就|那么|那|还有|所以|而且|但是|不过|对了|嗯|哦|好的?|ok\b|and\b|so\b|then\b)",
+                      re.I)
+QUESTION = re.compile(r"[?？]|为什么|怎么回事|吗(?=[。，,！!；]|$)|呢(?=[。，,]|$)|是不是|要不要|能不能|再决定|"
+                      r"等你决定|还在等|\bwhy\b|\bwhether\b|\bshould we\b", re.I)
+NOW = re.compile(r"现在|刚才|刚刚|今天|下午|上午|这周|本周|\bright now\b|\bthis week\b|\btoday\b", re.I)
+MIN_PREF_TEXT = 10
 MIN_LEAD_TEXT = 14
 MAX_TEXT = 220
 
@@ -69,17 +85,23 @@ def _clip(s: str) -> str:
     return s if len(s) <= MAX_TEXT else s[: MAX_TEXT - 1] + "…"
 
 
+def _one_off(s: str) -> bool:
+    """About this piece of work or this moment of the conversation, not a lasting note."""
+    bare = s.replace("*", "").strip()
+    return bool(REF.search(bare) or WORK_VERB.match(bare) or QUESTION.search(bare))
+
+
 def gather(d: dict, path: Path, limit: int = 8) -> list[dict]:
     """Candidates from a session read by transcript.read_claude / read_codex: the person's words first."""
     src = f"{d.get('agent')} session {d.get('session') or path.stem} ({path.name})"
     out: list[dict] = []
     for u in d.get("users") or []:
         for s in _sentences(u):
-            if PREFERENCE.search(s) and not TASK.search(s) and not PROGRESS.match(s):
+            if PREFERENCE.search(s) and not TASK.search(s) and not PROGRESS.match(s) and not _one_off(s)                     and not FRAGMENT.match(s) and len(s) >= MIN_PREF_TEXT:
                 out.append({"kind": "preference", "text": _clip(s), "by": "user", "source": src})
     for t in d.get("texts") or []:
         for s in _sentences(t):
-            if len(s.replace("*", "").strip()) < MIN_LEAD_TEXT or REPORT.search(s):
+            if len(s.replace("*", "").strip()) < MIN_LEAD_TEXT or REPORT.search(s) or _one_off(s)                     or NOW.search(s):
                 continue
             if DECISION.search(s):
                 out.append({"kind": "decision", "text": _clip(s), "by": d.get("agent"), "source": src})

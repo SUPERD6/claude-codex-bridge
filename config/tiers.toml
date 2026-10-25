@@ -151,6 +151,11 @@ max_lines = 80          # L2 自动合并的上限：改动行数（加 + 删，
 max_files = 5           # 和文件数
 protected = ["main", "master", "trunk", "release/*"]
 
+[hooks]
+# 开局 hook（ccx mem delta）和每轮 hook（ccx turn）最多跑这么多秒；超时就什么都不输出、退出码 0，
+# 在 hub 的 ccx/hook-timeouts.jsonl 记一行（命令、用时、在哪一步），ccx doctor 显示最近次数。0 = 不限。
+timeout_s = 2.0
+
 [review]
 # 独立审查（提案 F1）：子任务改完文件后，由另一家的便宜模型对照任务说明审一遍改动，只回“通过 / 有问题 + 在哪”。
 # auto = 只在 --risk visible/critical、代码改动 ≥ min_lines 行、子智能体自己说没把握（open_questions）、或它说改的文件和实际改动对不上时审；

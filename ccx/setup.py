@@ -1,4 +1,5 @@
-"""`ccx setup`: a guided first run — check, hub, init, sync (preview, then apply on a yes), doctor, selftest.
+"""`ccx setup`: a guided first run — check, hub, init, sync (preview, then apply on a yes), doctor, notes from your
+recent sessions (L6, each one only on a yes), selftest.
 
 Every change is previewed and asked about first. Not on a terminal and no --yes: it only shows the plan.
 Goal: a new user delegates for the first time within five minutes."""
@@ -13,6 +14,10 @@ from pathlib import Path
 from .config import hub_dir, paths, user_config_file
 from .runners import bin_argv, find_bin
 
+STEPS = 7
+COLD_DAYS = 7          # L6: how far back the first run looks for preferences and pitfalls
+COLD_FILES = 20        # newest session files read, at most
+COLD_ASK = 10          # suggestions asked about one by one; the rest wait in `ccx mem suggestions`
 LOGIN = {"codex": "codex login", "claude": "claude  (then /login)", "gemini": "gemini  (then sign in)"}
 
 
@@ -69,6 +74,75 @@ def _login_ok(agent: str) -> bool | None:
         return bool(json.loads(r.stdout).get("loggedIn"))
     except (json.JSONDecodeError, AttributeError):
         return r.returncode == 0 and "not logged in" not in out.lower()
+
+
+def recent_sessions(days: float = COLD_DAYS, limit: int = COLD_FILES, now: float | None = None) -> list[tuple[str, Path]]:
+    """The person's own recent Claude Code and Codex sessions (not ccx sub-runs, not sub-agents), newest first."""
+    import time
+    from .config import claude_home, codex_home
+    from .usage import codex_parent
+    since = (time.time() if now is None else now) - days * 86400
+    found: list[tuple[float, str, Path]] = []
+    root = claude_home() / "projects"
+    for f in (root.glob("*/*.jsonl") if root.exists() else []):
+        try:
+            if (mt := f.stat().st_mtime) >= since:
+                found.append((mt, "claude", f))
+        except OSError:
+            continue
+    root = codex_home() / "sessions"
+    for f in (root.rglob("rollout-*.jsonl") if root.exists() else []):
+        try:
+            if (mt := f.stat().st_mtime) < since:
+                continue
+            with open(f, encoding="utf-8", errors="replace") as fh:
+                meta = (json.loads(fh.readline() or "{}").get("payload") or {})
+        except (OSError, ValueError):
+            continue
+        if meta.get("originator") == "codex_exec" or codex_parent(meta):
+            continue
+        found.append((mt, "codex", f))
+    found.sort(key=lambda x: -x[0])
+    return [(agent, f) for _, agent, f in found[:limit]]
+
+
+def cold_start(w: Wizard, p) -> None:
+    """L6: on a new hub, offer the preferences and pitfalls ccx's rules (memsuggest, no model) find in the last few
+    days of sessions; each one goes to shared memory only on a yes, through `ccx mem accept`'s own path."""
+    if w.yes or not w.interactive:
+        w.say("  skipped (asks one by one, so only on a terminal); later: `ccx mem suggest --from-transcript "
+              "claude|codex`, then `ccx mem suggestions`")
+        return
+    if not w.ask(f"Look through your Claude Code / Codex sessions of the last {COLD_DAYS} days for preferences and "
+                 "pitfalls worth keeping? (read only; rules, no model)", default=True):
+        return
+    from . import memsuggest
+    from .transcript import read_claude, read_codex
+    added: list[dict] = []
+    for agent, f in recent_sessions():
+        try:
+            d = (read_claude if agent == "claude" else read_codex)(f)
+            added += memsuggest.add(p, memsuggest.gather(d, f))
+        except Exception:  # noqa: BLE001 — one odd session file must not stop setup
+            continue
+    if not added:
+        w.say("  nothing found — fine; ccx suggests notes again when work is handed over")
+        return
+    order = {"preference": 0, "decision": 1, "pitfall": 2}
+    added.sort(key=lambda i: (i.get("by") != "user", order.get(i.get("kind"), 3)))
+    w.say(f"  {len(added)} candidate(s); each is written to shared memory only if you say yes:")
+    kept = 0
+    for it in added[:COLD_ASK]:
+        w.say(f"  #{it['id']} ({it['kind']}): {it['text']}")
+        if w.ask("Keep it?"):
+            memsuggest.decide(p, it["id"], True)
+            kept += 1
+        elif w.interactive:
+            memsuggest.decide(p, it["id"], False)
+        else:
+            break                         # input ended: the rest stay waiting, not rejected
+    rest = len(added) - min(len(added), COLD_ASK)
+    w.say(f"  kept {kept}" + (f"; {rest} more wait in `ccx mem suggestions --all`" if rest else ""))
 
 
 def run(yes: bool = False, hub: str | None = None) -> int:
@@ -130,7 +204,10 @@ def run(yes: bool = False, hub: str | None = None) -> int:
     if applied and "codex" in agents:
         w.say("  Codex: open Codex once and trust the hook in /hooks (\"ccx: shared memory delta\").")
 
-    w.step(6, "Try it")
+    w.step(6, "Notes from your recent sessions (optional)")
+    cold_start(w, p)
+
+    w.step(7, "Try it")
     if w.ask("Run one tiny real task per installed agent (cheapest model, a few cents at most)?"):
         from types import SimpleNamespace
         from .commands.install import cmd_selftest
