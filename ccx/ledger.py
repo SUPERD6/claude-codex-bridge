@@ -254,4 +254,13 @@ def claim_final(run_dir: Path, by: str) -> bool:
 def write_record(run_dir: Path, record: dict) -> None:
     tmp = run_dir / "run.json.tmp"
     tmp.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
-    os.replace(tmp, run_dir / "run.json")      # ccx's own file: atomic replace is fine here
+    for i in range(60):
+        try:
+            os.replace(tmp, run_dir / "run.json")      # ccx's own file: atomic replace is fine here
+            return
+        except PermissionError:
+            # Windows: replacing a file another process has open for reading (`ccx stop` / `ccx show` polling it)
+            # is refused for that moment. Lost here, a run's final state stayed `running` (seen in CI, PR #37)
+            if i == 59:
+                raise
+            time.sleep(0.05)
