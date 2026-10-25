@@ -9,7 +9,7 @@ import sys
 from . import memory
 from .config import Paths, claude_home, codex_home, load_config
 from .runners import bin_argv, find_bin
-from .sync import BEGIN, codex_hook_needs_call_operator
+from .sync import BEGIN, PLUGIN, codex_hook_needs_call_operator, plugin_tools
 
 
 def _run(argv, timeout=20):
@@ -163,6 +163,22 @@ def codex_plugin(home) -> tuple[str, str] | None:
                    "Codex at every stop on top of ccx's review")
 
 
+def plugin_ccx(tools: list[str], which=None) -> tuple[str, str]:
+    """The relayline plugin carries its own copy of ccx: its hooks and Claude Code's Bash tool run that one. A
+    terminal, Codex as the lead and `ccx setup` need ccx installed too; say so when it isn't (the copy the plugin
+    puts on the Bash tool's PATH doesn't count)."""
+    import shutil
+    found = (which or shutil.which)("ccx")
+    inside = found and any(os.path.normcase(str(h / "plugins")) in os.path.normcase(found)
+                           for h in (claude_home(), codex_home()))
+    where = "enabled in " + " and ".join(tools)
+    if found and not inside:
+        return "ok", f"{where}; ccx itself: {found}"
+    return "WARN", (f"{where}, but ccx is not installed on its own: the plugin's hooks and skills run its bundled "
+                    "copy inside the tool only. For your terminal and Codex: `pipx install "
+                    "git+https://github.com/SUPERD6/relayline`, then `ccx init`")
+
+
 def routing_prior(p: Paths) -> tuple[str, str]:
     """Where routing's starting point comes from: the hand-set priors and, for rungs this hub has not learned yet,
     the built-in A/B head start (task-routing [observed])."""
@@ -275,7 +291,15 @@ def doctor(p: Paths) -> bool:
         has = "mem delta" in json.dumps(json.loads(sj.read_text(encoding="utf-8"))["hooks"]["SessionStart"])
     except Exception:  # noqa: BLE001
         has = False
-    add("Claude SessionStart hook", "ok" if has else "missing", str(sj))
+    plugged = plugin_tools()
+    if "claude" in plugged:
+        add("Claude SessionStart hook", "WARN" if has else "ok",
+            "in settings.json AND in the relayline plugin, so it runs twice: `ccx sync --apply` takes ccx's copy out"
+            if has else "from the relayline plugin")
+    else:
+        add("Claude SessionStart hook", "ok" if has else "missing", str(sj))
+    if plugged:
+        add("relayline plugin", *plugin_ccx(sorted(plugged)))
     if (cp := codex_plugin(claude_home())):
         add("codex-plugin-cc", *cp)
     ct = codex_home() / "config.toml"
@@ -292,7 +316,10 @@ def doctor(p: Paths) -> bool:
 
     skill = "agent-delegate"
     for tool, d in (("claude", claude_home() / "skills"), ("codex", codex_home() / "skills")):
-        add(f"{tool} has {skill}", "ok" if (d / skill / "SKILL.md").exists() else "missing", str(d))
+        if tool in plugged:
+            add(f"{tool} has {skill}", "ok", f"from the relayline plugin ({PLUGIN}:{skill})")
+        else:
+            add(f"{tool} has {skill}", "ok" if (d / skill / "SKILL.md").exists() else "missing", str(d))
 
     w = max(len(r[0]) for r in rows)
     for name, state, detail in rows:

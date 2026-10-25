@@ -36,7 +36,8 @@ Every number, the unfavourable ones too: [docs/measured.md](docs/measured.md).
 ## Quick start
 
 ```bash
-pipx install git+https://github.com/SUPERD6/relayline
+claude plugin install relayline --marketplace SUPERD6/relayline   # the skills and hooks in Claude Code (2.1.275+)
+pipx install git+https://github.com/SUPERD6/relayline             # ccx itself, for your terminal and Codex
 ccx setup                    # guided: explains each step and asks before changing anything
 ccx run --to codex --mode read "Summarise README.md in three lines"
 ```
