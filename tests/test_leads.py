@@ -16,7 +16,7 @@ from ccx import agents  # noqa: E402
 class TestLeads(unittest.TestCase):
     def test_leads_are_the_adapters_that_can_lead(self):
         self.assertEqual(set(agents.leads()), {a.name for a in agents.all_adapters() if a.can_lead})
-        self.assertEqual(set(agents.leads()), {"codex", "claude"})        # Gemini and dsh have no start hook yet
+        self.assertEqual(set(agents.leads()), {"codex", "claude", "dsh"})   # Gemini: no lead wiring (not tested)
 
     def test_a_new_lead_needs_only_its_adapter(self):
         gem = replace(agents.get("gemini"), can_lead=True)
@@ -25,7 +25,7 @@ class TestLeads(unittest.TestCase):
             self.assertIn("gemini", agents.leads())
 
     def test_as_rejects_an_agent_that_cannot_lead(self):
-        for cmd in (["mem", "delta", "--as", "gemini"], ["fresh", "--as", "dsh"], ["lead", "--as", "gemini"]):
+        for cmd in (["mem", "delta", "--as", "gemini"], ["fresh", "--as", "gemini"], ["lead", "--as", "gemini"]):
             r = subprocess.run([sys.executable, str(ROOT / "ccx.py"), *cmd], capture_output=True, text=True)
             self.assertEqual(r.returncode, 2, cmd)                         # argparse: invalid choice
             self.assertIn("invalid choice", r.stderr)

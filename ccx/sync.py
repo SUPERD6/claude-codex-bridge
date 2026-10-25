@@ -129,6 +129,14 @@ def sync_memory(p: Paths, plan: Plan) -> None:
         if not p.memory_index.exists():
             plan.warnings.append(f"external snapshot {p.memory_index} does not exist")
         plan.actions.append(f"(skip) snapshot {p.memory_index} is external: both tools already load it")
+        from .runners import find_bin
+        for agent, cf in memory_targets():
+            if agent in ("claude", "codex") or not find_bin(agent):
+                continue
+            text = cf.read_text(encoding="utf-8") if cf.exists() else ""
+            if p.memory_index.name not in text:     # a lead the person's own setup may not reach yet (dsh)
+                plan.warnings.append(f"{agent} leads with {cf} only; it does not load the external snapshot "
+                                     f"{p.memory_index}: add it there through your own sync (ccx leaves it alone)")
         if not p.memory.exists():
             plan.do(f"create journal folder {p.memory}", lambda: memory.ensure(p))
         return

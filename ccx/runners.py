@@ -36,7 +36,15 @@ def find_bin(agent: str) -> str | None:
     override = os.environ.get(f"CCX_{agent.upper()}_BIN")
     if override:
         return override
-    return shutil.which(agent) or (shutil.which(agent + ".cmd") if os.name == "nt" else None)
+    found = shutil.which(agent) or (shutil.which(agent + ".cmd") if os.name == "nt" else None)
+    if found or os.environ.get("CCX_NO_LOCATE"):     # tests set it: never find a real CLI by itself
+        return found
+    try:                                  # not on PATH: the adapter may know where its app keeps it
+        from .agents import NAMES, get
+        ad = get(agent) if agent in NAMES else None
+    except Exception:  # noqa: BLE001
+        return None
+    return ad.locate() if ad and ad.locate else None
 
 
 def bin_argv(agent: str) -> list[str]:

@@ -62,4 +62,6 @@ The recommendation is right, and the critic's points were real ones that the pro
 On this machine Gemini CLI and DeepSeek Harness (`dsh`) are not installed, and there are no keys for Kimi
 (`MOONSHOT_API_KEY`), GLM (`ZAI_API_KEY`), Qwen (`DASHSCOPE_API_KEY`) or OpenRouter (`OPENROUTER_API_KEY`), so
 none of them has run: **Gemini: not run. dsh: not run. Kimi, GLM, Qwen, OpenRouter: not run.** DeepSeek through
-Claude Code ran above as the judge.
+Claude Code ran above as the judge. *Later the same day the DeepSeek Harness desktop app was installed: `dsh` read,
+write and resume then ran for real, see [2026-10-25-deepseek-lead.md](2026-10-25-deepseek-lead.md); the person chose
+not to install Gemini CLI.*

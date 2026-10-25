@@ -203,12 +203,41 @@ def _spend_watch(p: Paths, cfg: dict, cli: str, spec: dict, record: dict, since:
     return check
 
 
+def _vendor(name: str, cfg: dict) -> str | None:
+    """Who makes the caller's model (deepseek for dsh or a DeepSeek provider); None for the person or ccx itself."""
+    from . import agents
+    if name in agents.NAMES or name in (cfg.get("providers") or {}):
+        return agents.vendor(name, cfg)
+    return None
+
+
+def _provider_url(url: str | None) -> bool:
+    """Is this ANTHROPIC_BASE_URL one of the configured providers' endpoints?"""
+    if not url:
+        return False
+    provs = (load_config().get("providers") or {}).values()
+    return any(str((pv.get("env") or {}).get("ANTHROPIC_BASE_URL") or "").rstrip("/") == url.rstrip("/")
+               for pv in provs)
+
+
 def _child_env(to: str, run_id: str, extra: dict | None = None, provider: bool = False) -> dict:
     env = dict(os.environ)
     if provider:
         for k in HOST_AUTH:
             env.pop(k, None)
     env.update(extra or {})
+    for k in ("CCX_LEAD", "DSH_SESSION_ID"):    # who the lead is must not pass for the sub-agent's identity
+        env.pop(k, None)
+    if to == "claude" and not provider and _provider_url(env.get("ANTHROPIC_BASE_URL")):
+        # the lead is Claude Code on a provider's model (DeepSeek): a Claude sub-agent must reach Anthropic, not
+        # inherit the lead's endpoint and key
+        for k in ("ANTHROPIC_BASE_URL", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"):
+            env.pop(k, None)
+    if to == "claude" and not provider:
+        # a `claude --bare` lead (how Claude Code runs on a provider) passes CLAUDE_CODE_SIMPLE on to its commands; a
+        # Claude sub-agent started with it is bare too, ignores the person's login and fails "Not logged in"
+        # (real run, Claude Code 2.1.309, 2026-10-25)
+        env.pop("CLAUDE_CODE_SIMPLE", None)
     env["CCX_DEPTH"] = str(int(env.get("CCX_DEPTH", "0") or 0) + 1)
     env["CCX_ROLE"] = "subagent"
     env["CCX_PARENT_RUN"] = run_id
@@ -303,6 +332,7 @@ def run(req: Request, p: Paths) -> dict:
     plan = _within_budget(p, cfg, plan)
     record = {
         "run_id": run_id, "label": req.label, "to": plan[0]["agent"], "caller": req.caller,
+        "caller_vendor": _vendor(req.caller, cfg),
         "tier": plan[0].get("tier", "rung"), "start_tier": req.tier if not req.model else "rung",
         "mode": req.mode, "cwd": str(cwd), "session_id": prev.get("session_id") if prev else None,
         "resumed_from": req.resume_run, "attempts": [], "result": None, "ok": False,

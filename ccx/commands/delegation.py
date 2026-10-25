@@ -88,7 +88,7 @@ def cmd_run(a) -> int:
     if a.seat:
         prev = None if (a.new or a.fork or a.worktree) else find_seat(p, a.seat, cwd, kw["to"])
     else:
-        prev = None if (a.new or a.fork or a.worktree) else find_continuable(p, lead, cwd, kw["to"])
+        prev = None if (a.new or a.fork or a.worktree) else find_continuable(p, lead, cwd, kw["to"], mode["mode"])
     req = Request(brief=text, mode=mode["mode"], mode_source=mode["source"], mode_why=mode["why"], cwd=cwd, caller=caller,
                   worktree=a.worktree, escalate=False if a.no_escalate else None,
                   label=f"seat:{a.seat}" if a.seat else (a.label or ""),
@@ -427,7 +427,7 @@ def register(sub) -> None:
     r.add_argument("brief", nargs="*", help="task text (or use --brief-file / stdin)")
     r.add_argument("--brief-file")
     r.add_argument("--to", choices=["auto", *DELEGATE_AGENTS, *PROVIDER_AGENTS], default="auto")
-    r.add_argument("--from", dest="caller", choices=[*DELEGATE_AGENTS, "user"])
+    r.add_argument("--from", dest="caller", choices=[*DELEGATE_AGENTS, *PROVIDER_AGENTS, "user"])
     r.add_argument("--provider", help="model API behind an agent CLI, e.g. deepseek (see [providers] in config)")
     r.add_argument("--bg", action="store_true", help="run detached; poll with `ccx show <run_id>`")
     r.add_argument("--tier", choices=["auto", *TIER_ORDER], default="auto")
@@ -478,14 +478,14 @@ def register(sub) -> None:
     ak = sub.add_parser("ask", help="quick read-only second opinion from the other agent (low effort)")
     ak.add_argument("brief", nargs="*"); ak.add_argument("--brief-file")
     ak.add_argument("--to", choices=["auto", *DELEGATE_AGENTS, *PROVIDER_AGENTS], default="auto")
-    ak.add_argument("--from", dest="caller", choices=[*DELEGATE_AGENTS, "user"]); ak.add_argument("--cwd")
+    ak.add_argument("--from", dest="caller", choices=[*DELEGATE_AGENTS, *PROVIDER_AGENTS, "user"]); ak.add_argument("--cwd")
     ak.set_defaults(fn=cmd_ask)
     tk = sub.add_parser("task", help="long tasks: status, or resume an interrupted one (task-checkpoint)")
     tks = tk.add_subparsers(dest="task_cmd", required=True)
     tst = tks.add_parser("status"); tst.add_argument("task", nargs="?")
     trs = tks.add_parser("resume"); trs.add_argument("task")
     trs.add_argument("--same", action="store_true", help="resume the same session even after a quota stop")
-    trs.add_argument("--from", dest="caller", choices=[*DELEGATE_AGENTS, "user"])
+    trs.add_argument("--from", dest="caller", choices=[*DELEGATE_AGENTS, *PROVIDER_AGENTS, "user"])
     for x in (tst, trs):
         x.add_argument("--cwd")
     tk.set_defaults(fn=cmd_task)
@@ -527,7 +527,7 @@ def register(sub) -> None:
     rs.add_argument("brief", nargs="*")
     rs.add_argument("--brief-file")
     rs.add_argument("--tier", choices=["auto", *TIER_ORDER], default="auto")
-    rs.add_argument("--from", dest="caller", choices=[*AGENTS, "user"])
+    rs.add_argument("--from", dest="caller", choices=[*DELEGATE_AGENTS, *PROVIDER_AGENTS, "user"])
     rs.add_argument("--no-escalate", action="store_true")
     rs.add_argument("--model")
     rs.add_argument("--effort")
@@ -540,7 +540,7 @@ def register(sub) -> None:
     sp.set_defaults(fn=cmd_stop)
     b = sub.add_parser("batch", help="run independent tasks in parallel from plan.json")
     b.add_argument("plan")
-    b.add_argument("--from", dest="caller", choices=[*AGENTS, "user"])
+    b.add_argument("--from", dest="caller", choices=[*DELEGATE_AGENTS, *PROVIDER_AGENTS, "user"])
     b.set_defaults(fn=cmd_batch)
     ro = sub.add_parser("route", help="which agent/model/effort for a task (rubric -> task-routing)")
     ro.add_argument("text", nargs="*", help="the task description (used to recommend read or write)")

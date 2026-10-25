@@ -46,7 +46,7 @@ ccx run --to codex --mode read "Summarise README.md in three lines"
 
 | | What | Where it stands |
 |---|---|---|
-| **1. Each other's lead and sub-agent** | Claude Code leads and Codex works, or the other way round; Gemini CLI and DeepSeek (through Claude Code, Codex, or DeepSeek Harness `dsh`) take work. One adapter per CLI; `ccx agents` lists what each can do, the version tested, official or community. | Both directions run for real; DeepSeek through Claude Code and Codex for real; Gemini and `dsh` only with stand-ins |
+| **1. Each other's lead and sub-agent** | Claude Code leads and Codex works, or the other way round; DeepSeek leads too (as `dsh`, or as Claude Code on a DeepSeek model) and takes work (through Claude Code, Codex, or `dsh`); Gemini CLI takes work (untested). One adapter per CLI; `ccx agents` lists what each can do, the version tested, official or community. | Both directions run for real; DeepSeek as lead (dsh, and Claude Code on DeepSeek) and as sub-agent (all three routes) for real; Gemini untested |
 | **2. Two models talking directly** | `ccx ask` gets a quick second opinion from the other vendor; `ccx resume` follows up in the same sub-session; `ccx send` puts a message into a live Codex session; `ccx discuss` lets 2–3 models from different vendors talk a costly decision through (propose, find faults, judge; at most 3 rounds) and shows it as a conversation in `ccx ui`. | The first three work for real; `ccx discuss` ran for real twice, two vendors and then three (Codex, Claude, DeepSeek; [notes](docs/research/2026-10-25-discuss-three-vendors.md)) |
 | **3. Shared memory** | A personal layer (your hub: memory, skills, MCP, ledger) and a project layer (`.ccx/`: context, journal, handoffs, checkpoints). The session-start hook brings only the other side's new lines; `ccx handoff` passes the baton, `ccx fresh` moves a long conversation to a fresh one of the same tool. | Works for real; fuller shared memory in progress |
 | **4. Splitting the work** | A five-question difficulty score → agent, model, effort and the odds; when doing it yourself is cheaper, or the task should be split first, it says so instead of delegating. `ccx batch` / `ccx q` run pieces in parallel; `ccx task resume` continues a long task after a stop. | Routing works for real but priors are uncalibrated; the queue only with stand-ins |
@@ -437,10 +437,14 @@ must edit stops with `needs_write` and hands the decision back to you.
 **Does it drive the chat apps?** No. Both sides run in their work mode (`codex exec`, `claude -p`) — the same agents
 you use in a terminal, not a web chat.
 
-**Which tools work?** Claude Code and Codex CLI can lead or work, tested on a real machine in both directions.
-DeepSeek through Claude Code is calibrated on real tasks and only works as a sub-agent; DeepSeek through Codex has run
-for real (one small read-only task). DeepSeek Harness (`dsh`) and Gemini CLI are adapted (community-supported), only
-work as sub-agents, and have not run for real yet. Kimi, GLM, Qwen and OpenRouter are configured, untested for real. One adapter per CLI (`ccx/agents/`);
+**Which tools work?** **Leads: Claude Code, Codex and DeepSeek (tested on a real machine).** DeepSeek leads either as
+DeepSeek Harness (`dsh` 0.2.1-rc.3, headless, handed work to Codex) or as Claude Code running a DeepSeek model (handed
+work to Claude); ccx tells it from the environment and records the lead's vendor as deepseek. Codex running a DeepSeek
+model is recognised from its config or `CCX_LEAD=deepseek-codex`, not tested as a lead. Other tools can lead as far as
+their adapter allows, untested. **Sub-agents:** Claude Code and Codex in both directions; DeepSeek through Claude Code
+(calibrated on real tasks), through Codex (one small read-only task) and as `dsh` (read, write and resume run for real;
+ccx also finds the `dsh` that ships in the DeepSeek Harness desktop app on Windows). Gemini CLI is adapted
+(community) but **untested**; Kimi, GLM, Qwen and OpenRouter are configured, untested. One adapter per CLI (`ccx/agents/`);
 `ccx agents` lists what each can do; adding one is described in [CONTRIBUTING.md](CONTRIBUTING.md) (start from
 `ccx/agents/_template.py` and `tests/fakes/fake_template.py`).
 
