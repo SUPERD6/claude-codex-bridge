@@ -257,6 +257,38 @@ def format_delta(new: list[dict], budget: int = DELTA_CHARS, project: str | None
     return "\n".join(lines)
 
 
+BRIEF_NOTES = 4
+BRIEF_CHARS = 1200          # ~300 tokens: what a brief may spend on notes for a tool with no start hook
+
+
+def _words(text: str) -> set[str]:
+    """Latin words of 3+ letters and CJK pairs: enough to tell which notes a task is about."""
+    t = (text or "").lower()
+    out = set(re.findall(r"[a-z0-9_][a-z0-9_.-]{2,}", t))
+    for run in re.findall(r"[一-鿿]{2,}", t):
+        out.update(run[i:i + 2] for i in range(len(run) - 1))
+    return out
+
+
+def for_brief(p: Paths, brief: str, project: str | None = None, k: int = BRIEF_NOTES,
+              budget: int = BRIEF_CHARS) -> list[dict]:
+    """I6: the few notes a task is about (shared words; this project's notes win ties), for a sub-agent whose tool
+    has no start hook to show memory. No shared word, no note: an unrelated note costs tokens and helps nothing."""
+    bw = _words(brief)
+    scored = []
+    for e in live_entries(p):
+        n = len(bw & _words(f"{e.get('topic') or ''} {e['text']}"))
+        if n:
+            scored.append((n + (1 if relevant(e, project) else 0), e["seq"], e))
+    out, used = [], 0
+    for _n, _s, e in sorted(scored, key=lambda x: (-x[0], -x[1]))[:k]:
+        if used + len(e["text"]) > budget:
+            continue
+        out.append(e)
+        used += len(e["text"])
+    return out
+
+
 UNUSED_DAYS = 60
 
 
