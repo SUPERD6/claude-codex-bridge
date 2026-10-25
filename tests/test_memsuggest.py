@@ -41,6 +41,25 @@ class TestGather(unittest.TestCase):
         self.assertIn("claude session s1", got[0]["source"])
 
 
+    def test_task_instructions_and_progress_lines_are_not_notes(self):
+        from ccx.transcript import read_claude
+        import tempfile
+        session = [
+            {"type": "user", "message": {"content": "在 `D:\\work\\proj` 继续 ccx 的统一施工顺序第 3–10 步，最终开源发布。"}},
+            {"type": "user", "message": {"content": "#34 默认 tradeoff 改成 save。把 `ccx/review.py` 默认改成 off。"}},
+            {"type": "user", "message": {"content": "原生能力优先、约束只放在边界上。"}},
+            {"type": "assistant", "message": {"content": [{"type": "text", "text":
+                "E8 真跑发现一个问题：只读子任务没去读文件。J6：STATUS 压成一页，原来 24 KB。"
+                "PR #21 原来漏了一个测试。The root cause was a race on **run.json** while it is replaced."}]}},
+        ]
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "s2.jsonl"
+            f.write_text("".join(json.dumps(e) + "\n" for e in session), encoding="utf-8")
+            got = [(c["kind"], c["text"]) for c in memsuggest.gather(read_claude(f), f)]
+        self.assertEqual(got, [("preference", "原生能力优先、约束只放在边界上。"),
+                               ("pitfall", "The root cause was a race on run.json while it is replaced.")])
+
+
 class TestFlow(Env):
     def write_session(self):
         slug = re.sub(r"[^A-Za-z0-9]", "-", str(self.work.resolve()))

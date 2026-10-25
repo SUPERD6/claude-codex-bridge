@@ -11,8 +11,17 @@ from pathlib import Path
 
 from .config import Paths
 
+# A preference is a standing rule in the person's words ("from now on ...", "以后不要 ..."), not an instruction for the
+# task at hand: "改成"/"统一" name an edit as often as a rule, so they are not markers; "继续"/"第 N 步" are the task.
 PREFERENCE = re.compile(r"\b(always|never|from now on|prefer|please (?:use|keep|write)|don'?t|do not|instead of|"
-                        r"make sure)\b|以后|不要|别再|总是|一律|默认|记住|优先|不用|改成|统一|每次", re.I)
+                        r"make sure|by default)\b|以后|不要|别再|总是|一律|默认|记住|优先|不用|每次|永远|必须", re.I)
+TASK = re.compile(r"\b(continue|carry on|go ahead|next step|steps? \d+)\b|继续|接着|下一步|这一步|"
+                  r"第\s*[0-9一二三四五六七八九十]+(?:\s*[-–~～到]\s*[0-9一二三四五六七八九十]+)?\s*步|"
+                  r"[A-Za-z]:\\|(?:^|\s)/(?:Users|home)/|"     # an absolute path: this machine, this task
+                  r"`[^`\s]*/[^`\s]*`", re.I)                  # a file to change (`ccx/review.py`): a work item
+# "E8 真跑发现…", "J6：…", "H5–H7 …", "PR #21 …": a progress line about one proposal or PR, not a lasting pitfall
+PROGRESS = re.compile(r"^\s*(?:\*\*)?(?:[A-Z]{1,2}\d{1,2}[a-z]?(?:\s*[-–/、,]\s*[A-Z]{0,2}\d{1,2})*|(?:PR\s*)?#\d+)"
+                      r"(?:\*\*)?(?=[\s:：,，)）]|$)")
 DECISION = re.compile(r"\b(decided|decision|we(?:'ll| will) use|chose|going with|settled on)\b|决定|改为|采用|定下|结论[:：]",
                       re.I)
 PITFALL = re.compile(r"\b(turned out|gotcha|pitfall|found that|careful|the cause was|root cause)\b|注意|坑|原来|发现|根因",
@@ -49,7 +58,7 @@ def _sentences(text: str) -> list[str]:
 
 def _clip(s: str) -> str:
     from .transcript import redact
-    s = redact(" ".join(s.split()))
+    s = redact(" ".join(s.replace("**", "").split()))
     return s if len(s) <= MAX_TEXT else s[: MAX_TEXT - 1] + "…"
 
 
@@ -59,13 +68,13 @@ def gather(d: dict, path: Path, limit: int = 8) -> list[dict]:
     out: list[dict] = []
     for u in d.get("users") or []:
         for s in _sentences(u):
-            if PREFERENCE.search(s):
+            if PREFERENCE.search(s) and not TASK.search(s) and not PROGRESS.match(s):
                 out.append({"kind": "preference", "text": _clip(s), "by": "user", "source": src})
     for t in d.get("texts") or []:
         for s in _sentences(t):
             if DECISION.search(s):
                 out.append({"kind": "decision", "text": _clip(s), "by": d.get("agent"), "source": src})
-            elif PITFALL.search(s):
+            elif PITFALL.search(s) and not PROGRESS.match(s):
                 out.append({"kind": "pitfall", "text": _clip(s), "by": d.get("agent"), "source": src})
     seen, uniq = set(), []
     for c in out:
