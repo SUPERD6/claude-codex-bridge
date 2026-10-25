@@ -147,7 +147,7 @@ def session_runs(p, session: str | None, limit: int = 5) -> str:
         res, chk, v = rec.get("result") or {}, rec.get("check") or {}, verdict.get(r["run_id"])
         last = (rec.get("attempts") or [{}])[-1]
         check = "no check" if not chk else ("check passed" if chk.get("passed") else "check FAILED")
-        judged = "unjudged" if not v else (("right" if v.get("ok") else "wrong") + (" (probable)" if v.get("soft") else ""))
+        judged = "dismissed" if r.get("dismissed") else "unjudged" if not v else (("right" if v.get("ok") else "wrong") + (" (probable)" if v.get("soft") else ""))
         summary = " ".join(str(res.get("summary") or rec.get("error") or "").split())[:200]
         out.append(f"- `{r['run_id']}` {r.get('to')} {last.get('model') or ''}: {r.get('status')}, {check}, {judged}"
                    + (f" — {summary}" if summary else ""))

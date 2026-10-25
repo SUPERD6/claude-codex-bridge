@@ -46,20 +46,20 @@ def soft_verdicts(p: Paths, min_age_h: float = SOFT_AFTER_H, now: float | None =
     unjudged: they wait for the person (the UI's 'please review' list)."""
     now = now or time.time()
     rows = ledger.rows(p)
-    judged = {r.get("run_id") for r in rows if r.get("type") == "verify"}
+    judged = {r.get("run_id") for r in rows if r.get("type") in ("verify", "dismiss")}
     out, trust = [], None
     for r in rows:
         if r.get("type") or r.get("run_id") in judged or not r.get("ok") or r.get("status") != "done":
             continue
-        if now - float(r.get("ts") or now) < min_age_h * 3600 or r.get("ephemeral"):
+        if now - float(r.get("ts") or now) < min_age_h * 3600 or r.get("ephemeral") or r.get("dismissed"):
             continue
-        if (r.get("label") or "").startswith(("review:", "quota-probe", "selftest", "handoff-from-transcript")):
+        if (r.get("label") or "").startswith(("review:", "handoff-from-transcript", *ledger.SELFTEST_LABELS)):
             continue
         try:
             record = ledger.load_run(p, r["run_id"])
         except (FileNotFoundError, KeyError, ValueError):
             continue
-        if _hard_verdict(record) or (record.get("verdict") or {}).get("soft"):
+        if _hard_verdict(record) or (record.get("verdict") or {}).get("soft") or record.get("dismissed"):
             continue
         if (p.runs / r["run_id"] / "undone.json").exists():       # undone: right or wrong is the person's call
             continue
@@ -117,6 +117,7 @@ def verify(p: Paths, run_id: str, ok: bool, note: str = "", reason: str = "") ->
     record = ledger.load_run(p, run_id)
     prev = record.get("verdict")
     record["verdict"] = {"ok": ok, "note": note, "reason": reason, "ts": time.time()}
+    record.pop("dismissed", None)                     # a real verdict counts again (ledger._mark_dismissed too)
     learned = []
     how = record.get("learned")
     auto_ok = bool(record.get("ok") and (record.get("result") or {}).get("status") == "done")
@@ -143,6 +144,23 @@ def verify(p: Paths, run_id: str, ok: bool, note: str = "", reason: str = "") ->
     except Exception:  # noqa: BLE001
         pass
     return {"run_id": run_id, "verdict": ok, "learned": learned, **({"reason": reason} if reason else {})}
+
+
+def dismiss(p: Paths, run_id: str, note: str = "") -> dict:
+    """A run that was a test, a probe or a leftover, not the person's work: kept, but neither right nor wrong.
+    It leaves the 'waits for you' lists, `--sweep` skips it and routing and splitting never learn from it
+    (`ledger.is_eval`). A run the person or the lead already judged keeps that verdict: dismissing it is refused.
+    What a run taught routing when it ended (its provisional record) cannot be taken back; the answer says so."""
+    record = ledger.load_run(p, run_id)
+    if _hard_verdict(record):
+        raise ValueError(f"run {run_id} already has a verdict ({'ok' if record['verdict'].get('ok') else 'not ok'}); "
+                         "`ccx verify RUN --ok 0|1` changes it")
+    record["dismissed"] = {"note": note, "ts": time.time()}
+    _write_record(p.runs / run_id, record)
+    ledger.append_event(p, {"type": "dismiss", "run_id": run_id, "note": note, "ts": time.time()})
+    return {"run_id": run_id, "dismissed": True, "learned": [],
+            **({"note": f"its provisional record ({record['learned']}) already in routing stays"}
+               if record.get("learned") else {})}
 
 
 # ---- spot checks of probable verdicts (J7) ------------------------------------------------------------------------

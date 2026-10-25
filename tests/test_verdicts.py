@@ -45,6 +45,39 @@ class TestVerdicts(Env):
         summary = self.run_ccx("stats", "--summary")["totals"]
         self.assertEqual((summary["verified"], summary["soft_verified"], summary["reasons"]), (1, 0, {"wrong": 1}))
 
+    def test_dismissed_counts_neither_way_and_is_never_learned(self):
+        from unittest import mock
+        from ccx import ledger, learn, ui, ways
+        from ccx.config import Paths
+        p = Paths(self.hub)
+        run = self.run_ccx("run", "--to", "codex", "--tier", "T1", "--mode", "write", "--review", "off",
+                           "--check", "exit 0", "--label", "two-way-x2c", "change x")["run_id"]
+        real = self.run_ccx("run", "--to", "codex", "--tier", "T1", "--mode", "write", "--review", "off",
+                            "--check", "exit 0", "change y")["run_id"]
+        self.assertEqual(ui.waiting(p), 1)                       # a probe label: only the real run waits
+        bad = self.ccx("verify", real, "--dismiss", "--ok", "1")
+        self.assertNotEqual(bad.returncode, 0)
+        out = self.run_ccx("verify", real, "--dismiss", "--note", "a leftover of a test")
+        self.assertTrue(out["dismissed"])
+        self.assertEqual(ui.waiting(p), 0)
+        with mock.patch.object(learn, "record_outcomes") as rec_out:
+            from ccx.verdicts import soft_verdicts
+            self.assertEqual(soft_verdicts(p, 0), [])            # the sweep skips it: no probable verdict
+            rec_out.assert_not_called()
+        self.assertEqual(self.events(), [])                      # no verify row: not right, not wrong
+        row = ledger.runs_by_id(ledger.rows(p))[real]
+        self.assertTrue(row["dismissed"] and ledger.is_eval(row))
+        self.assertNotIn(real, [x["run_id"] for x in ways.pieces(p)])
+        d = ui.collect(p, quota_wait=False)
+        pc = [x for pr in d["projects"] for t in pr["tasks"] for x in ui._walk(t["pieces"]) if x["run_id"] == real][0]
+        self.assertTrue(pc["test"] and pc["act"] is None)
+        self.run_ccx("verify", real, "--ok", "1")                 # a real verdict later: it counts again
+        self.assertFalse(ledger.runs_by_id(ledger.rows(p))[real].get("dismissed"))
+        again = self.ccx("verify", real, "--dismiss")             # judged by a person: not dismissed over it
+        self.assertNotEqual(again.returncode, 0)
+        self.assertIn("already has a verdict", again.stdout + again.stderr)
+        self.assertTrue(run)
+
     def test_no_evidence_waits_for_a_person(self):
         self.run_ccx("run", "--to", "claude", "--model", "haiku", "--effort", "low", "--mode", "write",
                      "--review", "off", "change x")              # the fake reports verification: not-run, no --check

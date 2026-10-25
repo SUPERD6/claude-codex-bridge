@@ -52,7 +52,8 @@ button{font:inherit}
 .qbar i{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:var(--teal)}
 .qbar .pj{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--red)}
 .qnote{font-size:12px;margin-top:2px}
-.tools{display:flex;gap:6px;margin-top:12px}
+.tools{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.tools button[data-do=tests]{flex-basis:100%}
 .tools button{flex:1;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:8px;padding:6px 8px;font-size:13px;cursor:pointer}
 
 main{padding:18px 24px 48px;min-width:0}

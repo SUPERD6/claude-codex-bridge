@@ -12,6 +12,11 @@ probe is never started (an open page must not cost anything):
   suggested notes  <hub>/ccx/mem-suggestions.json, the pending ones (H5), each with a yes and a no button
   leads            main Claude / Codex conversations written to in the last 15 minutes: model, own sub-agents
 
+Tests and evaluations are marked `test` and the page hides them unless asked ('show evaluations and tests'): runs
+`ledger.is_eval` leaves out (eval-*, --no-ab, ccx's probes, dismissed), runs in the system's temporary folder or in
+a project's .ccx folder (unless the hub itself is in one: then it is all scratch), and projects, leads and
+discussions there.
+
 Grouping: a project = the folder a run worked in (worktrees fold back into their repo). A task = one project's work
 queue (pieces = its items, split items drill down a level, at most 3), or the runs one lead conversation sent out
 (pieces = runs; a fix round or a follow-up stays on its piece). Strings shown to people are keys into
@@ -24,6 +29,7 @@ files (CSP). The page polls every 3 s and says 'still open' every 10 s; 60 s wit
 """
 from __future__ import annotations
 
+import functools
 import hashlib
 import hmac
 import json
@@ -156,6 +162,39 @@ def project_root(cwd: str | None) -> Path | None:
         if (d / ".ccx" / "context.md").exists() or (d / ".ccx" / "queue").is_dir() or (d / ".git").exists():
             return d
     return c
+
+
+def scratch_roots(p: Paths) -> list[Path]:
+    """Where tests and evaluations work: the system's temporary folder. None when the hub itself is in it (a
+    throwaway hub, e.g. an A/B round's: there everything is scratch, so nothing is set apart)."""
+    import tempfile
+    try:
+        tmp = Path(tempfile.gettempdir()).resolve()
+        hub = p.hub.resolve()
+    except OSError:
+        return []
+    return [] if hub == tmp or tmp in hub.parents else [tmp]
+
+
+def is_scratch(path: str | Path | None, roots: list[Path]) -> bool:
+    """A folder in the temporary folder or inside a project's .ccx folder (ccx's own trials): not real work."""
+    if not path:
+        return False
+    c = _resolved(str(path))
+    return ".ccx" in c.parts or any(c == r or r in c.parents for r in roots)
+
+
+@functools.lru_cache(maxsize=4096)
+def _resolved(path: str) -> Path:                   # the page asks every 3 s about the same few hundred folders
+    try:
+        return Path(path).resolve()
+    except OSError:
+        return Path(path)
+
+
+def is_test(rec: dict, roots: list[Path]) -> bool:
+    """A run that was a test, an evaluation, a probe or a dismissed leftover: nobody waits on it."""
+    return bool(is_eval({**rec, "no_ab": (rec.get("route") or {}).get("no_ab")}) or is_scratch(rec.get("cwd"), roots))
 
 
 def _pid(root: Path) -> str:
@@ -292,8 +331,8 @@ def _act(rec: dict, verdict: dict | None, now: float, beat: float | None) -> dic
             return {"kind": "decide", "what": "a_stale", "why": ["w_stale", {"m": int((now - beat) // 60)}],
                     "buttons": [show, _btn("b_resume_later", f"ccx resume {rid}")]}
         return None
-    if verdict is not None or (rec.get("verdict") or {}).get("ok") is not None:
-        return None                                  # judged (by the person, the lead or ccx's soft verdict)
+    if verdict is not None or (rec.get("verdict") or {}).get("ok") is not None or rec.get("dismissed"):
+        return None                                  # judged (by the person, the lead or ccx's soft verdict), dismissed
     if kind == "needs_write":
         return {"kind": "decide", "what": "a_needs_write", "why": ["w_needs_write", {}],
                 "buttons": [show, _btn("b_allow_write",
@@ -712,6 +751,7 @@ def collect(p: Paths, project: Path | None = None, days: float = 7, rd: Reader |
             if isinstance(rec, dict) and rec.get("run_id"):
                 recs[rec["run_id"]] = rec
     proj = project.resolve() if project else None
+    scratch = scratch_roots(p)
     shown = {rid: r for rid, r in recs.items()
              if not r.get("ephemeral") and not str(r.get("label") or "").startswith(INTERNAL)}
     mine = {s for r in recs.values() for s in [r.get("session_id"), *[a.get("session_id") for a in r.get("attempts") or []]] if s}
@@ -795,6 +835,7 @@ def collect(p: Paths, project: Path | None = None, days: float = 7, rd: Reader |
                      else "") or _short(_brief_of(p.runs / head)) or head
             pc = piece_of_run(rd, latest, verdicts.get(latest["run_id"]), now, title)
             pc["id"] = _sid(head)
+            pc["test"] = any(is_test(shown[x], scratch) for x in runs)
             pc["usd"] = round(sum(_usd(shown[x]) for x in runs), 6)
             pc["rounds"] = len(runs)
             pieces.append(pc)
@@ -809,20 +850,25 @@ def collect(p: Paths, project: Path | None = None, days: float = 7, rd: Reader |
             "spent": round(sum(x["usd"] for x in pieces), 6), "budget": None, "pieces": pieces,
             "hist": sorted(hist, key=lambda h: h.get("ts") or 0)[-40:]})
 
-    current = leads(rd, mine)
+    current = [{**x, "test": is_scratch(x.get("cwd"), scratch)} for x in leads(rd, mine)]
     by_session = {x["session"]: x for x in current}
     projects = []
     for root, tasks in tasks_by_root.items():
         if not tasks:
             continue
         for t in tasks:
+            for pc in _walk(t["pieces"]):                # queue pieces: by their run (the lead pieces are set above)
+                if "test" not in pc:
+                    pc["test"] = bool(pc.get("run_id") in recs and is_test(recs[pc["run_id"]], scratch))
+            t["test"] = all(pc["test"] for pc in t["pieces"])
             if t["kind"] == "lead":
                 cur = by_session.get(t["id"])
                 if cur:
                     t["helpers"] = cur["helpers"]
                     t["lead"]["model"] = t["lead"]["model"] or cur["model"]
         tasks.sort(key=lambda t: -(t["last"] or t["asked"] or 0))
-        projects.append({"id": _pid(root), "name": root.name or str(root), "path": str(root), "tasks": tasks[:30]})
+        projects.append({"id": _pid(root), "name": root.name or str(root), "path": str(root), "tasks": tasks[:30],
+                         "test": is_scratch(root, scratch) or all(t["test"] for t in tasks)})
     projects.sort(key=lambda pr: -max(t["last"] or t["asked"] or 0 for t in pr["tasks"]))
 
     providers = set((cfg.get("providers") or {}).keys())
@@ -835,7 +881,7 @@ def collect(p: Paths, project: Path | None = None, days: float = 7, rd: Reader |
         track = rd.every("track", 60, lambda: ways.track(p))      # H9: who is good at what (judged pieces)
     except Exception:  # noqa: BLE001 — the page still shows the rest
         track = {}
-    talks =[discuss.view(d) for d in discuss.recent(p, since)
+    talks = [{**discuss.view(d), "test": is_scratch(d.get("cwd"), scratch)} for d in discuss.recent(p, since)
              if not proj or project_root(d.get("cwd")) == proj][:10]
     from . import memsuggest
     try:                                                      # H5: notes that wait for the person's yes or no
@@ -1069,6 +1115,7 @@ def waiting(p: Paths, days: float = 7) -> int:
     now = time.time()
     rd = Reader(p)
     verdicts = rd.lines(p.ledger, _verdict_rows, {}) if p.ledger.exists() else {}
+    scratch = scratch_roots(p)
     n = 0
     for f in (p.runs.glob("*/run.json") if p.runs.exists() else []):
         try:
@@ -1079,8 +1126,8 @@ def waiting(p: Paths, days: float = 7) -> int:
         rec = rd.json_file(f)
         if not isinstance(rec, dict) or rec.get("ephemeral") or str(rec.get("label") or "").startswith(INTERNAL):
             continue
-        if is_eval({**rec, "no_ab": (rec.get("route") or {}).get("no_ab")}):
-            continue                                 # an evaluation's run (eval-*, --no-ab): nobody waits on it
+        if is_test(rec, scratch):
+            continue                                 # an evaluation, test or dismissed run: nobody waits on it
         if rec.get("state") == "running" or not rec.get("run_id"):
             continue
         if _act(rec, verdicts.get(rec["run_id"]), now, None):

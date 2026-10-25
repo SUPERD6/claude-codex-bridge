@@ -4,7 +4,7 @@
 "use strict";
 (function () {
   let STR = {zh: {}, en: {}};
-  let LANG = "en", D = null, TOKEN = "", SNAP = false, OFFLINE = false, lastOk = 0;
+  let LANG = "en", D = null, ALL = null, TOKEN = "", SNAP = false, OFFLINE = false, lastOk = 0, TESTS = false, HIDDEN = 0;
   let filt = "all", sel = null, expanded = {}, query = "", histOpen = {}, drawerSig = "", drawerStable = "", pending = null, chosen = null;
   const KNOWN = {claude: "Claude", codex: "Codex", deepseek: "DeepSeek", gemini: "Gemini"};
   const FIXED = {claude: "claude", codex: "codex", deepseek: "deepseek"};
@@ -72,6 +72,25 @@
   function walk(list, f, chain) { for (const p of list || []) { f(p, chain || []); if (p.children) walk(p.children, f, (chain || []).concat([p])); } }
   function acts(list) { const out = []; walk(list, (p, ch) => { if (p.act) out.push({p, chain: ch}); }); return out; }
   function below(p) { return acts(p.children || []).length; }
+  /* evaluations, tests and dismissed leftovers (marked `test` by ccx ui) are left out unless asked for */
+  function view(d) {
+    HIDDEN = 0;
+    if (!d || TESTS) return d;
+    const prune = (list) => list.filter(p => { if (p.test) HIDDEN++; return !p.test; })
+      .map(p => p.children ? Object.assign({}, p, {children: prune(p.children)}) : p);
+    const projects = [];
+    for (const pr of d.projects || []) {
+      if (pr.test) { for (const tk of pr.tasks) walk(tk.pieces, () => HIDDEN++); continue; }
+      const tasks = [];
+      for (const tk of pr.tasks) {
+        if (tk.test) { walk(tk.pieces, () => HIDDEN++); continue; }
+        tasks.push(Object.assign({}, tk, {pieces: prune(tk.pieces)}));
+      }
+      if (tasks.length) projects.push(Object.assign({}, pr, {tasks}));
+    }
+    return Object.assign({}, d, {projects, leads: (d.leads || []).filter(l => !l.test),
+                                 discussions: (d.discussions || []).filter(x => !x.test)});
+  }
   function findProject(id) { return ((D && D.projects) || []).find(x => x.id === id); }
   function findTask(pr, id) { return pr && pr.tasks.find(x => x.id === id); }
   function findPiece(list, id) { let hit = null; walk(list, (p, ch) => { if (p.id === id) hit = {p, chain: ch}; }); return hit; }
@@ -130,7 +149,8 @@
       h += `<a class="proj ${route[0] === pr.id && !route[1] ? "cur" : ""}" href="${href([pr.id])}" title="${esc(pr.path)}">▾ ${esc(pr.name)}${need ? `<span class="badge">${need}</span>` : ""}</a>` + inner;
     }
     h += `</nav><div class="foot"><div>${t("quota")}</div>${quotaHTML()}
-      <div class="tools"><button data-do="lang">${t("lang_other")}</button><button data-do="theme">${t("theme")}</button></div></div>`;
+      <div class="tools"><button data-do="lang">${t("lang_other")}</button><button data-do="theme">${t("theme")}</button>
+      <button data-do="tests" aria-pressed="${TESTS}">${TESTS ? t("tests_hide") : t("tests_show", {n: HIDDEN})}</button></div></div>`;
     const side = $("side");
     const focused = document.activeElement && document.activeElement.id === "search";
     const pos = focused ? document.activeElement.selectionStart : null;
@@ -509,6 +529,7 @@
       const root = document.documentElement, dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
       root.dataset.theme = dark ? "light" : "dark"; try { localStorage.setItem("ccx-theme", root.dataset.theme); } catch (x) { /* ok */ } return;
     }
+    if (el.dataset.do === "tests") { TESTS = !TESTS; try { localStorage.setItem("ccx-tests", TESTS ? "1" : ""); } catch (x) { /* ok */ } D = view(ALL); render(); return; }
     if (el.dataset.do === "copy") { const c = $("cmdtext"); if (c) copy(c.textContent, el); return; }
     if (el.dataset.filt) { filt = el.dataset.filt; render(); return; }
     if (el.dataset.more) { expanded[el.dataset.more] = 1; render(); return; }
@@ -566,8 +587,8 @@
   async function poll() {
     try {
       const got = await api("/api/data");
-      const changed = stableSig(got) !== stableSig(D) || OFFLINE;
-      D = got; OFFLINE = false; lastOk = Date.now();
+      const changed = stableSig(got) !== stableSig(ALL) || OFFLINE;
+      ALL = got; D = view(got); OFFLINE = false; lastOk = Date.now();
       if (changed) render(); else patchLive();
     } catch (e) {
       if (!OFFLINE && Date.now() - lastOk > 8000) { OFFLINE = true; render(); }
@@ -582,9 +603,10 @@
 
   async function start() {
     try { const th = localStorage.getItem("ccx-theme"); if (th === "dark" || th === "light") document.documentElement.dataset.theme = th; } catch (e) { /* ok */ }
+    try { TESTS = localStorage.getItem("ccx-tests") === "1"; } catch (e) { /* ok */ }
     const inlineStr = document.getElementById("ccx-strings"), snap = document.getElementById("ccx-snapshot");
     if (snap) {
-      SNAP = true; STR = JSON.parse(inlineStr.textContent); D = JSON.parse(snap.textContent);
+      SNAP = true; STR = JSON.parse(inlineStr.textContent); ALL = JSON.parse(snap.textContent); D = view(ALL);
       if (!location.hash) location.hash = "#/";
       render(); return;
     }
