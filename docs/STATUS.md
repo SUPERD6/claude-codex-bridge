@@ -1,62 +1,48 @@
 # Status
 
-English · [中文](STATUS.zh.md) · updated 2026-10-24 · version 0.4.0 · 317 tests
+English · [中文](STATUS.zh.md) · updated 2026-10-25 · version 0.5.0 · 491 tests
 
-One page on purpose: whatever an agent reads at start-up it re-reads on every later turn. Older notes, the full
+One page on purpose: whatever an agent reads at start-up it re-reads on every later turn. Older pages, the full
 confidence table, acceptance checks and the done list are in [STATUS-archive.md](STATUS-archive.md); what changed
 is in [CHANGELOG.md](../CHANGELOG.md). Keep this page short: when something is done, say so in one line here and
 put the detail in the changelog. Only the lead session edits this page; PRs add a `changes/<PR>.md` instead.
 
 ## Now
 
-The order comes from the shared plan (proposals F–J, all approved). **J13** moved the lead-cost items first,
-because nearly all spend is the lead re-reading its own conversation (sub-agents: $0.34 in 30 days; a median lead
-turn re-reads ~220k tokens):
+0.5.0 holds everything since 0.4.0 (PRs up to #90) (see the CHANGELOG, grouped by theme: save, check, split, share, control, Windows).
+What the measurements say, each from a raw record:
 
-| Step | State |
-|---|---|
-| H13 verdicts without asking | ✅ PR #2 |
-| H10 the lead's own context (`ccx lead`, per-turn hint) | ✅ PR #3 |
-| H11 week-long comparison: the tool (`ccx trial`) | ✅ PR #5 — the week of data is collected by the eval session (PR #6, with J0, E8, F9) |
-| J1 + J2 what a turn re-reads, where the cache broke (`ccx lead --breakdown`, `--cache`) | ✅ PR #8 |
-| J3 long output cut down before the lead reads it (`ccx sum`) | ✅ PR #9 |
-| J6 this page down to one page | ✅ PR #10 |
-| J0 baseline, H11 first batch, E8 both ways, F9 on/off, J7 | ✅ PR #6 ([report](research/2026-10-24-h11-e8-f9-measurements.md)): lead median 352k tokens / $0.11 a request (7 days), ~55k fixed per request; delegating saved 1 lead request per small task only when the lead trusted the check; F9 started no sub-agents; J7 switch in, no overturn data yet |
-| Fixes from that report: handoffs per file (parallel sessions), plan from a numbered list, the conversation's ccx runs in a handoff, saving measured or labelled a model, agent-delegate: don't re-run a passed check | ✅ PR #15 |
-| J12 `ccx uninstall --apply` once for real, then back in (report 5c); fixed: line endings kept, the Codex block back in place, uninstall says how to reinstall the skills | ✅ PR #17 |
-| J8–J10 official codex-plugin-cc, similar projects, name options (docs only, [landscape](research/landscape.md)) | ✅ PR #4; coexistence plan not implemented or tested; the name waits for the user |
-| G1 `ccx ui` (read-only live page) + `ui.lang` | ✅ PR #7; `ccx stop` next (the adapters are in) |
-| I1–I4 adapters per agent, vendor decides "another", fallback and reviewers from data | ✅ PR #11 — new interface: `ccx.agents.get(name)` → `Adapter` (build/parse, vendor, support, tested_version, capabilities()); `ccx.agents.vendor()`, `others()`; `ccx agents` lists them as JSON |
-| J4 one step to a fresh conversation (`ccx fresh`) | ✅ PR #12 |
-| J5 a model for the lead itself (`ccx lead --suggest`, a line in `ccx report`) | ✅ PR #13 |
-| J11 `ccx/delegate.py` split by job, behaviour unchanged | ✅ PR #14 |
-| F10–F14 own sub-agents: spend and quota limits, Agent tool for Claude, explicit "use sub-agents" for parts | ✅ PR #18 — limits not yet hit by a real run (sub-agents rarely start: PR #6) |
-| H5–H6 + I6 shared memory in use: suggested notes the person accepts, this project first, usage counts, notes in the brief for tools without a start hook | ✅ PR #21 — suggestions are heuristic; **H7 waits for the user**: the first try (in a folder named `...\玩`) hit a crash on non-ASCII paths, fixed in PR #27; send "ok" again in a new Codex desktop conversation |
-| `changes/<PR>.md` per PR instead of editing CHANGELOG/STATUS | ✅ PR #22 |
-| H3–H4 + I7 `ccx discuss` (2–3 vendors propose / critique / judge, `ccx ui` shows it as a conversation) | ✅ PR #23 — one real discussion (Codex + Claude, agreed in 3 rounds, $0.28); with two vendors the proposer also judges |
-| H8–H9 `ccx way` (three ways of working by risk; first-try and rework rates per kind of task) | ✅ PR #24 |
-| DeepSeek as the fourth vendor (`dsh` adapter, DeepSeek through Codex), Kimi / GLM / Qwen / OpenRouter providers | ✅ PR #25 — through Claude Code and through Codex run for real; `dsh`, Gemini and the small vendors not run (not installed / no keys) |
-| Fixes from the seven-cores real runs: `ccx task resume` restarts a step killed before its session began (#26); non-ASCII paths no longer crash (#27); `ccx doctor` checks a Codex lead's sandbox (#28) | ✅ #26, #27; #28 open — on Windows only `danger-full-access` lets a Codex lead hand work to Claude |
-| Seven cores A/B on real CLIs (delegation, routing, review, memory; 3 rounds, $6 cap) | ⏳ running (session ccx-evals); round 1: delegating saves the lead 1 request in 3 but costs as much in total and is ~2.7× slower; routing no better than one fixed model; review cost ~34× with no gain in pass rate and passed one wrong solution |
+| Result | Numbers | Source |
+|---|---|---|
+| Shared work context (`ccx run --context`) | right the first time 36/36 with it vs 7/36 without (McNemar p ≈ 4e-9), 0 vs 29 reworks, 63 % less spend in all; best case by design | [shared-context A/B](research/2026-10-25-shared-context-ab.md) |
+| Project memory reaches the sub-agent | hidden test 9/9 with the note vs 0/9 without (Holm p = 0.016) | [seven-cores A/B](research/2026-10-24-seven-cores-ab.md) §2.5 |
+| Hub memory (note only in the shared hub) | 9/9 vs 0/9 (McNemar p = 0.0039); control is round 1's arm, one note per hub | CHANGELOG 0.5.0 (PR #45); no separate report |
+| Delegating (round 1) | the lead's tokens −32 % (median 35.6k → 24.3k) and one request fewer, but total spend the same (ratio 1.02), total tokens 3.3×, ~23 s slower | [seven-cores A/B](research/2026-10-24-seven-cores-ab.md) §2.2 |
+| Routing (round 1) | no gain: it picked the fixed arm's model 21/21 times | same, §2.3 |
+| Review (round 1, then fixed) | round 1: 34× the cost, no gain, missed the same bug 3×; after the fix (cheap other-vendor reviewer, requirement by requirement) the fix round passed the hidden test 3/3 at $0.004–0.009 a review | same, §2.4 and §4 item 3 |
+
+Running: the seven-cores **round 2** A/B (division of work and parallel scale; session ccx-eval-r2) and the
+H11 week-long `ccx trial` (ends 2026-10-31).
 
 ## Next three
 
-1. Finish the seven-cores A/B (rounds 2–3, memory group) and act on it: review and routing defaults, the "ccx says ok,
-   hidden test fails" cases (the check is too weak when the visible tests miss a requirement).
-2. J0 on real sessions (`scripts/eval/j0_baseline.py real --days 7`) a week after J1–J6, against the baseline in
-   PR #6; spot-check 5 probable verdicts a week so J7 has an overturn rate.
-3. Then: H7 (the user's check above), `ccx stop`, I5, H1–H2, H12, H14–H16, I8, a third vendor in a real `ccx discuss`,
-   and the release.
+1. **K3, the coordinator skill**: a skill for the lead session that coordinates the others.
+2. **Round 2 A/B** (division of work, parallel scale) — finish, report with raw data, and act on it (including
+   whether the weak-evidence review, H13, catches more wrong work).
+3. **Getting ready to go public**: install from the plugin marketplace, a narrower README, a demo GIF, a public
+   benchmark. Then tag v0.5.0 and the GitHub Release (the person's go-ahead).
 
 ## How sure we are (short)
 
 **real** = run on a real Windows machine with logged-in CLIs; **fake** = tests with fake CLIs only.
 
-- **real**: delegation both ways (read and write), `--check`, independent review, failure kinds, `--bg`, `ccx send`,
-  auto-continue, `task resume` after a kill, memory on the Claude side, wiring (`sync --apply`), accounting and
-  `ccx report`, DeepSeek as a provider, the E8 handover both ways (once each), `ccx lead --breakdown` / `--cache`, `ccx ui` (page and server in Edge on a hub of ccx runs on the fake CLIs,
-  read-only once on the real hub; other browsers/OS not opened).
-- **fake only**: worktrees, `ccx batch`, quota fallback to the other agent, the queue and seats, `--fork`, Gemini
-  CLI, a real quota stop.
-- **not calibrated**: routing priors (few real verdicts), the 10-minute checking window in `ccx trial`, the token
-  estimates per part in `--breakdown` (the total is measured).
+- **real**: delegation both ways, `--check`, review (new defaults, 3 runs), `ccx stop` → `ccx resume` and killed
+  runs counted, archiving after a run, DeepSeek leading (dsh and Claude Code on a DeepSeek model), a three-vendor
+  `ccx discuss`, the board via `ccx say --resume` (Codex, dsh), shared work context A/B, project catalog scan
+  (31 projects), non-ASCII paths, no console pop-ups, the release preflight (Codex only, $0.013).
+- **fake only**: worktrees, `ccx batch`, quota fallback, the queue and seats, `--fork`, Gemini CLI, a real quota
+  stop (none yet).
+- **not verified**: Codex desktop's per-turn hook and `ccx say --now` into a live thread; Codex hooks on Windows
+  after the fix (H7, waits for the person); the Codex rule from `ccx doctor --codex-rule`; whether the dsh app keeps
+  an archived id; own sub-agent limits (F10–F14) live; suggested-note rules (13/30 agreement on a held-out set, not an
+  accuracy result); routing priors and the "save" default beyond round 1's tasks.

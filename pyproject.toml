@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "relayline"
-version = "0.4.0"
+version = "0.5.0"
 description = "Claude Code <-> Codex (and Gemini CLI) as lead/sub-agents: routing, shared skills/MCP/incremental memory, resumable runs, token accounting"
 readme = "README.md"
 requires-python = ">=3.11"
