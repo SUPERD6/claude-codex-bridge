@@ -11,12 +11,28 @@ from pathlib import Path
 
 from .config import Paths
 
+# A preference is a standing rule in the person's words ("from now on ...", "以后不要 ..."), not an instruction for the
+# task at hand: "改成"/"统一" name an edit as often as a rule, so they are not markers; "继续"/"第 N 步" are the task.
 PREFERENCE = re.compile(r"\b(always|never|from now on|prefer|please (?:use|keep|write)|don'?t|do not|instead of|"
-                        r"make sure)\b|以后|不要|别再|总是|一律|默认|记住|优先|不用|改成|统一|每次", re.I)
+                        r"make sure|by default)\b|以后|不要|别再|总是|一律|默认|记住|优先|不用|每次|永远|必须", re.I)
+TASK = re.compile(r"\b(continue|carry on|go ahead|next step|steps? \d+)\b|继续|接着|下一步|这一步|"
+                  r"第\s*[0-9一二三四五六七八九十]+(?:\s*[-–~～到]\s*[0-9一二三四五六七八九十]+)?\s*步|"
+                  r"[A-Za-z]:\\|(?:^|\s)/(?:Users|home)/|"     # an absolute path: this machine, this task
+                  r"`[^`\s]*/[^`\s]*`|"                       # a file to change (`ccx/review.py`): a work item
+                  r"写进|写到|放进|放到", re.I)                  # "put this into F": where this task's text goes
+# "E8 真跑发现…", "J6：…", "H5–H7 …", "PR #21 …": a progress line about one proposal or PR, not a lasting pitfall
+PROGRESS = re.compile(r"^\s*(?:\*\*)?(?:[A-Z]{1,2}\d{1,2}[a-z]?(?:\s*[-–/、,]\s*[A-Z]{0,2}\d{1,2})*|(?:PR\s*)?#\d+)"
+                      r"(?:\*\*)?(?=[\s:：,，)）]|$)")
 DECISION = re.compile(r"\b(decided|decision|we(?:'ll| will) use|chose|going with|settled on)\b|决定|改为|采用|定下|结论[:：]",
                       re.I)
-PITFALL = re.compile(r"\b(turned out|gotcha|pitfall|found that|careful|the cause was|root cause)\b|注意|坑|原来|发现|根因",
-                     re.I)
+# bare "原来" mostly means "the original ..."; only "原来是/原来其实/原来没 ..." reports something that turned out
+PITFALL = re.compile(r"\b(turned out|gotcha|pitfall|found that|careful|the cause was|root cause)\b|注意|坑|"
+                     r"原来(?:是|其实|并|没|不|只|一直)|发现|根因", re.I)
+# The lead's report to the person rather than a lasting fact: "已推送 / tests pass / 提交号 abc1234", a heading, or a
+# fragment too short to stand alone ("还没做 / 需要注意"). A "pitfall" said to "你" is about this conversation.
+REPORT = re.compile(r"已推送|已提交|已合并|都过了|测试通过|\b(?:pushed|merged|tests? pass(?:ed)?)\b|"
+                    r"`[0-9a-f]{7,40}`|^#", re.I)
+MIN_LEAD_TEXT = 14
 MAX_TEXT = 220
 
 
@@ -49,7 +65,7 @@ def _sentences(text: str) -> list[str]:
 
 def _clip(s: str) -> str:
     from .transcript import redact
-    s = redact(" ".join(s.split()))
+    s = redact(" ".join(s.replace("**", "").split()))
     return s if len(s) <= MAX_TEXT else s[: MAX_TEXT - 1] + "…"
 
 
@@ -59,13 +75,15 @@ def gather(d: dict, path: Path, limit: int = 8) -> list[dict]:
     out: list[dict] = []
     for u in d.get("users") or []:
         for s in _sentences(u):
-            if PREFERENCE.search(s):
+            if PREFERENCE.search(s) and not TASK.search(s) and not PROGRESS.match(s):
                 out.append({"kind": "preference", "text": _clip(s), "by": "user", "source": src})
     for t in d.get("texts") or []:
         for s in _sentences(t):
+            if len(s.replace("*", "").strip()) < MIN_LEAD_TEXT or REPORT.search(s):
+                continue
             if DECISION.search(s):
                 out.append({"kind": "decision", "text": _clip(s), "by": d.get("agent"), "source": src})
-            elif PITFALL.search(s):
+            elif PITFALL.search(s) and not PROGRESS.match(s) and "你" not in s:
                 out.append({"kind": "pitfall", "text": _clip(s), "by": d.get("agent"), "source": src})
     seen, uniq = set(), []
     for c in out:
@@ -99,6 +117,16 @@ def add(p: Paths, cands: list[dict]) -> list[dict]:
 
 def pending(p: Paths) -> list[dict]:
     return [i for i in load(p) if i["status"] == "pending"]
+
+
+SHOW = 3   # the person's call (2026-10-25): the rules only sift, so show a few and let the person judge
+
+
+def ranked(p: Paths) -> list[dict]:
+    """Pending suggestions, the most trustworthy first: the person's own words (preferences), then decisions, then
+    pitfalls (the held-out checks found most noise in the lead's own sentences); newest first within a kind."""
+    order = {"preference": 0, "decision": 1, "pitfall": 2}
+    return sorted(pending(p), key=lambda i: (i.get("by") != "user", order.get(i.get("kind"), 3), -i["id"]))
 
 
 def decide(p: Paths, sid: int, accept: bool, text: str | None = None, topic: str | None = None) -> dict:

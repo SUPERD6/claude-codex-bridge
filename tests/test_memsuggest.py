@@ -41,6 +41,27 @@ class TestGather(unittest.TestCase):
         self.assertIn("claude session s1", got[0]["source"])
 
 
+    def test_task_instructions_and_progress_lines_are_not_notes(self):
+        from ccx.transcript import read_claude
+        import tempfile
+        session = [
+            {"type": "user", "message": {"content": "在 `D:\\work\\proj` 继续 ccx 的统一施工顺序第 3–10 步，最终开源发布。"}},
+            {"type": "user", "message": {"content": "#34 默认 tradeoff 改成 save。把 `ccx/review.py` 默认改成 off。"}},
+            {"type": "user", "message": {"content": "原生能力优先、约束只放在边界上。"}},
+            {"type": "assistant", "message": {"content": [{"type": "text", "text":
+                "E8 真跑发现一个问题：只读子任务没去读文件。J6：STATUS 压成一页，原来 24 KB。"
+                "PR #21 原来漏了一个测试。The root cause was a race on **run.json** while it is replaced。"
+                "试验中发现的问题已经修好，提交号 `688e3ad`，已推送。\n## 顺带发现两个小 bug\n还没做 / 需要注意\n"
+                "现在能找到，并沿用原来的模型。你原来的判断是对的，我发现上一条说偏了。"}]}},
+        ]
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "s2.jsonl"
+            f.write_text("".join(json.dumps(e) + "\n" for e in session), encoding="utf-8")
+            got = [(c["kind"], c["text"]) for c in memsuggest.gather(read_claude(f), f)]
+        self.assertEqual(got, [("preference", "原生能力优先、约束只放在边界上。"),
+                               ("pitfall", "The root cause was a race on run.json while it is replaced。")])
+
+
 class TestFlow(Env):
     def write_session(self):
         slug = re.sub(r"[^A-Za-z0-9]", "-", str(self.work.resolve()))
@@ -70,6 +91,23 @@ class TestFlow(Env):
         self.assertNotEqual(self.ccx("mem", "accept", str(second)).returncode, 0)      # already decided
         left = self.j("mem", "suggestions")["pending"]
         self.assertNotIn(first, [i["id"] for i in left])
+
+    def test_only_the_first_three_the_persons_words_first(self):
+        p = Paths(self.hub)
+        memsuggest.add(p, [{"kind": "pitfall", "text": f"pitfall number {i} is long enough", "by": "claude",
+                            "source": "s"} for i in range(3)]
+                       + [{"kind": "decision", "text": "we decided to keep one queue file", "by": "claude", "source": "s"},
+                          {"kind": "preference", "text": "from now on PR text in Chinese", "by": "user", "source": "s"}])
+        out = self.j("mem", "suggestions")
+        self.assertEqual([i["kind"] for i in out["pending"]], ["preference", "decision", "pitfall"])
+        self.assertEqual(out["more"], 2)
+        self.assertEqual(len(self.j("mem", "suggestions", "--all")["pending"]), 5)
+        start = self.ccx("mem", "delta", "--as", "codex", "--peek").stdout
+        self.assertIn("5 suggested note(s)", start)
+        self.assertIn("from now on PR text in Chinese", start)
+        self.assertIn("pitfall number 2", start)                     # newest pitfall
+        self.assertNotIn("pitfall number 0", start)
+        self.assertIn("--all", start)
 
     def test_handoff_from_transcript_gathers_suggestions(self):
         self.write_session()

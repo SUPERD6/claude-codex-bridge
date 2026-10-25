@@ -839,13 +839,16 @@ def collect(p: Paths, project: Path | None = None, days: float = 7, rd: Reader |
              if not proj or project_root(d.get("cwd")) == proj][:10]
     from . import memsuggest
     try:                                                      # H5: notes that wait for the person's yes or no
-        sugs = [{k: s.get(k) for k in ("id", "kind", "text", "by", "source", "ts")} for s in memsuggest.pending(p)]
+        ranked = memsuggest.ranked(p)              # the first few only: the rules sift, the person judges
+        sugs = [{k: s.get(k) for k in ("id", "kind", "text", "by", "source", "ts")} for s in ranked[:memsuggest.SHOW]]
+        n_sugs = len(ranked)
     except Exception:  # noqa: BLE001 — the page still shows the rest
-        sugs = []
+        sugs, n_sugs = [], 0
     return {
         "v": 1, "generated": now, "lang": ui_lang(cfg), "poll_s": POLL_S, "beat_s": BEAT_S,
         "projects": projects, "quota": quota_view(rd, quota_wait), "leads": current, "agents": agents,
         "discussions": talks, "track": track, "track_min": ways.MIN_JUDGED, "suggestions": sugs,
+        "suggestions_total": n_sugs,
         "week": {"usd": round(sum(_usd(r) for r in week), 4),
                  "cash_usd": round(sum(_usd(r) for r in week if r.get("to") in providers or r.get("provider")), 4),
                  "runs": len(week), "verdicts": len(hard), "verdicts_needed": VERDICTS_TO_KNOW},
