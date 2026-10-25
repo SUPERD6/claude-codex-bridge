@@ -98,6 +98,29 @@ class TestDiscuss(DiscussEnv):
         self.assertEqual(out["state"], "done")
         self.assertEqual(self.j("discuss", "--with", "codex,claude", "--rounds", "1", "x?")["state"], "done")  # person
 
+    def test_bg_runs_detached_and_show_follows_it(self):
+        import time
+        out = self.j("discuss", "--bg", "--with", "codex,claude", "--rounds", "1", "which lock?",
+                     env={**self.env, "CLAUDECODE": "1"})
+        self.assertFalse(out["ran"])                              # without --confirmed: only the estimate
+        self.assertNotIn("id", out)
+        out = self.j("discuss", "--bg", "--confirmed", "--with", "codex,claude", "--rounds", "1", "which lock?",
+                     env={**self.env, "CLAUDECODE": "1"})
+        self.assertEqual(out["state"], "started")
+        self.assertIn(self.j("discuss", "--show", out["id"])["state"], ("starting", "running", "done"))
+        for _ in range(400):                 # up to 40 s: the detached process starts slowly under full-suite load
+            try:
+                if discuss.load(Paths(self.hub), out["id"])["state"] == "done":
+                    break
+            except (ValueError, OSError):    # caught mid-replace (Windows): look again
+                pass
+            time.sleep(0.1)
+        log = Path(out["log"])
+        shown = self.j("discuss", "--show", out["id"])
+        self.assertEqual(shown["state"], "done", log.read_text() if log.exists() else "no log")
+        self.assertEqual(shown["question"], "which lock?")
+        self.assertEqual([t["role"] for t in shown["turns"]], ["proposer", "critic", "judge"])
+
     def discuss_prompts(self):
         return [c for c in self.calls() if "[ccx discuss" in (c.get("prompt") or "")]
 

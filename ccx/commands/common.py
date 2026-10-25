@@ -19,6 +19,17 @@ def _out(obj) -> None:
     print(json.dumps(obj, ensure_ascii=False, indent=2))
 
 
+def detach(args: list[str], log: Path, env: dict) -> None:
+    """Start `ccx <args>` detached (hidden console), its output into `log`: `ccx run --bg`, `ccx discuss --bg`."""
+    import subprocess
+    from ..config import ccx_argv
+    from ..winproc import BACKGROUND as kw   # hidden console: its git/codex/claude calls pop no windows
+    log.parent.mkdir(parents=True, exist_ok=True)
+    with open(log, "w", encoding="utf-8") as lf:
+        subprocess.Popen([*ccx_argv(), *[x for x in args if x != "--bg"]], stdout=lf, stderr=subprocess.STDOUT,
+                         stdin=subprocess.DEVNULL, env={**os.environ, **env}, cwd=os.getcwd(), **kw)
+
+
 def _caller(explicit: str | None) -> str:
     if explicit:
         return explicit
