@@ -122,6 +122,8 @@ def _codex_seen(prev: dict | None) -> dict:
     seen = {}
     for a in (prev or {}).get("attempts", []):
         if a.get("agent") == "codex" and a.get("session_id") and a.get("usage"):
+            if a.get("recovered") and not a.get("codex_total"):
+                continue            # read back after a kill: its own usage, not a running total of the session
             seen[a["session_id"]] = a.get("codex_total") or _codex_total(a["usage"])
     return seen
 

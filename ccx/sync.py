@@ -117,9 +117,12 @@ IMPORTS = {"claude"}       # context files that load `@path` themselves, so the 
 
 
 def memory_targets() -> list[tuple[str, Path]]:
-    """(agent, its context file) for every tool that can sit in the lead's chair (I6: from the adapters)."""
+    """(agent, its context file) for every tool that can sit in the lead's chair (I6: from the adapters); a
+    community one only when it is installed, so no folder of a tool the person never installed is created."""
     from . import agents
-    return [(ad.name, ad.home() / ad.context_file) for ad in agents.all_adapters() if ad.can_lead and ad.home]
+    from .runners import find_bin
+    return [(ad.name, ad.home() / ad.context_file) for ad in agents.all_adapters()
+            if ad.can_lead and ad.home and (ad.support == "official" or find_bin(ad.name))]
 
 
 def sync_memory(p: Paths, plan: Plan) -> None:

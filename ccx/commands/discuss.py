@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import os
+import sys
+import time
 from pathlib import Path
 
 from .. import discuss
 from ..config import load_config, paths
-from .common import _caller, _out
+from .common import _caller, _out, detach
 
 
 def started_by_agent() -> str | None:
@@ -50,8 +52,18 @@ def cmd_discuss(a) -> int:
               "next": "tell the person the question and this estimate; on their yes run the same command with "
                       "--confirmed"})
         return 0
+    if a.bg:                            # the same command, detached; the id is fixed now so --show works at once
+        did = discuss.new_id()
+        log = discuss._dir(p) / f"{did}.log"
+        discuss.save(p, {"id": did, "ts": time.time(), "state": "starting", "question": question, "roles": est["roles"],
+                         "tiers": tiers, "rounds": a.rounds, "turns": [], "usd": 0.0, "log": str(log)})
+        detach(sys.argv[1:], log, {"CCX_DISCUSS_ID": did})
+        _out({"id": did, "state": "started", **{k: est[k] for k in ("usd_max_est", "usd_min_est", "models")},
+              "check": f"ccx discuss --show {did}", "log": str(log),
+              "next": "poll with `ccx discuss --show ID` (turns appear as they finish) or watch `ccx ui`"})
+        return 0
     d = discuss.run(p, question, names, rounds=a.rounds, caller=_caller(a.caller), context=context,
-                    cwd=Path(a.cwd) if a.cwd else None, tier=tiers)
+                    cwd=Path(a.cwd) if a.cwd else None, tier=tiers, did=os.environ.pop("CCX_DISCUSS_ID", None))
     out = discuss.view(d)
     out["next"] = "the turns as a conversation: `ccx ui` (Discussions)"
     _out(out)
@@ -75,6 +87,7 @@ def register(sub) -> None:
     d.add_argument("--confirmed", action="store_true",
                    help="the person said yes (H4): needed when a lead or a sub-agent starts the discussion; without "
                         "it they only get the estimate")
-    d.add_argument("--show", metavar="ID", help="print a past discussion")
+    d.add_argument("--bg", action="store_true", help="run detached; follow it with --show ID or in `ccx ui`")
+    d.add_argument("--show", metavar="ID", help="print a discussion, also one still going (--bg)")
     d.add_argument("--list", action="store_true", help="recent discussions")
     d.set_defaults(fn=cmd_discuss)

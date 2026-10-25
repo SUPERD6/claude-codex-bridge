@@ -85,6 +85,10 @@ def recent(p: Paths, since: float = 0.0) -> list[dict]:
     return sorted(out, key=lambda d: -(d.get("ts") or 0))
 
 
+def new_id() -> str:
+    return time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:4]
+
+
 def participants(cfg: dict, wanted: list[str] | None, installed=None) -> list[str]:
     """2–3 agents of different vendors, in the order of the roles. Not given: the installed ones, one per vendor."""
     from . import agents
@@ -306,7 +310,8 @@ def estimate(p: Paths, names: list[str], rounds: int, *, tier: str | dict = "T2"
 
 
 def run(p: Paths, question: str, names: list[str], *, rounds: int = MAX_ROUNDS, caller: str = "the lead",
-        context: str = "", cwd: Path | None = None, tier: str | dict = "T2", runner=None) -> dict:
+        context: str = "", cwd: Path | None = None, tier: str | dict = "T2", runner=None,
+        did: str | None = None) -> dict:
     """Talk it through. `runner(agent, brief, label, resume=None) -> run record` is delegate.run by default (tests
     pass a fake); `resume` is the turn's run id when ccx asks once more, in the same session, for the format."""
     rounds = max(1, min(MAX_ROUNDS, int(rounds)))
@@ -324,7 +329,7 @@ def run(p: Paths, question: str, names: list[str], *, rounds: int = MAX_ROUNDS, 
                                         cwd=cwd, caller="ccx-discuss", resume_run=resume,
                                         escalate=False, fallback=False, review="off", allow_subagents=False,
                                         ephemeral=True, keep_session=True, label=label), p)
-    did = time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:4]
+    did = did or new_id()
     rl = roles(names)
     d = {"id": did, "ts": time.time(), "question": question.strip(), "context": context.strip()[:4000],
          "caller": caller, "cwd": str(cwd), "rounds": rounds, "roles": rl, "judge_independent": len(names) > 2,
@@ -336,7 +341,7 @@ def run(p: Paths, question: str, names: list[str], *, rounds: int = MAX_ROUNDS, 
         try:
             rec = runner(agent, text, label, resume=resume) if resume else runner(agent, text, label)
         except Exception as e:  # noqa: BLE001 — one failed turn ends the talk, the record keeps what was said
-            rec = {"ok": False, "error": str(e)[:300]}
+            rec = {"ok": False, "error": f"{type(e).__name__}: {e}"[:300]}   # some exceptions have no message
         usd = sum(a.get("ae_usd") or 0 for a in rec.get("attempts") or [])
         d["usd"] = round(d["usd"] + usd, 6)
         ok = rec.get("ok") and (rec.get("result") or {}).get("status") == "done"

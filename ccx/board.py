@@ -17,7 +17,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 VENDORS = ("claude", "codex", "deepseek")
-ALIASES = {"dsh": "deepseek", "human": "user", "person": "user"}
+ALIASES = {"dsh": "deepseek", "deepseek-codex": "deepseek", "human": "user", "person": "user"}
 MARK = "[ccx board"                 # starts every message ccx pushes into a session: such a turn is not a person's
 MAX_MACHINE = 6                     # machine messages in a row in one thread before a person must speak
 TURN_CHARS = 1200                   # ~300 tokens: what one turn may spend on the board and the shared document

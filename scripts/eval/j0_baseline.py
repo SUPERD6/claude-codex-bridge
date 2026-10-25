@@ -1,13 +1,25 @@
 """J0: the lead's own cost, measured the same way before and after proposal J (J1 fixed overhead, J2 cache breaks,
 J3 compressed outputs, J6 a one-page STATUS).
 
-  python scripts/eval/j0_baseline.py real [--days 7]          # free: the real lead sessions + the ledger
+  python scripts/eval/j0_baseline.py real [--days 7] [--until ISO] [--tag T]   # free: real lead sessions + ledgers
+  python scripts/eval/j0_baseline.py compare --before T1 --after T2           # two `real` readings side by side
   python scripts/eval/j0_baseline.py tasks --ref HEAD [--repeat 2] [--model haiku]
   python scripts/eval/j0_baseline.py summary [--tag TAG]
 
 `real` reads what already happened (no model calls): per lead request, the tokens it re-read (new input + cache
 writes + cache reads), its API-equivalent cost, the cache read / write shares, how many requests broke the cache (a
-cache write of 20k+ tokens and over half of the request), and what ccx sub-runs cost in the same window.
+cache write of 20k+ tokens and over half of the request), `ccx lead --cache`'s breaks and causes in the window, and
+what ccx sub-runs cost in the same window. Only conversations a person drove count as the lead: left out are the
+sessions any ccx ledger knows (this hub's and the temporary hubs eval scripts leave under the temp folder) and
+every session a program started headless — Claude `-p` (entrypoint sdk-*) and `codex exec` — which is how every
+ccx sub-run (CCX_ROLE=subagent; the variable itself is not in the session files) and every eval lead runs. A `-p`
+run started from inside the desktop app inherited its CLAUDE_CODE_ENTRYPOINT and was labelled "claude-desktop"
+until ccx and the eval scripts stopped passing it on (2026-10-25); such older sub-runs are caught by the ledgers
+and the project filter (eval leads ran in temp folders), not by the label.
+`--keep-headless` counts them as before (the reading in PR #6 did). By default only this project's conversations
+are read (its main checkout and its worktrees; Claude folders by path, Codex sessions by their cwd), `--project
+DIR` for another, `--all-projects` for every one (PR #6's scope). `--until` re-reads an earlier window with the same
+rules, so a before/after pair is measured the same way.
 
 `tasks` runs a fixed set of lead tasks in a fresh clone of this repo at `--ref`, each by a new headless Claude Code
 lead with the person's DEFAULT setup (their CLAUDE.md, hooks, skills and MCP — what J1–J3 and J6 change; no slim
@@ -26,6 +38,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -125,14 +138,164 @@ def cmd_tasks(a) -> int:
     return 0
 
 
+def other_ledgers(tmp: Path | None = None) -> list[Path]:
+    """Ledgers of the temporary hubs eval scripts leave behind (<temp>/ccx-*/.../ledger.jsonl)."""
+    tmp = tmp or Path(tempfile.gettempdir())
+    out = []
+    for d in tmp.glob("ccx-*"):
+        if d.is_dir():
+            out += [f for f in d.rglob("ledger.jsonl") if len(f.relative_to(d).parts) <= 6]
+    return out
+
+
+def ledger_sessions(files: list[Path]) -> set[str]:
+    out = set()
+    for f in files:
+        try:
+            lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        for line in lines:
+            try:
+                r = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(r, dict) and not r.get("type"):
+                out.update(r.get("sessions") or [])
+                if r.get("session_id"):
+                    out.add(r["session_id"])
+    return out
+
+
+def headless_sessions(since: float, claude_root: Path | None = None, codex_root: Path | None = None) -> set[str]:
+    """Sessions a program started, not a person: Claude Code `-p` (entrypoint sdk-cli / sdk-*) and `codex exec`
+    (originator codex_exec)."""
+    from ccx.config import claude_home, codex_home
+    out = set()
+    root = (claude_root or claude_home()) / "projects"
+    for f in root.glob("*/*.jsonl") if root.exists() else ():
+        try:
+            if f.stat().st_mtime < since:
+                continue
+            with f.open(encoding="utf-8", errors="replace") as fh:
+                for i, line in enumerate(fh):
+                    if '"entrypoint"' in line:
+                        ep = str((json.loads(line) or {}).get("entrypoint") or "")
+                        if ep.startswith("sdk"):
+                            out.add(f.stem)
+                        break
+                    if i > 200:
+                        break
+        except (OSError, ValueError):
+            continue
+    xroot = (codex_root or codex_home()) / "sessions"
+    for f in xroot.rglob("rollout-*.jsonl") if xroot.exists() else ():
+        try:
+            if f.stat().st_mtime < since:
+                continue
+            with f.open(encoding="utf-8", errors="replace") as fh:
+                meta = (json.loads(fh.readline()) or {}).get("payload") or {}
+        except (OSError, ValueError):
+            continue
+        if meta.get("originator") == "codex_exec":
+            out.add(meta.get("id") or f.stem)
+    return out
+
+
+def main_checkout(root: Path = ROOT) -> Path:
+    """The repository's main checkout, also when this runs from one of its worktrees."""
+    common = git(root, "rev-parse", "--path-format=absolute", "--git-common-dir").strip()
+    return Path(common).parent if common else root
+
+
+def _forms(p) -> set[str]:
+    """A path as written and resolved, lower case (/var vs /private/var on macOS, short names on Windows)."""
+    try:
+        both = {str(p), str(Path(p).resolve())}
+    except OSError:
+        both = {str(p)}
+    return {x.lower().rstrip("\\/") for x in both}
+
+
+def project_sessions(project: Path, claude_root: Path | None = None, codex_root: Path | None = None) -> set[str]:
+    """Conversations started in `project` or below it (its worktrees live under .claude/worktrees/)."""
+    from ccx.config import claude_home, codex_home
+    here = _forms(project)
+    slugs = {re.sub(r"[^a-z0-9]", "-", h) for h in here}
+    out = set()
+    root = (claude_root or claude_home()) / "projects"
+    for d in root.iterdir() if root.exists() else ():
+        if d.is_dir() and any(d.name.lower().startswith(sl) for sl in slugs):
+            out.update(x.stem for x in d.glob("*.jsonl"))
+    xroot = (codex_root or codex_home()) / "sessions"
+    for x in xroot.rglob("rollout-*.jsonl") if xroot.exists() else ():
+        try:
+            with x.open(encoding="utf-8", errors="replace") as fh:
+                meta = (json.loads(fh.readline()) or {}).get("payload") or {}
+        except (OSError, ValueError):
+            continue
+        if meta.get("cwd") and any(c.startswith(h) for c in _forms(meta["cwd"]) for h in here):
+            out.add(meta.get("id") or x.stem)
+    return out
+
+
+def _session_file(agent: str, sid: str) -> Path | None:
+    from ccx.config import claude_home, codex_home
+    if agent == "claude":
+        return next(iter((claude_home() / "projects").glob(f"*/{sid}.jsonl")), None)
+    root = codex_home() / "sessions"
+    return next(iter(root.rglob(f"rollout-*{sid}*.jsonl")), None) if root.exists() else None
+
+
+def lead_cache_breaks(p, agent: str, sessions: set[str], since: float, until: float) -> dict:
+    """`ccx lead --cache` over every lead conversation in the window, breaks inside the window only."""
+    from ccx import leadcost
+    from ccx.usage import _ts
+    n, usd, causes = 0, 0.0, {}
+    for sid in sorted(sessions):
+        f = _session_file(agent, sid)
+        if not f:
+            continue
+        for br in leadcost.cache_breaks(p, agent, f)["breaks"]:
+            t = _ts(br.get("ts"))
+            if t is None or not since <= t <= until:
+                continue
+            n += 1
+            usd += br.get("extra_usd") or 0
+            for w in br["why"]:
+                key = "idle longer than the cache lives" if w.startswith("idle") else w.split(" → ")[0]
+                causes[key] = causes.get(key, 0) + 1
+    return {"breaks": n, "extra_usd": round(usd, 2), "causes": causes}
+
+
+def _when(s: str | None) -> float:
+    if not s:
+        return time.time()
+    return datetime.fromisoformat(s).timestamp()
+
+
 def cmd_real(a) -> int:
     from ccx import usage
     p = paths()
-    since = time.time() - a.days * 86400
-    runs = [r for r in ledger.rows(p) if not r.get("type")]
+    until = _when(a.until)
+    since = until - a.days * 86400
+    rows = ledger.rows(p)
+    runs = [r for r in rows if not r.get("type")]
     mine = {s for r in runs for s in r.get("sessions", [])}
-    evs, _ = usage.lead_events(since, mine)
-    out = {"days": a.days, "taken": time.strftime("%Y-%m-%d %H:%M"), "lead": {}}
+    others = [f for f in other_ledgers() if f.resolve() != p.ledger.resolve()] + [Path(x) for x in a.ledger or []]
+    from_ledgers = ledger_sessions(others) - mine
+    headless = set() if a.keep_headless else headless_sessions(since)
+    evs, _ = usage.lead_events(since, mine | from_ledgers | headless)
+    project = None if a.all_projects else Path(a.project) if a.project else main_checkout()
+    keep = project_sessions(project) if project else None
+    evs = [e for e in evs if e["ts"] <= until and (keep is None or e["session"] in keep or e.get("parent") in keep)]
+    out = {"tag": a.tag or time.strftime("%Y%m%d"), "days": a.days, "taken": time.strftime("%Y-%m-%d %H:%M"),
+           "window": [time.strftime("%Y-%m-%d %H:%M", time.localtime(since)),
+                      time.strftime("%Y-%m-%d %H:%M", time.localtime(until))],
+           "left_out": {"this_hub_sessions": len(mine), "other_ledgers": len(others),
+                        "other_ledger_sessions": len(from_ledgers), "headless_sessions": len(headless),
+                        "keep_headless": a.keep_headless},
+           "project": str(project) if project else "all", "lead": {}}
     for agent in ("claude", "codex"):
         es = [e for e in evs if e["agent"] == agent and e.get("role") == "lead"]
         if not es:
@@ -152,12 +315,39 @@ def cmd_real(a) -> int:
             "cache_write_share": round(sum(writes) / tot, 3),
             "cache_breaks": sum(w >= BREAK_MIN and w > t / 2 for w, t in zip(writes, tok)),
             "cache_break_usd": round(sum(u for u, w, t in zip(usd, writes, tok) if w >= BREAK_MIN and w > t / 2), 2),
+            "lead_cache": lead_cache_breaks(p, agent, {e["session"] for e in es}, since, until),
             "models": sorted({e.get("model") or "?" for e in es})}
-    sub = [r for r in runs if (r.get("ts") or 0) >= since]
+    sub = [r for r in runs if since <= (r.get("ts") or 0) <= until]
     out["sub_runs"] = {"runs": len(sub), "ae_usd": round(sum(r.get("ae_usd") or 0 for r in sub), 4),
-                       "eval_runs": sum((r.get("label") or "").startswith("eval-") for r in sub)}
+                       "eval_runs": sum(ledger.is_eval(r) for r in sub)}
     append_jsonl(OUT / "real.jsonl", out)
     print(json.dumps(out, indent=1))
+    return 0
+
+
+def compare_real(before: dict, after: dict) -> dict:
+    """Two `real` readings side by side: per agent, after / before for what a lead request costs."""
+    res = {"before": before.get("window"), "after": after.get("window"), "lead": {}}
+    for agent in sorted(set(before.get("lead", {})) | set(after.get("lead", {}))):
+        b, x = before.get("lead", {}).get(agent) or {}, after.get("lead", {}).get(agent) or {}
+        row = {}
+        for k in ("requests", "median_request_tokens", "median_request_usd", "mean_request_usd", "total_usd",
+                  "cache_read_share", "cache_breaks"):
+            row[k] = {"before": b.get(k), "after": x.get(k),
+                      "ratio": round(x[k] / b[k], 3) if b.get(k) and x.get(k) is not None else None}
+        row["lead_cache_breaks"] = {"before": (b.get("lead_cache") or {}).get("breaks"),
+                                    "after": (x.get("lead_cache") or {}).get("breaks")}
+        res["lead"][agent] = row
+    return res
+
+
+def cmd_compare(a) -> int:
+    rows = read_jsonl(OUT / "real.jsonl")
+    pick = lambda tag: next((r for r in reversed(rows) if r.get("tag") == tag), None)  # noqa: E731
+    before, after = pick(a.before), pick(a.after)
+    if not before or not after:
+        raise SystemExit(f"no `real` reading tagged {a.before if not before else a.after} in {OUT / 'real.jsonl'}")
+    print(json.dumps(compare_real(before, after), indent=1))
     return 0
 
 
@@ -185,7 +375,17 @@ def main(argv=None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("real")
     r.add_argument("--days", type=float, default=7)
+    r.add_argument("--until", help="end of the window (ISO, local time); default now")
+    r.add_argument("--tag", default="", help="name this reading for `compare` (default: today's date)")
+    r.add_argument("--ledger", action="append", help="another ccx ledger whose sessions are sub-runs")
+    r.add_argument("--keep-headless", action="store_true", help="count headless sessions as lead (PR #6's reading)")
+    r.add_argument("--project", help="read only conversations started in this folder or below (default: this repo)")
+    r.add_argument("--all-projects", action="store_true", help="every project's conversations (PR #6's scope)")
     r.set_defaults(fn=cmd_real)
+    c = sub.add_parser("compare")
+    c.add_argument("--before", required=True)
+    c.add_argument("--after", required=True)
+    c.set_defaults(fn=cmd_compare)
     t = sub.add_parser("tasks")
     t.add_argument("--ref", default="HEAD")
     t.add_argument("--repeat", type=int, default=2)

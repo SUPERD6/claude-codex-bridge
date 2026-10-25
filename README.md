@@ -30,9 +30,10 @@ ccx run --to codex --mode read "Summarise README.md in three lines"
 
 > **Work in progress (v0.4, October 2026).** It runs every day on one Windows machine, both directions, terminal and
 > desktop apps.
-> - **Does it save money? The first measurements say "it depends"** (next section): small tasks save only when the
->   lead trusts ccx's check result. The week-long comparison (`ccx trial`) is still collecting; routing priors are
->   uncalibrated.
+> - **Does it save money? Not yet shown.** Measured on 7 tasks × 3 (next section): delegating to Codex left the
+>   total spend about even (ratio 1.02), used 3.3× the tokens and took about 23 s longer; the lead made one request
+>   fewer per task, which pays only in a long lead conversation (extrapolated, not measured). The week-long
+>   comparison (`ccx trial`) is still collecting; routing priors are uncalibrated.
 > - **Tested only with stand-in CLIs:** the work queue (`ccx q`), seats, worktrees and `ccx batch`, fallback to the
 >   other agent on a real quota stop. Gemini CLI has never run for real. macOS and Linux
 >   run in CI only.
@@ -62,13 +63,15 @@ ccx run --to codex --mode read "Summarise README.md in three lines"
 ## Measured (2026-10-24, ccx 0.4.0)
 
 All from real runs on a real machine; method, raw tables and limits in the
-[measurement report](docs/research/2026-10-24-h11-e8-f9-measurements.md). **The unfavourable results are here too.**
+[measurement report](docs/research/2026-10-24-h11-e8-f9-measurements.md) and the
+[seven-cores A/B](docs/research/2026-10-24-seven-cores-ab.md). **The unfavourable results are here too.** The last column says whether a number is
+measured or extrapolated.
 
 | Question | Result | How sure |
 |---|---|---|
-| Does handing small tasks to Codex save the lead anything? (8 small Python tasks, each done by the lead itself and delegated, paired) | **It depends on whether the lead trusts ccx's check.** sonnet as lead: one request fewer per task (3 → 2, 6/6, p = 0.031), total cost about even. haiku as lead: reruns the tests itself after delegating, so the same number of requests and a higher total (median $0.0024 → $0.0056, p = 0.008). Both **about 16–18 s slower**. 14/14 correct on both sides. | Sure for few-minute tasks; small samples |
-| And with a real, long-conversation lead? | One request fewer ≈ about 220k tokens not re-read ≈ **about $0.04 saved per small task at Opus cache-read prices, 16 s more waiting**; a lead that doesn't save the request just pays about $0.003 more. | **Extrapolated, not measured** |
-| Where does the money actually go? (real sessions on this machine, 7 days) | The Claude lead re-reads a median **352k tokens, $0.11 per request**, 99% cache reads; all ccx sub-tasks in the same week: $0.42. So the lead's own re-reading is what to cut. | A reading; sure |
+| Does handing small tasks to Codex save anything? ([seven-cores A/B](docs/research/2026-10-24-seven-cores-ab.md) round 1: 7 Python tasks (4 small, 3 medium) × 3, sonnet lead does it itself vs delegates to Codex luna low, paired) | **Total spend about even: ratio 1.02** (median $0.0344 → $0.0351; sign test over tasks p = 1). **Total tokens 3.3×** (35.6k → 119k), **about 23 s slower** (10.9 → 33.7 s). The lead made **one request fewer on every task** (3 → 2, 21/21). Right 21/21 done by the lead, 18/21 delegated (the cheap sub-agent got one medium task wrong 3/3). An earlier batch (PR #6): a haiku lead that reran the tests after delegating saved no request and paid more. | **Measured**; 5–15-minute tasks, a short headless lead |
+| And with a real, long-conversation lead? | One request fewer ≈ 352k tokens not re-read (the median below) ≈ **about $0.07 saved per small task at Opus cache-read price, about 23 s more waiting**, possibly wrong; a lead that doesn't save the request pays about $0.003 more. | **Extrapolated, not measured** ([A/B](docs/research/2026-10-24-seven-cores-ab.md) §2.2) |
+| Where does the money actually go? (real sessions on this machine, 7 days) | The Claude lead re-reads a median **352k tokens, $0.11 per request**, 99% cache reads; all ccx sub-tasks in the same week: $0.42. So the lead's own re-reading is what to cut. | **Measured** (a reading of session files, 2026-10-17–24) |
 | Do Codex's own sub-agents get used? | On gpt-6-luna low, **0 of 5 runs started one**, even when asked explicitly; on vs. off differ within noise. Higher models not tested. | Sure for luna low only |
 | From a handoff alone, can the next agent say where things stand? | 3/3 in controlled runs (including one killed midway); a real long session failed at first (the plan was read stale), right after the fix. | One real session |
 | Slim start of a Claude sub-agent | Fixed context per request 46k → **13.6k** tokens | Single run |
@@ -240,6 +243,7 @@ ccx lead                                     # what each turn of your lead conve
 ccx lead --breakdown | --cache | --suggest   # each re-read part / where the cache broke / a model for the lead itself
 ccx sum -- python -m pytest -q               # run a command, show the lead only what matters (tests: failures); full output in .ccx/sum/
 ccx fresh [--launch]                         # move a long conversation to a fresh one of the same tool, handoff from its file
+ccx propose --lead claude:opus:high --minutes 30 "…"  # before offering to delegate: estimate, one line to say, recorded (--no ID, --stats)
 ccx trial start | stop | report              # a week-long comparison: half the delegable tasks done by the lead, half delegated
 ccx trial tag --arm native --session ID      # count a conversation that used Claude Code's own helpers / a workflow as a third half
 ccx agents                                   # each agent CLI: vendor, what it can do, tested version, official or community
@@ -412,13 +416,15 @@ Checked 2026-10-24 (stars and dates from the GitHub API; they change). Details, 
 | [claude-codex-memory-sync](https://github.com/DaizeDong/claude-codex-memory-sync), [mycelium](https://github.com/conradomateu/mycelium), [memorize](https://github.com/shakystar/memorize) | Sync skills, instructions, MCP and memory between the tools | 1–31 · 2026 · MIT | Config and memory only; in ccx shared memory supports delegation. |
 
 What ccx doesn't have: a visible split-screen view, instructions added mid-run, multi-provider consensus, moving a whole
-conversation into Codex. What it is still missing: measured savings (see the top of this page).
+conversation into Codex. What it is still missing: a saving measured with real, long lead conversations (see the top of this page).
 
 ## Questions
 
-**Doesn't a second agent cost more tokens?** It can. In the measurements, delegating a small task saved something
-only when the lead answered as soon as ccx's check passed (one request fewer per task); a lead that reran the tests
-itself paid for the sub-task on top and waited a dozen seconds longer. For tiny tasks ccx tells you to do them
+**Doesn't a second agent cost more tokens?** Yes: 3.3× the tokens in the measured small tasks, about the same
+dollars (ratio 1.02) because the sub-agent was cheap, and about 23 s slower. What delegating saves is the lead's own
+requests (one fewer per task, when the lead answers as soon as ccx's check passed); that is worth money only when
+each lead request re-reads a long conversation, and so far that is extrapolated. A lead that reran the tests itself
+paid for the sub-task on top. For tiny tasks ccx tells you to do them
 yourself (`delegated: false`). Most of the money goes on the lead re-reading its own conversation every turn, which
 is what `ccx lead`, `ccx sum` and `ccx fresh` are for. `ccx report` shows the difference from your own runs;
 `ccx trial` runs a week-long comparison.

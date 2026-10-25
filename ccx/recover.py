@@ -46,34 +46,49 @@ def _claude_usage(lines) -> dict:
     return tot
 
 
-def _codex_session_total(sid: str, home: Path | None = None) -> dict | None:
-    """The session's running total from its rollout file(s): {input, cached, output} (cached inside input)."""
+def _codex_attempt(sid: str, since: float, home: Path | None = None) -> tuple[dict | None, dict | None]:
+    """From the session's rollout file(s): (what its requests since `since` cost, as {input, cached, output}; the
+    session's running total of completed work, as its last token_count says). codex-cli 0.164 writes a
+    token_usage_record per request, also for a turn that never finished; its token_count total covers only what
+    got that far (a turn stopped during its first request was in no token_count at all: real run, 2026-10-25)."""
+    from .usage import _ts
     root = (home or codex_home()) / "sessions"
-    best = None
+    spent, total = None, None
     for f in root.rglob(f"rollout-*{sid}.jsonl") if root.exists() and sid else []:
         try:
             lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
         except OSError:
             continue
-        for line in reversed(lines):
-            if '"token_count"' not in line:
-                continue
-            try:
-                tot = (((json.loads(line).get("payload") or {}).get("info") or {}).get("total_token_usage"))
-            except ValueError:
-                continue
-            if tot:
-                cur = {"input": int(tot.get("input_tokens", 0) or 0), "cached": int(tot.get("cached_input_tokens", 0) or 0),
-                       "output": int(tot.get("output_tokens", 0) or 0)}
-                if not best or cur["input"] > best["input"]:
-                    best = cur
-                break
-    return best
+        for line in lines:
+            if '"token_usage_record"' in line or '"token_count"' in line:
+                try:
+                    e = json.loads(line)
+                except ValueError:
+                    continue
+                pl = e.get("payload") or {}
+                if e.get("type") == "token_usage_record":
+                    t = _ts(e.get("timestamp"))
+                    u = pl.get("usage") or {}
+                    if t is not None and t >= since and u:
+                        spent = spent or {"input": 0, "cached": 0, "output": 0}
+                        spent["input"] += int(u.get("input_tokens", 0) or 0)
+                        spent["cached"] += int(u.get("cached_input_tokens", 0) or 0)
+                        spent["output"] += int(u.get("output_tokens", 0) or 0)
+                elif pl.get("type") == "token_count":
+                    tot = (pl.get("info") or {}).get("total_token_usage")
+                    if tot:
+                        total = {"input": int(tot.get("input_tokens", 0) or 0),
+                                 "cached": int(tot.get("cached_input_tokens", 0) or 0),
+                                 "output": int(tot.get("output_tokens", 0) or 0)}
+    return spent, total
 
 
-def partial_usage(cli: str, sid: str | None, stdout: str = "", cwd: Path | None = None) -> dict:
-    """Usage of an attempt that ended without its final usage line, in the shape its parser would have given:
-    Claude per attempt; Codex the session's running total (delegate counts only its growth, as for a resume)."""
+def partial_usage(cli: str, sid: str | None, stdout: str = "", cwd: Path | None = None, since: float = 0.0,
+                  before: dict | None = None) -> tuple[dict, dict | None]:
+    """What an attempt that ended without its final usage line spent: (usage, Codex's running total to remember
+    for the session, or None). Claude: its assistant events (stream, else transcript). Codex: its per-request
+    records since the attempt began (`since`); older Codex without them: the growth of its running total over
+    `before`, the total already counted for the session."""
     if cli == "claude":
         u = _claude_usage(stdout.splitlines())
         if not any(u.values()) and sid and cwd:
@@ -83,20 +98,27 @@ def partial_usage(cli: str, sid: str | None, stdout: str = "", cwd: Path | None 
                 u = _claude_usage(f.read_text(encoding="utf-8", errors="replace").splitlines())
             except OSError:
                 pass
-        return u if any(u.values()) else {}
+        return (u if any(u.values()) else {}), None
     if cli == "codex" and sid:
-        t = _codex_session_total(sid)
-        if t:
-            return usage_dict(fresh=max(0, t["input"] - t["cached"]), cached=t["cached"], out=t["output"])
-    return {}
+        from .agents.codex import _codex_growth
+        spent, total = _codex_attempt(sid, since)
+        if total and before and total["input"] < before.get("input", 0):
+            total = None                   # an older reading than what is counted already: keep the baseline
+        if spent:
+            return usage_dict(fresh=max(0, spent["input"] - spent["cached"]), cached=spent["cached"],
+                              out=spent["output"]), total or before
+        if total:
+            return _codex_growth(total, before or {}), total
+    return {}, None
 
 
 def close_dead(p: Paths, run_id: str, kind: str, state: str, why: str, by: str,
                attempt_kind: str | None = None) -> dict | None:
     """Close a run whose own ccx process is gone: the attempt it was in the middle of becomes one attempt with the
-    usage read back (kind=`kind`), then the final state and its one ledger row. None if someone else closed it."""
+    usage read back (kind `attempt_kind`, else `kind`), then the final state and its one ledger row. None if
+    someone else closed it."""
     from . import learn
-    from .agents.codex import _codex_growth, _codex_seen, _codex_total
+    from .agents.codex import _codex_seen
     run_dir = p.runs / run_id
     if not ledger.claim_final(run_dir, by):
         return None
@@ -104,19 +126,16 @@ def close_dead(p: Paths, run_id: str, kind: str, state: str, why: str, by: str,
     cur = rec.get("current") or {}
     if cur and len(rec.get("attempts") or []) <= int(cur.get("n", 0)):
         cli, sid = cur.get("cli") or cur.get("agent"), rec.get("session_id")
-        u = partial_usage(cli, sid, cwd=Path(rec["cwd"]) if rec.get("cwd") else None)
-        extra = {}
-        if cli == "codex" and u:
-            total = _codex_total(u)
-            u = _codex_growth(total, cur.get("before") or _codex_seen(rec).get(sid, {}))
-            extra["codex_total"] = total
+        u, total = partial_usage(cli, sid, cwd=Path(rec["cwd"]) if rec.get("cwd") else None,
+                                 since=float(cur.get("t0") or 0), before=cur.get("before") or _codex_seen(rec).get(sid))
         ae = learn.price_usd(p, cur["agent"], cur["model"], u, ts=cur.get("t0")) if u else None
         rec.setdefault("attempts", []).append({
             "agent": cur["agent"], "tier": cur.get("tier"), "rung": cur.get("rung"), "model": cur.get("model"),
             "effort": cur.get("effort"), "ok": False, "kind": attempt_kind or kind,
             "seconds": round(max(0.0, time.time() - float(cur.get("t0") or time.time())), 1), "usage": u,
             "cost_usd": None, "ae_usd": round(ae, 6) if ae is not None else None, "error": why,
-            "auth_problem": False, "retry_after": None, "session_id": sid, "recovered": True, **extra})
+            "auth_problem": False, "retry_after": None, "session_id": sid, "recovered": True,
+            **({"codex_total": total} if total else {})})
     rec.update(state=state, kind=kind, ok=False, error=why)
     ledger.write_record(run_dir, rec)
     ledger.append(p, rec)

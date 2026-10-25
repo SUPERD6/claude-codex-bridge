@@ -81,6 +81,26 @@ def _last_turn_claude(transcript: Path) -> tuple[dict, str, int] | None:
     return (last[0], last[1], turns) if last else None
 
 
+def lead_now(agent: str, session: str | None, home: Path | None = None) -> int | None:
+    """Tokens the lead's conversation reads per request right now (its last request), from that conversation's own
+    file; None when it can't be found."""
+    if not session:
+        return None
+    if agent == "claude":
+        from .config import claude_home
+        for f in ((home or claude_home()) / "projects").glob(f"*/{session}.jsonl"):
+            got = _last_turn_claude(f)
+            if got:
+                return turn_tokens(got[0])
+        return None
+    if agent == "codex":
+        from . import usage
+        evs = [e for e in usage.codex_events(time.time() - 6 * 3600, set(), home)[0]
+               if e["session"] == session and e.get("role") == "lead"]
+        return turn_tokens(max(evs, key=lambda e: e["ts"])["usage"]) if evs else None
+    return None
+
+
 def hint(p, agent: str, hook_input: dict, threshold: int = THRESHOLD, every: int = EVERY) -> str:
     """One line for the lead's next turn when its conversation is long; '' otherwise, and at most once per
     `every` turns per conversation (state in the hub)."""

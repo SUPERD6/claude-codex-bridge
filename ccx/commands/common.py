@@ -70,6 +70,17 @@ def lead_identity(env=None, cfg: dict | None = None) -> str:
     return "user"
 
 
+def detach(args: list[str], log: Path, env: dict) -> None:
+    """Start `ccx <args>` detached (hidden console), its output into `log`: `ccx run --bg`, `ccx discuss --bg`."""
+    import subprocess
+    from ..config import ccx_argv
+    from ..winproc import BACKGROUND as kw   # hidden console: its git/codex/claude calls pop no windows
+    log.parent.mkdir(parents=True, exist_ok=True)
+    with open(log, "w", encoding="utf-8") as lf:
+        subprocess.Popen([*ccx_argv(), *[x for x in args if x != "--bg"]], stdout=lf, stderr=subprocess.STDOUT,
+                         stdin=subprocess.DEVNULL, env={**os.environ, **env}, cwd=os.getcwd(), **kw)
+
+
 def _caller(explicit: str | None) -> str:
     return explicit or lead_identity()
 
@@ -108,7 +119,8 @@ def _agent_of_model(model: str) -> str | None:
     return None
 
 
-LEAD_VARS = {"claude": ("CLAUDE_CODE_SESSION_ID",), "codex": ("CODEX_THREAD_ID", "CODEX_SESSION_ID")}
+LEAD_VARS = {"claude": ("CLAUDE_CODE_SESSION_ID",), "codex": ("CODEX_THREAD_ID", "CODEX_SESSION_ID"),
+             "dsh": ("DSH_SESSION_ID",)}
 
 
 def lead_session_id(caller: str | None = None) -> str | None:

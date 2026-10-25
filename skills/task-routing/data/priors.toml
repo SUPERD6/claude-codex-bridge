@@ -59,6 +59,11 @@ cached_share = 0.85        # share of input that is a cache read (Anthropic repo
 turns_base = 4             # turns ~= turns_base + turns_per_b * b
 turns_per_b = 1.5
 fresh_input_per_turn = 3000
+# requests the lead itself makes for one task; each re-reads its whole conversation (seven-cores A/B, PR #30, small
+# tasks of 5-15 minutes: 3 when the lead did the task, 2 when it delegated, 21 pairs; larger tasks are a guess)
+lead_turns_self_base = 2
+lead_turns_self_per_b = 0.5
+lead_turns_delegate = 2
 output_base = 1500         # output tokens ~= output_base * (1 + b/2) * effort_mult
 effort_mult = { low = 0.5, medium = 1.0, high = 1.9, xhigh = 4.0, max = 13.0 }  # high/max from a 3rd-party Sonnet 5.5 effort benchmark
 
