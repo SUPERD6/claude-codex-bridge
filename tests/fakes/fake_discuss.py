@@ -4,7 +4,23 @@ import os
 import re
 
 
+def way(prompt: str) -> dict | None:
+    """`ccx way` steps: the planner's plan, the judge's pick (FAKE_PICK=A|B, default B)."""
+    m = re.search(r"\[ccx way \S+: (plan|pick)\]", prompt)
+    if not m:
+        return None
+    base = {"status": "done", "files_changed": [], "commands_run": [], "verification": "not-run", "next_step": ""}
+    if m.group(1) == "plan":
+        return {**base, "summary": "add a helper, then call it", "open_questions": [
+            "[step] add helper in util.py", "[step] call it from main.py", "[accept] main.py uses the helper"]}
+    return {**base, "summary": f"PICK: {os.environ.get('FAKE_PICK', 'B')} — smaller change",
+            "open_questions": ["[reason] fewer lines"]}
+
+
 def answer(prompt: str, agent: str, log: str | None) -> dict | None:
+    w = way(prompt)
+    if w:
+        return w
     m = re.search(r"\[ccx discuss \S+ role=(\w+) round=(\d+)", prompt)
     if not m:
         return None

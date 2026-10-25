@@ -192,7 +192,17 @@
     const w = (D && D.week) || {runs: 0};
     let h = `<h2>${t("worth")}</h2><p class="stat">${t("week_spent", {u: usd(w.usd || 0), n: w.runs || 0})}${w.cash_usd ? " " + t("week_cash", {u: usd(w.cash_usd)}) : ""}</p>`;
     h += `<p class="stat">${w.verdicts >= w.verdicts_needed ? t("saved_see_report") : t("saved_unknown", {n: w.verdicts || 0, need: w.verdicts_needed || 30})}</p>`;
-    return h;
+    return h + trackHTML();
+  }
+  /* H9: who is right the first time, per kind of work (judged pieces only) */
+  function trackHTML() {
+    const tr = (D && D.track) || {}, rows = [];
+    for (const kind of Object.keys(tr).sort()) for (const a of Object.keys(tr[kind]).sort()) {
+      const s = tr[kind][a];
+      if (s.judged) rows.push(`<tr><td>${esc(t("kind_" + kind))}</td><td>${who(a)}</td><td>${s.judged}${s.enough ? "" : ` <span class="cost">${t("track_few")}</span>`}</td><td>${Math.round(100 * s.first_right)}%</td><td>${Math.round(100 * s.rework)}%</td></tr>`);
+    }
+    if (!rows.length) return `<h2>${t("track_title")}</h2><p class="stat">${t("track_none", {n: (D && D.track_min) || 5})}</p>`;
+    return `<h2>${t("track_title")}</h2><table class="track"><thead><tr><th>${t("track_kind")}</th><th>${t("track_who")}</th><th>${t("track_judged")}</th><th>${t("track_first")}</th><th>${t("track_rework")}</th></tr></thead><tbody>${rows.join("")}</tbody></table>`;
   }
   function banner() {
     if (SNAP) return `<div class="banner snap">${t("snap_banner", {at: clock(D.generated)})}</div>`;
