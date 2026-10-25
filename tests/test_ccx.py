@@ -406,6 +406,18 @@ class TestSync(Env):
         line = next(x for x in self.ccx("doctor").stdout.splitlines() if x.startswith("Codex SessionStart hook"))
         self.assertIn("WARN" if os.name == "nt" else "ok", line)
 
+    def test_codex_hook_output_does_not_start_with_a_bracket(self):
+        """H7: Codex reads hook output starting with '[' or '{' as JSON and drops the hook when it isn't."""
+        memory.add(Paths(self.hub), "the parser tests need the fixtures folder", "claude")
+        cx = self.ccx("mem", "delta", "--as", "codex", "--peek").stdout
+        self.assertIn("[ccx shared memory", cx)
+        self.assertNotIn(cx.lstrip()[:1], ("[", "{"))
+        memory.add(Paths(self.hub), "billing exports run on Fridays", "codex")
+        self.assertTrue(self.ccx("mem", "delta", "--as", "claude", "--peek").stdout.startswith("[ccx"))   # unchanged
+        from ccx.commands.common import hook_text
+        self.assertEqual(hook_text("plain text", "codex"), "plain text")
+        self.assertEqual(hook_text("[x]", "claude"), "[x]")
+
     def test_upsert_block(self):
         t = upsert_block("a\n", "x", "one")
         t2 = upsert_block(t, "x", "two")
