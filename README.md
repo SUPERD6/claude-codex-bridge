@@ -257,7 +257,8 @@ ccx handoff --from-transcript codex --to claude   # the old lead can't write it 
                                                   # (by code; a format the code can't read goes to a routed sub-agent, --no-model to skip)
 ccx undo <run_id> [--apply] [--wrong]   # put back what a write run changed (new files moved aside); --wrong: also judge it wrong
 ccx ask "question"                    # quick read-only second opinion from the other agent, low effort
-ccx archive [--apply] | --restore <run>   # archive finished sub-sessions (also automatic after 2 h)
+ccx archive [--apply] | --restore <run>   # archive finished sub-sessions (automatic once a result is final;
+                                          # sessions.archive = after_run | hours | off)
 ccx batch plan.json                   # independent tasks in parallel; parallel writers get separate worktrees
 ccx q add "title" --brief "..." [--dep q1] [--check CMD] [--minutes 30] [--budget 1]   # the project's work queue
 ccx q run | resume | tree | done q3 --ok 1   # run every ready piece in parallel; a piece too big splits itself

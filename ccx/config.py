@@ -207,6 +207,8 @@ SETTINGS = {   # key -> (type, help). Only these can be set with `ccx config set
     "defaults.timeout_sec": (int, "per-attempt timeout"),
     "lead.claude": (str, "model the Claude lead runs on (for savings estimates), e.g. opus"),
     "lead.codex": (str, "model the Codex lead runs on, e.g. gpt-6.1-sol"),
+    "sessions.archive": (str, "after_run | hours | off: archive a sub-agent session as soon as its result is "
+                              "final (default), only after auto_archive_hours, or never by itself"),
     "sessions.auto_archive_hours": (float, "archive finished sub-agent sessions after N hours (0 = off)"),
     "report.publish_dir": (str, "local clone of your private usage repo; `ccx report --publish` commits there"),
     "board.github": (str, "owner/repo of a PRIVATE repository of yours: the board's fallback between computers "
@@ -233,6 +235,8 @@ def set_setting(p: Paths, key: str, raw: str) -> dict:
         k = float(raw)
         if not 0 <= k <= 1:
             raise ValueError("tradeoff knob must be between 0 and 1")
+    if key == "sessions.archive" and raw not in ("after_run", "hours", "off"):
+        raise ValueError("sessions.archive must be after_run, hours or off")
     if key == "ui.lang" and raw not in ("zh", "en"):
         raise ValueError("ui.lang must be zh or en")
     try:

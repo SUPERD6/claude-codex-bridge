@@ -181,7 +181,8 @@ ccx handoff --from-transcript codex --to claude   # 原主智能体写不了（�
                                                   # （先用代码提取；格式认不出时交给自动选出的子智能体整理，--no-model 不用模型）
 ccx undo <run_id> [--apply] [--wrong]   # 撤回某次可写运行改动的文件（新建的挪到一边）；--wrong 同时记成做错
 ccx ask "问题"                       # 让另一个模型快速给个第二意见（只读、低强度）
-ccx archive [--apply] | --restore <run>   # 归档用完的子会话（2 小时后也会自动归档）
+ccx archive [--apply] | --restore <run>   # 归档用完的子会话（结果确定时自动归档；
+                                          # sessions.archive = after_run | hours | off）
 ccx batch plan.json                 # 互不依赖的任务并行；多个写任务自动分到不同 worktree
 ccx route --files 3 --coupling cross ... [--lead claude:opus:high --ctx-files 日志.txt]  # 只看推荐；加 --lead 还会比较自己做 vs 派出去
 ccx plan size --minutes 240 --rung codex:gpt-6.1-sol:medium   # 大任务拆几块（task-split）

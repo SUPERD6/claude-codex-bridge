@@ -6,13 +6,21 @@
   Gemini  no archive command yet: left alone (reported).
 
 One-shot runs (`ccx ask`, `ccx selftest`) are never saved in the first place (--ephemeral /
---no-session-persistence). Runs are archived only after the auto-continue window, so a session that may still
-take the next task is never archived. `sessions.auto_archive_hours` (default 2, 0 = off) does this quietly at
-session start; `ccx archive` does it on demand.
+--no-session-persistence). `sessions.archive` decides when the others go (the user's request, 2026-10-25):
+  after_run (default)  as soon as a run's result is final: done and checked (its --check passed, or it checked
+                       itself), or judged by `ccx verify`. Anything that may still be continued stays: a quota,
+                       timeout, stop, kill, blocked or failed check; named seats; discussions and reviews. A session
+                       archived this way is put back by itself when it is continued (`ccx resume`, the next task in
+                       the auto-continue window): codex unarchive / the transcript moved back.
+  hours                only `sessions.auto_archive_hours` after the run, at session start (the old behaviour)
+  off                  never by itself
+At session start, finished runs older than `sessions.auto_archive_hours` (default 2, 0 = off) are archived in both
+after_run and hours modes; `ccx archive` does it on demand.
 """
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import time
@@ -27,18 +35,31 @@ def _log(p: Paths) -> Path:
     return p.state / "archived.jsonl"
 
 
-def archived_ids(p: Paths) -> set[str]:
+def _entries(p: Paths) -> list[dict]:
     f = _log(p)
     if not f.exists():
-        return set()
-    out = set()
+        return []
+    out = []
     for line in f.read_text(encoding="utf-8").splitlines():
         try:
-            e = json.loads(line)
+            out.append(json.loads(line))
         except json.JSONDecodeError:
             continue
-        (out.discard if e.get("restored") else out.add)(e["run_id"])
     return out
+
+
+def archived_ids(p: Paths, after_run: bool = True) -> set[str]:
+    """Runs whose sessions are archived now. after_run=False leaves out those archived by `after_run` (they come
+    back by themselves when continued, so they still count as continuable)."""
+    out, auto = set(), set()
+    for e in _entries(p):
+        if e.get("restored"):
+            out.discard(e["run_id"])
+            auto.discard(e["run_id"])
+        else:
+            out.add(e["run_id"])
+            (auto.add if e.get("why") == "after_run" else auto.discard)(e["run_id"])
+    return out if after_run else out - auto
 
 
 def finished_runs(p: Paths, older_than_h: float = 0) -> list[str]:
@@ -73,7 +94,7 @@ def _run(argv: list[str]) -> tuple[int, str]:
     return r.returncode, (r.stdout or r.stderr).strip()[-300:]
 
 
-def archive(p: Paths, run_ids: list[str], apply: bool = False) -> dict:
+def archive(p: Paths, run_ids: list[str], apply: bool = False, why: str = "") -> dict:
     rows, handled = [], {}            # (agent, session) -> first run that archived it in this call
     for run_id in run_ids:
         try:
@@ -120,13 +141,14 @@ def archive(p: Paths, run_ids: list[str], apply: bool = False) -> dict:
         if apply:
             _log(p).parent.mkdir(parents=True, exist_ok=True)
             with open(_log(p), "a", encoding="utf-8") as f:
-                f.write(json.dumps({"run_id": run_id, "sessions": done, "ts": time.time()}) + "\n")
+                f.write(json.dumps({"run_id": run_id, "sessions": done, "ts": time.time(),
+                                    **({"why": why} if why else {})}) + "\n")
     return {"applied": apply, "runs": len(run_ids), "sessions": rows,
             "note": "" if apply else "dry run: add --apply"}
 
 
 def restore(p: Paths, run_id: str) -> dict:
-    entries = [json.loads(line) for line in _log(p).read_text(encoding="utf-8").splitlines()] if _log(p).exists() else []
+    entries = _entries(p)
     last = next((e for e in reversed(entries) if e["run_id"] == run_id and not e.get("restored")), None)
     if not last:
         raise FileNotFoundError(f"run {run_id} is not archived")
@@ -149,9 +171,54 @@ def restore(p: Paths, run_id: str) -> dict:
 def auto(p: Paths) -> int:
     """Quiet housekeeping at session start: archive finished runs older than sessions.auto_archive_hours."""
     hours = float((load_config(p).get("sessions") or {}).get("auto_archive_hours", 2) or 0)
-    if hours <= 0:
+    if hours <= 0 or mode(p) == "off":
         return 0
     ids = finished_runs(p, older_than_h=hours)
     if ids:
         archive(p, ids, apply=True)
     return len(ids)
+
+
+KEEP_LABELS = ("discuss:", "review:", "seat:", "quota-probe", "selftest")   # their own lifetimes: left as they are
+
+
+def mode(p: Paths) -> str:
+    """sessions.archive: after_run (default) | hours | off."""
+    return str((load_config(p).get("sessions") or {}).get("archive", "after_run") or "after_run")
+
+
+def is_final(record: dict) -> bool:
+    """Nothing more will be done in this run's session: judged by the lead, or done and checked."""
+    v = record.get("verdict") or {}
+    if v and not v.get("soft"):
+        return True
+    if record.get("state") != "finished" or record.get("kind") != "ok" or not record.get("ok"):
+        return False                       # quota, timeout, stop, kill, blocked, failed check, review issues ...
+    res = record.get("result") or {}
+    if res.get("status") != "done":
+        return False
+    if record.get("check"):
+        return bool(record["check"].get("passed"))
+    return res.get("verification", "not-run") not in ("", "not-run")
+
+
+def after_run(p: Paths, record: dict) -> dict | None:
+    """sessions.archive = after_run: archive a run's session the moment its result is final. Best effort."""
+    if os.environ.get("CCX_NO_AUTO_ARCHIVE") == "1" or mode(p) != "after_run":
+        return None
+    if record.get("ephemeral") or str(record.get("label") or "").startswith(KEEP_LABELS) or not is_final(record):
+        return None
+    if record["run_id"] in archived_ids(p) or not record.get("session_id"):
+        return None
+    return archive(p, [record["run_id"]], apply=True, why="after_run")
+
+
+def bring_back(p: Paths, session: str | None) -> dict | None:
+    """Before a run continues `session`: if it is archived, put it back (codex unarchive / move the transcript)."""
+    if not session:
+        return None
+    gone = archived_ids(p)
+    for e in reversed(_entries(p)):
+        if e["run_id"] in gone and any(s[1] == session for s in e.get("sessions") or []):
+            return restore(p, e["run_id"])
+    return None
