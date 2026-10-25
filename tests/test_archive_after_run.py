@@ -106,6 +106,44 @@ class TestAfterRun(ArchiveEnv):
         self.assertEqual(common.archive_hub(hub2), 1)
         self.assertEqual(len(self.codex_calls("archive")), 1)
 
+    def dsh_workspace(self):
+        import os
+        from pathlib import Path
+        f = Path(os.environ["DSH_HOME"]) / "storages" / "workspace.json"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps({"unit": {"name": "workspace", "version": 2}, "global": {
+            "initialized": True, "archivedSessionIds": ["session-persons-own"], "pinnedSessionIds": []},
+            "tables": {"workspaces": {"w1": {"name": "mine"}}}}, indent=2) + "\n", encoding="utf-8")
+        return f
+
+    def test_dsh_session_goes_into_the_desktop_archived_list_and_back(self):
+        from test_ccx import FAKES
+        f = self.dsh_workspace()
+        env = {"CCX_DSH_BIN": str(FAKES / "fake_dsh.py"), "DEEPSEEK_API_KEY": "sk-test"}
+        out = self.go("run", "--from", "claude", "--to", "dsh", "--tier", "T2", "--check", "python -c pass", "x",
+                      env=env, code=0)
+        sid = self.rec(out["run_id"])["session_id"]
+        data = json.loads(f.read_text(encoding="utf-8"))
+        self.assertEqual(data["global"]["archivedSessionIds"], ["session-persons-own", sid])
+        self.assertEqual(data["tables"], {"workspaces": {"w1": {"name": "mine"}}})     # nothing else touched
+        self.assertTrue(f.with_name("workspace.json.ccx-backup").exists())
+        self.go("archive", "--restore", out["run_id"])
+        self.assertEqual(json.loads(f.read_text(encoding="utf-8"))["global"]["archivedSessionIds"],
+                         ["session-persons-own"])                       # only ccx's own id comes and goes
+
+    def test_dsh_resume_takes_it_out_of_the_list_first(self):
+        from ccx import archive
+        f = self.dsh_workspace()
+        self.assertEqual(archive.dsh_mark("session-x", True), (True, "ok"))
+        self.assertEqual(archive.dsh_mark("session-x", True), (True, "already so"))
+        self.assertIn("session-x", json.loads(f.read_text(encoding="utf-8"))["global"]["archivedSessionIds"])
+        self.assertEqual(archive.dsh_mark("session-x", False), (True, "ok"))
+        self.assertNotIn("session-x", json.loads(f.read_text(encoding="utf-8"))["global"]["archivedSessionIds"])
+        f.unlink()
+        ok, why = archive.dsh_mark("session-x", True)
+        self.assertFalse(ok)
+        self.assertIn("never opened", why)
+
     def test_hours_and_off_leave_it_to_session_start(self):
         for m in ("hours", "off"):
             self.go("config", "set", "sessions.archive", m)

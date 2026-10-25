@@ -3,6 +3,8 @@
   Codex   official command: `codex archive <thread>` (and `codex unarchive`), reversible.
   Claude  no archive command: the session transcript (<claude home>/projects/<folder>/<id>.jsonl) is moved to
           <claude home>/ccx-archive/<folder>/ — nothing is deleted, `ccx archive --restore <run>` moves it back.
+  dsh     no archive command (0.2.1-rc.3): the session id is added to the desktop app's archived list
+          (<DSH_HOME>/storages/workspace.json, global.archivedSessionIds) and taken out again on restore.
   Gemini  no archive command yet: left alone (reported).
 
 One-shot runs (`ccx ask`, `ccx selftest`) are never saved in the first place (--ephemeral /
@@ -94,6 +96,36 @@ def _run(argv: list[str]) -> tuple[int, str]:
     return r.returncode, (r.stdout or r.stderr).strip()[-300:]
 
 
+def dsh_mark(sid: str, archived: bool) -> tuple[bool, str]:
+    """DeepSeek Harness has no archive command (0.2.1-rc.3). Its desktop app keeps the archived list in
+    <DSH_HOME>/storages/workspace.json, global.archivedSessionIds (what its own archiveSession / unarchiveSession
+    change). Add or remove only this one session id: the file is backed up first (workspace.json.ccx-backup) and
+    replaced atomically; nothing else in it is touched. A desktop app open at that moment may write its own copy
+    back later (see docs/DECISIONS.md, 2026-10-25)."""
+    from .agents.dsh import dsh_home
+    from .ledger import replace
+    f = dsh_home() / "storages" / "workspace.json"
+    try:
+        raw = f.read_text(encoding="utf-8")
+        data = json.loads(raw)
+    except (OSError, ValueError):
+        return False, "no desktop workspace file (the desktop app was never opened here)"
+    ids = (data.get("global") or {}).get("archivedSessionIds")
+    if not isinstance(ids, list):
+        return False, "workspace file without global.archivedSessionIds (another dsh version?)"
+    if (sid in ids) == archived:
+        return True, "already so"
+    ids[:] = [*ids, sid] if archived else [x for x in ids if x != sid]
+    try:
+        f.with_name(f.name + ".ccx-backup").write_text(raw, encoding="utf-8")
+        tmp = f.with_name(f.name + f".{os.getpid()}.tmp")
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")   # as dsh writes it
+        replace(tmp, f)
+    except OSError as e:
+        return False, f"could not write {f}: {e}"
+    return True, "ok"
+
+
 def archive(p: Paths, run_ids: list[str], apply: bool = False, why: str = "") -> dict:
     rows, handled = [], {}            # (agent, session) -> first run that archived it in this call
     for run_id in run_ids:
@@ -123,6 +155,14 @@ def archive(p: Paths, run_ids: list[str], apply: bool = False, why: str = "") ->
                     if rc == 0:
                         done.append([agent, sid, None])
                         handled[(agent, sid)] = (run_id, None)
+            elif agent == "dsh":
+                action = f"dsh desktop: add {sid} to archivedSessionIds"
+                if apply:
+                    ok, msg = dsh_mark(sid, archived=True)
+                    action += " -> ok" if ok else f" -> skipped: {msg}"
+                    if ok:
+                        done.append([agent, sid, "dsh-list"])
+                        handled[(agent, sid)] = (run_id, "dsh-list")
             elif agent == "claude":
                 src = _claude_transcript(sid)
                 if not src:
@@ -157,6 +197,10 @@ def restore(p: Paths, run_id: str) -> dict:
         if agent == "codex":
             rc, msg = _run([*bin_argv("codex"), "unarchive", sid])
             out.append({"session": sid, "action": "codex unarchive -> " + ("ok" if rc == 0 else msg)})
+        elif agent == "dsh":
+            ok, msg = dsh_mark(sid, archived=False)
+            out.append({"session": sid, "action": "dsh desktop: removed from archivedSessionIds"
+                        if ok else f"dsh desktop: {msg}"})
         elif agent == "claude" and original:
             src = claude_home() / "ccx-archive" / Path(original).parent.name / Path(original).name
             if src.exists():
