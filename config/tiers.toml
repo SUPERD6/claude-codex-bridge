@@ -120,6 +120,14 @@ max_chars = 5000          # 约 1.2k token
 # 每轮 hook（ccx turn）里加一行“另一家刚做了什么”；false = 关
 turn = true
 
+[memory]
+# 共享记忆（docs/DECISIONS.md 的 L1–L3）。ccx mem search 已按 BM25 排序（少见的词权重高，不要求每个词都出现）。
+# by_kind = true：按类决定带什么——开局只推“偏好、约束”，简报带相关的“坑、事实、其他”（按 BM25 挑），
+#   “事件”只能搜到。默认 false：H11 试用跑到 2026-11-01，开局和简报的默认内容在那之前不变，之后由统筹打开。
+# start_scene = true：开局再带当前项目的场景块（先 ccx mem compact --by project 生成）。默认 false。
+by_kind = false
+start_scene = false
+
 [autonomy]
 # 总管自动档位（K4，docs/DECISIONS.md）：总管用 ccx run --project（或带 --autonomy）派活时按档位行事。
 # L0 = 只给建议：说打算派什么、怎么派、预计花多少，不派；
