@@ -108,16 +108,19 @@ class TestDiscuss(DiscussEnv):
                      env={**self.env, "CLAUDECODE": "1"})
         self.assertEqual(out["state"], "started")
         self.assertIn(self.j("discuss", "--show", out["id"])["state"], ("starting", "running", "done"))
-        for _ in range(400):                 # up to 40 s: the detached process starts slowly under full-suite load
-            try:
-                if discuss.load(Paths(self.hub), out["id"])["state"] == "done":
+        log = Path(out["log"])
+        for _ in range(600):                 # up to 60 s: the detached process starts slowly under full-suite load
+            try:                             # done, and its final output written: it is exiting, not still
+                if discuss.load(Paths(self.hub), out["id"])["state"] == "done" and \
+                        '"next"' in log.read_text(encoding="utf-8", errors="replace"):   # writing for the next test
                     break
             except (ValueError, OSError):    # caught mid-replace (Windows): look again
                 pass
             time.sleep(0.1)
-        log = Path(out["log"])
+        time.sleep(0.5)
         shown = self.j("discuss", "--show", out["id"])
-        self.assertEqual(shown["state"], "done", log.read_text() if log.exists() else "no log")
+        self.assertEqual(shown["state"], "done",
+                         log.read_text(encoding="utf-8", errors="replace")[-2000:] if log.exists() else "no log")
         self.assertEqual(shown["question"], "which lock?")
         self.assertEqual([t["role"] for t in shown["turns"]], ["proposer", "critic", "judge"])
 
