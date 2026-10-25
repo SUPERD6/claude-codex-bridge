@@ -48,7 +48,7 @@ ccx run --to codex --mode read "Summarise README.md in three lines"
 | | What | Where it stands |
 |---|---|---|
 | **1. Each other's lead and sub-agent** | Claude Code leads and Codex works, or the other way round; DeepSeek leads too (as `dsh`, or as Claude Code on a DeepSeek model) and takes work (through Claude Code, Codex, or `dsh`); Gemini CLI takes work (untested). One adapter per CLI; `ccx agents` lists what each can do, the version tested, official or community. | Both directions run for real; DeepSeek as lead (dsh, and Claude Code on DeepSeek) and as sub-agent (all three routes) for real; Gemini untested |
-| **2. Two models talking directly** | `ccx ask` gets a quick second opinion from the other vendor; `ccx resume` follows up in the same sub-session; `ccx send` puts a message into a live Codex session; `ccx discuss` lets 2–3 models from different vendors talk a costly decision through (propose, find faults, judge; at most 3 rounds) and shows it as a conversation in `ccx ui`. | The first three work for real; `ccx discuss` ran for real twice, two vendors and then three (Codex, Claude, DeepSeek; [notes](docs/research/2026-10-25-discuss-three-vendors.md)) |
+| **2. Two models talking directly** | `ccx ask` gets a quick second opinion from the other vendor; `ccx resume` follows up in the same sub-session; `ccx send` puts a message into a live Codex session; `ccx say` / `ccx board` let open Claude Code, Codex and DeepSeek sessions in one project write to each other (each turn sees what is new for it; Claude Code desktop only sees it on its next turn, a DeepSeek session runs `ccx board` itself); `ccx discuss` lets 2–3 models from different vendors talk a costly decision through (propose, find faults, judge; at most 3 rounds) and shows it as a conversation in `ccx ui`. | The first three work for real; `ccx discuss` ran for real twice, two vendors and then three (Codex, Claude, DeepSeek; [notes](docs/research/2026-10-25-discuss-three-vendors.md)) |
 | **3. Shared memory** | A personal layer (your hub: memory, skills, MCP, ledger) and a project layer (`.ccx/`: context, journal, handoffs, checkpoints). The session-start hook brings only the other side's new lines; `ccx handoff` passes the baton, `ccx fresh` moves a long conversation to a fresh one of the same tool. | Works for real; fuller shared memory in progress |
 | **4. Splitting the work** | A five-question difficulty score → agent, model, effort and the odds; when doing it yourself is cheaper, or the task should be split first, it says so instead of delegating. `ccx batch` / `ccx q` run pieces in parallel; `ccx task resume` continues a long task after a stop. | Routing works for real but priors are uncalibrated; the queue only with stand-ins |
 | **5. Cheap and fast** | Slim sub-agent start-up; `ccx lead` shows what every turn of the lead re-reads (`--breakdown` part by part, `--cache` where the prompt cache broke, `--suggest` a model for the lead itself); `ccx sum` gives the lead only what matters of a big output. | The tools exist; how much they save depends on the lead using them (see below) |
@@ -88,9 +88,10 @@ for watching and steering many agents) and not OpenAI's official [codex-plugin-c
 
 ## See it live: `ccx ui`
 
-`ccx ui` opens a read-only page on this machine: what waits for you (red = your call, amber = please review),
+`ccx ui` opens a page on this machine: what waits for you (red = your call, amber = please review),
 who works on what (one column per agent, new agents get their own), and how the quota windows are going. Click a
-block for the reason, the evidence and the `ccx` command to copy. It reads only files ccx and the tools already
+block for the reason, the evidence and the `ccx` command to copy. Suggested notes (preferences, decisions, pitfalls
+ccx picked from a session) have a yes / no button, the page's only write. It reads only files ccx and the tools already
 write — no model is called — listens on 127.0.0.1 only, and exits a minute after the page is closed.
 `ccx ui --export snapshot.html` writes a static copy; `ccx config set ui.lang zh|en` picks the language.
 
@@ -265,13 +266,17 @@ ccx plan size --minutes 240 --rung codex:gpt-6.1-sol:medium # how many pieces fo
 ccx show <run_id> [--full]            # compact result by default
 ccx stats [--summary]                 # per agent × tier; --summary: spend, savings, cache share
 ccx report [--days 30] [--publish]    # offline one-file dashboard; --publish commits it to your private repo
-ccx ui [--project DIR] [--no-open] [--export FILE]   # read-only live page on 127.0.0.1 (never calls a model)
+ccx ui [--project DIR] [--no-open] [--export FILE]   # live page on 127.0.0.1 (never calls a model; writes only yes/no on suggested notes)
 ccx config set ui.lang zh            # language of ccx ui and of the lines ccx writes into conversations
 ccx config set defaults.tradeoff 0.3  # the save <-> fast knob: save / balanced / fast, or 0..1
 ccx ab done <id> --ok 1               # close an A/B sample (the ~10% the lead does itself)
 ccx send --list | --thread <id> "msg" # message a live Codex desktop / interactive session (Codex only: a Claude Code
                                       # session, terminal or desktop app, has no way in for an outside message;
                                       # follow up a Claude sub-agent with ccx resume <run_id>)
+ccx say --to codex|claude|deepseek|all "msg"   # the board: open sessions in this project see it on their next turn
+ccx board [--thread T] / ccx reply <id> "msg"  # read what is new for you / answer one (docs/board.md)
+ccx say --to codex --now "msg"   # also push it into the live Codex desktop conversation (Claude Code desktop: next turn only)
+ccx config set board.github owner/repo   # optional: mirror the board to a PRIVATE repo of yours (ccx board --sync)
 ccx skills find pdf table             # search the shared skill library before writing a new skill
 ccx skills install [--replace] [--apply]   # link this repo's skills into the hub (dry run first), so `git pull` upgrades them
 ccx improve add <skill> "concrete problem" --fix "what to change"   # log real problems only

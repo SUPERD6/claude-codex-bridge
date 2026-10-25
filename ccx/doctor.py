@@ -162,6 +162,27 @@ def codex_plugin(home) -> tuple[str, str] | None:
                    "Codex at every stop on top of ccx's review")
 
 
+def routing_prior(p: Paths) -> tuple[str, str]:
+    """Where routing's starting point comes from: the hand-set priors and, for rungs this hub has not learned yet,
+    the built-in A/B head start (task-routing [observed])."""
+    try:
+        from . import learn
+        tr = learn.module(p, "routing")
+        pri, st = tr.load_priors(), tr.load_state()
+    except Exception as e:  # noqa: BLE001
+        return "WARN", f"task-routing not readable: {e}"[:120]
+    head = f"priors.toml {pri.get('as_of', '?')}"
+    if not hasattr(tr, "observed_offsets"):
+        return "ok", head + (" (the hub's task-routing predates the built-in A/B head start: update the checkout "
+                             "it links to, or `ccx skills install`)")
+    obs, learned = tr.observed_offsets(pri), st.get("offsets") or {}
+    if not obs:
+        return "ok", head
+    parts = [f"{k} {v:+.2f}" + (" (learned here since)" if k in learned else "") for k, v in sorted(obs.items())]
+    return "ok", (f"{head} + {pri['observed'].get('source', 'built-in outcomes')} at weight "
+                  f"{pri['observed'].get('weight', 0.5)}: " + ", ".join(parts))
+
+
 def doctor(p: Paths) -> bool:
     rows: list[tuple[str, str, str]] = []
 
@@ -238,6 +259,7 @@ def doctor(p: Paths) -> bool:
     lay = p.layout
     add("hub layout", "ok", f"snapshot={lay['snapshot']} ({lay['snapshot_mode']})"
         + (f", external sync: {lay['external_sync']}" if lay.get("external_sync") else ""))
+    add("routing prior", *routing_prior(p))
     if p.snapshot_external:
         add("snapshot wiring", "ok (external)", "the tools load the snapshot themselves; ccx writes no blocks")
     else:

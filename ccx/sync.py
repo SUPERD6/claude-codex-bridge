@@ -157,6 +157,11 @@ def sync_memory(p: Paths, plan: Plan) -> None:
 
 
 # ------------------------------------------------------------ hooks
+def _is_turn_hook(cmd: str) -> bool:
+    """ccx's per-turn hook: `ccx turn` now, `ccx lead --hint` before the board (updated in place)."""
+    return "ccx" in cmd and ("lead --hint" in cmd or " turn --as" in cmd)
+
+
 def sync_hooks(p: Paths, plan: Plan) -> None:
     # Claude Code: settings.json -> hooks.SessionStart
     sj = claude_home() / "settings.json"
@@ -181,16 +186,16 @@ def sync_hooks(p: Paths, plan: Plan) -> None:
             mine[0]["command"] = cmd
             text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
             plan.do(f"update SessionStart hook command in {sj}", lambda: _write(sj, text))
-        # per turn: one line when this conversation re-reads a lot (H10); prints nothing otherwise
-        hcmd = ccx_command("lead", "--hint", "--as", "claude")
+        # per turn: board messages for this session, shared-document changes, and the H10 hint when this
+        # conversation re-reads a lot; prints nothing otherwise
+        hcmd = ccx_command("turn", "--as", "claude")
         turns = data.setdefault("hooks", {}).setdefault("UserPromptSubmit", [])
-        have = [h for g in turns for h in g.get("hooks", []) if "lead --hint" in h.get("command", "")
-                and "ccx" in h.get("command", "")]
+        have = [h for g in turns for h in g.get("hooks", []) if _is_turn_hook(h.get("command", ""))]
         if not have:
-            turns.append({"hooks": [{"type": "command", "command": hcmd, "timeout": 5}]})
+            turns.append({"hooks": [{"type": "command", "command": hcmd, "timeout": 10}]})
             text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
-            plan.do(f"add UserPromptSubmit hook to {sj} (a one-line hint when the conversation gets long)",
-                    lambda: _write(sj, text))
+            plan.do(f"add UserPromptSubmit hook to {sj} (board messages and shared-document changes each turn, "
+                    "a one-line hint when the conversation gets long)", lambda: _write(sj, text))
         elif have[0]["command"] != hcmd:
             have[0]["command"] = hcmd
             text = json.dumps(data, ensure_ascii=False, indent=2) + "\n"
@@ -209,6 +214,11 @@ def sync_hooks(p: Paths, plan: Plan) -> None:
         f"command = '{cmd}'",
         'statusMessage = "ccx: shared memory delta"',
         "timeout = 15",
+        "[[hooks.UserPromptSubmit]]",              # every turn: board messages, shared-document changes (Codex 0.164)
+        "[[hooks.UserPromptSubmit.hooks]]",
+        'type = "command"',
+        f"command = '{ccx_command('turn', '--as', 'codex')}'",
+        "timeout = 10",
         TOML_END,
     ])
     pat = re.compile(re.escape(TOML_BEGIN) + r".*?" + re.escape(TOML_END), re.S)
@@ -226,7 +236,7 @@ def sync_hooks(p: Paths, plan: Plan) -> None:
         except tomllib.TOMLDecodeError as e:
             plan.warnings.append(f"would make {ct} invalid TOML ({e}); Codex hook NOT added")
             return
-        plan.do(f"add SessionStart hook block to {ct} (trust it once via /hooks in Codex)",
+        plan.do(f"add SessionStart + UserPromptSubmit hook block to {ct} (trust each once via /hooks in Codex)",
                 lambda: (_write(ct, new), _anchor_file(p).unlink(missing_ok=True)))
 
 
@@ -436,10 +446,10 @@ def uninstall(p: Paths, apply: bool) -> Plan:
         except json.JSONDecodeError:
             data = None
         changed = []
-        for event, marker in (("SessionStart", "mem delta"), ("UserPromptSubmit", "lead --hint")):
+        mine = {"SessionStart": lambda c: "ccx" in c and "mem delta" in c, "UserPromptSubmit": _is_turn_hook}
+        for event, is_mine in mine.items():
             groups = (data or {}).get("hooks", {}).get(event, [])
-            keep = [g for g in groups if not any("ccx" in h.get("command", "") and marker in h.get("command", "")
-                                                 for h in g.get("hooks", []))]
+            keep = [g for g in groups if not any(is_mine(h.get("command", "")) for h in g.get("hooks", []))]
             if data is not None and len(keep) != len(groups):
                 data["hooks"][event] = keep
                 if not keep:

@@ -187,3 +187,18 @@ output = 1.20
 input = 1.32
 cached = 0.044
 output = 3.96
+
+# Built-in outcomes: the seven-cores A/B round 1 (2026-10-24, docs/research/2026-10-24-seven-cores-ab.md). Per rung
+# and difficulty b = log2(minutes routing was told): runs (n) and how many the first rung got right by the hidden
+# tests (ok). The memory group's no-memory arm is left out (it fails by design). Used at low weight as the starting
+# offset of a rung this hub has not learned yet; the hub's own outcomes take over from there (`ccx doctor` shows it).
+[observed]
+source = "seven-cores A/B round 1 (2026-10-24)"
+weight = 0.5
+max_shift = 1.5
+data = [
+  { rung = "codex:gpt-6-luna:low", b = 2.32, n = 45, ok = 38 },
+  { rung = "codex:gpt-6-luna:low", b = 3.91, n = 27, ok = 14 },
+  { rung = "claude:sonnet:medium", b = 2.32, n = 24, ok = 24 },
+  { rung = "claude:sonnet:medium", b = 3.91, n = 18, ok = 18 },
+]
