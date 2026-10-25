@@ -359,6 +359,38 @@ def attempt_cost(r: dict, b: float, pri: dict, ctx_tokens: int = 0, factor: floa
     return {"usd": usd, "calibrated": factor != 1.0, "input": int(total_in), "cached": int(cached), "output": int(out), "turns": round(turns, 1)}
 
 
+def observed_offsets(pri: dict) -> dict[str, float]:
+    """Starting offsets from built-in outcomes ([observed] in the priors): per rung, the theta shift that makes the
+    model expect the observed successes (smoothed, so 42 of 42 gives a finite shift), times `weight`, capped at
+    `max_shift`. A low-weight head start for a new hub, not a measurement of it."""
+    obs = pri.get("observed") or {}
+    a, w, cap = pri["irt"]["a"], float(obs.get("weight", 0.5)), float(obs.get("max_shift", 1.5))
+    theta = {rung_key(r): r["theta"] for r in pri["rungs"]}
+    by: dict[str, list] = {}
+    for d in obs.get("data") or []:
+        if d["rung"] in theta:
+            by.setdefault(d["rung"], []).append(d)
+    out = {}
+    for k, ds in by.items():
+        n, ok = sum(d["n"] for d in ds), sum(d["ok"] for d in ds)
+        want = (ok + 0.5) / (n + 1) * n
+        lo, hi = -4.0, 4.0
+        for _ in range(40):
+            mid = (lo + hi) / 2
+            if sum(d["n"] * p_success(theta[k] + mid, d["b"], a) for d in ds) < want:
+                lo = mid
+            else:
+                hi = mid
+        out[k] = round(max(-cap, min(cap, w * (lo + hi) / 2)), 3)
+    return out
+
+
+def offset(state: dict, pri: dict, rung: str) -> float:
+    """What this hub has learned about a rung; before its first outcome, the built-in head start (observed_offsets)."""
+    offs = state.get("offsets", {})
+    return offs[rung] if rung in offs else observed_offsets(pri).get(rung, 0.0)
+
+
 def decay(state: dict, pri: dict) -> None:
     weeks = (time.time() - state.get("last_decay", time.time())) / (7 * 86400)
     if weeks >= 1:
@@ -436,7 +468,7 @@ def route(b: float, pri: dict, state: dict, agents: list[str], tradeoff: str = "
         if unavailable(state, r["agent"], r["model"]):
             continue
         k = rung_key(r)
-        theta = r["theta"] + state["offsets"].get(k, 0.0)
+        theta = r["theta"] + offset(state, pri, k)
         p = p_success(theta, b, a)
         cost = attempt_cost(r, b, pri, ctx_tokens, state.get("cost_factor", {}).get(k, 1.0), mode=mode)
         rows.append({"rung": k, "agent": r["agent"], "theta": round(theta, 2), "p": p, "cost": cost,
@@ -584,7 +616,7 @@ def three_way(b: float, pri: dict, state: dict, lead: str, delegate_agents: list
         + lead_rereads(pri, price, b, lead_ctx, "delegate")                    # brief + read-back + review
     self_usd = attempt_cost(r, b, pri, ctx_tokens)["usd"] - pri["cost"]["startup_tokens"].get(agent, 0)         * (pri["cost"]["turns_base"] + pri["cost"]["turns_per_b"] * b) * price["cached"] / 1e6 + persist(ctx_tokens) \
         + lead_rereads(pri, price, b, lead_ctx, "self")
-    p_self = p_success(r["theta"] + state.get("offsets", {}).get(lead, 0.0), b, pri["irt"]["a"])
+    p_self = p_success(r["theta"] + offset(state, pri, lead), b, pri["irt"]["a"])
     # the lead checks its own work and can redo it once: expected 1 + (1 - p) attempts, a wrong result left only
     # when both tries fail
     self_total = (self_usd * lam + attempt_minutes(r, b, pri, state) * vot) * (2 - p_self)         + (1 - p_self) ** 2 * fail_cost
@@ -638,7 +670,7 @@ def record(rung: str, b: float, ok: bool, pri: dict, state: dict, cost_usd: floa
         mins[rung] = round(0.7 * mins[rung] + 0.3 * seconds / 60, 2) if rung in mins else round(seconds / 60, 2)
     r = next((x for x in pri["rungs"] if rung_key(x) == rung), None)
     base = r["theta"] if r else 5.0
-    off = state["offsets"].get(rung, 0.0)
+    off = offset(state, pri, rung)
     p = p_success(base + off, b, pri["irt"]["a"])
     off += pri["irt"]["learning_rate"] * ((1.0 if ok else 0.0) - p)
     state["offsets"][rung] = off

@@ -117,6 +117,18 @@ It needs no training set and behaves sensibly with a handful of outcomes. Bandit
 trained routers (RouteLLM) need hundreds to thousands of labelled runs. RouterBench found that trained routers often
 don't beat a simple cost-quality mix.
 
+### 6b. A head start from measured outcomes (2026-10-25)
+
+A new hub has learned nothing, so its first picks rest on the hand-set thetas alone. `[observed]` in the priors holds
+outcomes measured elsewhere — now the seven-cores A/B round 1: per rung and difficulty (b = log2 of the minutes
+routing was told), how many runs the first rung got right by hidden tests. `observed_offsets` finds the theta shift
+that makes the model expect those successes (smoothed by +½ success in n+1, so 42 of 42 stays finite), multiplies it
+by `weight` (0.5) and caps it at `max_shift` (1.5). It is a rung's offset **only until the hub records its first outcome
+for that rung**; the update then starts from it, and decay pulls it back toward the hand-set prior. A hub that already
+learned a rung is not affected. With round 1: luna low +0.67 (p at 5 minutes 0.55 → 0.74; measured 38/45), sonnet
+medium +0.78 (42/42). `ccx doctor` prints where routing starts ("routing prior"). The round's tasks are small Python
+tasks from one person's evaluation; that is why the weight is low.
+
 ## 7. Why not call an existing router library directly
 
 - RouteLLM (lm-sys) and IRT-Router ship routers trained on chat/QA data (Chatbot Arena, MMLU, GSM8K, …).
