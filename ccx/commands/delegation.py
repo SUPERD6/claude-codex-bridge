@@ -256,8 +256,21 @@ def cmd_verify(a) -> int:
         _out({"recorded": done, "note": "probable verdicts from the evidence (soft); `ccx verify RUN --ok 0|1` "
               "overrides any of them"} if done else {"recorded": [], "note": "nothing old enough with clear evidence"})
         return 0
+    if a.sample:
+        import sys
+        from ..verdicts import review_sample, sample_soft
+        picks = sample_soft(paths(), a.sample, include_evals=a.include_evals)
+        if not picks:
+            _out({"sample": [], "note": "no probable verdict this week that nobody judged since"})
+        elif sys.stdin.isatty() and not a.list:
+            done = review_sample(paths(), picks)
+            _out({"judged": done, "overturned": sum(d["overturned"] for d in done)})
+        else:
+            _out({"sample": picks, "how": "look at each, then `ccx verify RUN_ID --ok 1|0` (run this in a terminal "
+                  "to answer one by one)"})
+        return 0
     if a.ok is None:
-        raise ValueError("give --ok 1 or --ok 0 (or --sweep)")
+        raise ValueError("give --ok 1 or --ok 0 (or --sweep, --sample N)")
     if a.builtin:
         from ..delegate import verify_builtin
         if a.b is None:
@@ -492,6 +505,10 @@ def register(sub) -> None:
                    "whose check or self-check passed and review (if any) passed, and 'wrong' for undone ones; also "
                    "runs quietly at session start. Your own verdict always overrides these")
     v.add_argument("--after-h", type=float, default=12.0, help="with --sweep: only runs at least this old (hours)")
+    v.add_argument("--sample", type=int, metavar="N", help="spot-check N random probable verdicts of this week: shows "
+                   "what changed and asks ok / wrong (J7: tells how far probable verdicts can be trusted)")
+    v.add_argument("--include-evals", action="store_true", help="with --sample: evaluation runs too")
+    v.add_argument("--list", action="store_true", help="with --sample: print the picks as JSON instead of asking")
     v.add_argument("--builtin", metavar="RUNG", help="work your own built-in sub-agent did, e.g. claude-builtin:haiku:low")
     v.add_argument("--b", type=float, help="with --builtin: the difficulty ccx route used")
     v.add_argument("--agent-id", help="with --builtin: the sub-agent's id, so its real cost is read and learned")

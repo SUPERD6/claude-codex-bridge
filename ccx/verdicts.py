@@ -139,3 +139,66 @@ def verify(p: Paths, run_id: str, ok: bool, note: str = "", reason: str = "") ->
     _write_record(p.runs / run_id, record)
     ledger.append_event(p, {"type": "verify", "run_id": run_id, "ok": ok, "reason": reason, "ts": time.time()})
     return {"run_id": run_id, "verdict": ok, "learned": learned, **({"reason": reason} if reason else {})}
+
+
+# ---- spot checks of probable verdicts (J7) ------------------------------------------------------------------------
+def sample_soft(p: Paths, n: int = 5, days: float = 7, seed: int | None = None,
+                include_evals: bool = False) -> list[dict]:
+    """Up to n probable verdicts (soft) of the last `days` that nobody judged since, picked at random, each with
+    what changed, so the person can say ok or wrong. Their answers are what `ledger.soft_trust` counts."""
+    import random
+    rows = ledger.rows(p)
+    runs = ledger.runs_by_id(rows)
+    since = time.time() - days * 86400
+    soft: dict[str, dict] = {}
+    for r in rows:
+        if r.get("type") != "verify" or not r.get("run_id"):
+            continue
+        if r.get("soft"):
+            if (r.get("ts") or 0) >= since and (include_evals or not ledger.is_eval(r, runs)):
+                soft.setdefault(r["run_id"], r)
+        else:
+            soft.pop(r["run_id"], None)                 # judged by a person or the lead since
+    ids = sorted(soft)
+    random.Random(seed).shuffle(ids)
+    out = []
+    for rid in ids[:max(n, 0)]:
+        try:
+            rec = ledger.load_run(p, rid)
+        except (FileNotFoundError, ValueError):
+            continue
+        res = rec.get("result") or {}
+        check = rec.get("check") or {}
+        out.append({"run_id": rid, "probable": "right" if soft[rid].get("ok") else "wrong",
+                    "label": rec.get("label") or "", "who": (rec.get("attempts") or [{}])[-1].get("rung") or rec.get("to"),
+                    "summary": (res.get("summary") or "")[:400], "files": list(res.get("files_changed") or [])[:12],
+                    "check": f"{check.get('cmd')}: {'passed' if check.get('passed') else 'failed'}" if check else None,
+                    "verification": (res.get("verification") or "")[:200],
+                    "why": (rec.get("verdict") or {}).get("note", "")})
+    return out
+
+
+def review_sample(p: Paths, picks: list[dict], ask=input, show=print) -> list[dict]:
+    """Ask about each pick: ok, wrong or skip. ok/wrong become the person's verdict (`verify`)."""
+    done = []
+    for i, x in enumerate(picks, 1):
+        show(f"\n[{i}/{len(picks)}] {x['run_id']}  {x['label']}  ({x['who']}, probably {x['probable']})")
+        show(f"  {x['summary']}")
+        if x["files"]:
+            show("  files: " + ", ".join(x["files"]))
+        if x["check"]:
+            show(f"  check: {x['check']}")
+        elif x["verification"]:
+            show(f"  self-check: {x['verification']}")
+        while True:
+            try:
+                a = (ask("  ok / wrong / skip [o/w/s]: ") or "").strip().lower()
+            except EOFError:                            # no one at the keyboard after all: stop, judge nothing more
+                return done
+            if a in ("o", "ok", "w", "wrong", "s", "skip", ""):
+                break
+        if a in ("o", "ok", "w", "wrong"):
+            ok = a.startswith("o")
+            verify(p, x["run_id"], ok, note="spot check (ccx verify --sample)", reason="" if ok else "wrong")
+            done.append({"run_id": x["run_id"], "ok": ok, "overturned": ok != (x["probable"] == "right")})
+    return done
