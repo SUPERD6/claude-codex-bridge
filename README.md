@@ -85,9 +85,10 @@ for watching and steering many agents) and not OpenAI's official [codex-plugin-c
 
 ## See it live: `ccx ui`
 
-`ccx ui` opens a read-only page on this machine: what waits for you (red = your call, amber = please review),
+`ccx ui` opens a page on this machine: what waits for you (red = your call, amber = please review),
 who works on what (one column per agent, new agents get their own), and how the quota windows are going. Click a
-block for the reason, the evidence and the `ccx` command to copy. It reads only files ccx and the tools already
+block for the reason, the evidence and the `ccx` command to copy. Suggested notes (preferences, decisions, pitfalls
+ccx picked from a session) have a yes / no button, the page's only write. It reads only files ccx and the tools already
 write — no model is called — listens on 127.0.0.1 only, and exits a minute after the page is closed.
 `ccx ui --export snapshot.html` writes a static copy; `ccx config set ui.lang zh|en` picks the language.
 
@@ -260,7 +261,7 @@ ccx plan size --minutes 240 --rung codex:gpt-6.1-sol:medium # how many pieces fo
 ccx show <run_id> [--full]            # compact result by default
 ccx stats [--summary]                 # per agent × tier; --summary: spend, savings, cache share
 ccx report [--days 30] [--publish]    # offline one-file dashboard; --publish commits it to your private repo
-ccx ui [--project DIR] [--no-open] [--export FILE]   # read-only live page on 127.0.0.1 (never calls a model)
+ccx ui [--project DIR] [--no-open] [--export FILE]   # live page on 127.0.0.1 (never calls a model; writes only yes/no on suggested notes)
 ccx config set ui.lang zh            # language of ccx ui and of the lines ccx writes into conversations
 ccx config set defaults.tradeoff 0.3  # the save <-> fast knob: save / balanced / fast, or 0..1
 ccx ab done <id> --ok 1               # close an A/B sample (the ~10% the lead does itself)
