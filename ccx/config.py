@@ -221,6 +221,8 @@ SETTINGS = {   # key -> (type, help). Only these can be set with `ccx config set
     "board.max_machine_turns": (int, "machine messages in a row in one board thread before a person must speak"),
     "projects.roots": (path_list, "folders `ccx projects scan` looks for your projects in, separated by ';' "
                                   "(the catalog stays in the hub, on this machine)"),
+    "autonomy.level": (str, "L0 | L1 | L2: how much the project manager does without asking (default L1; "
+                            "per project: `ccx autonomy set`)"),
     "ui.lang": (str, "zh | en: language of `ccx ui` and of the lines ccx writes into conversations (unset: the "
                      "page follows the browser, the lines stay English)"),
 }
@@ -246,6 +248,8 @@ def set_setting(p: Paths, key: str, raw: str) -> dict:
             raise ValueError("tradeoff knob must be between 0 and 1")
     if key == "sessions.archive" and raw not in ("after_run", "hours", "off"):
         raise ValueError("sessions.archive must be after_run, hours or off")
+    if key == "autonomy.level" and raw not in ("L0", "L1", "L2"):
+        raise ValueError("autonomy.level must be L0, L1 or L2")
     if key == "ui.lang" and raw not in ("zh", "en"):
         raise ValueError("ui.lang must be zh or en")
     try:

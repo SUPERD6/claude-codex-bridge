@@ -7,7 +7,7 @@ description: Act as the project manager of a coordinating lead session - take on
 
 One sentence in, one or two sentences out. In between: find the project, choose the cheapest way that will be
 right, dispatch, check, tidy up. The person does not want to be interrupted: routine, reversible steps you just do;
-the few things in section 6 you ask about. How to write a brief, run and check one piece is the agent-delegate
+what your autonomy level holds back and the few things in section 6 you ask about. How to write a brief, run and check one piece is the agent-delegate
 skill; this skill decides *what* to send *where* and in what shape.
 
 Keep your own side cheap: you need this skill, `ccx where` and the brief. Don't open the project's README, STATUS or
@@ -72,7 +72,30 @@ fix round; after that it's your call. For several pieces, check each before repo
 - Report in one or two sentences: what is now true, where it is (branch, PR, files), what costs it had, and what
   was **not** verified. No step-by-step story.
 
-## 6. Ask the person only for these
+## 6. Autonomy level, and what always goes to the person
+
+`ccx autonomy --project <name>` gives the level that applies (free; default L1). Only the person raises it
+(`ccx autonomy set L2 --project <name> --auto-merge on`, or `--autonomy` in a command they asked for); never raise
+it yourself. `ccx run --project` (and any run with `--autonomy`) applies it; when it stops, the answer is
+`delegated: false` with a `plan` (agent, model, mode, `expected_usd`, check, budget).
+
+| Level | You do without asking | You stop and ask |
+|---|---|---|
+| L0 | find the project, choose the shape, write the brief | every dispatch: tell the person the `plan` in one line; on a yes, the same command with `--approved` |
+| L1 (default) | read-only runs (`--mode read`, e.g. a draft review), reviews, the fix round of an approved run, archiving | a run that may edit files: the `plan` in one line; on a yes, `--approved` |
+| L2 | read and write runs; with `--worktree --check "CMD" --review on` ccx merges the branch itself (below) | a merge ccx refused: report the branch and `autonomy.merge.why_not`; it gets merged only when the person says so |
+
+The L2 merge (ccx checks all of it; `ccx autonomy merge <run_id>` shows the same check without merging): the
+person allowed merging for this project; the run ended ok; `--check` passed and is not marked weak; the independent
+review said pass; at most `max_lines` changed lines in `max_files` files (80 / 5 by default); the project has no
+approval rules; risk is not visible or critical; the project's branch is not protected (`main`, `master`, `trunk`,
+`release/*` and the remote's default branch). It merges locally into the branch the project is on; pushing and any
+PR into the main branch stay with the person. Undo: the `undo` line in the answer.
+
+`ccx batch` and `ccx q run` don't read the level: at L0 and L1 start them only after the person said yes to that
+plan.
+
+Whatever the level, ask the person for these (`--approved` never stands in for them):
 
 - sending anything outside this machine: email, chat, issues, PR comments to others, publishing;
 - merging into the main branch (opening a PR and pushing a feature branch is fine where the project allows it);
@@ -81,4 +104,5 @@ fix round; after that it's your call. For several pieces, check each before repo
   clearly allow this task, otherwise ask. Never relax a project's freeze or approval because work was delegated;
 - the project can't be determined (section 2).
 
-Everything else — choosing the shape, a cheap review, a fix round, archiving — you do without asking.
+Everything else your level allows — choosing the shape, a cheap review, a fix round, archiving — you do without
+asking.

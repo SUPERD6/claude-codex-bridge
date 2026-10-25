@@ -63,9 +63,13 @@ def cmd_run(a) -> int:
         if stop:
             _out(stop)
             return 0
-    if a.bg:
-        if not a.brief and not a.brief_file:
-            raise ValueError("--bg needs the task as text or --brief-file (stdin is not passed on)")
+    auto = None
+    if proj or a.autonomy:                       # a manager's dispatch: its autonomy level decides (K4)
+        from .. import autonomy
+        auto = autonomy.level_for(proj["name"] if proj else None, p, cfg, flag=a.autonomy)
+    if a.bg and not a.brief and not a.brief_file:
+        raise ValueError("--bg needs the task as text or --brief-file (stdin is not passed on)")
+    if a.bg and not auto:
         _out(_background(sys.argv[1:], p))
         return 0
     text = _brief(a)
@@ -82,6 +86,18 @@ def cmd_run(a) -> int:
         _out({"delegated": False, "advice": route.get("advice"), "route": route,
               "hint": "add --force to delegate anyway"})
         return 0
+    if auto:
+        plan = {"to": kw["to"], "model": kw.get("model"), "effort": kw.get("effort"), "mode": mode["mode"],
+                **{k: route[k] for k in ("rung", "p", "expected_usd") if route.get(k) is not None},
+                **({"check": a.check} if a.check else {}), **({"budget_usd": a.budget} if a.budget else {}),
+                **({"project": proj["name"]} if proj else {})}
+        stop = autonomy.gate(auto, mode["mode"], bool(a.approved or a.proposal), plan)
+        if stop:
+            _out(stop)
+            return 0
+        if a.bg:
+            _out(_background(sys.argv[1:], p))
+            return 0
     lead = lead_session_id(caller)
     cwd = Path(a.cwd or os.getcwd())
     fork = None
@@ -112,6 +128,12 @@ def cmd_run(a) -> int:
                                                               "stale", "mode", "trial")}
     if proj:
         res["project"] = {k: proj[k] for k in ("name", "path", "approval_rules") if proj.get(k)}
+    if auto:
+        res["autonomy"] = {k: auto[k] for k in ("level", "source")}
+        if auto["level"] == "L2" and rec["ok"] and res.get("worktree"):
+            res["autonomy"]["merge"] = autonomy.merge(p, rec["run_id"], auto, cfg,
+                                                      rules=(proj or {}).get("approval_rules"),
+                                                      apply=auto["auto_merge"])
     if route.get("b") is None:
         # an explicit pick with no size: its verdict reaches the ledger but not routing (seven-cores A/B, PR #30)
         res["route"]["learns"] = "no: give --minutes (or the rubric flags) so this run's verdict can teach routing"
@@ -501,6 +523,10 @@ def register(sub) -> None:
                                      "(`ccx where`); several fit -> an error listing them")
     r.add_argument("--rules-ok", action="store_true", help="with --project: you read the project's approval rules "
                                                           "ccx showed and they allow this task")
+    r.add_argument("--autonomy", choices=["L0", "L1", "L2"], help="this run's autonomy level (default: the "
+                   "project's, `ccx autonomy`): L0 proposes only, L1 stops before edits, L2 may merge a small branch")
+    r.add_argument("--approved", action="store_true", help="the person said yes to this dispatch (passes an "
+                   "L0/L1 stop; never a spending cap, approval rules or a merge into a protected branch)")
     _routing_args(r)
     r.add_argument("--model", help="explicit model (skips routing), e.g. gpt-6.1-sol or sonnet")
     r.add_argument("--effort", help="explicit reasoning effort: low|medium|high|xhigh|max")
