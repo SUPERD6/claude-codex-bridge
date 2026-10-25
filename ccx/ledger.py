@@ -78,7 +78,20 @@ def load_run(p: Paths, run_id: str) -> dict:
     f = p.runs / run_id / "run.json"
     if not f.exists():
         raise FileNotFoundError(f"no ccx run {run_id!r} under {p.runs}")
-    return json.loads(f.read_text(encoding="utf-8"))
+    return read_record(f)
+
+
+def read_record(f: Path) -> dict:
+    """run.json, read while its run may be replacing it: on Windows the open is refused for that moment (the read
+    side of write_record's retry; seen in CI on a test polling a live run)."""
+    for i in range(60):
+        try:
+            return json.loads(f.read_text(encoding="utf-8"))
+        except PermissionError:
+            if i == 59:
+                raise
+            time.sleep(0.05)
+    return {}
 
 
 def spent_today(p: Paths, agent: str) -> float:

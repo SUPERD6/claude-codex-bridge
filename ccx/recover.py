@@ -162,7 +162,7 @@ def sweep(p: Paths, now: float | None = None) -> list[str]:
         if d.name in done or d.name[:8] < cutoff or not (d / "run.json").exists():
             continue
         try:
-            rec = json.loads((d / "run.json").read_text(encoding="utf-8"))
+            rec = ledger.read_record(d / "run.json")
         except (OSError, ValueError):
             continue
         if rec.get("state") != "running" or not _gone(rec, d, now):
