@@ -11,7 +11,7 @@ sys.path.insert(0, str(EVAL))
 
 import common  # noqa: E402
 import h11_compare  # noqa: E402
-from tasks import PARALLEL_TASK, TASKS  # noqa: E402
+from tasks import MEDIUM, MEMORY, PARALLEL_TASK, TASKS  # noqa: E402
 
 HAS_PYTEST = subprocess.run([sys.executable, "-c", "import pytest"], capture_output=True).returncode == 0
 
@@ -20,7 +20,7 @@ HAS_PYTEST = subprocess.run([sys.executable, "-c", "import pytest"], capture_out
 class TestTaskBank(unittest.TestCase):
     def test_start_fails_solution_passes(self):
         tmp = Path(tempfile.mkdtemp())
-        for t in [*TASKS, PARALLEL_TASK]:
+        for t in [*TASKS, *MEDIUM, *MEMORY, PARALLEL_TASK]:
             with self.subTest(task=t["id"]):
                 repo = common.make_repo(t, tmp / t["id"])
                 self.assertFalse(common.score(repo, t)["ok"], "the hidden test must be able to fail")
