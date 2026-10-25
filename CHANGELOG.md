@@ -3,11 +3,14 @@
 ## Unreleased
 
 ## 0.5.0 — 2026-10-25 (save, check, split, share, control: cheaper defaults, review that checks the task, project catalog, shared work context, the board, stop and archive)
-- Highlights: everything since 0.4.0 (PRs up to #93), grouped by theme below; 495 tests. Measured on real CLIs:
+- Highlights: everything since 0.4.0 (PRs up to #103), grouped by theme below; 523 tests. Measured on real CLIs:
   shared work context, right the first time 36/36 vs 7/36 and 63 % less spend
   ([report](docs/research/2026-10-25-shared-context-ab.md)); project memory 9/9 vs 0/9 and hub memory 9/9 vs 0/9;
   seven-cores round 1 ([report](docs/research/2026-10-24-seven-cores-ab.md)): delegating cut the lead's tokens 32 %
   but not the total spend, routing gave no gain, review after the fix 3/3.
+  Round 2 ([report](docs/research/2026-10-25-seven-cores-r2.md)): a cheap model was right 47/49 on trap tasks;
+  review 36/36 vs 33/36 at +$0.004 a task; dividing the work 14/14 vs 12/14 at 20–39× the spend; ten parallel
+  runs 2.5× faster but 4.7× the tokens. Default shape: one cheap model plus another vendor's cheap review.
 
 ### Save: routing and cost
 - Default `tradeoff` is now `save` (was `balanced`): routing starts small work on the cheap model. With routing fed
@@ -626,6 +629,53 @@
   changed; a test checks every command is in exactly one group.
 - README (EN + ZH) cut to one promise (spend less), four pillars with one sourced measurement each, and a three-command
   quick start; the details moved, unchanged, to docs/features, docs/install, docs/measured and docs/faq (EN + ZH).
+
+### Added before the tag (#96–#103)
+- The repository is now a plugin marketplace: `claude plugin install relayline --marketplace SUPERD6/relayline`
+  gives Claude Code the four skills and ccx's SessionStart / UserPromptSubmit hooks (they run the plugin's own
+  `bin/ccx`); `codex plugin marketplace add SUPERD6/relayline` + `codex plugin add relayline@relayline` gives Codex
+  the skills. Where the plugin is enabled, `ccx sync` leaves the Claude hooks and the four skills to it and removes
+  its earlier copies, so nothing runs twice; `ccx doctor` reports the plugin, warns when a hook is there twice and
+  when ccx itself is not installed. `bin/ccx` now finds a Python 3.11+ (`python3`, `python` or `py`).
+- Fix: a plain terminal was taken for a Codex lead when the person had `CODEX_SQLITE_HOME` or the installer's
+  `CODEX_INSTALL_DIR` set for good (any `CODEX_*` but `CODEX_HOME` counted). `ccx say --from claude` then failed with
+  "runs inside codex", and `ccx run` recorded the caller as Codex. Codex is now recognised by the variables it sets
+  for the commands it runs (codex-cli 0.164, checked on a real run: `CODEX_THREAD_ID`, `CODEX_SESSION_ID`,
+  `CODEX_TOOL_CALL_ID`, `CODEX_CI`, `CODEX_SANDBOX*`).
+- Independent review: a reviewer's summary without the `REVIEW: pass|issues` line (e.g. written in Chinese) no
+  longer ends as `unclear` when its items are tagged: `[must]` items make it `issues` (so the fix round runs), only
+  `[note]` items make it `pass`; the verdict carries `format: lenient`. The prefix also tolerates markdown and a
+  full-width colon. Found in the seven-cores round 2: haiku named the real bug as `[must]` and the run stayed unfixed.
+- `ccx way --label` labels the build runs (e.g. `eval-...`, so H9 and probable verdicts leave an evaluation out).
+- Seven cores, round 2 (cores 4–7): plan, report and scrubbed data in `docs/research/` (`scripts/eval/r2.py`,
+  `scripts/eval/tasks_r2.py`); `scripts/eval/common.read_jsonl` splits on `\n` only (U+2028 inside a JSON string broke
+  it).
+- `ccx ui` and the session-start "N delegated piece(s) wait for you" leave out evaluations and tests by default:
+  eval-* labels, `--no-ab`, ccx's probes (now also `startup-probe`, `two-way-*`), runs in the system's temporary folder
+  or inside a project's `.ccx` folder (unless the hub itself is temporary), and the projects and lead conversations
+  there. A "show evaluations and tests" switch on the page brings them back.
+- `ccx verify RUN --dismiss --note why`: a test or leftover counts neither right nor wrong. It leaves "waits for you",
+  `--sweep` skips it and routing, splitting and the statistics leave it out (`ledger.is_eval`); a later `--ok`
+  undoes it, and a run that already has a verdict cannot be dismissed.
+- `ccx batch`: a plan task can set `"review"` (auto|on|off, as `ccx run --review`) and `"risk"`; both were dropped
+  before, so a batch always reviewed with the defaults (a real 3-task batch spent $0.04 of its $0.05 on reviews).
+- dsh archiving: the "queued" message now says the desktop app has to be quit from the tray; closing its window
+  leaves it running, so ccx keeps the id queued (seen on a real machine 2026-10-25; once quit, the next session
+  start wrote the queued ids, and the reopened app did not overwrite them on start; its own next write is not
+  observed yet).
+- New skill `project-manager` (proposal K3) for a lead session that coordinates others: one sentence in, find the
+  project with `ccx where`, choose the shape, dispatch with `ccx run --project`, check, archive, report in a line or
+  two. Default shape from the second seven-cores round: one cheap model plus another vendor's cheap review; parallel
+  only when speed is wanted and the pieces are independent ("faster, not cheaper"); large work gets a reviewed split
+  draft first. It asks the person only before sending outside, merging the main branch, spending over a cap, research
+  approval, or when the project is unclear. A test checks that every ccx command and flag the skill names exists.
+- `--review auto` now judges weak evidence from the run itself, with no history needed: a write run that changed
+  code is reviewed once (on the other vendors' cheapest rung only, within `weak_daily`) when there is no `--check`,
+  when the check runs no tests (`exit 0`, a linter, an import), or when the tests it runs never name a changed code
+  file or a changed public function. A passed check whose tests reach the change is not reviewed, nor are read-only
+  runs. Round 2 of the seven-cores A/B: auto fired 0 times in 36 runs, while review on raised right first time from
+  33/36 to 36/36 for +$0.004 a task; replaying the 18 trap tasks' reference changes, the new rule fires on 4,
+  inventory among them (its visible test never calls `low_stock` or `remove_stock`).
 
 ## 0.4.0 — 2026-10-24 (routing from public benchmarks and total cost, quota by pace, work queue, reviews, handoff from the session file)
 - Highlights: proposals E and F, the F1 live trial and the fixes below; 201 tests. Details per item follow.
