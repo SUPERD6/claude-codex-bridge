@@ -174,6 +174,7 @@ class TestBoardNowAndGitHub(AdapterEnv):
         self.assertTrue(ans["via"].startswith("ccx-run:"))
         self.assertTrue(self.calls()[-1]["prompt"].lstrip().startswith(board.MARK) or
                         board.MARK in self.calls()[-1]["prompt"])
+        self.assertIn("do not run `ccx reply`", self.calls()[-1]["prompt"])    # ccx posts it; may not be on PATH
 
     def gh_calls(self):
         return [c for c in self.calls() if c.get("agent") == "gh"]
