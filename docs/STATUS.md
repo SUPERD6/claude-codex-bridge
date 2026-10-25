@@ -31,7 +31,7 @@ turn re-reads ~220k tokens):
 | J5 a model for the lead itself (`ccx lead --suggest`, a line in `ccx report`) | ✅ PR #13 |
 | J11 `ccx/delegate.py` split by job, behaviour unchanged | ✅ PR #14 |
 | F10–F14 own sub-agents: spend and quota limits, Agent tool for Claude, explicit "use sub-agents" for parts | ✅ PR #18 — limits not yet hit by a real run (sub-agents rarely start: PR #6) |
-| H3–H4 + I7 `ccx discuss`: 2–3 vendors propose / find faults / judge, ≤3 rounds, points only; a conversation in `ccx ui`; the lead asks first | ✅ PR #22 — fake CLIs only; no real discussion run yet |
+| H3–H4 + I7 `ccx discuss`: 2–3 vendors propose / find faults / judge, ≤3 rounds, points only; a conversation in `ccx ui`; the lead asks first | ✅ PR #23 — fake CLIs only; no real discussion run yet |
 | H5–H6 + I6 shared memory in use: suggested notes the person accepts, this project first, usage counts, notes in the brief for tools without a start hook | ✅ PR #21 — suggestions are heuristic; **H7 waits for the user**: open a new Codex desktop conversation in this project and send "ok", to confirm the start hook arrives |
 
 ## Next three
