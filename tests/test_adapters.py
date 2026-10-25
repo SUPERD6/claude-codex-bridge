@@ -297,6 +297,15 @@ class TestUndoAskTask(AdapterEnv):
         self.assertIn("change x to 2 in a.py", call["prompt"])                   # the person's own brief
         self.assertIn("python -c pass", call["prompt"])                          # and its acceptance command
 
+    def test_explicit_pick_says_whether_it_teaches_routing(self):
+        bare = self.j("run", "--from", "claude", "--to", "codex", "--model", "gpt-6-luna", "--effort", "low",
+                      "--mode", "read", "look at a.py")
+        self.assertIn("--minutes", bare["route"]["learns"])
+        sized = self.j("run", "--from", "claude", "--to", "codex", "--model", "gpt-6-luna", "--effort", "low",
+                       "--mode", "read", "--minutes", "5", "--new", "look at a.py")
+        self.assertNotIn("learns", sized["route"])
+        self.assertIsNotNone(sized["route"]["b"])
+
     def test_run_saves_its_brief(self):
         out = self.j("run", "--from", "claude", "--to", "codex", "--tier", "T2", "--mode", "read", "look at a.py")
         self.assertEqual((self.hub / "ccx" / "runs" / out["run_id"] / "brief.md").read_text(encoding="utf-8"),

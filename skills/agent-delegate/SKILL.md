@@ -39,7 +39,9 @@ Template: `references/brief-template.md`.
 
 ```
 ccx run --from <you> --files 3 --coupling cross --clarity goal "brief..."  # routed; may edit (default)
-ccx run --from <you> --model <m> --effort <e> "brief..."   # explicit pick
+ccx run --from <you> --model <m> --effort <e> --minutes <n> "brief..."   # explicit pick; --minutes = how long a
+#   skilled engineer would need. Without it (or the rubric flags) the run has no difficulty and its verdict can't
+#   teach routing: in the seven-cores A/B dozens of luna-low runs taught it nothing (2026-10-24)
 ccx run ... --task <id> --step <n>   # session id saved into task-checkpoint at once
 ccx run ... --mode read          # analysis only (without --mode, ccx infers read/write from the brief; follow it)
 ccx run ... --check "CMD"        # acceptance command: the sub-agent runs it, ccx runs it again (failure = failure)
