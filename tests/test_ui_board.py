@@ -212,7 +212,8 @@ class TestAcrossProjects(Env):
 
     def test_optional_level_and_inbox_show_only_when_there(self):
         put_run(self.hub, "r1", self.a)
-        data = ui.collect(self.p)
+        with mock.patch.dict(sys.modules, {"ccx.autonomy": None, "ccx.intake": None}):    # not installed
+            data = ui.collect(self.p)
         self.assertIsNone(data["projects"][0]["level"])
         self.assertIsNone(data["inbox"])
         auto = types.ModuleType("ccx.autonomy")
@@ -227,6 +228,11 @@ class TestAcrossProjects(Env):
         auto.level_for = lambda e, p=None: "<b>bold</b>"                # anything else is not shown
         with mock.patch.dict(sys.modules, {"ccx.autonomy": auto}):
             self.assertIsNone(ui.collect(self.p)["projects"][0]["level"])
+        try:                                                            # K4's own module, once it is in
+            from ccx import autonomy  # noqa: F401
+        except ImportError:
+            return
+        self.assertIn(ui.collect(self.p)["projects"][0]["level"], ("L0", "L1", "L2"))
 
 
 class TestMonth(Env):

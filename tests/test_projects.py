@@ -229,7 +229,7 @@ def test_run_project_goes_into_it_with_its_rules(tmp_path):
     catalog(tmp_path)
     env = run_env(tmp_path)
     code, out = run_ccx(env, "run", "--from", "claude", "--to", "codex", "--tier", "T1", "--project", "桌宠",
-                        "rename foo to bar in a.py")
+                        "--approved", "rename foo to bar in a.py")         # a write run: L1 waits for a yes
     assert code == 0, out
     assert out["project"]["name"] == "desk-pet"
     call = json.loads((tmp_path / "calls.jsonl").read_text(encoding="utf-8").splitlines()[-1])
@@ -245,7 +245,7 @@ def test_run_project_with_approval_rules_stops_until_the_lead_read_them(tmp_path
     assert out["approval_rules"][0]["text"] == "Approval needed before each stage."     # quoted as written
     assert not (tmp_path / "calls.jsonl").exists()
     code, out = run_ccx(env, "run", "--from", "claude", "--to", "codex", "--tier", "T1", "--project", "lab",
-                        "--rules-ok", "x")
+                        "--rules-ok", "--approved", "x")
     assert code == 0 and out["project"]["approval_rules"]
 
 
