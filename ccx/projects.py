@@ -530,3 +530,47 @@ def where(cat: dict, text: str, limit: int = 5) -> dict:
         if clear and (first["confidence"] >= 0.4 or (second is None and first["score"] >= 5)):
             pick = first["name"]
     return {"query": text, "terms": terms, "pick": pick, "candidates": cands}
+
+
+# ---- delegating into a project (ccx run --project) ----
+
+APPROVAL = re.compile(r"审批|批准|授权|同意后|冻结|签字|approv|authori[sz]|sign-?off|frozen|freeze", re.I)
+
+
+def resolve(cat: dict, words: str) -> dict:
+    """The one project `words` names (a name, an alias, a path or a sentence); ValueError listing the candidates
+    when there is none or more than one."""
+    e = find(cat, words)
+    if e:
+        return e
+    r = where(cat, words)
+    if r["pick"]:
+        return find(cat, r["pick"]) or {}
+    names = ", ".join(f"{c['name']} ({c['confidence']})" for c in r["candidates"])
+    raise ValueError(f"--project {words!r} does not name one project: "
+                     + (f"candidates {names}; give the name" if names else "nothing in the catalog fits; "
+                        "`ccx projects` lists them, `ccx projects scan` refreshes"))
+
+
+def approval_rules(e: dict, limit: int = 12) -> list[dict]:
+    """The lines of the project's rule files (its own and the ones it inherits) that speak of approval,
+    authorization or a freeze, quoted as written. ccx shows them; whether a task is allowed is the lead's call."""
+    out = []
+    for f in e.get("rules") or []:
+        for n, line in enumerate(_read(Path(f), 200000).splitlines(), 1):
+            if APPROVAL.search(line) and line.strip():
+                out.append({"file": f, "line": n, "text": line.strip()[:400]})
+                if len(out) >= limit:
+                    return out
+    return out
+
+
+def brief_header(e: dict) -> str:
+    """What a sub-agent sent into the project is told first: where it is, what to read before working."""
+    lines = [f"Project: {e['name']} ({e['path']})"]
+    if e.get("rules"):
+        lines.append("Read these rules first (nearest first) and follow them: " + "; ".join(e["rules"]))
+    state = [s for s in e.get("state") or [] if s != "topics/"]
+    if state:
+        lines.append("Where things stand: " + "; ".join(state))
+    return "\n".join(lines)

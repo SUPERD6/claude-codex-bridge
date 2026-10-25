@@ -62,6 +62,8 @@ Point to existing source files rather than copying background. Reuse `.ccx/conte
 present; update it only when context maintenance is part of the authorized task.
 Template: `references/brief-template.md`.
 
+**A project named, no path given** ("the desk pet", "that harness PR"): `ccx where "<their words>"` first (code only, free). One `pick` → use it; several candidates → ask which. Delegate into it with `ccx run --project <name>`: the run goes to that folder and the brief starts with its rule files. If the project's rules speak of approval, ccx stops and quotes them (`approval_rules`); you decide from them, or ask the person, and only then run again with `--rules-ok`.
+
 ## 3. Run
 
 ```

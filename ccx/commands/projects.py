@@ -43,11 +43,36 @@ def cmd_where(a) -> int:
         r["path"] = e.get("path")
         r["read_first"] = e.get("rules", []) + [str(Path(e["path"]) / s) for s in e.get("state", [])
                                                  if s != "topics/"]
+        rules = projects.approval_rules(e)
+        if rules:
+            r["approval_rules"] = rules     # the project's own words on approval; the lead decides
     else:
         r["next"] = ("several projects fit: ask which one (or use the name from the list)" if r["candidates"]
                      else "nothing in the catalog fits; `ccx projects` lists them, `ccx projects scan` refreshes")
     _out(r)
     return 0
+
+
+def for_run(a) -> tuple[dict | None, dict | None]:
+    """`ccx run --project X`: (the project, None) after pointing the run at its folder, or (None, what to tell
+    the lead) when the project's rules speak of approval and the lead has not said it read them (--rules-ok)."""
+    if a.cwd:
+        raise ValueError("give --project or --cwd, not both")
+    cat = projects.load(paths())
+    if not cat:
+        raise ValueError('--project needs the project catalog: `ccx config set projects.roots "DIR;DIR"`, then '
+                         "`ccx projects scan`")
+    e = projects.resolve(cat, a.project)
+    rules = projects.approval_rules(e)
+    if rules and not a.rules_ok:
+        return None, {"delegated": False, "project": e["name"], "path": e["path"], "approval_rules": rules,
+                      "note": "the project's own rules on approval, quoted as written; ccx does not judge whether "
+                              "this task is allowed",
+                      "next": "read them; if they allow this task (or the person approved it), run again with "
+                              "--rules-ok; otherwise ask the person first"}
+    a.cwd = e["path"]
+    return {"name": e["name"], "path": e["path"], "header": projects.brief_header(e),
+            "approval_rules": rules}, None
 
 
 def register(sub) -> None:

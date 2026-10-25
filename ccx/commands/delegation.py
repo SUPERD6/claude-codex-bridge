@@ -56,6 +56,13 @@ def _background(argv: list[str], p) -> dict:
 def cmd_run(a) -> int:
     p = paths()
     cfg = load_config(p)
+    proj = None
+    if a.project:                                # into a project from the catalog (ccx/commands/projects.py)
+        from .projects import for_run
+        proj, stop = for_run(a)
+        if stop:
+            _out(stop)
+            return 0
     if a.bg:
         if not a.brief and not a.brief_file:
             raise ValueError("--bg needs the task as text or --brief-file (stdin is not passed on)")
@@ -87,6 +94,8 @@ def cmd_run(a) -> int:
         prev = None if (a.new or a.fork or a.worktree) else find_seat(p, a.seat, cwd, kw["to"])
     else:
         prev = None if (a.new or a.fork or a.worktree) else find_continuable(p, lead, cwd, kw["to"], mode["mode"])
+    if proj:
+        text = f"{proj['header']}\n\n{text}"
     req = Request(brief=text, mode=mode["mode"], mode_source=mode["source"], mode_why=mode["why"], cwd=cwd, caller=caller,
                   worktree=a.worktree, escalate=False if a.no_escalate else None,
                   label=f"seat:{a.seat}" if a.seat else (a.label or ""),
@@ -101,6 +110,8 @@ def cmd_run(a) -> int:
         res["continued_from"] = prev          # same sub-session: it remembers the earlier task(s)
     res["route"] = {k: v for k, v in route.items() if k in ("source", "b", "rung", "p", "chain_p", "tier",
                                                               "stale", "mode", "trial")}
+    if proj:
+        res["project"] = {k: proj[k] for k in ("name", "path", "approval_rules") if proj.get(k)}
     if route.get("b") is None:
         # an explicit pick with no size: its verdict reaches the ledger but not routing (seven-cores A/B, PR #30)
         res["route"]["learns"] = "no: give --minutes (or the rubric flags) so this run's verdict can teach routing"
@@ -479,6 +490,10 @@ def register(sub) -> None:
                    help="read: analyse only; write: may edit files. Not given: inferred from the task text "
                         "(analysis verbs -> read, edit verbs -> write, unclear -> write)")
     r.add_argument("--cwd")
+    r.add_argument("--project", help="run in a project from the catalog: its name, an alias or a sentence "
+                                     "(`ccx where`); several fit -> an error listing them")
+    r.add_argument("--rules-ok", action="store_true", help="with --project: you read the project's approval rules "
+                                                          "ccx showed and they allow this task")
     _routing_args(r)
     r.add_argument("--model", help="explicit model (skips routing), e.g. gpt-6.1-sol or sonnet")
     r.add_argument("--effort", help="explicit reasoning effort: low|medium|high|xhigh|max")

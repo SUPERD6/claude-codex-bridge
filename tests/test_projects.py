@@ -207,3 +207,59 @@ def test_where_command(tmp_path):
     out = ccx("where", "那个", "桌宠")
     assert out["pick"] == "desk-pet" and out["candidates"][0]["path"].endswith("desk-pet")
     assert out["read_first"][0].endswith("CLAUDE.md")
+
+
+# ---- ccx run --project ----
+
+def run_env(tmp_path):
+    fakes = REPO / "tests" / "fakes"
+    return {**os.environ, "CCX_CODEX_BIN": str(fakes / "fake_codex.py"), "CCX_CLAUDE_BIN": str(fakes / "fake_claude.py"),
+            "FAKE_LOG": str(tmp_path / "calls.jsonl"), "CCX_AB_RATE": "0", "CCX_NO_BENCH_REFRESH": "1",
+            "CCX_NO_QUOTA_PROBE": "1"}
+
+
+def run_ccx(env, *args):
+    r = subprocess.run([sys.executable, str(REPO / "ccx.py"), *args], capture_output=True, text=True,
+                       encoding="utf-8", env=env)
+    return r.returncode, json.loads(r.stdout)
+
+
+def test_run_project_goes_into_it_with_its_rules(tmp_path):
+    catalog(tmp_path)
+    env = run_env(tmp_path)
+    code, out = run_ccx(env, "run", "--from", "claude", "--to", "codex", "--tier", "T1", "--project", "桌宠",
+                        "rename foo to bar in a.py")
+    assert code == 0, out
+    assert out["project"]["name"] == "desk-pet"
+    call = json.loads((tmp_path / "calls.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+    assert call["prompt"].count("Project: desk-pet") == 1 and "CLAUDE.md" in call["prompt"]
+    assert any(x.endswith("desk-pet") for x in call["argv"])                       # it runs in that folder
+
+
+def test_run_project_with_approval_rules_stops_until_the_lead_read_them(tmp_path):
+    catalog(tmp_path)
+    env = run_env(tmp_path)
+    code, out = run_ccx(env, "run", "--from", "claude", "--to", "codex", "--tier", "T1", "--project", "lab", "x")
+    assert code == 0 and out["delegated"] is False
+    assert out["approval_rules"][0]["text"] == "Approval needed before each stage."     # quoted as written
+    assert not (tmp_path / "calls.jsonl").exists()
+    code, out = run_ccx(env, "run", "--from", "claude", "--to", "codex", "--tier", "T1", "--project", "lab",
+                        "--rules-ok", "x")
+    assert code == 0 and out["project"]["approval_rules"]
+
+
+def test_run_project_not_unique_lists_candidates(tmp_path):
+    catalog(tmp_path)
+    code, out = run_ccx(run_env(tmp_path), "run", "--from", "claude", "--project", "wrapper ui", "x")
+    assert code == 3 and "candidates" in out["error"] and "wrapper" in out["error"]
+    code, out = run_ccx(run_env(tmp_path), "run", "--from", "claude", "--project", "lab", "--cwd", ".", "x")
+    assert code == 3 and "not both" in out["error"]
+
+
+def test_where_shows_approval_rules_and_session_start_points_at_where(tmp_path):
+    catalog(tmp_path)
+    out = ccx("where", "research", "lab")
+    assert out["pick"] == "lab" and out["approval_rules"][0]["line"] == 3
+    r = subprocess.run([sys.executable, str(REPO / "ccx.py"), "mem", "delta", "--as", "claude", "--peek"],
+                       capture_output=True, text=True, encoding="utf-8", cwd=tmp_path)
+    assert "ccx where" in r.stdout and "8 projects" in r.stdout
