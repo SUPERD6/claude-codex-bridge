@@ -601,7 +601,12 @@ def run(req: Request, p: Paths) -> dict:
     record.pop("current", None)
     if not ledger.claim_final(run_dir, "run"):
         # `ccx stop` found this process gone and closed the run already: its record and ledger row stand
-        return ledger.load_run(p, run_id)
+        closed = ledger.load_run(p, run_id)
+        if closed.get("state") == "running":
+            # nobody wrote a final state although the lock is taken: say so instead of an empty "not ok"
+            closed.update(ok=False, error=closed.get("error") or "final.lock was already taken by "
+                          + ((run_dir / "final.lock").read_text(encoding="utf-8", errors="replace")[:200]))
+        return closed
     _write_record(run_dir, record)
     ledger.append(p, record)
     if record.get("kind") == "review_issues" and record.get("session_id"):
