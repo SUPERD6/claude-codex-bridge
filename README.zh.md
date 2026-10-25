@@ -171,7 +171,7 @@ ccx fresh [--launch]                         # 长对话交给同一工具的新
 ccx trial start | stop | report              # 一周正式对比：一半可派的活主智能体自己做，一半派出去，同样口径量
 ccx agents                                   # 每家命令行：厂商、能做什么、测过的版本、官方还是社区
 ccx way "任务" --risk low|visible|critical   # 按风险选合作方式：一家做 / 规划+实现+验收 / 两版比较（--yes）
-ccx way --stats                              # 每类活每家的一次做对率和返工率
+ccx way --stats [--include-evals]           # 每类活每家（分档位）的一次做对率和返工率，默认不算评测
 ccx discuss "问题" [--dry-run]              # 2-3 家不同厂商讨论选错代价高的决定：出方案、挑错、裁判
 ccx verify <run_id> --ok 0 --reason wrong     # 你的判断（没人判断的，12 小时后按证据自动记“大概率对/错”）
 ccx handoff --from-transcript codex --to claude   # 原主智能体写不了（额度用完）：从它的会话文件生成交接

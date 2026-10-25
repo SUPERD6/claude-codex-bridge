@@ -105,6 +105,27 @@ class TestTrack(unittest.TestCase):
             self.assertEqual(tr["read"]["claude"]["first_right"], 1.0)
             self.assertNotIn("r1", [x["run_id"] for x in ways.pieces(p)])
 
+    def test_tiers_apart_and_evals_left_out(self):
+        # H9: a cheap tier's misses are seen apart from the strong one's; evaluation runs don't count by default
+        import tempfile
+        rung = lambda r: [{"rung": r}]  # noqa: E731
+        with tempfile.TemporaryDirectory() as t:
+            p = Paths(Path(t))
+            p.runs.mkdir(parents=True, exist_ok=True)
+            _run(p, "c1", "codex", attempts=rung("codex:luna:low"))
+            _run(p, "c2", "codex", attempts=[{"rung": "codex:luna:low"}, {"rung": "codex:gpt-6:high"}])
+            _run(p, "c3", "codex", attempts=rung("codex:gpt-6:high"))
+            _run(p, "e1", "codex", label="eval-7c:r1:x", attempts=rung("codex:luna:low"))
+            _run(p, "e2", "codex", route={"kind": "code", "no_ab": True}, attempts=rung("codex:luna:low"))
+            for rid, ok in (("c1", False), ("c2", True), ("c3", True), ("e1", False), ("e2", False)):
+                ledger.append_event(p, {"type": "verify", "run_id": rid, "ok": ok, "ts": time.time()})
+            c = ways.track(p)["code"]["codex"]
+            self.assertEqual((c["judged"], c["first_right"]), (3, round(2 / 3, 3)))
+            self.assertEqual({k: (v["judged"], v["first_right"]) for k, v in c["tiers"].items()},
+                             {"luna:low": (1, 0.0), "gpt-6:high": (2, 1.0)})      # the tier that finished it
+            c = ways.track(p, include_evals=True)["code"]["codex"]
+            self.assertEqual((c["judged"], c["tiers"]["luna:low"]["judged"]), (5, 3))
+
     def test_choose_uses_the_record(self):
         good = {"judged": 10, "first_right": 0.9, "rework": 0.1, "enough": True}
         weak = {"judged": 10, "first_right": 0.3, "rework": 0.6, "enough": True}
