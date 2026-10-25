@@ -197,7 +197,8 @@ ccx run "任务" --provider deepseek-codex   # 同一个模型经 Codex（用 -c
 ccx run "任务" --to dsh --tier T2          # DeepSeek 自己的智能体 DeepSeek Harness（无头模式）
 ccx run "任务" --provider glm              # 较新的 API 经 Claude Code：kimi、glm、qwen、openrouter（要有密钥）
 ccx run "任务" ... --bg             # 后台跑，马上返回 run_id；用 ccx show 查看
-ccx send --list | --thread <id> "消息"   # 发消息给正在运行的 Codex 桌面/交互会话
+ccx send --list | --thread <id> "消息"   # 发消息给正在运行的 Codex 桌面/交互会话（只有 Codex：Claude Code 的终端
+                                        # 和桌面会话都没有接收外部消息的入口；Claude 子智能体用 ccx resume <run_id> 追问）
 ccx skills find pdf 表格             # 先在共享技能库里找，别重复写
 ccx skills install [--replace] [--apply]   # 把仓库里的技能链接进 hub（默认先预演），以后 git pull 就是升级
 ccx improve add <技能> "遇到的具体问题" --fix "怎么改"   # 只记真实遇到的问题

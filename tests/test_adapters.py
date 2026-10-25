@@ -184,6 +184,14 @@ class TestBackgroundAndSend(AdapterEnv):
         self.assertIn("ago", held["why"])
         self.assertTrue(self.j("send", "--thread", "thread-123", "--force", "now")["ok"])
 
+    def test_send_offers_codex_only(self):
+        # the choices say what works: a Claude session has no way in for an outside message
+        r = self.ccx("send", "--to", "claude", "--thread", "t", "hi")
+        self.assertEqual(r.returncode, 2)
+        self.assertIn("invalid choice: 'claude'", r.stderr)
+        self.assertIn("ccx resume", self.ccx("send", "-h").stdout)
+        self.assertFalse(any(c["argv"][:1] == ["queue"] for c in self.calls()))
+
 
 class TestSelftest(AdapterEnv):
     def test_selftest_all_installed(self):
