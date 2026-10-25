@@ -3,7 +3,7 @@
 ## Unreleased
 
 ## 0.5.0 — 2026-10-25 (save, check, split, share, control: cheaper defaults, review that checks the task, project catalog, shared work context, the board, stop and archive)
-- Highlights: everything since 0.4.0 (PRs up to #92), grouped by theme below; 493 tests. Measured on real CLIs:
+- Highlights: everything since 0.4.0 (PRs up to #93), grouped by theme below; 495 tests. Measured on real CLIs:
   shared work context, right the first time 36/36 vs 7/36 and 63 % less spend
   ([report](docs/research/2026-10-25-shared-context-ab.md)); project memory 9/9 vs 0/9 and hub memory 9/9 vs 0/9;
   seven-cores round 1 ([report](docs/research/2026-10-24-seven-cores-ab.md)): delegating cut the lead's tokens 32 %
@@ -620,6 +620,12 @@
   holds the folder as its cwd for a moment.
 - Tests no longer see the machine's own provider keys (`*_API_KEY`, `*_AUTH_TOKEN`): with a real
   `DEEPSEEK_API_KEY` set, `test_missing_key_is_a_clear_error` failed on that machine only.
+- `ccx -h` lists commands by use: everyday (setup, doctor, run, ask, resume, stop, verify, ui, where, projects, peek,
+  board, say, reply), memory and context, accounting and reports, then maintenance and advanced as names only. The
+  description now says what ccx is (a cost-saving team of Claude Code, Codex and DeepSeek). No command or option
+  changed; a test checks every command is in exactly one group.
+- README (EN + ZH) cut to one promise (spend less), four pillars with one sourced measurement each, and a three-command
+  quick start; the details moved, unchanged, to docs/features, docs/install, docs/measured and docs/faq (EN + ZH).
 
 ## 0.4.0 — 2026-10-24 (routing from public benchmarks and total cost, quota by pace, work queue, reviews, handoff from the session file)
 - Highlights: proposals E and F, the F1 live trial and the fixes below; 201 tests. Details per item follow.

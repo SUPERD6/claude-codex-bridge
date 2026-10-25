@@ -1,6 +1,6 @@
 # Status
 
-English · [中文](STATUS.zh.md) · updated 2026-10-25 · version 0.5.0 · 493 tests
+English · [中文](STATUS.zh.md) · updated 2026-10-25 · version 0.5.0 · 495 tests
 
 One page on purpose: whatever an agent reads at start-up it re-reads on every later turn. Older pages, the full
 confidence table, acceptance checks and the done list are in [STATUS-archive.md](STATUS-archive.md); what changed
@@ -9,7 +9,7 @@ put the detail in the changelog. Only the lead session edits this page; PRs add 
 
 ## Now
 
-0.5.0 holds everything since 0.4.0 (PRs up to #92) (see the CHANGELOG, grouped by theme: save, check, split, share, control, Windows).
+0.5.0 holds everything since 0.4.0 (PRs up to #93) (see the CHANGELOG, grouped by theme: save, check, split, share, control, Windows).
 What the measurements say, each from a raw record:
 
 | Result | Numbers | Source |
@@ -39,11 +39,10 @@ H11 week-long `ccx trial` (ends 2026-10-31).
 - **real**: delegation both ways, `--check`, review (new defaults, 3 runs), `ccx stop` → `ccx resume` and killed
   runs counted, archiving after a run, DeepSeek leading (dsh and Claude Code on a DeepSeek model), a three-vendor
   `ccx discuss`, the board via `ccx say --resume` (Codex, dsh), shared work context A/B, project catalog scan
-  (31 projects), non-ASCII paths, no console pop-ups, the release preflight (Codex only, $0.013).
+  (31 projects), non-ASCII paths, no console pop-ups, the release preflight (Codex only, $0.013), Codex hooks on Windows (H7, #82 + #92: a new Codex
+  conversation showed "From ccx (shared memory and delegated work):").
 - **fake only**: worktrees, `ccx batch`, quota fallback, the queue and seats, `--fork`, Gemini CLI, a real quota
   stop (none yet).
-- **not verified**: Codex desktop's per-turn hook and `ccx say --now` into a live thread; Codex hooks on Windows (H7):
-  after #82 the hooks run (cursor and use records moved, real), after #92 their output should reach the
-  conversation — waits for the person to see a `From ccx …` line in their Codex; the Codex rule from `ccx doctor --codex-rule`; dsh archiving queued until
+- **not verified**: Codex desktop's per-turn hook and `ccx say --now` into a live thread; the Codex rule from `ccx doctor --codex-rule`; dsh archiving queued until
   the app is closed (#91; the open app was seen dropping the id); own sub-agent limits (F10–F14) live; suggested-note rules (13/30 agreement on a held-out set, not an
   accuracy result); routing priors and the "save" default beyond round 1's tasks.
