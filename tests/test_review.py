@@ -50,6 +50,20 @@ class TestReason(unittest.TestCase):
         cfg["providers"]["deepseek"]["vendor"] = "anthropic"          # a provider can say it is the same vendor
         self.assertTrue(agents.same_vendor("claude", "deepseek", cfg))
 
+    def test_cheapest_rung_before_routing_and_fallback(self):
+        cfg = {"review": {"also": ["claude:sonnet:medium"]},
+               "tiers": {"T1": {"claude": {"model": "haiku", "effort": "low"},
+                                "codex": {"model": "gpt-6-luna", "effort": "low"}}}}
+        got = review.reviewers(cfg, "codex", lambda a: a in ("codex", "claude"))
+        self.assertEqual(got, [("claude", "haiku", "low"), ("claude", "sonnet", "medium")])   # sonnet only after
+        self.assertEqual(review.reviewers(cfg, "claude", lambda a: a in ("codex", "claude"))[0],
+                         ("codex", "gpt-6-luna", "low"))
+
+    def test_brief_asks_for_requirements_not_tests(self):
+        b = review.brief("r1", "task", "did it", "+x", 100)
+        self.assertIn("requirement by requirement", b)
+        self.assertIn("Missing tests, inputs the task doesn't cover, typing or docs taste and style are `[note]", b)
+
     def test_reviewers_from_routing_data(self):
         import tempfile
         from pathlib import Path

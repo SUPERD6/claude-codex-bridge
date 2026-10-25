@@ -37,10 +37,11 @@ BRIEF = """{mark} of run {run_id}] Review a change another agent made. Do not ed
 
 ## Answer
 You cannot run commands; judge from the diff and the files. Do not report that tests were not run.
-Report a problem as `[must] file:line — what is wrong` only if it makes the change wrong for the task as stated: a
-bug a test would catch, a broken behaviour that worked before, the new behaviour left untested, or a real safety
-problem (code execution, secrets, data loss). Anything else worth saying (inputs the task doesn't cover, typing or
-docs taste, style) is `[note] ...`, at most 3. Start summary with exactly `REVIEW: pass` (no [must]) or
+First go through the task above requirement by requirement (each return value, case, rule and error it names) and
+check the code meets it; the acceptance tests may cover only some of them. Report a problem as
+`[must] file:line — what is wrong` only if it makes the change wrong for the task as stated: a requirement not met,
+a bug a test would catch, a broken behaviour that worked before, or a real safety problem (code execution, secrets,
+data loss). Missing tests, inputs the task doesn't cover, typing or docs taste and style are `[note] ...`, at most 3. Start summary with exactly `REVIEW: pass` (no [must]) or
 `REVIEW: issues` (at least one [must]); put the items in open_questions, [must] first. Status done."""
 
 
@@ -127,6 +128,12 @@ def reviewers(cfg: dict, worker: str, installed, p=None) -> list[tuple[str, str,
     rc = cfg.get("review") or {}
     by = rc.get("by") or {}
     rungs = [by.get(worker)] + [v for k, v in by.items() if k != worker]
+    # cheapest rung of each other vendor first: routing picked sonnet medium for reviews in the seven-cores A/B,
+    # 20–40x the luna-low work it reviewed, with no gain in pass rate (PR #30); sonnet stays as the fallback (also)
+    for agent in filter(installed, others(worker, cfg, only_installed=False)):
+        t1 = ((cfg.get("tiers") or {}).get("T1") or {}).get(agent)
+        if isinstance(t1, dict) and t1.get("model"):
+            rungs.append(f"{agent}:{t1['model']}:{t1.get('effort', 'low')}")
     if p is not None:
         from . import learn
         for agent in filter(installed, others(worker, cfg, only_installed=False)):
