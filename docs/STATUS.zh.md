@@ -21,18 +21,18 @@
 | 路由（第 1–2 轮） | 第一轮没有增益（21/21 选了固定组的模型）；第 2 轮和固定 sonnet 一样对，省下的钱来自评测 hub 不知道额度 | 第一轮 §2.3，第 2 轮 4-D |
 | 越用越准 | 还没有证据（全都做对了，没东西可学） | 第 2 轮 §6 |
 
-所以默认路线是**一个便宜模型做 + 另一家便宜模型审**；只有要快时才拆开或并行（总管技能 `project-manager`，#102）。在跑：H11 一周的 `ccx trial`（2026-10-31 结束），以及下面的真机补验（会话 ccx-realcheck，10/31 前）。
+所以默认路线是**一个便宜模型做 + 另一家便宜模型审**；只有要快时才拆开或并行（总管技能 `project-manager`，#102）。在跑：H11 一周的 `ccx trial`（2026-10-31 结束）。打 0.5.0 tag 之后：`q resume` 接着被杀那次运行的会话续跑，不再从头重做（#105）；worktree、`ccx batch`、`--fork`、`ccx say --now` 已于 2026-10-25 真机补验（约 $0.06）。
 
 ## 接下来三件
 
-1. **10/31 前的真机补验**：worktree、`--fork`、`ccx say --now`、dsh 在桌面端退出后再写归档；第 2 轮剩下的队列问题：`q resume` 从头重做那一块，没接着原会话（被杀的运行停在 running 已由 #104 修好）。
-2. **对外发布**（先问用户）：演示 GIF、用第 1–2 轮任务做公开基准，然后推广。
-3. **总管 K4–K6**：自动档位、从外面派活进来（手机、私人 GitHub issue）、总管看板。K7（用另一个桌宠项目当形象）等那个项目做好。
+1. **对外发布**（先问用户）：演示 GIF、用第 1–2 轮任务做公开基准，然后推广。
+2. **总管 K4–K6**：自动档位、从外面派活进来（手机、私人 GitHub issue）、总管看板。K7（用另一个桌宠项目当形象）等那个项目做好。
+3. **测还没证明的**：新 `--review auto` 的触发率；路由能不能从用户自己的活里学到东西（10/31 之后看 H11 trial 的结果）。
 
 ## 把握有多大（简版）
 
 **real** = 在真实 Windows 机器上、用已登录的 CLI 跑过；**fake** = 只有用假 CLI 的测试。
 
-- **real**：双向派活、`--check`、审查（第 1–2 轮）、`ccx way`、`ccx stop` → `ccx resume` 以及被杀的运行也记账、跑完即归档、DeepSeek 当组长、三家一起的 `ccx discuss`、对话板经 `ccx say --resume`、共享工作上下文 A/B、项目目录扫描、插件市场安装（Claude Code，临时配置目录）、`ccx ui` 隐藏测试、3 个任务的 `ccx batch`（#100）、非 ASCII 路径、不再弹控制台窗口、Codex hook 在 Windows 上（H7，#82 + #92）、队列中途杀掉再续跑（还剩上面一个问题）。
-- **只有 fake**：worktree、额度回退、席位、`--fork`、Gemini CLI、真实的额度用尽。
-- **未验证**：`ccx say --now` 推进正在进行的 Codex 对话；`ccx doctor --codex-rule` 给出的 Codex 规则；归档排队写入后 dsh 桌面端自己的下一次写入；Codex 从 GitHub 地址装插件；子智能体自己的子智能体上限真机（F11 没触发：明确要求了也没有一家开子智能体）；新 `--review auto` 的触发率；建议笔记的筛选规则（留出集 13/30）；评测任务之外的路由表现。
+- **real**：双向派活、`--check`、审查（第 1–2 轮）、`ccx way`、`ccx stop` → `ccx resume` 以及被杀的运行也记账、跑完即归档、DeepSeek 当组长、三家一起的 `ccx discuss`、对话板经 `ccx say --resume`、共享工作上下文 A/B、项目目录扫描、插件市场安装（Claude Code，临时配置目录）、`ccx ui` 隐藏测试、3 个任务的 `ccx batch`（#100）、非 ASCII 路径、不再弹控制台窗口、Codex hook 在 Windows 上（H7，#82 + #92）、队列中途杀掉再续跑、worktree 派活和 `ccx undo`、3 路并行 batch（Codex + dsh）、`--fork`（fork 出的运行知道只有组长会话里才有的内容）、交互式 Codex CLI 里的 `ccx say --now` 和每轮 hook、dsh 桌面端开着时排队、退出后写入归档。
+- **只有 fake**：额度回退、席位、Gemini CLI、真实的额度用尽。
+- **未验证**：Codex 桌面版窗口里的 `ccx say --now`；`ccx doctor --codex-rule` 给出的 Codex 规则；归档排队写入后 dsh 桌面端自己的下一次写入；Codex 从 GitHub 地址装插件；子智能体自己的子智能体上限真机（F11 没触发：明确要求了也没有一家开子智能体）；新 `--review auto` 的触发率；建议笔记的筛选规则（留出集 13/30）；评测任务之外的路由表现。

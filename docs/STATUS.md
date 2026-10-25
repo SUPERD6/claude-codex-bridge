@@ -26,17 +26,17 @@ say, each from a raw record:
 | More accurate with use | no evidence yet (everything was right, so nothing to learn from) | round 2 §6 |
 
 So the default shape is **one cheap model plus another vendor's cheap review**; split or parallel only when speed
-is wanted (the `project-manager` skill, #102). Running: the H11 week-long `ccx trial` (ends 2026-10-31) and the
-real-machine checks below (session ccx-realcheck, before 2026-10-31).
+is wanted (the `project-manager` skill, #102). Running: the H11 week-long `ccx trial` (ends 2026-10-31).
+Since the 0.5.0 tag: `q resume` continues the killed run's session instead of redoing it (#105); real-machine checks
+of worktrees, `ccx batch`, `--fork` and `ccx say --now` done on 2026-10-25 (about $0.06).
 
 ## Next three
 
-1. **Real-machine checks before 10/31**: worktrees, `--fork`, `ccx say --now`, dsh archiving after
-   the app is quit; the queue problem left from round 2: `q resume` redoes the piece instead of continuing its session
-   (the killed run staying `running` is fixed in #104).
-2. **Going public** (ask the person first): demo GIF, a public benchmark from the round-1/2 tasks, then the launch.
-3. **Coordinator K4–K6**: autonomy levels, work sent in from outside (phone, a private GitHub issue), the
+1. **Going public** (ask the person first): demo GIF, a public benchmark from the round-1/2 tasks, then the launch.
+2. **Coordinator K4–K6**: autonomy levels, work sent in from outside (phone, a private GitHub issue), the
    coordinator board. K7 (an avatar from a separate desktop-pet project) waits for that project.
+3. **Measure what is still unproven**: the new `--review auto` trigger rate, and whether routing learns from the
+   person's own work (H11 trial results after 2026-10-31).
 
 ## How sure we are (short)
 
@@ -46,9 +46,11 @@ real-machine checks below (session ccx-realcheck, before 2026-10-31).
   runs counted, archiving after a run, DeepSeek leading, a three-vendor `ccx discuss`, the board via
   `ccx say --resume`, shared work context A/B, project catalog scan, the plugin marketplace install (Claude Code,
   from a temporary config), `ccx ui` hiding tests, a 3-task `ccx batch` (#100), non-ASCII paths, no console pop-ups, Codex hooks on Windows (H7,
-  #82 + #92), the queue killed and resumed (one problem left, above).
-- **fake only**: worktrees, quota fallback, seats, `--fork`, Gemini CLI, a real quota stop.
-- **not verified**: `ccx say --now` into a live Codex thread; the Codex rule from `ccx doctor --codex-rule`; the
-  dsh app's own later writes after a queued archive; the Codex plugin from a GitHub address; own sub-agent limits
+  #82 + #92), the queue killed and resumed, worktree delegation with `ccx undo`, a parallel 3-run batch (Codex +
+  dsh), `--fork` (the forked run knew what only the lead's session held), `ccx say --now` and the per-turn hook in
+  the interactive Codex CLI, dsh archiving queued while the app is open and written after it is quit.
+- **fake only**: quota fallback, seats, Gemini CLI, a real quota stop.
+- **not verified**: `ccx say --now` in the Codex desktop app's own window; the Codex rule from
+  `ccx doctor --codex-rule`; the dsh app's own later writes after a queued archive; the Codex plugin from a GitHub address; own sub-agent limits
   live (F11 did not fire: no agent started sub-agents even when told to); the new `--review auto` trigger rate;
   suggested-note rules (13/30 on a held-out set); routing beyond the evaluation tasks.
