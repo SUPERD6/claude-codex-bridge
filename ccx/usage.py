@@ -43,47 +43,76 @@ def _recent(files, since: float):
             continue
 
 
+def _helper_parent(f: Path) -> str | None:
+    """The main session a built-in helper's file belongs to: projects/<folder>/<session>/subagents/agent-*.jsonl,
+    and a workflow's agents one level deeper, <session>/subagents/workflows/wf_*/agent-*.jsonl."""
+    for d in f.parents:
+        if d.name == "subagents":
+            return d.parent.name
+        if d.name == "projects":
+            break
+    return None
+
+
+def _claude_file(f: Path, since: float, exclude: set[str], msgs: dict[str, dict]) -> None:
+    try:
+        lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return
+    parent = _helper_parent(f)
+    for line in lines:
+        if '"assistant"' not in line or '"usage"' not in line:
+            continue
+        try:
+            e = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if e.get("type") != "assistant":
+            continue
+        sid = e.get("sessionId") or f.stem
+        if sid in exclude:          # a ccx sub-run (incl. its own built-in helpers): already in the ledger
+            continue
+        builtin = bool(e.get("isSidechain")) or parent is not None
+        m = e.get("message") or {}
+        u = m.get("usage") or {}
+        t = _ts(e.get("timestamp"))
+        if not u or t is None or t < since:
+            continue
+        cc = u.get("cache_creation") or {}
+        key = m.get("id") or e.get("uuid")
+        msgs[key] = {"ts": t, "agent": "claude", "role": "builtin" if builtin else "lead",
+                     "session": f.stem if builtin else sid,
+                     **({"parent": parent} if builtin and parent else {}),
+                     **({"workflow": f.parent.name} if parent and f.parent.name.startswith("wf_") else {}),
+                     "model": m.get("model") or e.get("requestedModel") or "?",
+                     "usage": usage_dict(fresh=u.get("input_tokens", 0) or 0,
+                                         write=u.get("cache_creation_input_tokens", 0) or 0,
+                                         write_1h=cc.get("ephemeral_1h_input_tokens", 0) or 0,
+                                         cached=u.get("cache_read_input_tokens", 0) or 0,
+                                         out=u.get("output_tokens", 0) or 0)}
+
+
 def claude_events(since: float, exclude: set[str], home: Path | None = None) -> list[dict]:
     root = (home or claude_home()) / "projects"
     if not root.exists():
         return []
     msgs: dict[str, dict] = {}
     # main sessions: projects/<folder>/<session>.jsonl; Claude Code's own (built-in) sub-agents:
-    # projects/<folder>/<session>/subagents/agent-*.jsonl with isSidechain = true
+    # projects/<folder>/<session>/subagents/agent-*.jsonl with isSidechain = true, and a workflow's
+    # agents under <session>/subagents/workflows/wf_*/
     for f in _recent(root.rglob("*.jsonl"), since):
-        try:
-            lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
-        except OSError:
-            continue
-        for line in lines:
-            if '"assistant"' not in line or '"usage"' not in line:
-                continue
-            try:
-                e = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if e.get("type") != "assistant":
-                continue
-            sid = e.get("sessionId") or f.stem
-            if sid in exclude:          # a ccx sub-run (incl. its own built-in helpers): already in the ledger
-                continue
-            builtin = bool(e.get("isSidechain")) or f.parent.name == "subagents"
-            m = e.get("message") or {}
-            u = m.get("usage") or {}
-            t = _ts(e.get("timestamp"))
-            if not u or t is None or t < since:
-                continue
-            cc = u.get("cache_creation") or {}
-            key = m.get("id") or e.get("uuid")
-            msgs[key] = {"ts": t, "agent": "claude", "role": "builtin" if builtin else "lead",
-                         "session": f.stem if builtin else sid,
-                         **({"parent": f.parent.parent.name} if builtin and f.parent.name == "subagents" else {}),
-                         "model": m.get("model") or e.get("requestedModel") or "?",
-                         "usage": usage_dict(fresh=u.get("input_tokens", 0) or 0,
-                                             write=u.get("cache_creation_input_tokens", 0) or 0,
-                                             write_1h=cc.get("ephemeral_1h_input_tokens", 0) or 0,
-                                             cached=u.get("cache_read_input_tokens", 0) or 0,
-                                             out=u.get("output_tokens", 0) or 0)}
+        _claude_file(f, since, exclude, msgs)
+    return list(msgs.values())
+
+
+def claude_session_events(session: str, home: Path | None = None) -> list[dict]:
+    """One Claude conversation and everything it ran itself (built-in helpers, workflow agents), read from only
+    that conversation's files."""
+    root = (home or claude_home()) / "projects"
+    msgs: dict[str, dict] = {}
+    if root.exists():
+        for f in [*root.glob(f"*/{session}.jsonl"), *root.glob(f"*/{session}/subagents/**/*.jsonl")]:
+            _claude_file(f, 0.0, set(), msgs)
     return list(msgs.values())
 
 

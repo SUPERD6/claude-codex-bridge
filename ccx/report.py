@@ -30,7 +30,7 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
-from . import learn, ledger, usage
+from . import accuracy, learn, ledger, usage
 from .config import Paths, load_config
 
 STREAMS = [("claude", "lead"), ("claude", "sub"), ("codex", "lead"), ("codex", "sub"), ("gemini", "sub"),
@@ -260,6 +260,7 @@ def summarize(p: Paths, data: dict) -> dict:
                         for d, v in sorted(by_day.items())],
         "runs": sorted(run_rows, key=lambda r: r["run_id"], reverse=True),
         "ab": ab, "trial": tr, "quota": list(quota.values()), "compare": compare,
+        "accuracy": accuracy.summary(p),
     }
 
 
@@ -509,7 +510,7 @@ last {s['days']} days · amounts are API-equivalent USD (AE$), not your subscrip
 {''.join(f'<th class="r">{_esc(n)}</th>' for _, n in BUCKETS)}<th class="r">AE$</th></tr>{stream_rows}</table></div></details>
 <p class="note">Cache reads bill at about 0.1× input; Claude's headless start-up is written to a 1-hour cache (2× input) on
 first use, so delegations close together are cheaper.</p></div>
-{ab_html}{cmp_html}{quota_html}
+{ab_html}{cmp_html}{quota_html}{accuracy.card_html(s.get('accuracy'))}
 <div class="card"><h2>Delegated runs</h2><div class="scroll"><table class="tbl"><tr><th>day</th><th>task</th><th>who</th>
 <th>model → escalation</th><th>result</th><th class="r">tokens</th><th class="r">AE$</th><th class="r">est. saving (model)</th></tr>
 {run_rows or '<tr><td colspan="8">No runs yet.</td></tr>'}</table></div>

@@ -55,6 +55,10 @@ def _slim(record: dict) -> dict:
     costs = [a["cost_usd"] for a in record["attempts"] if a.get("cost_usd") is not None]
     slim["cost_usd"] = round(sum(costs), 5) if costs else None
     slim["attempts"] = len(record["attempts"])
+    if record.get("check"):                         # J7: which acceptance command passed or failed it
+        c = record["check"]
+        slim["check"] = {"key": check_key(c.get("cmd", ""), record.get("cwd"))[0], "cmd": (c.get("cmd") or "")[:200],
+                         "passed": bool(c.get("passed"))}
     return slim
 
 
@@ -127,6 +131,70 @@ def soft_trust(rows_: list[dict]) -> dict:
     learn_ok = not (rechecked >= SOFT_MIN_RECHECKED and rate > SOFT_MAX_OVERTURN)
     return {"soft": n_soft, "rechecked": rechecked, "overturned": overturned,
             "overturn_rate": None if rate is None else round(rate, 3), "learn": learn_ok}
+
+
+CHECK_MIN_JUDGED = 3        # J7: a check command that passed this many runs judged by a person or the lead ...
+CHECK_MAX_WRONG = 0.2       # ... of which more than this share were wrong lets wrong work through
+
+
+def check_key(cmd: str, cwd: str | None) -> tuple[str, str, str]:
+    """(key, command, place) of an acceptance check. The same command means different things in different
+    projects, so the place counts: the folder's name, numbers collapsed (round-1 / round-2 copies of a task
+    are one place) and a ccx worktree counted as its repository."""
+    import hashlib
+    import re
+    norm = " ".join((cmd or "").split())
+    parts = [x for x in re.split(r"[\\/]+", (cwd or "").lower()) if x]
+    if len(parts) >= 3 and parts[-3] == ".ccx-worktrees":
+        parts = parts[:-1]
+    place = re.sub(r"\d+", "#", parts[-1]) if parts else ""
+    return hashlib.sha1(f"{norm}\0{place}".encode("utf-8")).hexdigest()[:12], norm, place
+
+
+def _run_check(row: dict, p: Paths | None) -> dict | None:
+    if "check" in row:
+        return row["check"]
+    if p is None or not row.get("run_id"):
+        return None
+    try:
+        c = load_run(p, row["run_id"]).get("check")
+    except (FileNotFoundError, ValueError, OSError):
+        return None
+    if not c:
+        return None
+    key, _, _ = check_key(c.get("cmd", ""), row.get("cwd"))
+    return {"key": key, "cmd": c.get("cmd", ""), "passed": bool(c.get("passed"))}
+
+
+def check_trust(rows_: list[dict], p: Paths | None = None) -> dict[str, dict]:
+    """J7: per acceptance command (and place), how often it passed work that a person or the lead then judged
+    wrong. Evaluation runs count too: their verdicts come from hidden tests, the best evidence there is.
+    Rows from before ccx kept the check in the ledger are read from their run.json when `p` is given."""
+    final = {}
+    for r in rows_:                                     # the person's or the lead's last word; not probable ones
+        if r.get("type") == "verify" and r.get("run_id") and not r.get("soft"):
+            final[r["run_id"]] = bool(r.get("ok"))
+    out: dict[str, dict] = {}
+    for r in rows_:
+        if r.get("type") or r.get("run_id") not in final:
+            continue
+        c = _run_check(r, p)
+        if not c or not c.get("passed"):
+            continue
+        key = c.get("key") or check_key(c.get("cmd", ""), r.get("cwd"))[0]
+        _, cmd, place = check_key(c.get("cmd", ""), r.get("cwd"))
+        g = out.setdefault(key, {"cmd": cmd, "place": place, "judged": 0, "wrong": 0, "runs": []})
+        g["judged"] += 1
+        if not final[r["run_id"]]:
+            g["wrong"] += 1
+            g["runs"].append(r["run_id"])
+    for g in out.values():
+        g["wrong_rate"] = round(g["wrong"] / g["judged"], 3)
+        g["weak"] = g["judged"] >= CHECK_MIN_JUDGED and g["wrong_rate"] > CHECK_MAX_WRONG
+    return out
+
+
+WEAK_CHECK_NOTE = "this acceptance command has let wrong work through before: look at the change, not only the check"
 
 
 def rows(p: Paths) -> list[dict]:

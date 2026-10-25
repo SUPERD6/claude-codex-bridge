@@ -96,13 +96,11 @@ def _project_context(cwd: Path) -> Path | None:
 
 
 def _brief_notes(p: Paths, cfg: dict, to: str, brief: str, cwd: Path) -> str:
-    """I6: a tool with no start hook never sees shared memory on its own, so its brief carries the few notes the
-    task is about. Tools with a hook skip this (their sub-agent runs read the background index if needed)."""
-    from . import agents, memory
-    name = (provider_of(cfg, to) or {}).get("agent", to)
+    """I6: every sub-agent's brief carries the few shared notes the task is about. A sub-agent never sees the start
+    hook's memory delta (`ccx mem delta` prints nothing under CCX_ROLE=subagent, and the hook moves the lead's
+    cursor, not the sub-agent's), so with a hook or without, the brief is the only way hub notes reach it."""
+    from . import memory
     try:
-        if agents.get(name).start_hook:
-            return ""
         notes = memory.for_brief(p, brief, project=cwd.name)
     except (KeyError, OSError, ValueError):
         return ""
@@ -214,9 +212,10 @@ def _child_env(to: str, run_id: str, extra: dict | None = None, provider: bool =
     env["CCX_PARENT_RUN"] = run_id
     if to == "claude":
         # When the caller itself runs inside Claude Code, these would tie the child
-        # to the parent's session/effort. The child must be its own session.
+        # to the parent's session/effort. The child must be its own session. CLAUDE_CODE_EFFORT_LEVEL overrides
+        # --effort (and "ultracode" there turns on dynamic workflows), so the routed effort would not apply.
         for k in ("CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CLAUDE_CODE_REMOTE_SESSION_ID",
-                  "CLAUDE_EFFORT", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_PID"):
+                  "CLAUDE_EFFORT", "CLAUDE_CODE_EFFORT_LEVEL", "CLAUDE_CODE_CHILD_SESSION", "CLAUDE_PID"):
             env.pop(k, None)
     return env
 
@@ -632,7 +631,8 @@ def compact(record: dict) -> dict:
                        f"yourself, or `ccx resume {record['run_id']} \"...\"`")
     if record.get("check"):
         c = record["check"]
-        out["check"] = {"cmd": c["cmd"], "passed": c["passed"], "exit": c["exit"]}
+        out["check"] = {"cmd": c["cmd"], "passed": c["passed"], "exit": c["exit"],
+                        **({"weak": c["weak"], "note": c["note"]} if c.get("weak") else {})}
     if record["cwd"] and "/.ccx-worktrees/" in record["cwd"].replace("\\", "/"):
         out["worktree"] = record["cwd"]
     if record.get("auth_problem"):

@@ -138,6 +138,17 @@ def cmd_trial(a) -> int:
                           "as usual; `ccx trial report` any time"})
     elif a.trial_cmd == "stop":
         _out(trial.stop(p))
+    elif a.trial_cmd == "tag":
+        from ..usage import _ts
+        def when(s):
+            if s is None:
+                return None
+            t = _ts(s)
+            if t is None:
+                raise ValueError(f"not an ISO time: {s!r} (e.g. 2026-10-26T14:30)")
+            return t
+        _out(trial.tag(p, a.session, a.arm, a.kind, a.b, None if a.ok is None else bool(a.ok),
+                       when(a.since), when(a.until), a.note or ""))
     elif a.markdown:
         print(trial.markdown(trial.summarize(p)) or "no trial yet")
     else:
@@ -210,7 +221,17 @@ def register(sub) -> None:
     ts.add_argument("--rate", type=float, default=0.5, help="share of tasks the lead does itself (default 0.5)")
     ts.add_argument("--note", help="what this trial is about")
     trs.add_parser("stop")
-    trp = trs.add_parser("report", help="the comparison so far (the last trial when none is running)")
+    tt = trs.add_parser("tag", help="count a Claude conversation that did a task with its own helpers or a "
+                        "workflow (native) into the trial; its spend, helpers included, is read from its files")
+    tt.add_argument("--arm", choices=["native", "self"], default="native")
+    tt.add_argument("--session", required=True, help="the Claude conversation's session id")
+    tt.add_argument("--kind", help="kind of work, as `ccx route` names it (code, test, docs, read, ...)")
+    tt.add_argument("--b", type=float, help="difficulty, as `ccx route` estimates it")
+    tt.add_argument("--ok", type=int, choices=[0, 1], help="did the work hold up (omit when not judged yet)")
+    tt.add_argument("--since", help="only turns from this time (ISO), when the conversation did more than the task")
+    tt.add_argument("--until", help="only turns up to this time (ISO)")
+    tt.add_argument("--note")
+    trp =trs.add_parser("report", help="the comparison so far (the last trial when none is running)")
     trp.add_argument("--markdown", action="store_true", help="the table for the README")
     tr.set_defaults(fn=cmd_trial)
     ld = sub.add_parser("lead", help="how many tokens each turn of your lead conversations re-reads, and when a "
