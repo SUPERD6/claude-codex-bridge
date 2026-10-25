@@ -2,7 +2,7 @@
 
 [English: SKILL.md](SKILL.md)
 
-**作用**：给“统筹其他会话的主会话”当项目总管。用户说一句话，总管找到项目、决定怎么分工、派给 Claude / Codex / DeepSeek、验收、收尾，最后用一两句话汇报。用户不想被打扰：常规、能撤回的事直接做，只有第 6 节那几类才问。
+**作用**：给“统筹其他会话的主会话”当项目总管。用户说一句话，总管找到项目、决定怎么分工、派给 Claude / Codex / DeepSeek、验收、收尾，最后用一两句话汇报。用户不想被打扰：常规、能撤回的事直接做，档位不允许的和第 6 节那几类才问。
 
 **和 agent-delegate 的分工**：agent-delegate 管“一块活怎么写简报、怎么派、怎么验收”；本技能管“派什么、派到哪个项目、用什么形状派”。目标已经定死的单次委派直接用 agent-delegate。
 
@@ -50,7 +50,21 @@ ccx run --project <名字> --minutes <n> --tradeoff save --review on --check "CM
 - 已结束的运行用 `ccx archive --older-than 1 --apply` 归档（不确定会动哪些就先不加 `--apply` 看一遍）；客户端有自己的会话列表时，自己开的会话在它的活合并后归档。
 - 汇报一两句：现在什么成立了、在哪里（分支、PR、文件）、花了多少、哪些**没验证**。不讲过程。
 
-## 6. 只有这几类要问用户
+## 6. 自动档位，以及始终要问用户的事
+
+`ccx autonomy --project <名字>` 给出当前适用的档位（不花钱；默认 L1）。只有用户能调高（`ccx autonomy set L2 --project <名字> --auto-merge on`，或在用户要求的命令里带 `--autonomy`），总管自己永远不调高。`ccx run --project`（以及带 `--autonomy` 的运行）按档位行事；停下时返回 `delegated: false` 和 `plan`（派给谁、模型、读/写、`expected_usd`、验收命令、预算）。
+
+| 档位 | 不用问直接做 | 停下来问 |
+|---|---|---|
+| L0 | 找项目、选形状、写简报 | 每次派活：用一句话把 `plan` 告诉用户；同意后同一条命令加 `--approved` |
+| L1（默认） | 只读任务（`--mode read`，如审分工草案）、审查、已同意任务的改一轮、归档 | 可能改文件的任务：一句话说 `plan`；同意后加 `--approved` |
+| L2 | 读写都直接派；带 `--worktree --check "CMD" --review on` 时由 ccx 自己合并分支（见下） | ccx 拒绝合并的：报告分支和 `autonomy.merge.why_not`，用户说合才合 |
+
+L2 自动合并（ccx 全部检查；`ccx autonomy merge <run_id>` 只检查不合并）：用户允许了这个项目合并；运行正常结束；`--check` 通过且没被标成弱；独立审查 pass；改动最多 `max_lines` 行、`max_files` 个文件（默认 80 / 5）；项目没有审批规则；风险不是 visible / critical；项目当前分支不是受保护分支（`main`、`master`、`trunk`、`release/*` 和远端默认分支）。只在本机合进项目当前所在的分支；推送和任何进主分支的 PR 仍由用户决定。撤回：看返回里的 `undo` 那一行。
+
+`ccx batch` 和 `ccx q run` 不读档位：L0、L1 下要用户同意了那份计划才启动。
+
+无论哪一档，下面这些都要问用户（`--approved` 不能代替）：
 
 - 往本机以外发东西：邮件、聊天、issue、给别人的 PR 评论、发布；
 - 合并进主分支（项目允许时，推功能分支、开 PR 不用问）；
@@ -58,4 +72,4 @@ ccx run --project <名字> --minutes <n> --tradeoff save --review on --check "CM
 - 科研审批：`ccx run --project` 因 `approval_rules` 停下时，先读规则；明确允许这件事才加 `--rules-ok`，否则问。派出去不等于放宽项目的冻结或审批；
 - 判断不出是哪个项目（第 2 节）。
 
-其他的——选形状、便宜的审查、改一轮、归档——都直接做，不用问。
+档位允许的其他事——选形状、便宜的审查、改一轮、归档——都直接做，不用问。

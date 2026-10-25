@@ -144,6 +144,7 @@ ccx config set projects.roots "DIR;DIR" ; ccx projects scan   # catalog of your 
 ccx projects | projects show <name>      # list them / one: path, summary, rules to read first, recent work
 ccx where "the desk pet"                # which project a sentence is about: one clear pick, else the candidates and why
 ccx run --project "the desk pet" "brief"   # delegate into it (its rules first; approval rules quoted, then --rules-ok)
+ccx autonomy --project desk-pet            # how much the manager does without asking: L0 / L1 (default) / L2
 ccx project init | status | compact ; ccx inbox "note" --file mail.eml   # project layer
 ccx sync [--apply] [--only skills,memory,hooks,mcp] ; ccx doctor ; ccx uninstall [--apply]
 ```

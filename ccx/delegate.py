@@ -360,7 +360,7 @@ def run(req: Request, p: Paths) -> dict:
         "first_rung": plan[0]["rung"],
         "continue_depth": (int(prev.get("continue_depth", 0)) + 1) if cont else 0,
         "forked_from_lead": bool(req.fork_lead), "ephemeral": req.ephemeral,
-        "mode_source": req.mode_source, "mode_why": req.mode_why, "check_cmd": req.check,
+        "mode_source": req.mode_source, "mode_why": req.mode_why, "check_cmd": req.check, "risk": req.risk,
         "shared_context": shared_meta,
     }
     _write_record(run_dir, record)          # visible to `ccx show` at once (background runs, crashes)
