@@ -123,7 +123,7 @@ def reviewers(cfg: dict, worker: str, installed, p=None) -> list[tuple[str, str,
     vendor, the rung routing finds cheapest for an easy read (I4: from data, not a fixed table); then
     [review] also. The next one is tried when a review can't finish (haiku ran out of structured-output retries
     twice in the 2026-10-24 trial)."""
-    from .agents import NAMES, others, same_vendor
+    from .agents import NAMES, get, others, same_vendor
     rc = cfg.get("review") or {}
     by = rc.get("by") or {}
     rungs = [by.get(worker)] + [v for k, v in by.items() if k != worker]
@@ -134,10 +134,11 @@ def reviewers(cfg: dict, worker: str, installed, p=None) -> list[tuple[str, str,
                 rungs.append(learn.pick(p, REVIEW_B, [agent], "save", mode="read", kind="read")["rung"])
             except Exception:  # noqa: BLE001 — no routing data for it: the pinned ones still apply
                 pass
-    out = []
+    out, pinned = [], set(filter(None, by.values()))
     for rung in filter(None, rungs + list(rc.get("also") or [])):
         agent, model, effort = rung.split(":", 2)
-        if (agent in NAMES and not same_vendor(agent, worker, cfg) and installed(agent)
+        cash = agent in NAMES and get(agent).pay_per_token and rung not in pinned   # real money: only if pinned
+        if (agent in NAMES and not cash and not same_vendor(agent, worker, cfg) and installed(agent)
                 and (agent, model, effort) not in out):
             out.append((agent, model, effort))
     return out

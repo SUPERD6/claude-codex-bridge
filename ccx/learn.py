@@ -276,9 +276,13 @@ def price_usd(p: Paths, agent: str, model: str, usage: dict, ts: float | None = 
     r = next((r for r in rs if r["model"] == model), None) or \
         next((r for r in rs if r["model"] in (model or "")), None)     # "claude-opus-5-5" -> opus
     key = r["price"] if r else (pri.get("model_prices") or {}).get(model or "")
-    if not key or key not in pri["prices"]:
-        return None
-    pr = pri["prices"][key]
+    if key and key in pri["prices"]:
+        pr = pri["prices"][key]
+    else:                       # a provider can carry its own prices: [providers.<name>] prices."<model>"
+        from .config import load_config
+        pr = ((((load_config(p).get("providers") or {}).get(agent) or {}).get("prices") or {}).get(model or ""))
+        if not pr:
+            return None
     w = usage.get("cache_write_tokens", 0) or 0
     w1h = min(w, usage.get("cache_write_1h_tokens", 0) or 0)
     m5, m1h = pr.get("cache_write_5m_mult", 1.25), pr.get("cache_write_1h_mult", 2.0)

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from . import learn, ledger
-from .config import Paths, next_tier, provider_env, provider_of, tier_spec
+from .config import Paths, daily_cap, next_tier, provider_env, provider_of, tier_spec
 
 if TYPE_CHECKING:
     from .delegate import Request
@@ -36,18 +36,24 @@ def _provider_envs(cfg: dict, plan: list[dict]) -> dict:
 
 
 def _within_budget(p: Paths, cfg: dict, plan: list[dict]) -> list[dict]:
-    """Drop pay-per-token rungs once today's spend reached the provider's daily_usd cap."""
-    keep = []
+    """Drop pay-per-token rungs once today's spend reached the agent's daily_usd cap, and rungs whose model has
+    no price: ccx could not count what they spend, so the cap could not hold."""
+    keep, why = [], ""
     for spec in plan:
-        pv = provider_of(cfg, spec["agent"])
-        cap = (pv or {}).get("daily_usd")
-        if cap is not None and ledger.spent_today(p, spec["agent"]) >= float(cap):
-            continue
-        keep.append(spec)
+        ag, cap = spec["agent"], daily_cap(cfg, spec["agent"])
+        if cap is None:
+            keep.append(spec)
+        elif learn.price_usd(p, ag, spec["model"], {"output_tokens": 1}) is None:
+            why = why or (f"{ag}: no price for model {spec['model']!r}, so its daily_usd cap can't be kept; add "
+                          f"prices.\"{spec['model']}\" = {{ input = .., cached = .., output = .. }} (USD per 1M "
+                          f"tokens) to [providers.{ag}] in your tiers.toml")
+        elif ledger.spent_today(p, ag) >= cap:
+            why = why or (f"{ag}: today's budget is used up (daily_usd = {cap:g}); raise it, wait until tomorrow, "
+                          f"or pick another agent")
+        else:
+            keep.append(spec)
     if not keep:
-        ag = plan[0]["agent"]
-        raise ValueError(f"{ag}: today's budget is used up (daily_usd = {provider_of(cfg, ag).get('daily_usd')} in "
-                         f"[providers.{ag}]); raise it, wait until tomorrow, or pick another agent")
+        raise ValueError(why)
     return keep
 
 
@@ -108,7 +114,7 @@ def _fallback_plan(req: Request, p: Paths, cfg: dict, failed: dict) -> dict | No
 
 def _usable(p: Paths, spec: dict) -> dict:
     """Swap a model this account is known not to have (learned from an earlier 'not supported' error)."""
-    if spec["agent"] in ("codex", "claude", "gemini") and learn.is_unavailable(p, spec["agent"], spec["model"]):
+    if spec["agent"] in ("codex", "claude", "gemini", "dsh") and learn.is_unavailable(p, spec["agent"], spec["model"]):
         sub = learn.substitute(p, spec["agent"], spec["model"], spec["effort"])
         if sub:
             new = _rung_spec(f"{spec['agent']}:{sub[0]}:{sub[1]}")

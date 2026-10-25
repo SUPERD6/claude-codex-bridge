@@ -1,13 +1,14 @@
 """One module per agent CLI (proposal I1). Adding a tool = adding `ccx/agents/<name>.py` with an ADAPTER and its
 name below; nothing in the core changes. Providers (another model API behind one of these CLIs, e.g. DeepSeek
-through Claude Code) are configured in [providers.<name>] and count as their own vendor (I3)."""
+through Claude Code or Codex) are configured in [providers.<name>] and count as their own vendor (I3). `dsh` is
+DeepSeek's own agent (DeepSeek Harness), the same vendor as the deepseek providers."""
 from __future__ import annotations
 
 import importlib
 
 from .base import Adapter
 
-NAMES = ("codex", "claude", "gemini")
+NAMES = ("codex", "claude", "gemini", "dsh")
 
 
 def get(name: str) -> Adapter:
@@ -40,9 +41,10 @@ def installed(names=None) -> list[str]:
 
 def others(agent: str, cfg: dict | None = None, *, need: str = "can_work", only_installed: bool = True) -> list[str]:
     """Agents of a different vendor that can do `need`, official ones first (I3/I4). Routing then picks among
-    them by total cost; this list never decides on its own which one is cheapest."""
+    them by total cost; this list never decides on its own which one is cheapest. Pay-per-token agents (dsh) are
+    left out, like the providers: real money is spent only when the person or routing's cash rule asks for it."""
     from ..runners import find_bin
     out = [a for a in all_adapters() if getattr(a, need) and not same_vendor(a.name, agent, cfg)
-           and (not only_installed or find_bin(a.name))]
+           and not a.pay_per_token and (not only_installed or find_bin(a.name))]
     out.sort(key=lambda a: (a.support != "official", NAMES.index(a.name)))
     return [a.name for a in out]

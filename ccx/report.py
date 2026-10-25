@@ -34,12 +34,13 @@ from . import learn, ledger, usage
 from .config import Paths, load_config
 
 STREAMS = [("claude", "lead"), ("claude", "sub"), ("codex", "lead"), ("codex", "sub"), ("gemini", "sub"),
-           ("claude", "builtin"), ("codex", "builtin"), ("deepseek", "sub")]
+           ("claude", "builtin"), ("codex", "builtin"), ("deepseek", "sub"), ("other", "sub")]
 STREAM_LABEL = {("claude", "lead"): "Claude · lead", ("claude", "sub"): "Claude · sub-agent",
                 ("codex", "lead"): "Codex · lead", ("codex", "sub"): "Codex · sub-agent",
                 ("gemini", "sub"): "Gemini · sub-agent",
                 ("claude", "builtin"): "Claude · built-in sub-agent", ("codex", "builtin"): "Codex · built-in sub-agent",
-                ("deepseek", "sub"): "DeepSeek · sub-agent (pay per token)"}
+                ("deepseek", "sub"): "DeepSeek · sub-agent (pay per token)",
+                ("other", "sub"): "Other API providers · sub-agent (pay per token)"}
 BASE_STREAMS = 4      # always shown; later ones only when they have data. Color = fixed slot per stream.
 BUCKETS = [("input_tokens", "fresh input"), ("cache_write_tokens", "cache write"),
            ("cached_input_tokens", "cache read"), ("output_tokens", "output")]
@@ -122,11 +123,22 @@ def _bootstrap(values: list[float], n: int = 1000, seed: int = 7) -> tuple[float
     return sums[int(0.025 * n)], sums[int(0.975 * n) - 1]
 
 
+def _stream(e: dict, cfg: dict) -> tuple[str, str]:
+    """A sub-agent run on DeepSeek by any route (Claude Code, Codex, dsh) counts as DeepSeek; other pay-per-token
+    providers (Kimi, GLM, ...) share one stream."""
+    s = (e["agent"], e["role"])
+    if s in STREAM_LABEL or e["role"] != "sub":
+        return s
+    from .agents import vendor
+    return ("deepseek", "sub") if vendor(e["agent"], cfg) == "deepseek" else ("other", "sub")
+
+
 def summarize(p: Paths, data: dict) -> dict:
     by_stream = {s: {"ae": 0.0, "n": 0, **{k: 0 for k, _ in BUCKETS}} for s in STREAMS}
     by_day: dict[str, dict] = defaultdict(lambda: {s: 0.0 for s in STREAMS})
+    cfg = load_config(p)
     for e in data["events"]:
-        s = (e["agent"], e["role"])
+        s = _stream(e, cfg)
         if s not in by_stream:
             continue
         b = by_stream[s]
@@ -255,14 +267,14 @@ def summarize(p: Paths, data: dict) -> dict:
 CSS = """
 .viz-root{color-scheme:light;--surface-1:#fcfcfb;--page:#f9f9f7;--ink:#0b0b0b;--ink-2:#52514e;--muted:#898781;
 --grid:#e1e0d9;--axis:#c3c2b7;--ring:rgba(11,11,11,.10);--good:#006300;--bad:#d03b3b;
---s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#e87ba4;--s6:#008300;--s7:#6250d6;--s8:#9a6a2f;--t1:#e87ba4;--t2:#008300;--t3:#6250d6;--t4:#e34948}
+--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#e87ba4;--s6:#008300;--s7:#6250d6;--s8:#9a6a2f;--s9:#5f6b7a;--t1:#e87ba4;--t2:#008300;--t3:#6250d6;--t4:#e34948}
 @media (prefers-color-scheme:dark){:root:where(:not([data-theme="light"])) .viz-root{color-scheme:dark;
 --surface-1:#1a1a19;--page:#0d0d0d;--ink:#f0efec;--ink-2:#c3c2b7;--grid:#2c2c2a;--axis:#383835;
---ring:rgba(255,255,255,.10);--good:#0ca30c;--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--s6:#008300;--s7:#9085e9;--s8:#c4955c;
+--ring:rgba(255,255,255,.10);--good:#0ca30c;--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--s6:#008300;--s7:#9085e9;--s8:#c4955c;--s9:#98a2b0;
 --t1:#d55181;--t2:#008300;--t3:#9085e9;--t4:#e66767}}
 :root[data-theme="dark"] .viz-root{color-scheme:dark;--surface-1:#1a1a19;--page:#0d0d0d;--ink:#f0efec;
 --ink-2:#c3c2b7;--grid:#2c2c2a;--axis:#383835;--ring:rgba(255,255,255,.10);--good:#0ca30c;--s1:#3987e5;
---s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--s6:#008300;--s7:#9085e9;--s8:#c4955c;--t1:#d55181;--t2:#008300;--t3:#9085e9;--t4:#e66767}
+--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--s6:#008300;--s7:#9085e9;--s8:#c4955c;--s9:#98a2b0;--t1:#d55181;--t2:#008300;--t3:#9085e9;--t4:#e66767}
 *{box-sizing:border-box}body{margin:0;background:var(--page);color:var(--ink);
 font:14px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
 .viz-root{background:var(--page);color:var(--ink);min-height:100vh;padding:24px 16px 48px}
