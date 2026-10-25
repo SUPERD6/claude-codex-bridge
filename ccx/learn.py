@@ -183,7 +183,7 @@ def refresh_benchmarks_later(p: Paths) -> bool:
         script = _skill_file(p, "routing")
     except Exception:  # noqa: BLE001 — older skill copy or no skill: nothing to do
         return False
-    flags = {"creationflags": 0x00000008 | 0x00000200} if sys.platform == "win32" else {"start_new_session": True}
+    from .winproc import BACKGROUND as flags      # hidden console: no window for it or its children
     subprocess.Popen([sys.executable, str(script), "refresh", "--if-stale"], stdin=subprocess.DEVNULL,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, close_fds=True, **flags)
     return True
