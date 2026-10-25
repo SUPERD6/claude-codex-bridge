@@ -41,12 +41,12 @@ def _soft_verdict(p: Paths, record: dict, ok: bool, reason: str, note: str) -> N
 
 def soft_verdicts(p: Paths, min_age_h: float = SOFT_AFTER_H, now: float | None = None) -> list[dict]:
     """Finished runs nobody judged within `min_age_h`: 'probably right' when ccx's own check passed or the
-    sub-agent's self-check ran, the independent review (if any) passed, and it was neither undone nor sent back.
-    Runs without such evidence stay unjudged: they wait for the person (the UI's 'please review' list)."""
+    sub-agent's self-check ran, the independent review (if any) passed, and it was neither undone nor sent back, and the check
+    command has not let wrong work through before (J7). Runs without such evidence stay unjudged: they wait for the person (the UI's 'please review' list)."""
     now = now or time.time()
     rows = ledger.rows(p)
     judged = {r.get("run_id") for r in rows if r.get("type") == "verify"}
-    out = []
+    out, trust = [], None
     for r in rows:
         if r.get("type") or r.get("run_id") in judged or not r.get("ok") or r.get("status") != "done":
             continue
@@ -72,6 +72,10 @@ def soft_verdicts(p: Paths, min_age_h: float = SOFT_AFTER_H, now: float | None =
             (record.get("result") or {}).get("verification", "not-run") not in ("", "not-run")
         if not checked or (check and not check.get("passed")) or rev in ("issues", "unclear"):
             continue
+        if check:                       # J7: a command that passed wrong work before is no evidence: ask the person
+            trust = trust if trust is not None else ledger.check_trust(rows, p)
+            if (trust.get(ledger.check_key(check.get("cmd", ""), record.get("cwd"))[0]) or {}).get("weak"):
+                continue
         why = "ccx check passed" if check else "self-checked"
         if rev == "pass":
             why += ", review passed"
