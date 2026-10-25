@@ -400,7 +400,8 @@ class TestSync(Env):
         conf = tomllib.loads(ct.read_text(encoding="utf-8"))
         for ev in ("SessionStart", "UserPromptSubmit"):
             self.assertEqual(conf["hooks"][ev][0]["hooks"][0]["command"].startswith("& "), os.name == "nt", ev)
-        self.assertFalse(codex_hook_needs_call_operator(ct.read_text(encoding="utf-8")))
+        # elsewhere the quoted path stays (no PowerShell), which is why doctor only checks this on Windows
+        self.assertEqual(codex_hook_needs_call_operator(ct.read_text(encoding="utf-8")), os.name != "nt")
         ct.write_text(old, encoding="utf-8")
         line = next(x for x in self.ccx("doctor").stdout.splitlines() if x.startswith("Codex SessionStart hook"))
         self.assertIn("WARN" if os.name == "nt" else "ok", line)
