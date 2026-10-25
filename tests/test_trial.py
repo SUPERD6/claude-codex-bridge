@@ -66,7 +66,7 @@ class TestTrial(ReportEnv):
         self.assertGreater(s["arms"]["self"]["lead_usd_mean"], 0)
         self.assertGreater(s["arms"]["delegated"]["sub_usd_mean"], 0)
         self.assertFalse(s["enough"])
-        self.assertIn("not a result yet", s["note"])
+        self.assertIn("deferred, no conclusion", s["note"])
         md = self.ccx("trial", "report", "--markdown").stdout
         self.assertIn("| Lead spend per task |", md)
         self.j("report", "--no-lead")
@@ -81,6 +81,99 @@ class TestTrial(ReportEnv):
 
     def test_no_trial(self):
         self.assertIsNone(self.j("trial", "report")["trial"])
+        self.assertNotEqual(self.ccx("trial", "tag", "--session", "x").returncode, 0)
+
+    def test_native_tag_reads_helpers_and_workflow_agents(self):
+        from test_report import iso
+        t = self.j("trial", "start", "--days", "7")
+        now = time.time()
+        self.claude_transcript("nat-1", n=2, ts=now)
+        base = self.home_claude / "projects" / "-work" / "nat-1" / "subagents"
+        for rel, mid in (("agent-h.jsonl", "h1"), ("workflows/wf_ab12/agent-a1.jsonl", "w1"),
+                         ("workflows/wf_ab12/agent-a2.jsonl", "w2")):
+            f = base / rel
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text(json.dumps({
+                "type": "assistant", "isSidechain": True, "sessionId": "nat-1", "timestamp": iso(now + 1),
+                "message": {"id": mid, "model": "claude-sonnet-5-5",
+                            "usage": {"input_tokens": 100, "cache_read_input_tokens": 5000, "output_tokens": 200}}}),
+                encoding="utf-8")
+        self.claude_transcript("unrelated", n=3, ts=now)                       # another conversation: not read
+        row = self.j("trial", "tag", "--arm", "native", "--session", "nat-1", "--kind", "code", "--b", "4",
+                     "--ok", "1")
+        self.assertEqual((row["trial"], row["arm"], row["bucket"]), (t["id"], "native", "code:b4"))
+        self.assertEqual((row["turns"], row["helper_turns"], row["helpers"], row["workflows"]), (2, 3, 3, 1))
+        self.assertEqual(row["sub_tokens"], 3 * 5300)
+        self.assertGreater(row["sub_usd"], 0)
+        self.assertGreater(row["lead_usd"], 0)
+        self.assertNotEqual(self.ccx("trial", "tag", "--session", "nat-1").returncode, 0)   # counted once
+        self.assertNotEqual(self.ccx("trial", "tag", "--session", "missing").returncode, 0)
+        s = self.j("trial", "report")
+        self.assertEqual(s["arms"]["native"]["n"], 1)
+        self.assertEqual(s["arms"]["native"]["ok_rate"], 1.0)
+        self.assertAlmostEqual(s["arms"]["native"]["total_usd_mean"], row["lead_usd"] + row["sub_usd"], places=4)
+        self.assertIn("deferred, no conclusion", s["compare"]["native"]["note"])
+        md = self.ccx("trial", "report", "--markdown").stdout
+        self.assertIn("Claude Code's own helpers / workflow", md)
+        self.assertIn("deferred, no conclusion", md)
+        # the usage reader ties workflow agents to their conversation too (window_usage for self-runs)
+        from ccx import usage
+        evs = [e for e in usage.claude_events(now - 60, set()) if e.get("workflow")]
+        self.assertEqual({(e["parent"], e["workflow"]) for e in evs}, {("nat-1", "wf_ab12")})
+
+
+def _s(arm, bucket, usd):
+    return {"arm": arm, "bucket": bucket, "lead_usd": usd, "sub_usd": 0.0}
+
+
+class TestBalanced(unittest.TestCase):
+    def test_compares_within_buckets_only(self):
+        ss = ([_s("self", "a", 1.0)] * 3 + [_s("delegated", "a", 0.5)]
+              + [_s("self", "b", 2.0)] + [_s("delegated", "b", 1.5)] * 3 + [_s("native", "c", 0.1)])
+        d = trial.balanced(ss, "delegated")
+        # pooled means would say 1.25 vs 1.25 (no saving); within each bucket it saves 0.5
+        self.assertAlmostEqual(d["saving_per_task_usd"], 0.5)
+        self.assertEqual((d["n_base"], d["n_arm"], d["left_out"]), (4, 4, 0))
+        self.assertFalse(d["enough"])
+        self.assertIn("deferred, no conclusion", d["note"])
+        n = trial.balanced(ss, "native")
+        self.assertIsNone(n["saving_per_task_usd"])            # no bucket shared with the lead's own runs
+        self.assertEqual(n["left_out"], 5)
+
+    def test_interval_once_enough(self):
+        rng = random.Random(5)
+        ss = ([_s("self", "a", 1.0 + rng.uniform(-0.2, 0.2)) for _ in range(12)]
+              + [_s("native", "a", 0.6 + rng.uniform(-0.2, 0.2)) for _ in range(12)])
+        n = trial.balanced(ss, "native")
+        self.assertTrue(n["enough"])
+        self.assertNotIn("note", n)
+        lo, hi = n["saving_ci95"]
+        self.assertLess(lo, n["saving_per_task_usd"])
+        self.assertLess(n["saving_per_task_usd"], hi)
+        self.assertLess(lo, 0.4)
+        self.assertGreater(hi, 0.4)
+        self.assertGreater(lo, 0)
+
+
+class TestNoUltracodeInSubRuns(unittest.TestCase):
+    def test_settings_flag_and_effort_env(self):
+        import os
+        from pathlib import Path
+        from ccx.agents.claude import claude_invocation
+        from ccx.delegate import _child_env
+        inv = claude_invocation(model="m", effort="low", perm=[], cwd=Path("."), prompt="ultracode please",
+                                run_dir=Path("."))
+        settings = json.loads(inv.argv[inv.argv.index("--settings") + 1])
+        self.assertEqual(settings, {"ultracode": False, "workflowKeywordTriggerEnabled": False})
+        old = os.environ.get("CLAUDE_CODE_EFFORT_LEVEL")
+        os.environ["CLAUDE_CODE_EFFORT_LEVEL"] = "ultracode"
+        try:
+            self.assertNotIn("CLAUDE_CODE_EFFORT_LEVEL", _child_env("claude", "r1"))
+        finally:
+            if old is None:
+                os.environ.pop("CLAUDE_CODE_EFFORT_LEVEL")
+            else:
+                os.environ["CLAUDE_CODE_EFFORT_LEVEL"] = old
 
 
 if __name__ == "__main__":

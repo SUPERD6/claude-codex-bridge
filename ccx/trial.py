@@ -6,7 +6,13 @@ for its days and makes the halves comparable.
 
 Windows: a self-run is measured from the moment ccx said "do this one yourself" to `ccx ab done`; a delegated run
 from its start to its end plus TAIL_S for the lead reading and checking the result. Both count only the lead
-conversation the task belongs to when it is known."""
+conversation the task belongs to when it is known.
+
+A third half, "native": Claude Code doing the task with its own built-in helpers or a dynamic workflow
+(ultracode). ccx does not see those, so the person tags the conversation afterwards (`ccx trial tag --arm native
+--session ID`), and its whole spend — the conversation plus every helper and workflow agent it started — is read
+from that conversation's own files. The report compares each half with the lead doing it itself only within the
+same kind of work and difficulty, weighted by how many tasks each bucket has."""
 from __future__ import annotations
 
 import json
@@ -15,6 +21,7 @@ import time
 
 from .config import Paths
 
+ARMS = ("self", "delegated", "native")
 TAIL_S = 600              # the lead reads and checks a delegated result in about this long after it returns
 MIN_PER_ARM = 10          # below this, the numbers are shown but not called a result
 
@@ -131,21 +138,66 @@ def samples(p: Paths, t: dict, now: float | None = None) -> list[dict]:
                         "minutes": round((end_ts - TAIL_S - float(r["ts"])) / 60, 1), "ok": bool(ok),
                         "judged": ("soft" if v.get("soft") else "lead") if v else "none",
                         "agent": r.get("caller"), "run_id": r["run_id"]})
+        elif r.get("type") == "trialtag" and r.get("trial") == t["id"]:
+            out.append({k: r.get(k) for k in ("arm", "bucket", "lead_tokens", "lead_usd", "sub_usd", "minutes",
+                                              "agent", "session")}
+                       | {"ok": bool(r.get("ok")), "judged": "none" if r.get("ok") is None else "lead"})
     return out
+
+
+def session_cost(p: Paths, session: str, since: float | None = None, until: float | None = None,
+                 home=None) -> dict:
+    """Everything one Claude conversation spent in a window: its own turns and every built-in helper or
+    workflow agent it started."""
+    from . import learn, usage
+    from .context import turn_tokens
+    evs = [e for e in usage.claude_session_events(session, home)
+           if (since is None or e["ts"] >= since) and (until is None or e["ts"] <= until)]
+    if not evs:
+        raise ValueError(f"no Claude turns found for session {session!r} in that window")
+    c = {"lead_tokens": 0, "lead_usd": 0.0, "sub_tokens": 0, "sub_usd": 0.0, "turns": 0, "helper_turns": 0}
+    helpers, workflows = set(), set()
+    for e in evs:
+        tok = turn_tokens(e["usage"]) + int(e["usage"].get("output_tokens", 0) or 0)
+        usd = learn.price_usd(p, "claude", e.get("model") or "", e["usage"]) or 0.0
+        side = "sub" if e.get("role") == "builtin" else "lead"
+        c[f"{side}_tokens"] += tok
+        c[f"{side}_usd"] += usd
+        c["helper_turns" if side == "sub" else "turns"] += 1
+        if side == "sub":
+            helpers.add(e["session"])
+            if e.get("workflow"):
+                workflows.add(e["workflow"])
+    ts = [e["ts"] for e in evs]
+    return {**c, "lead_usd": round(c["lead_usd"], 6), "sub_usd": round(c["sub_usd"], 6),
+            "helpers": len(helpers), "workflows": len(workflows), "first": min(ts), "last": max(ts),
+            "minutes": round((max(ts) - min(ts)) / 60, 1)}
+
+
+def tag(p: Paths, session: str, arm: str = "native", kind: str | None = None, b: float | None = None,
+        ok: bool | None = None, since: float | None = None, until: float | None = None, note: str = "",
+        home=None) -> dict:
+    """Count one task done outside ccx's own assignment — Claude Code's built-in helpers or a workflow
+    (native), or the lead on its own (self) — into the running trial (the last one when none is running)."""
+    from . import ledger
+    if arm not in ("native", "self"):
+        raise ValueError("--arm must be native or self (delegated runs are counted by ccx itself)")
+    t = active(p) or _last(p)
+    if not t:
+        raise ValueError("no trial yet: `ccx trial start` first")
+    if any(r.get("type") == "trialtag" and r.get("trial") == t["id"] and r.get("session") == session
+           and r.get("since") == since for r in ledger.rows(p)):
+        raise ValueError(f"session {session} is already tagged in {t['id']}")
+    c = session_cost(p, session, since, until, home)
+    row = {"type": "trialtag", "ts": time.time(), "trial": t["id"], "arm": arm, "session": session,
+           "agent": "claude", "kind": kind, "b": b, "bucket": bucket(kind, b), "ok": ok,
+           "since": since, "until": until, "note": note, **c}
+    ledger.append_event(p, row)
+    return row
 
 
 def _mean(xs: list[float]) -> float | None:
     return round(sum(xs) / len(xs), 5) if xs else None
-
-
-def _diff_ci(a: list[float], b: list[float], n: int = 2000, seed: int = 11) -> list[float] | None:
-    """95 % bootstrap interval of mean(a) - mean(b)."""
-    if len(a) < 3 or len(b) < 3:
-        return None
-    rng = random.Random(seed)
-    ds = sorted(sum(rng.choice(a) for _ in a) / len(a) - sum(rng.choice(b) for _ in b) / len(b)
-                for _ in range(n))
-    return [round(ds[int(0.025 * n)], 5), round(ds[int(0.975 * n)], 5)]
 
 
 def summarize(p: Paths, t: dict | None = None) -> dict:
@@ -155,7 +207,7 @@ def summarize(p: Paths, t: dict | None = None) -> dict:
                                        "by the lead itself)"}
     ss = samples(p, t)
     arms = {}
-    for arm in ("self", "delegated"):
+    for arm in ARMS:
         xs = [s for s in ss if s["arm"] == arm]
         total = [s["lead_usd"] + s["sub_usd"] for s in xs]
         judged = [s for s in xs if s["judged"] != "none"]        # unjudged runs don't count as having held up
@@ -166,20 +218,47 @@ def summarize(p: Paths, t: dict | None = None) -> dict:
                      "sub_usd_mean": _mean([s["sub_usd"] for s in xs]),
                      "total_usd_mean": _mean(total), "minutes_mean": _mean([s["minutes"] for s in xs]),
                      "judged_by_lead": sum(s["judged"] == "lead" for s in xs)}
-    sl = [s["lead_usd"] for s in ss if s["arm"] == "self"]
-    dl = [s["lead_usd"] + s["sub_usd"] for s in ss if s["arm"] == "delegated"]
-    enough = min(arms["self"]["n"], arms["delegated"]["n"]) >= MIN_PER_ARM
+    compare = {arm: balanced(ss, arm) for arm in ("delegated", "native")}
+    d = compare["delegated"]
     res = {"trial": {k: t[k] for k in ("id", "start", "end", "rate", "note", "stopped")},
-           "running": active(p) is not None, "arms": arms,
-           "saving_per_task_usd": None, "saving_ci95": None, "enough": enough,
+           "running": active(p) is not None, "arms": arms, "compare": compare,
+           "saving_per_task_usd": d["saving_per_task_usd"], "saving_ci95": d["saving_ci95"], "enough": d["enough"],
            "buckets": sorted({s["bucket"] for s in ss})}
-    if sl and dl:
-        res["saving_per_task_usd"] = round(sum(sl) / len(sl) - sum(dl) / len(dl), 5)
-        res["saving_ci95"] = _diff_ci(sl, dl)
-    if not enough:
-        res["note"] = (f"not a result yet: fewer than {MIN_PER_ARM} tasks in a half "
-                       f"({arms['self']['n']} self, {arms['delegated']['n']} delegated)")
+    if not d["enough"]:
+        res["note"] = d["note"]
     return res
+
+
+def balanced(ss: list[dict], arm: str, base: str = "self", n: int = 2000, seed: int = 11) -> dict:
+    """What `arm` saves per task against the lead doing it itself (base $ minus arm $, so positive = cheaper),
+    compared only within a bucket (kind of work x difficulty) both halves have, weighted by the bucket's task
+    count; 95 % interval by resampling within each bucket."""
+    by: dict[str, tuple[list[float], list[float]]] = {}
+    for s in ss:
+        if s["arm"] in (arm, base):
+            by.setdefault(s["bucket"], ([], []))[0 if s["arm"] == base else 1].append(s["lead_usd"] + s["sub_usd"])
+    matched = {k: v for k, v in by.items() if v[0] and v[1]}
+    nb = sum(len(v[0]) for v in matched.values())
+    na = sum(len(v[1]) for v in matched.values())
+    out = {"arm": arm, "base": base, "buckets": sorted(matched), "n_base": nb, "n_arm": na,
+           "left_out": sum(len(v[0]) + len(v[1]) for k, v in by.items() if k not in matched),
+           "saving_per_task_usd": None, "saving_ci95": None, "enough": min(na, nb) >= MIN_PER_ARM}
+
+    def est(groups):
+        w = sum(len(x) + len(y) for x, y in groups)
+        return sum((len(x) + len(y)) * (sum(x) / len(x) - sum(y) / len(y)) for x, y in groups) / w
+    if matched:
+        groups = list(matched.values())
+        out["saving_per_task_usd"] = round(est(groups), 5)
+        if na >= 3 and nb >= 3:
+            rng = random.Random(seed)
+            ds = sorted(est([([rng.choice(x) for _ in x], [rng.choice(y) for _ in y]) for x, y in groups])
+                        for _ in range(n))
+            out["saving_ci95"] = [round(ds[int(0.025 * n)], 5), round(ds[int(0.975 * n)], 5)]
+    if not out["enough"]:
+        out["note"] = (f"deferred, no conclusion: fewer than {MIN_PER_ARM} tasks in a half within matching "
+                       f"buckets ({nb} {base}, {na} {arm})")
+    return out
 
 
 def _last(p: Paths) -> dict | None:
@@ -193,26 +272,29 @@ def markdown(s: dict) -> str:
     """The table for the README once the week is over."""
     if not s.get("trial"):
         return ""
-    a, d = s["arms"]["self"], s["arms"]["delegated"]
+    arms = [s["arms"][k] for k in ARMS if k in s["arms"]]
     def f(v, kind="usd"):
         if v is None:
             return "–"
         return f"${v:.4f}" if kind == "usd" else (f"{v:,.0f}" if kind == "n" else f"{v:.0%}" if kind == "%" else
                                                    f"{v:.1f}")
-    rows = [("Tasks", a["n"], d["n"], "n"), ("Lead tokens per task", a["lead_tokens_mean"], d["lead_tokens_mean"], "n"),
-            ("Lead spend per task", a["lead_usd_mean"], d["lead_usd_mean"], "usd"),
-            ("Sub-agent spend per task", a["sub_usd_mean"], d["sub_usd_mean"], "usd"),
-            ("Total per task", a["total_usd_mean"], d["total_usd_mean"], "usd"),
-            ("Minutes per task", a["minutes_mean"], d["minutes_mean"], "m"),
-            ("Held up (no rework)", a["ok_rate"], d["ok_rate"], "%")]
+    rows = [("Tasks", "n", "n"), ("Lead tokens per task", "lead_tokens_mean", "n"),
+            ("Lead spend per task", "lead_usd_mean", "usd"), ("Sub-agent spend per task", "sub_usd_mean", "usd"),
+            ("Total per task", "total_usd_mean", "usd"), ("Minutes per task", "minutes_mean", "m"),
+            ("Held up (no rework)", "ok_rate", "%")]
     t = s["trial"]
     head = (f"Trial {t['id']} ({time.strftime('%Y-%m-%d', time.localtime(t['start']))} – "
             f"{time.strftime('%Y-%m-%d', time.localtime(t.get('stopped') or t['end']))}), API-equivalent dollars.")
-    lines = [head, "", "| | Lead did it itself | Delegated with ccx |", "|---|---:|---:|"]
-    lines += [f"| {name} | {f(x, k)} | {f(y, k)} |" for name, x, y, k in rows]
-    if s.get("saving_per_task_usd") is not None:
-        ci = s.get("saving_ci95")
-        lines += ["", f"Saving per task: {f(s['saving_per_task_usd'])}"
+    names = ["Lead did it itself", "Delegated with ccx", "Claude Code's own helpers / workflow"][:len(arms)]
+    lines = [head, "", "| | " + " | ".join(names) + " |", "|---|" + "---:|" * len(arms)]
+    lines += [f"| {name} | " + " | ".join(f(x[key], k) for x in arms) + " |" for name, key, k in rows]
+    for arm, label in (("delegated", "Delegated with ccx"), ("native", "Claude Code's own helpers / workflow")):
+        c = (s.get("compare") or {}).get(arm)
+        if not c or not s["arms"].get(arm, {}).get("n"):
+            continue
+        ci = c.get("saving_ci95")
+        lines += ["", f"{label} vs the lead itself, same kind and difficulty ({c['n_base']} vs {c['n_arm']} tasks): "
+                  + ("saving per task " + f(c["saving_per_task_usd"]) if c["saving_per_task_usd"] is not None else "")
                   + (f" (95 % interval {f(ci[0])} to {f(ci[1])})" if ci else "")
-                  + ("" if s["enough"] else f" — {s.get('note')}")]
+                  + ("" if c["enough"] else f" — {c['note']}")]
     return "\n".join(lines)
