@@ -542,7 +542,7 @@ def publish(p: Paths, report_dir: Path) -> dict:
     for name in ("index.html", "summary.json"):
         shutil.copy2(report_dir / name, dest / name)
     git = lambda *a: subprocess.run(["git", *a], cwd=repo, capture_output=True, text=True,  # noqa: E731
-                                    stdin=subprocess.DEVNULL)
+                                    encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL)
     git("add", "usage/index.html", "usage/summary.json")
     c = git("commit", "-m", f"usage report {time.strftime('%Y-%m-%d %H:%M')}")
     pushed = git("push").returncode == 0 if c.returncode == 0 else False
