@@ -23,7 +23,7 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import learn, ledger, subagents
+from . import agents, learn, ledger, subagents
 from .config import DELEGATE_AGENTS, Paths, load_config, provider_of
 from .runners import BUILDERS, execute, usage_dict
 # split out by job (J11); re-exported so `from ccx.delegate import ...` keeps working
@@ -166,7 +166,7 @@ class _Heartbeat:
 # login down). A provider run must send ONLY the provider's key to the provider's server.
 HOST_AUTH = ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "CLAUDE_CODE_OAUTH_TOKEN",
              "CLAUDE_CODE_OAUTH_SCOPES", "CLAUDE_CODE_SDK_HAS_HOST_AUTH_REFRESH", "CLAUDE_CODE_MESSAGING_TOKEN",
-             "USE_LOCAL_OAUTH", "USE_STAGING_OAUTH")
+             "USE_LOCAL_OAUTH", "USE_STAGING_OAUTH", "OPENAI_API_KEY", "OPENAI_BASE_URL", "CODEX_API_KEY")
 
 
 def _spend_watch(p: Paths, cfg: dict, cli: str, spec: dict, record: dict, since: float,
@@ -285,6 +285,9 @@ def run(req: Request, p: Paths) -> dict:
                          if p.memory_index.exists() else "") + _brief_notes(p, cfg, req.to, brief, req.cwd.resolve()),
         )
     (run_dir / "prompt.md").write_text(first_prompt, encoding="utf-8")
+    if not prev:
+        # the person's own brief: `ccx task resume` restarts from it when the run was killed before its session began
+        (run_dir / "brief.md").write_text(req.brief, encoding="utf-8")
 
     if req.provider:
         req.to = req.provider                  # a provider is its own agent: own rungs, prices and learning
@@ -304,7 +307,7 @@ def run(req: Request, p: Paths) -> dict:
         "first_rung": plan[0]["rung"],
         "continue_depth": (int(prev.get("continue_depth", 0)) + 1) if cont else 0,
         "forked_from_lead": bool(req.fork_lead), "ephemeral": req.ephemeral,
-        "mode_source": req.mode_source, "mode_why": req.mode_why,
+        "mode_source": req.mode_source, "mode_why": req.mode_why, "check_cmd": req.check,
     }
     _write_record(run_dir, record)          # visible to `ccx show` at once (background runs, crashes)
     if req.mode == "write" and (not prev or cont):
@@ -332,6 +335,8 @@ def run(req: Request, p: Paths) -> dict:
         record["to"] = to
         cli, extra = pv_env.get(to, (to, {}))       # a provider agent runs on another agent's CLI
         perm = list(cfg["permissions"][cli][req.mode])
+        perm += [str(x) for x in (provider_of(cfg, to) or {}).get("args") or []]   # e.g. Codex's model provider
+        run_env = agents.get(cli).run_env
         if cli == "claude" and req.check and "--allowed-tools" in perm:
             # the acceptance command itself must be runnable, whatever its spelling (a full python.exe path is not
             # covered by Bash(python:*); found in the F1 live trial, 2026-10-24)
@@ -354,6 +359,12 @@ def run(req: Request, p: Paths) -> dict:
                 perm += ["--disable", "multi_agent", "--disable", "multi_agent_v2"]   # v2 tools stay in 0.164: see mode_text
             elif forking:
                 perm += ["--disallowed-tools", "Agent"]
+        elif cli == "codex" and extra:
+            # through a provider, Codex's own sub-agents would ask for OpenAI's models on the provider's server; and
+            # apps/plugins send every connector's full tool list there: ~210k extra input tokens per request with
+            # DeepSeek (codex-cli 0.164, measured 2026-10-24: 219k with them, 10k without)
+            perm += ["--disable", "multi_agent", "--disable", "multi_agent_v2", "--disable", "apps",
+                     "--disable", "plugins"]
         elif cli == "codex":
             # F10/F13: how many at once and which model stay Codex's own choice; ccx narrows them only when the
             # lead gave a number or quota is tight (config keys from the Codex config reference, read 2026-10-24).
@@ -374,7 +385,8 @@ def run(req: Request, p: Paths) -> dict:
         t0 = time.time()
         hb = _Heartbeat(p, cwd, req.task if req.step else None, cli)
         try:
-            oc, so, se = execute(cli, inv, timeout, _child_env(cli, run_id, extra, provider=bool(extra)),
+            env = {**extra, **(run_env(req.mode) if run_env else {})}
+            oc, so, se = execute(cli, inv, timeout, _child_env(cli, run_id, env, provider=bool(extra)),
                                  on_session=on_session, watch=_spend_watch(p, cfg, cli, spec, record, t0,
                                                                            req.budget_usd, cwd)
                                  if req.allow_subagents else None,

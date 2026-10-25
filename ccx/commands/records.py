@@ -4,9 +4,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from .. import ledger, report
-from ..config import SETTINGS, load_config, paths, set_setting
+from ..config import SETTINGS, daily_cap, load_config, paths, set_setting
 from ..delegate import compact, undo
-from .common import _out, lead_session_id
+from .common import _out, lead_session_id, provider_agents
 
 
 def cmd_report(a) -> int:
@@ -178,10 +178,15 @@ def cmd_agents(a) -> int:
     cfg = load_config(paths())
     rows = [{"agent": ad.name, "vendor": ad.vendor, "support": ad.support, "tested_version": ad.tested_version,
              "installed": bool(find_bin(ad.name)), **ad.capabilities(), "context_file": ad.context_file,
-             "start_hook": ad.start_hook, "session_files": ad.session_files} for ad in agents.all_adapters()]
+             "start_hook": ad.start_hook, "session_files": ad.session_files,
+             **({"daily_usd": daily_cap(cfg, ad.name)} if ad.pay_per_token else {})} for ad in agents.all_adapters()]
+    ready = set(provider_agents(cfg))
     for name, pv in (cfg.get("providers") or {}).items():
         rows.append({"agent": name, "vendor": agents.vendor(name, cfg), "support": "community",
-                     "provider_of": pv.get("agent", "claude"), "can_work": True, "can_lead": False})
+                     "provider_of": pv.get("agent", "claude"), "can_work": True, "can_lead": False,
+                     "pay_per_token": True, "ready": name in ready, "models": pv.get("models") or [],
+                     "needs_env": sorted(str(v)[1:] for v in (pv.get("env") or {}).values() if str(v).startswith("$")),
+                     "daily_usd": pv.get("daily_usd")})
     _out({"agents": rows})
     return 0
 

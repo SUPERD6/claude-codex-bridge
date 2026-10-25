@@ -14,14 +14,14 @@ from .verdicts import _hard_verdict, _soft_verdict
 
 def make_worktree(cwd: Path, run_id: str) -> Path:
     top = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=cwd,
-                         capture_output=True, text=True)
+                         capture_output=True, text=True, encoding="utf-8", errors="replace")
     if top.returncode != 0:
         raise RuntimeError("--worktree needs a git repository")
     root = Path(top.stdout.strip())
     wt = root.parent / f".ccx-worktrees" / root.name / run_id
     wt.parent.mkdir(parents=True, exist_ok=True)
     r = subprocess.run(["git", "worktree", "add", "-b", f"ccx/{run_id}", str(wt)], cwd=root,
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
     if r.returncode != 0:
         raise RuntimeError("git worktree add failed: " + r.stderr.strip())
     return wt
@@ -40,7 +40,8 @@ def run_check(cmd: str, cwd: Path, timeout: int = 900) -> dict:
 
 
 def _git(cwd: Path, *args: str) -> tuple[int, str]:
-    r = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, stdin=subprocess.DEVNULL)
+    r = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                       stdin=subprocess.DEVNULL)
     return r.returncode, r.stdout.strip()
 
 

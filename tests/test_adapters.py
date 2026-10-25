@@ -278,6 +278,30 @@ class TestUndoAskTask(AdapterEnv):
         self.assertEqual(argv[:3], ["exec", "resume", "th-killed"])       # same session, not a fresh one
         self.assertIn("gpt-6-luna", argv)                                    # and the model it started on
 
+    def test_task_resume_restarts_a_run_killed_before_its_session(self):
+        tid = self.checkpoint("init", "--title", "long job", "--step", "part a")
+        # killed after 12 s in a real run: the record is there, but no session id yet and no ledger row
+        d = self.hub / "ccx" / "runs" / "20261024-000000-early"
+        d.mkdir(parents=True)
+        (d / "brief.md").write_text("change x to 2 in a.py", encoding="utf-8")
+        (d / "run.json").write_text(json.dumps({
+            "run_id": "20261024-000000-early", "to": "codex", "caller": "claude", "tier": "rung", "mode": "write",
+            "cwd": str(self.work), "session_id": None, "attempts": [], "state": "running", "ok": False,
+            "task": tid, "step": 1, "first_rung": "codex:gpt-6-luna:low", "check_cmd": "python -c pass",
+            "ts": time.time()}), encoding="utf-8")
+        out = self.j("task", "resume", tid)
+        self.assertEqual(out["restarted"], "20261024-000000-early")
+        call = self.calls()[-1]
+        self.assertNotEqual(call["argv"][:2], ["exec", "resume"])                # a fresh session
+        self.assertIn("gpt-6-luna", call["argv"])
+        self.assertIn("change x to 2 in a.py", call["prompt"])                   # the person's own brief
+        self.assertIn("python -c pass", call["prompt"])                          # and its acceptance command
+
+    def test_run_saves_its_brief(self):
+        out = self.j("run", "--from", "claude", "--to", "codex", "--tier", "T2", "--mode", "read", "look at a.py")
+        self.assertEqual((self.hub / "ccx" / "runs" / out["run_id"] / "brief.md").read_text(encoding="utf-8"),
+                         "look at a.py")
+
     def test_task_resume_same_session(self):
         tid = self.checkpoint("init", "--title", "job", "--step", "x")
         first = self.j("run", "--from", "claude", "--to", "codex", "--tier", "T2", "--no-escalate", "--task", tid,

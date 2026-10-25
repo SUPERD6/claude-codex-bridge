@@ -112,6 +112,15 @@ from_quota = 0.7
 mult = 0.5
 peak_utc = [[1, 4], [6, 10]]
 weekdays_only = true
+# The same API reached through Codex (provider deepseek-codex) and through DeepSeek's own agent (dsh).
+[offpeak.deepseek-codex]
+mult = 0.5
+peak_utc = [[1, 4], [6, 10]]
+weekdays_only = true
+[offpeak.dsh]
+mult = 0.5
+peak_utc = [[1, 4], [6, 10]]
+weekdays_only = true
 
 # How public benchmark rows (scripts/benchmarks.py) name each rung's model: regexes on the name with everything but
 # letters and digits removed (effort suffixes like "_max" / "(High)" are split off first), with a weight — 1 for

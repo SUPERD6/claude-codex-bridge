@@ -58,7 +58,7 @@
 | 按难度、成功率、成本选模型 | 无（手动 `--model`，否则用 Codex 默认） | 有（五问打分 + task-routing，`ccx verify` 校准） |
 | 记 token、花费、额度 | 未见 | `ccx stats` / `ccx report` / `ccx quota` |
 | 主智能体自己的成本 | 无 | `ccx lead`、每轮提示 |
-| Codex → Claude、Gemini CLI、DeepSeek | 无 | 有（Gemini CLI 还没真机跑过） |
+| Codex → Claude、Gemini CLI、DeepSeek | 无 | 有（DeepSeek 经 Claude Code 或 Codex 真跑过；Gemini CLI 和 DeepSeek Harness 还没有） |
 | 共享记忆、技能、MCP | 用 Codex 自己的配置，不同步 | `ccx sync`、`ccx mem` |
 | 安装方式 | Claude Code 插件市场，Node.js | pipx，Python 标准库 |
 

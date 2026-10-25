@@ -63,7 +63,7 @@ end of each section.
 | Model choice by difficulty, odds and cost | none (manual `--model`, else Codex defaults) | yes (five-question score + task-routing, calibrated by `ccx verify`) |
 | Tokens, cost, quota | not seen | `ccx stats` / `ccx report` / `ccx quota` |
 | The lead's own cost | none | `ccx lead`, per-turn hint |
-| Codex → Claude, Gemini CLI, DeepSeek | none | yes (Gemini CLI not yet run for real) |
+| Codex → Claude, Gemini CLI, DeepSeek | none | yes (DeepSeek through Claude Code or Codex run for real; Gemini CLI and DeepSeek Harness not yet) |
 | Shared memory, skills, MCP | uses Codex's own config, no sync | `ccx sync`, `ccx mem` |
 | Install | Claude Code plugin marketplace, Node.js | pipx, Python standard library |
 

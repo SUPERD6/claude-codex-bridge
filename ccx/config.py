@@ -45,8 +45,18 @@ DEFAULT_TIERS = data_dir("config") / "tiers.toml"
 RESULT_SCHEMA = data_dir("config") / "result.schema.json"
 TIER_ORDER = ["T0", "T1", "T2", "T3", "T4"]
 AGENTS = ("codex", "claude")                 # wired for shared memory / skills / MCP / hooks
-DELEGATE_AGENTS = ("codex", "claude", "gemini")   # can run headless sub-tasks (adapters in runners.py)
-PROVIDER_AGENTS = ("deepseek",)   # [providers.<name>] in config: an agent CLI pointed at another model API
+DELEGATE_AGENTS = ("codex", "claude", "gemini", "dsh")   # can run headless sub-tasks (adapters in ccx/agents)
+
+
+def _default_providers() -> tuple[str, ...]:
+    try:
+        with open(DEFAULT_TIERS, "rb") as f:
+            return tuple(tomllib.load(f).get("providers") or ())
+    except (OSError, tomllib.TOMLDecodeError):
+        return ("deepseek",)
+
+
+PROVIDER_AGENTS = _default_providers()   # [providers.<name>] in config: an agent CLI pointed at another model API
 
 def user_config_file() -> Path:
     env = os.environ.get("CCX_CONFIG")
@@ -243,6 +253,14 @@ def set_setting(p: Paths, key: str, raw: str) -> dict:
 def provider_of(cfg: dict, agent: str) -> dict | None:
     """The [providers.<agent>] entry when this agent name is a provider (e.g. deepseek), else None."""
     return (cfg.get("providers") or {}).get(agent)
+
+
+def daily_cap(cfg: dict, agent: str) -> float | None:
+    """USD a pay-per-token agent may spend per day: [providers.<name>] daily_usd, or [pay_per_token.<agent>]
+    daily_usd for an agent billed per token by itself (dsh). None = no cap (subscription agents)."""
+    pv = provider_of(cfg, agent) or ((cfg.get("pay_per_token") or {}).get(agent)) or {}
+    cap = pv.get("daily_usd")
+    return None if cap is None else float(cap)
 
 
 def provider_env(cfg: dict, name: str) -> tuple[str, dict]:

@@ -35,6 +35,7 @@ when = "改名、格式化、补注释/类型、按明确规则批量替换、�
 codex  = { model = "gpt-6-luna",  effort = "low" }
 claude = { model = "haiku",       effort = "low", lean = true }
 gemini = { model = "flash-lite",       effort = "default" }
+dsh    = { model = "deepseek-flash", effort = "low" }
 # lean = true：子任务不加载 MCP 工具定义（--strict-mcp-config），机械活用不到，省输入 token。
 # gemini 用别名 flash-lite / flash / pro：Gemini CLI 自己解析成当前最新的型号，不用在这里写死版本号。
 # Gemini CLI 没有推理强度参数，effort 只做记录。
@@ -45,6 +46,7 @@ when = "单个功能、复现清楚的 bug、补测试、单模块小重构、�
 codex  = { model = "gpt-6.1-sol", effort = "medium" }
 claude = { model = "sonnet",      effort = "medium" }
 gemini = { model = "flash",       effort = "default" }
+dsh    = { model = "deepseek-flash", effort = "high" }
 
 [tiers.T3]
 label = "困难"
@@ -52,6 +54,7 @@ when = "跨多个文件/模块、原因不明的 bug、性能问题、需要先�
 codex  = { model = "gpt-6.1-sol", effort = "high" }
 claude = { model = "opus",        effort = "high" }
 gemini = { model = "pro",       effort = "default" }
+dsh    = { model = "deepseek-flash", effort = "max" }
 
 [tiers.T4]
 label = "关键/研究级"
@@ -59,6 +62,8 @@ when = "架构决策、安全审查、并发/正确性证明、新算法、出�
 codex  = { model = "gpt-6-astra", effort = "xhigh" }
 claude = { model = "opus",        effort = "max" }
 gemini = { model = "pro",       effort = "default" }
+dsh    = { model = "deepseek-v4-pro", effort = "max" }
+# dsh = DeepSeek 官方的 DeepSeek Harness（无头模式），按 token 付真钱；只在 --to dsh 时用，不参与自动选择和换边。
 
 # 权限：read = 只读分析；write = 可以改文件。
 [permissions.codex]
@@ -105,11 +110,69 @@ also = ["claude:sonnet:medium", "codex:gpt-6-luna:high"]
 read  = ["--approval-mode", "plan"]
 write = ["--approval-mode", "auto_edit"]
 
+[permissions.dsh]
+# dsh 0.2.1-rc.3 没有权限参数：ccx 用环境变量 DSH_PERMISSION_MODE（read-only / workspace-write）给，这里不用加参数。
+read  = []
+write = []
+
+[pay_per_token.dsh]
+daily_usd = 1.0   # dsh 用你的 DEEPSEEK_API_KEY 按 token 计费；每天最多花这么多美元
+
 # 模型来源（provider）：同一个 CLI 换一个 API，当作一个单独的智能体（自己的档位、价格和学习）。
 # 用法：ccx run --to deepseek --model deepseek-flash "..."（或 --provider deepseek）；自动选模型时，要所有订阅额度都用到 70% 以上才会考虑它（它花真钱）。
-# 值以 $ 开头的从你的环境变量读取，ccx 不保存任何密钥。
-[providers.deepseek]
+# 值以 $ 开头的从你的环境变量读取，ccx 不保存任何密钥；没设这个变量的 provider 不参与任何选择（ccx agents 里 ready = false）。
+# 每家都有 daily_usd（每天最多花多少美元，到了就不再派给它）。模型没有价格时 ccx 算不出花费，上限就守不住，所以拒绝运行：
+# 价格写在 priors 的 [model_prices]，或这里的 prices."<模型>" = { input = .., cached = .., output = .. }（美元 / 百万 token）。
+# 只有 deepseek 进了自动选择（有标定和价格）；其余几家要 --provider/--to 显式指定，标定之前不参与自动选择。
+# 经 Claude Code 的都加 --bare：只认 ANTHROPIC_API_KEY（x-api-key），不读你的 Claude 登录。
+# 核对日期 2026-10-24，来源见每家注释。
+
+[providers.deepseek]          # api-docs.deepseek.com（Claude Code 接入页）
 agent = "claude"
 models = ["deepseek-flash"]   # deepseek-v4-pro 仍可用 --model 显式指定，但不参与自动选择（评测里比 flash 弱、更贵）
 env = { ANTHROPIC_BASE_URL = "https://api.deepseek.com/anthropic", ANTHROPIC_API_KEY = "$DEEPSEEK_API_KEY" }
-daily_usd = 1.0   # 每天最多花多少真钱（美元）；到了就不再派给它（ccx report 单独一行显示）
+daily_usd = 1.0
+
+[providers.deepseek-codex]    # api-docs.deepseek.com（Codex 接入页）+ Codex 配置参考（model_providers.<id>）
+agent = "codex"
+vendor = "deepseek"
+models = ["deepseek-flash"]
+# Codex 只支持 Responses 接口（wire_api = "responses"）；密钥用 env_key 从环境变量读，不写进 config.toml。
+args = ["-c", 'model_provider="deepseek"', "-c", 'model_providers.deepseek.name="DeepSeek"',
+        "-c", 'model_providers.deepseek.base_url="https://api.deepseek.com/"',
+        "-c", 'model_providers.deepseek.env_key="DEEPSEEK_API_KEY"', "-c", 'model_providers.deepseek.wire_api="responses"']
+env = { DEEPSEEK_API_KEY = "$DEEPSEEK_API_KEY" }
+daily_usd = 1.0
+
+[providers.kimi]              # platform.kimi.ai/docs/guide/claude-code-kimi.md
+agent = "claude"
+models = ["kimi-k3.1-pro"]
+env = { ANTHROPIC_BASE_URL = "https://api.moonshot.ai/anthropic", ANTHROPIC_API_KEY = "$MOONSHOT_API_KEY" }
+daily_usd = 1.0
+# 价格页的表格是网页脚本渲染的，没读到数字：先在这里写上 prices."kimi-k3.1-pro"，否则会拒绝运行（守不住 daily_usd）。
+
+[providers.glm]               # docs.z.ai（Anthropic Messages 端点；价格页 guides/overview/pricing）
+agent = "claude"
+models = ["glm-5.3-flash"]
+env = { ANTHROPIC_BASE_URL = "https://api.z.ai/api/anthropic", ANTHROPIC_API_KEY = "$ZAI_API_KEY" }
+daily_usd = 1.0
+prices."glm-5.3-flash" = { input = 0.15, cached = 0.03, output = 0.50 }
+prices."glm-5.3" = { input = 1.4, cached = 0.26, output = 4.4 }
+
+[providers.qwen]              # alibabacloud.com/help/en/model-studio/claude-code（按量付费）
+agent = "claude"
+models = ["qwen3.7-plus"]
+# 按量付费的地址带你的工作空间 ID，按地域不同：https://{WorkspaceId}.ap-southeast-1.maas.aliyuncs.com/apps/anthropic 等，
+# 所以从环境变量 DASHSCOPE_ANTHROPIC_BASE_URL 读；密钥要和地域对应。
+env = { ANTHROPIC_BASE_URL = "$DASHSCOPE_ANTHROPIC_BASE_URL", ANTHROPIC_API_KEY = "$DASHSCOPE_API_KEY" }
+daily_usd = 1.0
+# 国际（新加坡）最低档价格；页面没给缓存价，cached 按 input 算（偏高，宁可多算）。
+prices."qwen3.7-plus" = { input = 0.4, cached = 0.4, output = 1.6 }
+prices."qwen3.7-max" = { input = 2.5, cached = 2.5, output = 7.5 }
+
+[providers.openrouter]        # openrouter.ai/docs/guides/guides/claude-code-integration
+agent = "claude"
+vendor = "openrouter"         # 实际厂商看你选的模型；要让“另一家”判断准，可改成那家（如 "moonshot"）
+models = []                   # 没有默认模型：用 --model 指定，并在 prices 里写上它的价格
+env = { ANTHROPIC_BASE_URL = "https://openrouter.ai/api", ANTHROPIC_API_KEY = "$OPENROUTER_API_KEY" }
+daily_usd = 1.0

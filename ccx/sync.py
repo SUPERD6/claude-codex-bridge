@@ -346,7 +346,7 @@ def import_codex_mcp(p: Paths, plan: Plan) -> None:
 
 def _claude_has(name: str) -> bool:
     r = subprocess.run([*bin_argv("claude"), "mcp", "get", name], capture_output=True, text=True,
-                       stdin=subprocess.DEVNULL)
+                       encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL)
     return r.returncode == 0
 
 
@@ -384,7 +384,7 @@ def run_external_sync(p: Paths, plan: Plan) -> None:
     cmd = p.layout["external_sync"]
     def go():
         r = subprocess.run(cmd, shell=True, cwd=str(p.hub), capture_output=True, text=True,
-                           stdin=subprocess.DEVNULL, timeout=300)
+                           encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL, timeout=300)
         if r.returncode != 0:
             raise RuntimeError(f"external sync failed ({r.returncode}): {(r.stderr or r.stdout)[-400:]}")
     plan.do(f"run the hub's own sync for skills/MCP: {cmd}", go)
