@@ -131,6 +131,28 @@ class TestAfterRun(ArchiveEnv):
         self.assertEqual(json.loads(f.read_text(encoding="utf-8"))["global"]["archivedSessionIds"],
                          ["session-persons-own"])                       # only ccx's own id comes and goes
 
+    def test_dsh_desktop_open_queues_until_it_is_closed(self):
+        # the open app writes its in-memory list back on its next change, dropping ccx's id (seen 2026-10-25)
+        import os
+        from ccx import archive
+        from ccx.config import Paths
+        f = self.dsh_workspace()
+        before = f.read_text(encoding="utf-8")
+        os.environ["CCX_DSH_DESKTOP"] = "open"
+        ok, why = archive.dsh_mark("session-a", True)
+        self.assertTrue(ok)
+        self.assertIn("queued", why)
+        archive.dsh_mark("session-b", True)
+        archive.dsh_mark("session-b", False)                       # archived, then resumed: nothing to write
+        self.assertEqual(f.read_text(encoding="utf-8"), before)    # the open app's file is left alone
+        archive.dsh_flush()
+        self.assertEqual(f.read_text(encoding="utf-8"), before)    # still open: still queued
+        os.environ["CCX_DSH_DESKTOP"] = "closed"
+        archive.auto(Paths(self.hub))                              # the next session start, app closed
+        self.assertEqual(json.loads(f.read_text(encoding="utf-8"))["global"]["archivedSessionIds"],
+                         ["session-persons-own", "session-a"])
+        self.assertFalse(f.with_name("workspace.json.ccx-pending.json").exists())
+
     def test_dsh_resume_takes_it_out_of_the_list_first(self):
         from ccx import archive
         f = self.dsh_workspace()

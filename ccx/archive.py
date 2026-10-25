@@ -96,15 +96,75 @@ def _run(argv: list[str]) -> tuple[int, str]:
     return r.returncode, (r.stdout or r.stderr).strip()[-300:]
 
 
+def dsh_desktop_open() -> bool:
+    """Is the DeepSeek Harness desktop app running? (CCX_DSH_DESKTOP=open|closed overrides, for tests.)"""
+    forced = os.environ.get("CCX_DSH_DESKTOP")
+    if forced in ("open", "closed"):
+        return forced == "open"
+    try:
+        if os.name == "nt":
+            r = subprocess.run(["tasklist", "/FI", "IMAGENAME eq DeepSeek Harness.exe", "/NH"], capture_output=True,
+                               text=True, encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL, timeout=20)
+            return "deepseek harness" in r.stdout.lower()
+        r = subprocess.run(["pgrep", "-f", "DeepSeek Harness"], capture_output=True, stdin=subprocess.DEVNULL,
+                           timeout=20)
+        return r.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False                       # can't tell: write it (at worst the app writes its own copy back)
+
+
+def _dsh_files() -> tuple[Path, Path]:
+    from .agents.dsh import dsh_home
+    f = dsh_home() / "storages" / "workspace.json"
+    return f, f.with_name(f.name + ".ccx-pending.json")
+
+
 def dsh_mark(sid: str, archived: bool) -> tuple[bool, str]:
     """DeepSeek Harness has no archive command (0.2.1-rc.3). Its desktop app keeps the archived list in
     <DSH_HOME>/storages/workspace.json, global.archivedSessionIds (what its own archiveSession / unarchiveSession
     change). Add or remove only this one session id: the file is backed up first (workspace.json.ccx-backup) and
-    replaced atomically; nothing else in it is touched. A desktop app open at that moment may write its own copy
-    back later (see docs/DECISIONS.md, 2026-10-25)."""
-    from .agents.dsh import dsh_home
+    replaced atomically; nothing else in it is touched.
+    While the desktop app is open it keeps that list in memory and writes it back on its next change, dropping
+    what ccx wrote (checked 2026-10-25). So then the change is queued next to the file (workspace.json.ccx-pending.json,
+    shared by every hub) and written by the first ccx call that finds the app closed (dsh_flush)."""
+    f, pend = _dsh_files()
+    if not f.exists():
+        return False, "no desktop workspace file (the desktop app was never opened here)"
+    if dsh_desktop_open():
+        try:
+            q = json.loads(pend.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            q = {"add": [], "remove": []}
+        keep, drop = ("add", "remove") if archived else ("remove", "add")
+        q[drop] = [x for x in q.get(drop, []) if x != sid]
+        q[keep] = [*[x for x in q.get(keep, []) if x != sid], sid]
+        try:
+            pend.write_text(json.dumps(q, indent=1), encoding="utf-8")
+        except OSError as e:
+            return False, f"could not queue it in {pend}: {e}"
+        return True, "queued: the desktop app is open; written once it is closed"
+    dsh_flush()                            # anything still queued from when it was open goes in first
+    return _dsh_write({sid} if archived else set(), set() if archived else {sid})
+
+
+def dsh_flush() -> str:
+    """Write what was queued while the desktop app was open, if it is closed now. Returns what happened."""
+    f, pend = _dsh_files()
+    if not pend.exists() or dsh_desktop_open():
+        return ""
+    try:
+        q = json.loads(pend.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        q = {}
+    ok, msg = _dsh_write(set(q.get("add") or []), set(q.get("remove") or []))
+    if ok:
+        pend.unlink(missing_ok=True)
+    return msg
+
+
+def _dsh_write(add: set[str], remove: set[str]) -> tuple[bool, str]:
     from .ledger import replace
-    f = dsh_home() / "storages" / "workspace.json"
+    f, pend = _dsh_files()
     try:
         raw = f.read_text(encoding="utf-8")
         data = json.loads(raw)
@@ -113,9 +173,10 @@ def dsh_mark(sid: str, archived: bool) -> tuple[bool, str]:
     ids = (data.get("global") or {}).get("archivedSessionIds")
     if not isinstance(ids, list):
         return False, "workspace file without global.archivedSessionIds (another dsh version?)"
-    if (sid in ids) == archived:
+    new = [x for x in ids if x not in remove] + sorted(x for x in add if x not in ids and x not in remove)
+    if new == ids:
         return True, "already so"
-    ids[:] = [*ids, sid] if archived else [x for x in ids if x != sid]
+    ids[:] = new
     try:
         f.with_name(f.name + ".ccx-backup").write_text(raw, encoding="utf-8")
         tmp = f.with_name(f.name + f".{os.getpid()}.tmp")
@@ -159,7 +220,7 @@ def archive(p: Paths, run_ids: list[str], apply: bool = False, why: str = "") ->
                 action = f"dsh desktop: add {sid} to archivedSessionIds"
                 if apply:
                     ok, msg = dsh_mark(sid, archived=True)
-                    action += " -> ok" if ok else f" -> skipped: {msg}"
+                    action += (" -> " + ("ok" if msg in ("ok", "already so") else msg)) if ok else f" -> skipped: {msg}"
                     if ok:
                         done.append([agent, sid, "dsh-list"])
                         handled[(agent, sid)] = (run_id, "dsh-list")
@@ -200,7 +261,7 @@ def restore(p: Paths, run_id: str) -> dict:
         elif agent == "dsh":
             ok, msg = dsh_mark(sid, archived=False)
             out.append({"session": sid, "action": "dsh desktop: removed from archivedSessionIds"
-                        if ok else f"dsh desktop: {msg}"})
+                        if ok and msg in ("ok", "already so") else f"dsh desktop: {msg}"})
         elif agent == "claude" and original:
             src = claude_home() / "ccx-archive" / Path(original).parent.name / Path(original).name
             if src.exists():
@@ -214,6 +275,10 @@ def restore(p: Paths, run_id: str) -> dict:
 
 def auto(p: Paths) -> int:
     """Quiet housekeeping at session start: archive finished runs older than sessions.auto_archive_hours."""
+    try:
+        dsh_flush()                        # what was queued while the dsh desktop app was open
+    except Exception:  # noqa: BLE001 — never break session start
+        pass
     hours = float((load_config(p).get("sessions") or {}).get("auto_archive_hours", 2) or 0)
     if hours <= 0 or mode(p) == "off":
         return 0

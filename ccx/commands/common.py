@@ -19,6 +19,15 @@ def _out(obj) -> None:
     print(json.dumps(obj, ensure_ascii=False, indent=2))
 
 
+def hook_text(text: str, as_: str | None) -> str:
+    """What a session hook prints. Codex (0.164) reads hook output that starts with '[' or '{' as JSON, and when it
+    isn't, the hook counts as failed and nothing reaches the conversation (H7: every ccx line starts with '[ccx').
+    A plain first line keeps it text."""
+    if as_ == "codex" and text.lstrip()[:1] in ("[", "{"):
+        return "From ccx (shared memory and delegated work):\n" + text
+    return text
+
+
 def _provider_lead(cli: str, env, cfg: dict | None = None) -> str | None:
     """The [providers] entry this Claude Code / Codex lead is pointed at, so a DeepSeek model behind Claude Code
     counts as DeepSeek. Claude Code: its ANTHROPIC_BASE_URL equals the provider's. Codex: config.toml's top-level

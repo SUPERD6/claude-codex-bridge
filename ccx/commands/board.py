@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .. import board
 from ..config import load_config, paths
-from .common import _caller, _out, lead_session_id
+from .common import _caller, _out, hook_text, lead_session_id
 
 
 def _root(a) -> Path:
@@ -250,7 +250,7 @@ def cmd_turn(a) -> int:
     except Exception:  # noqa: BLE001 — a hook must never break the lead's turn
         text = ""
     if text:
-        print(text)
+        print(hook_text(text, a.as_))
     return 0
 
 
