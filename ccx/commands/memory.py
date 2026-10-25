@@ -203,7 +203,7 @@ def cmd_mem(a) -> int:
                       f"nobody used for {memory.UNUSED_DAYS} days can go at the next `ccx mem compact`"})
     elif a.mem_cmd == "delta":
         if os.environ.get("CCX_ROLE") == "subagent":
-            return 0          # sub-agents get their context from the brief, not memory deltas
+            return 0          # sub-agents get the notes their task is about in the brief (I6), not memory deltas
         from .. import project
         root = project.find_root()
         shown: list[int] = []

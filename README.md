@@ -237,6 +237,7 @@ ccx sum -- python -m pytest -q               # run a command, show the lead only
 ccx fresh [--launch]                         # move a long conversation to a fresh one of the same tool, handoff from its file
 ccx propose --lead claude:opus:high --minutes 30 "…"  # before offering to delegate: estimate, one line to say, recorded (--no ID, --stats)
 ccx trial start | stop | report              # a week-long comparison: half the delegable tasks done by the lead, half delegated
+ccx trial tag --arm native --session ID      # count a conversation that used Claude Code's own helpers / a workflow as a third half
 ccx agents                                   # each agent CLI: vendor, what it can do, tested version, official or community
 ccx way "brief" --risk low|visible|critical  # the risk picks the way: one agent / plan-build-accept / two versions (--yes)
 ccx way --stats                              # per kind of work: who is right the first time, how often rework
