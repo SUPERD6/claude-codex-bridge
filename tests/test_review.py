@@ -107,9 +107,37 @@ class TestReviewRun(Env):
         return [c for c in self.calls() if c["agent"] == "claude" and "[ccx review" in c["prompt"]]
 
     def test_low_risk_matching_claims_not_reviewed(self):
-        out = self.go()
+        out = self.go("--check", "exit 0")
         self.assertNotIn("review", out)
         self.assertEqual(self.reviews(), [])
+
+    def test_weak_evidence_gets_one_cheap_review(self):
+        # H13: no acceptance command, only the sub-agent's own check -> one review by the cheapest other-vendor rung
+        out = self.go()
+        self.assertEqual((out["review"]["verdict"], out["review"]["reason"], out["review"]["by"]),
+                         ("pass", "only the sub-agent's own check", "claude:haiku:low"))
+        self.assertEqual(len(self.reviews()), 1)
+        self.assertNotIn("review", self.go("--review", "off"))           # --review off still means off
+
+    def test_weak_check_is_reviewed(self):
+        reset = lambda: (self.work / "a.py").write_text("x = 1\n", encoding="utf-8")  # noqa: E731
+        for _ in range(3):                                                # the same check passed wrong work 3 times
+            rid = self.go("--check", "exit 0")["run_id"]
+            self.assertEqual(self.ccx("verify", rid, "--ok", "0").returncode, 0)
+            reset()
+        out = self.go("--check", "exit 0")
+        self.assertEqual(out["check"]["weak"], "3/3 passed but judged wrong")
+        self.assertTrue(out["review"]["reason"].startswith("weak check"))
+
+    def test_weak_reviews_are_capped_and_can_be_switched_off(self):
+        from ccx.config import Paths
+        p = Paths(self.hub)
+        rec = {"run_id": "r", "result": {"verification": "ran pytest"}}
+        self.assertEqual(review.weak_reason(p, {"weak": False}, rec), None)
+        self.assertEqual(review.weak_reason(p, {}, {"run_id": "r", "result": {"verification": "not-run"}}), None)
+        self.assertEqual(review.weak_reason(p, {}, {**rec, "check": {"passed": True}}), None)   # a trusted check
+        rc = {"weak_daily": 2}
+        self.assertEqual([review.weak_reason(p, rc, rec) is not None for _ in range(3)], [True, True, False])
 
     def test_issues_fixed_then_pass(self):
         out = self.go("--risk", "visible", review_seq="issues,pass")
