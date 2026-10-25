@@ -9,7 +9,8 @@ H8 — three ways, picked by how costly a wrong result is:
 H9 — from finished runs: per kind of work (code / read / research / write) and per agent, how often a piece was
 right the first time (judged right, no follow-up, no review fix) and how often it needed rework (a follow-up, a
 review fix, or judged wrong). Only judged pieces count. These rates order who builds, and a low first-time rate
-moves a piece one way up (solo -> plan_build)."""
+moves a piece one way up (solo -> plan_build). Each agent's rates are also kept per tier (model:effort), so a cheap
+tier's misses are seen apart from the strong one's; evaluation runs (ledger.is_eval) are left out unless asked."""
 from __future__ import annotations
 
 import json
@@ -94,11 +95,20 @@ def _verdicts(p: Paths) -> dict[str, dict]:
     return v
 
 
-def pieces(p: Paths, days: float = 90) -> list[dict]:
-    """One row per piece of work (a run that is not a follow-up of another): agent, kind, judged, first_right, rework."""
+def _tier(r: dict) -> str:
+    """model:effort of the attempt that finished the piece (its last rung)."""
+    rungs = [a.get("rung") for a in r.get("attempts") or [] if a.get("rung")]
+    return rungs[-1].split(":", 1)[1] if rungs and ":" in rungs[-1] else "?"
+
+
+def pieces(p: Paths, days: float = 90, include_evals: bool = False) -> list[dict]:
+    """One row per piece of work (a run that is not a follow-up of another): agent, tier, kind, judged,
+    first_right, rework. Evaluation runs (ledger.is_eval) only with include_evals."""
+    from .ledger import is_eval
     from .learn import task_kind
     recs = [r for r in _records(p, time.time() - days * 86400)
-            if not r.get("ephemeral") and not str(r.get("label") or "").startswith(INTERNAL)]
+            if not r.get("ephemeral") and not str(r.get("label") or "").startswith(INTERNAL)
+            and (include_evals or not is_eval({"label": r.get("label"), "no_ab": (r.get("route") or {}).get("no_ab")}))]
     by_id = {r["run_id"]: r for r in recs}
     follow: dict[str, int] = {}
     for r in recs:
@@ -123,7 +133,7 @@ def pieces(p: Paths, days: float = 90) -> list[dict]:
         v = next((verdicts[x] for x in reversed(chain) if x in verdicts), None)
         n_follow = follow.get(r["run_id"], 0)
         review_fix = (r.get("review") or {}).get("verdict") == "issues"
-        row = {"run_id": r["run_id"], "agent": r.get("provider") or r.get("to"),
+        row = {"run_id": r["run_id"], "agent": r.get("provider") or r.get("to"), "tier": _tier(r),
                "kind": (r.get("route") or {}).get("kind") or task_kind(r.get("mode")),
                "judged": v is not None, "follow_ups": n_follow}
         if v is not None:
@@ -134,23 +144,40 @@ def pieces(p: Paths, days: float = 90) -> list[dict]:
     return out
 
 
-def track(p: Paths, days: float = 90) -> dict[str, dict[str, dict]]:
-    """kind -> agent -> {judged, first_right, rework, pieces}: rates over judged pieces only."""
+def _new() -> dict:
+    return {"pieces": 0, "judged": 0, "right": 0, "redo": 0}
+
+
+def _add(s: dict, x: dict) -> None:
+    s["pieces"] += 1
+    if x["judged"]:
+        s["judged"] += 1
+        s["right"] += x["first_right"]
+        s["redo"] += x["rework"]
+
+
+def _rates(s: dict) -> dict:
+    n = s["judged"]
+    s["first_right"] = round(s["right"] / n, 3) if n else None
+    s["rework"] = round(s["redo"] / n, 3) if n else None
+    s["enough"] = n >= MIN_JUDGED
+    del s["right"], s["redo"]
+    return s
+
+
+def track(p: Paths, days: float = 90, include_evals: bool = False) -> dict[str, dict[str, dict]]:
+    """kind -> agent -> {judged, first_right, rework, pieces, tiers: {model:effort -> the same}}: rates over judged
+    pieces only. The agent's own rates order who builds; `tiers` shows which of its tiers they come from."""
     out: dict[str, dict[str, dict]] = {}
-    for x in pieces(p, days):
-        s = out.setdefault(x["kind"], {}).setdefault(x["agent"], {"pieces": 0, "judged": 0, "right": 0, "redo": 0})
-        s["pieces"] += 1
-        if x["judged"]:
-            s["judged"] += 1
-            s["right"] += x["first_right"]
-            s["redo"] += x["rework"]
+    for x in pieces(p, days, include_evals):
+        s = out.setdefault(x["kind"], {}).setdefault(x["agent"], {**_new(), "tiers": {}})
+        _add(s, x)
+        _add(s["tiers"].setdefault(x["tier"], _new()), x)
     for agents in out.values():
         for s in agents.values():
-            n = s["judged"]
-            s["first_right"] = round(s["right"] / n, 3) if n else None
-            s["rework"] = round(s["redo"] / n, 3) if n else None
-            s["enough"] = n >= MIN_JUDGED
-            del s["right"], s["redo"]
+            _rates(s)
+            for t in s["tiers"].values():
+                _rates(t)
     return out
 
 

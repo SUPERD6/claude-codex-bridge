@@ -21,7 +21,8 @@ def _candidates(cfg: dict, caller: str, wanted: str | None) -> list[str]:
 def cmd_way(a) -> int:
     p = paths()
     if a.stats:
-        _out({"by_kind": ways.track(p, a.days), "min_judged": ways.MIN_JUDGED,
+        _out({"by_kind": ways.track(p, a.days, include_evals=a.include_evals), "min_judged": ways.MIN_JUDGED,
+              "evals": "included" if a.include_evals else "left out (--include-evals to count them)",
               "note": "rates over judged pieces only; below min_judged a rate does not steer anything"})
         return 0
     brief = " ".join(a.brief).strip()
@@ -60,4 +61,6 @@ def register(sub) -> None:
     w.add_argument("--dry-run", action="store_true", help="which way and who, without running")
     w.add_argument("--stats", action="store_true", help="first-time-right and rework rates per kind and agent (H9)")
     w.add_argument("--days", type=float, default=90)
+    w.add_argument("--include-evals", action="store_true", help="with --stats: also count evaluation runs (label "
+                   "eval-..., --no-ab, ccx's own probes), left out by default")
     w.set_defaults(fn=cmd_way)
