@@ -2,7 +2,7 @@
 
 [English](STATUS.md) · 中文 · 更新于 2026-10-24 · 版本 0.4.0 · 274 个测试
 
-这一页故意只写一页：智能体开局读进来的东西，之后每一轮都要跟着重读。以前的记录、完整的把握程度表、验收检查和完成列表在 [STATUS-archive.zh.md](STATUS-archive.zh.md)；改了什么写在 [CHANGELOG.md](../CHANGELOG.md)。请保持简短：做完一项就在这里写一行，细节放进更新记录。
+这一页故意只写一页：智能体开局读进来的东西，之后每一轮都要跟着重读。以前的记录、完整的把握程度表、验收检查和完成列表在 [STATUS-archive.zh.md](STATUS-archive.zh.md)；改了什么写在 [CHANGELOG.md](../CHANGELOG.md)。请保持简短：做完一项就在这里写一行，细节放进更新记录。这一页只由主会话改；各个 PR 改为加一个 `changes/<PR>.md`。
 
 ## 现在
 
