@@ -67,7 +67,8 @@ def _claude_transcript(sid: str) -> Path | None:
 
 
 def _run(argv: list[str]) -> tuple[int, str]:
-    r = subprocess.run(argv, capture_output=True, text=True, stdin=subprocess.DEVNULL)
+    r = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8", errors="replace",
+                       stdin=subprocess.DEVNULL)
     return r.returncode, (r.stdout or r.stderr).strip()[-300:]
 
 

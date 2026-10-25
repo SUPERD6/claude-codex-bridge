@@ -72,7 +72,8 @@ def find_root(start: Path | None = None) -> Path | None:
     cwd = (start or Path.cwd()).resolve()
     try:
         r = subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], cwd=cwd,
-                           capture_output=True, text=True, stdin=subprocess.DEVNULL, timeout=20)
+                           capture_output=True, text=True, encoding="utf-8", errors="replace",
+                           stdin=subprocess.DEVNULL, timeout=20)
         common = Path(r.stdout.strip()) if r.returncode == 0 else None
     except (OSError, subprocess.TimeoutExpired):
         common = None

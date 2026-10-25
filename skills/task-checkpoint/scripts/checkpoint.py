@@ -46,7 +46,7 @@ STALE_SECONDS = int(os.environ.get("CHECKPOINT_STALE_SECONDS", "600"))
 # ------------------------------------------------------------------ paths
 def _git(*args, cwd: Path) -> tuple[int, str]:
     try:
-        r = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True,
+        r = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, encoding="utf-8", errors="replace",
                            stdin=subprocess.DEVNULL, timeout=60)
         return r.returncode, r.stdout.strip()
     except (OSError, subprocess.TimeoutExpired):

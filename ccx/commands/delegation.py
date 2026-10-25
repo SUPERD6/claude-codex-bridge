@@ -137,7 +137,7 @@ def cmd_send(a) -> int:
                   "next": "send again when the conversation is idle, or add --force to send now"})
             return 2
     r = subprocess.run([*bin_argv("codex"), "queue", "--thread", a.thread, "--message", text],
-                       capture_output=True, text=True, stdin=subprocess.DEVNULL)
+                       capture_output=True, text=True, encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL)
     _out({"ok": r.returncode == 0, "thread": a.thread, "output": (r.stdout or r.stderr).strip()[-800:]})
     return 0 if r.returncode == 0 else 2
 
