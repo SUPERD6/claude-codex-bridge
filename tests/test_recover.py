@@ -11,7 +11,7 @@ from test_stop import StopEnv, wait_for
 
 from ccx import ledger, recover
 from ccx.config import Paths
-from ccx.runners import kill_tree, pid_alive
+from ccx.runners import group_flags, kill_tree, pid_alive
 
 
 class RecoverEnv(StopEnv):
@@ -158,3 +158,41 @@ class TestSweep(RecoverEnv):
         self.assertGreater(rec["attempts"][-1]["usage"]["output_tokens"], 0)
         self.assertFalse(pid_alive(rec["pid"]))
         self.assertEqual(len(self.rows(rec["run_id"])), 1)
+
+
+class TestKilledQueue(RecoverEnv):
+    def kill_q_run(self):
+        """`ccx q run` with one piece, its whole process tree killed mid-run (r2 group 9, 4-I)."""
+        it = json.loads(self.ccx("q", "add", "x", "--brief", "implement x", "--to", "codex", "--minutes", "5").stdout)
+        proc = subprocess.Popen([sys.executable, str(ROOT / "ccx.py"), "q", "run", "--from", "claude"], cwd=self.work,
+                                env={**self.env, "FAKE_STATUS": "hang", "FAKE_HANG_S": "60"},
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **group_flags())
+        runs = self.hub / "ccx" / "runs"
+
+        def started():
+            for d in runs.iterdir() if runs.exists() else []:
+                rec = self.record(d.name)
+                if rec.get("label") == f"q:{it['id']}" and rec.get("session_id") and rec.get("pid"):
+                    return rec
+        rec = wait_for(started)
+        self.assertTrue(rec)
+        time.sleep(2.5)                                   # the fake's session file grows every 2 s
+        kill_tree(proc.pid)                               # Windows: the whole tree (taskkill /T)
+        kill_tree(rec["pid"])                             # POSIX: the sub-agent has a process group of its own
+        proc.wait(30)
+        self.assertTrue(wait_for(lambda: not pid_alive(rec["ccx_pid"]) and not pid_alive(rec["pid"]), 10))
+        return it, rec
+
+    def test_resume_closes_the_killed_run_and_counts_its_spend(self):
+        it, rec = self.kill_q_run()
+        self.assertEqual(self.record(rec["run_id"])["state"], "running")
+        r = self.ccx("q", "resume", "--from", "claude", env={"FAKE_STATUS": "done"})
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        old = self.record(rec["run_id"])
+        self.assertEqual((old["state"], old["attempts"][-1]["kind"]), ("interrupted", "killed"))
+        self.assertEqual(len(self.rows(rec["run_id"])), 1)             # its spend reached the ledger
+        killed = old["attempts"][-1]["ae_usd"]
+        self.assertGreater(killed, 0)
+        item = json.loads(self.ccx("q", "ls").stdout)["items"][0]
+        self.assertEqual(item["status"], "done")
+        self.assertGreaterEqual(item["cost_usd"], killed)               # the queue counts it too
