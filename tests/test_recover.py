@@ -11,7 +11,7 @@ from test_stop import StopEnv, wait_for
 
 from ccx import ledger, recover
 from ccx.config import Paths
-from ccx.runners import kill_tree, pid_alive
+from ccx.runners import group_flags, kill_tree, pid_alive
 
 
 class RecoverEnv(StopEnv):
@@ -166,7 +166,7 @@ class TestKilledQueue(RecoverEnv):
         it = json.loads(self.ccx("q", "add", "x", "--brief", "implement x", "--to", "codex", "--minutes", "5").stdout)
         proc = subprocess.Popen([sys.executable, str(ROOT / "ccx.py"), "q", "run", "--from", "claude"], cwd=self.work,
                                 env={**self.env, "FAKE_STATUS": "hang", "FAKE_HANG_S": "60"},
-                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **group_flags())
         runs = self.hub / "ccx" / "runs"
 
         def started():
@@ -177,7 +177,8 @@ class TestKilledQueue(RecoverEnv):
         rec = wait_for(started)
         self.assertTrue(rec)
         time.sleep(2.5)                                   # the fake's session file grows every 2 s
-        kill_tree(proc.pid)
+        kill_tree(proc.pid)                               # Windows: the whole tree (taskkill /T)
+        kill_tree(rec["pid"])                             # POSIX: the sub-agent has a process group of its own
         proc.wait(30)
         self.assertTrue(wait_for(lambda: not pid_alive(rec["ccx_pid"]) and not pid_alive(rec["pid"]), 10))
         return it, rec
