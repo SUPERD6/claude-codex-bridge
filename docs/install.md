@@ -139,6 +139,9 @@ ccx improve add <skill> "concrete problem" --fix "what to change"   # log real p
 ccx mem add "one sentence" --by claude    # shared memory
 ccx mem delta --as codex                  # the other side's new lines (the hook runs this)
 ccx mem compact                           # fold the journal into the snapshot
+ccx mem search gradle signing             # best notes first (BM25); --all-words: only notes with every word
+ccx mem add "..." --kind pitfall          # preference|constraint|fact|pitfall|event; `ccx mem kinds --list`
+ccx mem compact --by project              # one short block per project in memory/scenes.md
 ccx ctx init | add "…" | show             # project background file
 ccx config set projects.roots "DIR;DIR" ; ccx projects scan   # catalog of your projects (hub, this machine only)
 ccx projects | projects show <name>      # list them / one: path, summary, rules to read first, recent work

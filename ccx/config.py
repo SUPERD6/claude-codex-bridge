@@ -204,6 +204,19 @@ def path_list(raw: str) -> list[str]:
     return [x.strip() for x in raw.replace("\n", ";").split(";") if x.strip()]
 
 
+def _bool(raw: str) -> bool:
+    """`ccx config set` value for an on/off setting."""
+    v = raw.strip().lower()
+    if v in ("true", "on", "yes", "1"):
+        return True
+    if v in ("false", "off", "no", "0"):
+        return False
+    raise ValueError(f"{raw!r} is not true or false")
+
+
+_bool.__name__ = "true/false"
+
+
 SETTINGS = {   # key -> (type, help). Only these can be set with `ccx config set`.
     "defaults.tradeoff": (str, "save | balanced | fast, or a knob 0..1 (0 = cheapest, 1 = fastest)"),
     "defaults.ab_self_rate": (float, "share of routed tasks the lead does itself to measure savings (0 = off)"),
@@ -222,11 +235,19 @@ SETTINGS = {   # key -> (type, help). Only these can be set with `ccx config set
     "report.publish_dir": (str, "local clone of your private usage repo; `ccx report --publish` commits there"),
     "board.github": (str, "owner/repo of a PRIVATE repository of yours: the board's fallback between computers "
                           "(empty = off, no network)"),
+    "intake.github": (str, "owner/repo of a PRIVATE repository of yours whose labelled issues are tasks for "
+                           "`ccx intake pull` (empty = off, no network)"),
+    "intake.label": (str, "the label that makes an issue there a task (default ccx-task)"),
     "board.max_machine_turns": (int, "machine messages in a row in one board thread before a person must speak"),
     "projects.roots": (path_list, "folders `ccx projects scan` looks for your projects in, separated by ';' "
                                   "(the catalog stays in the hub, on this machine)"),
     "autonomy.level": (str, "L0 | L1 | L2: how much the project manager does without asking (default L1; "
                             "per project: `ccx autonomy set`)"),
+    "memory.by_kind": (_bool, "true | false: kinds decide what a session start and a brief carry (preferences and "
+                              "constraints at start, events by search only) and briefs pick notes by BM25 (default "
+                              "false until the H11 trial ends on 2026-11-01)"),
+    "memory.start_scene": (_bool, "true | false: a session start also carries this project's block from "
+                                  "`ccx mem compact --by project` (default false)"),
     "ui.lang": (str, "zh | en: language of `ccx ui` and of the lines ccx writes into conversations (unset: the "
                      "page follows the browser, the lines stay English)"),
 }

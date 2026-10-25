@@ -15,6 +15,7 @@ snapshot stays the single source of "1" and the journal stays short.
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import time
@@ -169,20 +170,87 @@ def stale(p: Paths, days: int = STALE_DAYS) -> list[dict]:
     return [{**e, "checked": va.get(e["seq"])} for e in live_entries(p) if (va.get(e["seq"]) or "") < cutoff]
 
 
-def search(p: Paths, words: list[str]) -> list[dict]:
-    """Notes (journal and snapshot) containing every word, case-insensitive."""
+def search(p: Paths, words: list[str], all_words: bool = False, limit: int | None = None) -> list[dict]:
+    """Notes (journal and snapshot lines), best first by BM25 (L1): a rare word counts more than a common one, and
+    a note needn't contain every word. `all_words`: only notes containing every word (the old filter), still ranked."""
     ws = [w.lower() for w in words if w.strip()]
-    hits = [{"seq": e["seq"], "by": e.get("by"), "topic": e.get("topic"), "text": e["text"]}
-            for e in live_entries(p) if all(w in e["text"].lower() for w in ws)]
+    docs = [({"seq": e["seq"], "by": e.get("by"), "topic": e.get("topic"), "kind": kind_of(e), "text": e["text"]},
+             f"{e.get('topic') or ''} {e['text']}") for e in live_entries(p)]
     if p.memory_index.exists():
         for i, line in enumerate(p.memory_index.read_text(encoding="utf-8").splitlines(), 1):
-            if line.strip() and all(w in line.lower() for w in ws):
-                hits.append({"seq": None, "where": f"{p.memory_index.name}:{i}", "text": line.strip()})
-    return hits
+            if line.strip():
+                docs.append(({"seq": None, "where": f"{p.memory_index.name}:{i}", "text": line.strip()}, line))
+    scores = bm25(query_terms(" ".join(ws)), [d for _h, d in docs])
+    hits = []
+    for n, ((h, d), s) in enumerate(zip(docs, scores)):
+        if ws and not s:
+            continue
+        if all_words and not all(w in d.lower() for w in ws):
+            continue
+        hits.append((-s, h["seq"] is None, -(h["seq"] or 0), n, {**h, "score": round(s, 3)}))
+    return [h for *_k, h in sorted(hits, key=lambda x: x[:4])][:limit]
+
+
+KINDS = {"preference": "偏好", "constraint": "约束", "fact": "事实", "pitfall": "坑", "event": "事件",
+         "other": "其他"}
+START_KINDS = ("preference", "constraint")     # with [memory] by_kind: the only kinds a session start carries
+BRIEF_SKIP = ("event",)                         # ... and the one a brief never carries (searchable only)
+_KIND_ALIASES = {"decision": "constraint", "rule": "constraint", "rules": "constraint", "gotcha": "pitfall",
+                 "pitfalls": "pitfall", "preferences": "preference", "facts": "fact", "events": "event"}
+_KIND_WORDS = [     # first match wins: an old note without a kind is sorted by its words when read (L2)
+    ("pitfall", r"坑|小心|注意|别忘|踩|陷阱|会失败|失败时|会被|报错|不生效|gotcha|pitfall|careful|beware|watch out|breaks|"
+                r"silently|\btrap"),
+    ("constraint", r"必须|只能|不能|不得|禁止|不要|不许|务必|之前不|\bmust\b|\bnever\b|\bonly\b|do not|don't|"
+                   r"not allowed|required|\bshould\b"),
+    ("preference", r"偏好|喜欢|希望|想要|习惯|默认|倾向|讨厌|\bprefers?\b|\b(dis)?likes?\b|\bwants?\b|"
+                   r"rather|default to"),
+    ("event", r"\b20\d\d-\d\d-\d\d\b|今天|昨天|上周|已上线|已发布|已合并|发生|\breleased\b|\bmerged\b|\bshipped\b|"
+              r"\btagged\b|happened|yesterday|today"),
+    ("fact", r"是|在|用|位于|路径|命令|版本|\buses?\b|lives? in|\bruns?\b|\bis\b|\bare\b|\bpath|\bversion|"
+             r"\bbuilds?\b|\bgoe?s? in\b|\.py\b|/"),
+]
+
+
+def parse_kind(s: str) -> str:
+    """'pitfall' or '坑' -> 'pitfall'; anything else is an error."""
+    k = (s or "").strip().lower()
+    k = _KIND_ALIASES.get(k, k)
+    if k in KINDS:
+        return k
+    for en, zh in KINDS.items():
+        if s.strip() == zh:
+            return en
+    raise ValueError(f"unknown kind {s!r}; one of: " + ", ".join(f"{k} ({v})" for k, v in KINDS.items()))
+
+
+def kind_of(e: dict) -> str:
+    """The note's kind: its own `kind`, else its topic when that names a kind, else guessed from its words, else
+    'other'. Computed when read: old journal lines are never rewritten."""
+    for v in (e.get("kind"), e.get("topic")):
+        try:
+            if v:
+                return parse_kind(str(v))
+        except ValueError:
+            pass
+    t = (e.get("text") or "").lower()
+    for k, rx in _KIND_WORDS:
+        if re.search(rx, t):
+            return k
+    return "other"
+
+
+def by_kind_on(p: Paths) -> bool:
+    """[memory] by_kind (default false until the H11 trial ends): kinds decide what a start and a brief carry,
+    and a brief picks notes by BM25 instead of by shared words."""
+    try:
+        from .config import load_config
+        return bool((load_config(p).get("memory") or {}).get("by_kind", False))
+    except Exception:  # noqa: BLE001 — a bad config never changes what a session gets
+        return False
 
 
 def add(p: Paths, text: str, by: str, topic: str = "general", source: str | None = None,
-        supersedes: int | None = None) -> dict:
+        supersedes: int | None = None, kind: str | None = None) -> dict:
     text = " ".join(text.split())
     if not text:
         raise ValueError("empty memory text")
@@ -194,6 +262,8 @@ def add(p: Paths, text: str, by: str, topic: str = "general", source: str | None
         seq = _last_seq(p) + 1
         e = {"seq": seq, "ts": time.strftime("%Y-%m-%dT%H:%M:%S"), "by": by,
              "topic": topic, "text": text}
+        if kind:
+            e["kind"] = parse_kind(kind)
         if source:
             e["source"] = source           # where the fact came from (a file, a command, a page)
         if supersedes:
@@ -234,14 +304,18 @@ def relevant(e: dict, project: str | None) -> bool:
 
 
 def format_delta(new: list[dict], budget: int = DELTA_CHARS, project: str | None = None,
-                 shown: list[int] | None = None) -> str:
+                 shown: list[int] | None = None, kinds: tuple[str, ...] | None = None) -> str:
     """This project's notes first, then newest first, within ~600 tokens; replaced notes say which one they
-    replace. The seqs actually shown are appended to `shown` (usage counts, H6)."""
+    replace. The seqs actually shown are appended to `shown` (usage counts, H6). `kinds`: only notes of these
+    kinds (L2, behind [memory] by_kind); the rest stay for search and briefs."""
     if not new:
         return ""
     gone = {e.get("supersedes") for e in new if e.get("supersedes")}
+    keep = [e for e in new if e["seq"] not in gone and (kinds is None or kind_of(e) in kinds)]
+    if not keep:
+        return ""
     lines, used, left = ["[ccx shared memory: new since your last session]"], 0, 0
-    for e in sorted((e for e in new if e["seq"] not in gone), key=lambda e: (not relevant(e, project), -e["seq"])):
+    for e in sorted(keep, key=lambda e: (not relevant(e, project), -e["seq"])):
         extra = f" (replaces #{e['supersedes']})" if e.get("supersedes") else ""
         src = f" [source: {e['source']}]" if e.get("source") else ""
         line = f"- #{e['seq']} ({e['by']}, {e['topic']}){extra}: {e['text']}{src}"
@@ -270,16 +344,85 @@ def _words(text: str) -> set[str]:
     return out
 
 
+_STOP = frozenset("the and for with this that are was were from not but you all can has have had into its our "
+                  "out any one two who how what when then than them they their there here will would should could "
+                  "also just like more most some such only very use used using".split())
+
+
+def _tokens(text: str) -> list[str]:
+    """`_words` as a list (BM25 counts repeats), trailing dots and dashes off, `a.b-c` also as its parts, and no
+    common English words. Same Latin words of 3+ letters and CJK pairs."""
+    t = (text or "").lower()
+    out = []
+    for w in re.findall(r"[a-z0-9_][a-z0-9_.-]{2,}", t):
+        w = w.rstrip(".-")
+        if len(w) >= 3 and w not in _STOP:
+            out.append(w)
+        parts = [x for x in re.split(r"[.-]", w) if len(x) >= 3 and x not in _STOP]
+        if len(parts) > 1:
+            out.extend(parts)
+    for run in re.findall(r"[一-鿿]{2,}", t):
+        out.extend(run[i:i + 2] for i in range(len(run) - 1))
+    return out
+
+
+def query_terms(text: str) -> list[str]:
+    """A query's distinct terms; a word too short to be a token (`ci`, `坑`) is kept whole, matched as a substring."""
+    out = list(dict.fromkeys(_tokens(text)))
+    for w in (text or "").lower().split():
+        if not _tokens(w) and w not in _STOP and w not in out:
+            out.append(w)
+    return out
+
+
+BM25_K1, BM25_B = 1.5, 0.75
+
+
+def bm25(terms: list[str], docs: list[str]) -> list[float]:
+    """Okapi BM25 of each doc for these terms (L1). A term that isn't one of a doc's tokens but sits inside its text
+    (`snap` in `snapshot`, `坑`) counts half, so a note the old every-word filter found always scores above 0."""
+    if not terms or not docs:
+        return [0.0] * len(docs)
+    toks = [_tokens(d) for d in docs]
+    low = [d.lower() for d in docs]
+    avg = (sum(len(t) for t in toks) / len(toks)) or 1.0
+    tf = []
+    for t, d in zip(toks, low):
+        row = {}
+        for q in terms:
+            n = t.count(q) or (d.count(q) * 0.5)
+            if n:
+                row[q] = n
+        tf.append(row)
+    df = {q: sum(q in row for row in tf) for q in terms}
+    big_n = len(docs)
+    out = []
+    for t, row in zip(toks, tf):
+        norm = BM25_K1 * (1 - BM25_B + BM25_B * max(len(t), 1) / avg)
+        out.append(sum(math.log(1 + (big_n - df[q] + 0.5) / (df[q] + 0.5)) * n * (BM25_K1 + 1) / (n + norm)
+                       for q, n in row.items()))
+    return out
+
+
 def for_brief(p: Paths, brief: str, project: str | None = None, k: int = BRIEF_NOTES,
-              budget: int = BRIEF_CHARS) -> list[dict]:
+              budget: int = BRIEF_CHARS, by_kind: bool | None = None) -> list[dict]:
     """I6: the few notes a task is about (shared words; this project's notes win ties), for a sub-agent's brief
-    (sub-agents don't get the start hook's delta). No shared word, no note: an unrelated note costs tokens and helps nothing."""
-    bw = _words(brief)
+    (sub-agents don't get the start hook's delta). No shared word, no note: an unrelated note costs tokens and helps nothing.
+    With [memory] by_kind (L1/L2): ranked by BM25 instead, and events stay out (they are found by search only)."""
+    if by_kind is None:
+        by_kind = by_kind_on(p)
     scored = []
-    for e in live_entries(p):
-        n = len(bw & _words(f"{e.get('topic') or ''} {e['text']}"))
-        if n:
-            scored.append((n + (1 if relevant(e, project) else 0), e["seq"], e))
+    if by_kind:
+        es = [e for e in live_entries(p) if kind_of(e) not in BRIEF_SKIP]
+        for e, s in zip(es, bm25(query_terms(brief), [f"{e.get('topic') or ''} {e['text']}" for e in es])):
+            if s:
+                scored.append((round(s, 6) + (1e-6 if relevant(e, project) else 0), e["seq"], e))
+    else:
+        bw = _words(brief)
+        for e in live_entries(p):
+            n = len(bw & _words(f"{e.get('topic') or ''} {e['text']}"))
+            if n:
+                scored.append((n + (1 if relevant(e, project) else 0), e["seq"], e))
     out, used = [], 0
     for _n, _s, e in sorted(scored, key=lambda x: (-x[0], -x[1]))[:k]:
         if used + len(e["text"]) > budget:
@@ -451,3 +594,103 @@ def compact(p: Paths) -> dict:
         _journal(p).write_text("", encoding="utf-8")
         return {"folded": len(es), "seq": seq, "snapshot": str(p.memory_index),
                 "snapshot_bytes": len(new.encode("utf-8"))}
+
+
+SCENE_CHARS = 400           # ~100 tokens: one project's scene block
+SCENE_LINE = 90
+SCENES_TITLE = "# 按项目的场景块 / Scene blocks by project（ccx mem compact --by project 生成，勿手改 / generated, do not edit）"
+
+
+def _scenes_file(p: Paths) -> Path:
+    return p.memory / "scenes.md"
+
+
+def project_names(p: Paths) -> list[str]:
+    """Projects a note can belong to: the catalog's (`ccx projects scan`) and the ones notes were used in."""
+    names: list[str] = []
+    try:
+        from . import projects
+        names += [str(x.get("name")) for x in (projects.load(p).get("projects") or []) if x.get("name")]
+    except Exception:  # noqa: BLE001 — no catalog: the used-in projects still count
+        pass
+    try:
+        for line in _meta(p).read_text(encoding="utf-8").splitlines():
+            ev = json.loads(line)
+            if ev.get("ev") == "used" and ev.get("project"):
+                names.append(str(ev["project"]))
+    except (OSError, ValueError):
+        pass
+    return [n for n in dict.fromkeys(names) if n and n != "unknown"]
+
+
+def _snapshot_notes(p: Paths) -> list[str]:
+    if not p.memory_index.exists():
+        return []
+    _h, blocks, _t = _split_notes(p.memory_index.read_text(encoding="utf-8"))
+    return [t for items in blocks.values() for t in items]
+
+
+def scenes(p: Paths, names: list[str] | None = None, budget: int = SCENE_CHARS) -> dict[str, list[str]]:
+    """L3: notes grouped by the project they name (topic, source or text), newest first, each cut to one short
+    line, within `budget` per project. A note naming no project is left to search; nothing is summarised by a model."""
+    names = project_names(p) if names is None else names
+    notes = [e for e in reversed(live_entries(p))]
+    have = {e["text"] for e in notes}
+    notes += [{"seq": None, "text": t} for t in _snapshot_notes(p) if t not in have]
+    out: dict[str, list[str]] = {}
+    for n in sorted(names, key=len, reverse=True):          # `relayline-site` before `relayline`
+        lines, used, left = [], 0, 0
+        for e in notes:
+            if e.get("_scene") or not relevant(e, n):
+                continue
+            e["_scene"] = n
+            t = e["text"] if len(e["text"]) <= SCENE_LINE else e["text"][:SCENE_LINE - 1] + "…"
+            line = (f"#{e['seq']} " if e.get("seq") else "") + t
+            if used + len(line) > budget:
+                left += 1
+                continue
+            lines.append(line)
+            used += len(line)
+        if left:
+            lines.append(f"… {left} more: `ccx mem search {n}`")
+        if lines:
+            out[n] = lines
+    for e in notes:
+        e.pop("_scene", None)
+    return dict(sorted(out.items()))
+
+
+def compact_by_project(p: Paths) -> dict:
+    """`ccx mem compact --by project`: (re)write memory/scenes.md, one short block per project. The journal and the
+    snapshot are left as they are; nothing reads the file at a session start unless [memory] start_scene is on."""
+    ensure(p)
+    sc = scenes(p)
+    body = "\n\n".join(f"## {n}\n" + "\n".join(f"- {x}" for x in lines) for n, lines in sc.items())
+    text = SCENES_TITLE + "\n\n" + body + "\n"
+    with _lock(p):
+        _scenes_file(p).write_text(text, encoding="utf-8")
+    return {"by": "project", "projects": len(sc), "file": str(_scenes_file(p)),
+            "bytes": len(text.encode("utf-8")),
+            "largest_block_bytes": max([len("\n".join(v).encode("utf-8")) for v in sc.values()] or [0])}
+
+
+def scene_block(p: Paths, project: str | None) -> str:
+    """This project's block from memory/scenes.md, or '' (no file, no block)."""
+    f = _scenes_file(p)
+    if not project or not f.exists():
+        return ""
+    cur, lines = None, []
+    for line in f.read_text(encoding="utf-8").splitlines():
+        if line.startswith("## "):
+            cur = line[3:].strip()
+        elif cur == project and line.startswith("- "):
+            lines.append(line)
+    return f"[ccx shared memory: {project}]\n" + "\n".join(lines) if lines else ""
+
+
+def start_scene_on(p: Paths) -> bool:
+    try:
+        from .config import load_config
+        return bool((load_config(p).get("memory") or {}).get("start_scene", False))
+    except Exception:  # noqa: BLE001
+        return False
