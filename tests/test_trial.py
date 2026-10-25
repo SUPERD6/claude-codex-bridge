@@ -161,8 +161,17 @@ class TestNoUltracodeInSubRuns(unittest.TestCase):
         from pathlib import Path
         from ccx.agents.claude import claude_invocation
         from ccx.delegate import _child_env
-        inv = claude_invocation(model="m", effort="low", perm=[], cwd=Path("."), prompt="ultracode please",
-                                run_dir=Path("."))
+        from test_ccx import FAKES
+        old_bin = os.environ.get("CCX_CLAUDE_BIN")
+        os.environ["CCX_CLAUDE_BIN"] = str(FAKES / "fake_claude.py")      # never the real CLI in tests
+        try:
+            inv = claude_invocation(model="m", effort="low", perm=[], cwd=Path("."), prompt="ultracode please",
+                                    run_dir=Path("."))
+        finally:
+            if old_bin is None:
+                os.environ.pop("CCX_CLAUDE_BIN")
+            else:
+                os.environ["CCX_CLAUDE_BIN"] = old_bin
         settings = json.loads(inv.argv[inv.argv.index("--settings") + 1])
         self.assertEqual(settings, {"ultracode": False, "workflowKeywordTriggerEnabled": False})
         old = os.environ.get("CLAUDE_CODE_EFFORT_LEVEL")
