@@ -247,6 +247,7 @@ ccx way "brief" --risk low|visible|critical  # the risk picks the way: one agent
 ccx way --stats [--include-evals]           # per kind of work and tier: who is right the first time, how often rework
 ccx discuss "question" [--dry-run]           # 2-3 vendors talk a costly decision through: propose, find faults, judge
 ccx verify <run_id> --ok 0 --reason wrong     # your verdict (unjudged runs get a probable one after 12 h)
+ccx verify --sample 5                        # spot-check 5 probable verdicts of this week: ok / wrong
 ccx handoff --from-transcript codex --to claude   # the old lead can't write it (quota out): built from its session file
                                                   # (by code; a format the code can't read goes to a routed sub-agent, --no-model to skip)
 ccx undo <run_id> [--apply] [--wrong]   # put back what a write run changed (new files moved aside); --wrong: also judge it wrong
