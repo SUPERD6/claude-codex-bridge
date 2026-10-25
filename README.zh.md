@@ -273,7 +273,7 @@ python -m pytest -q tests        # 或 python -m unittest discover -s tests
 
 | 项目 | 做什么 | 星数 · 最近推送 · 许可证 | 和 ccx 的区别 |
 |---|---|---|---|
-| [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) | OpenAI 官方的 Claude Code 插件（2026-03-30）：让 Codex 审查、接活、把会话转给 Codex、管后台任务 | 3.45 万 · 2026-07 · Apache-2.0 | 只做 Claude → Codex，不选模型、不记花费。ccx 两个方向都做，另有按成本选模型、账本和主智能体成本。两者可以一起用。 |
+| [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) | OpenAI 官方的 Claude Code 插件（2026-03-30）：让 Codex 审查、接活、把会话转给 Codex、管后台任务 | 3.45 万 · 2026-07 · Apache-2.0 | 只做 Claude → Codex，不选模型、不记花费。ccx 两个方向都做，另有按成本选模型、账本和主智能体成本。按设计可以一起用（命令和 hook 各是各的），但还没实测过一起用；装了它时 `ccx doctor` 会提示。 |
 | [PAL MCP](https://github.com/BeehiveInnovations/pal-mcp-server)（`clink`） | MCP 服务器，把多家模型接进一个 CLI；`clink` 能启动另一个 CLI 当子智能体 | 1.18 万 · 2025-12 · Apache-2.0 | PAL 用 API key 接更多模型和工具；ccx 用两个 CLI 的订阅额度，按成功率和成本选，并用实际结果校准。 |
 | [CCB](https://github.com/SeemSeam/claude_codex_bridge)（`SeemSeam/claude_codex_bridge`） | 可见的多智能体终端工作区，支持 16 类 CLI，代理间有消息队列，可随时接管 | 3,595 · 2026-10 · AGPL-3.0 | CCB 重在一起看、一起指挥多个代理；ccx 是无界面的派活工具，重在成本。名字相近，但是不同的项目。 |
 | [sendbird/cc-plugin-codex](https://github.com/sendbird/cc-plugin-codex) | 跑在 Codex 里调 Claude Code 的插件（官方插件的反方向） | 226 · 2026-10 · Apache-2.0 | 只做 Codex → Claude。 |
@@ -295,7 +295,9 @@ ccx 没有的：可见的分屏界面、任务运行中追加指令、多家模�
 
 **它操作的是聊天网页吗？** 不是。两边调用的都是工作模式（`codex exec`、`claude -p`），也就是你在终端里用的那个智能体，不是网页聊天。
 
-**支持哪些工具？** Claude Code 和 Codex CLI 可以当主也可以当子，两个方向都在真机上测过。通过 Claude Code 用 DeepSeek 已在真实任务上校准过，只当子智能体；经 Codex 用 DeepSeek 真跑过（一个小的只读任务）。DeepSeek Harness（`dsh`）和 Gemini CLI 已经适配（社区维护），只当子智能体，还没真跑过。Kimi、GLM、Qwen、OpenRouter 已配置，没真跑过。每家一个适配器（`ccx/agents/`），`ccx agents` 列出各自的能力；加一家的方法见 [CONTRIBUTING.zh.md](CONTRIBUTING.zh.md)。
+**支持哪些工具？** Claude Code 和 Codex CLI 可以当主也可以当子，两个方向都在真机上测过。通过 Claude Code 用 DeepSeek 已在真实任务上校准过，只当子智能体；经 Codex 用 DeepSeek 真跑过（一个小的只读任务）。DeepSeek Harness（`dsh`）和 Gemini CLI 已经适配（社区维护），只当子智能体，还没真跑过。Kimi、GLM、Qwen、OpenRouter 已配置，没真跑过。每家一个适配器（`ccx/agents/`），`ccx agents` 列出各自的能力；加一家的方法见 [CONTRIBUTING.zh.md](CONTRIBUTING.zh.md)（从 `ccx/agents/_template.py` 和 `tests/fakes/fake_template.py` 开始）。
+
+**官方还是社区？** *官方*（Claude Code、Codex CLI）：每次发版都在适配器 `tested_version` 写的版本上真跑只读、可写和续接任务（发版检查）。*社区*（Gemini CLI、`dsh`、新加的适配器）：按命令行的 `--help` 和文档写成，只用模拟程序测过。装的版本主次版本号和 `tested_version` 不一样时，`ccx doctor` 会给 WARN：官方的请先跑发版检查再用，社区的表示在这个版本上没验证过。
 
 **两个模型能直接讨论吗？** 现在能做的是单向的：`ccx ask` 问一次第二意见，`ccx resume` 在同一个子会话里追问，`ccx send` 发消息进正在运行的 Codex 会话。选错代价高的决定可以用 `ccx discuss`：不同厂商的模型最多讨论 3 轮（一家出方案、一家挑错、一家裁判），轮与轮之间只传要点；组长开之前会先问你。
 
