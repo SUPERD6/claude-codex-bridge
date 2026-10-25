@@ -1,6 +1,17 @@
 # Changelog
 
 ## Unreleased
+- `ccx discuss "question"` (proposals H3, H4, I7): 2–3 models from different vendors talk a decision through. Roles
+  by order (`--with A,B[,C]`, default the installed agents, one per vendor): one proposes, one finds faults
+  (`CRITIQUE: objections|agree`, `[must]`/`[note]`), one judges (`RECOMMEND:` plus `[consensus]`, `[disagreement]`,
+  `[reason]`); with two vendors the proposer also judges and the result says so. At most 3 rounds (`--rounds`), and
+  it stops early when the critic agrees; between turns only the points travel (summary ≤500 characters, ≤8 items of
+  ≤300 each), never a whole answer. Every turn is a read-only, ephemeral ccx run with no review and no sub-agents,
+  so it is accounted like any run. The result has recommendation, consensus, disagreements and reasons;
+  `--dry-run` shows who would take part, the most calls and an estimate from each agent's recent read runs;
+  `--show ID`, `--list`. `ccx ui` gets a Discussions page (turns drawn as a conversation, the outcome under it) and
+  a "recent discussions" list on the overview. H4: agent-delegate section 7 tells the lead to propose a discussion
+  for decisions costly to get wrong and to start one only on the person's yes.
 - Shared memory in use (proposals H5, H6, I6). H5: `ccx mem suggest [--from-transcript claude|codex]` gathers
   notes worth keeping from a lead session (what the person asked to be done a certain way, decisions, pitfalls,
   each with its source); `ccx fresh` and `ccx handoff --from-transcript` gather them too; the session start says
