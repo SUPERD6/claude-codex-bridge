@@ -18,6 +18,11 @@ from .base import Adapter
 CODEX_KEEP = (("windows", "sandbox"),)
 
 
+# What CCX_CODEX_ISOLATE=1 turns off besides the user's config.toml (belt and braces: config.toml is not loaded)
+ISOLATE_SETTINGS = ("-c", "features.memories=false", "-c", "memories.use_memories=false",
+                    "-c", "memories.generate_memories=false")
+
+
 def _codex_kept_settings() -> list[str]:
     try:
         cfg = tomllib.loads((codex_home() / "config.toml").read_text(encoding="utf-8"))
@@ -36,8 +41,13 @@ def codex_invocation(*, model: str, effort: str, perm: list[str], cwd: Path, pro
     last = run_dir / "last_message.json"
     common = ["--json", "-m", model, "-c", f'model_reasoning_effort="{effort}"', *perm,
               "--skip-git-repo-check", "--output-schema", str(RESULT_SCHEMA), "-o", str(last)]
-    if lean:
+    isolate = os.environ.get("CCX_CODEX_ISOLATE") == "1"
+    if lean or isolate:
         common += ["--ignore-user-config", *_codex_kept_settings()]
+    if isolate:
+        # opt-in (an evaluation's clean room): no execpolicy .rules files and no Codex memories, whatever the
+        # effort (codex-cli 0.164.0 exec --help: --ignore-rules, -c key=value; also on `exec resume`)
+        common += ["--ignore-rules", *ISOLATE_SETTINGS]
     if resume_id:
         argv = [*bin_argv("codex"), "exec", "resume", resume_id, *common, "-"]
     else:

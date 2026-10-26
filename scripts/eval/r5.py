@@ -17,6 +17,21 @@ Every unit: the repository at the task commit's parent, with today's tests/conft
 commits' tests may predate per-test hubs, #73), a fresh throwaway hub (CCX_HUB, as round 3). The hidden test is the
 commit's own test files, run in a throwaway HOME / CCX_HUB / CODEX_HOME / CLAUDE_CONFIG_DIR.
 
+Clean environment (scripts/eval/preflight.py, after round 5h): `run` first checks the machine and refuses to start
+when anything fails (another eval or pytest running, modified tracked files, no dedicated Codex home for arms that use
+Codex, a work dir with foreign files, a canary lead that sees user-level instructions, ...); `--force-unclean` runs
+anyway and every row records it. Each unit then gets its own clean room: an allow-listed environment, its own TMP,
+git identity, CCX_CONFIG and DSH_HOME, Claude leads and sub-agents without the user's settings, hooks, CLAUDE.md and
+auto-memory and with reads of the real homes denied (`--claude-isolation config-dir`: a fresh CLAUDE_CONFIG_DIR),
+Codex in a dedicated CODEX_HOME with --ignore-user-config / --ignore-rules / memories off; everything it starts runs
+in one Job Object and whatever survives the unit is listed, killed and logged. Every row carries `fingerprint`
+(commit, task-file hash, CLI versions, isolation, concurrency, preflight result), `audit` (what its agents loaded and
+which real paths their tool calls named), `leftovers` and `env_clean`. The CLI versions are checked again after
+every unit; a change, a busy machine or a process that cannot be killed stops the run (unless --force-unclean).
+The work dir defaults to <temp>/<tag>, so two tags never share unit folders.
+
+  python scripts/eval/r5.py run --rounds 1 --tasks waiting-evals --codex-home <eval codex home> --budget 3
+
   python scripts/eval/r5.py run --rounds 1 --tasks waiting-evals --budget 3      # the pilot
   python scripts/eval/r5.py run --rounds 2 --budget 40
   python scripts/eval/r5.py run --rounds 2 --arms ccx,ccx2 --tag r5b --budget 20  # old vs new lead guidance
@@ -29,6 +44,7 @@ from __future__ import annotations
 import argparse
 import io
 import json
+import os
 import random
 import subprocess
 import sys
@@ -43,7 +59,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import r2  # noqa: E402
 import r3  # noqa: E402
 import r4  # noqa: E402
-from common import ROOT, append_jsonl, archive_hub, git, lead_env, read_jsonl  # noqa: E402
+import preflight as PF  # noqa: E402
+from common import ROOT, append_jsonl, archive_hub, ccx_verify, git, read_jsonl  # noqa: E402
 from tasks_r5 import IDS, by_id  # noqa: E402
 
 OUT = ROOT / ".ccx" / "eval" / "r5"
@@ -113,8 +130,14 @@ def make_repo(task: dict, dest: Path) -> None:
 
 
 def iso_env(d: Path) -> dict:
-    env = {k: v for k, v in lead_env().items() if not k.endswith(("_API_KEY", "_AUTH_TOKEN"))
+    env = {k: v for k, v in PF.base_env().items() if not k.endswith(PF.ENV_KEEP_SUFFIX)
            and not k.startswith(("CCX_", "CLAUDE", "CODEX"))}
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PATH"] = str(Path(sys.executable).parent) + os.pathsep + env.get("PATH", "")
+    env.update({"TMP": str(d / "tmp"), "TEMP": str(d / "tmp"), "TMPDIR": str(d / "tmp"), "GIT_CONFIG_NOSYSTEM": "1",
+                "GIT_CONFIG_GLOBAL": str(d / "gitconfig")})
+    (d / "tmp").mkdir(parents=True, exist_ok=True)
+    (d / "gitconfig").write_text("[user]\n\tname = eval\n\temail = eval@example.invalid\n", encoding="utf-8")
     for var, sub in (("CCX_HUB", "hub"), ("CODEX_HOME", "codex-home"), ("CLAUDE_CONFIG_DIR", "claude-home"),
                      ("HOME", "home"), ("USERPROFILE", "home")):
         (d / sub).mkdir(parents=True, exist_ok=True)
@@ -123,7 +146,7 @@ def iso_env(d: Path) -> dict:
     return env
 
 
-def score(repo: Path, task: dict, work: Path) -> dict:
+def score(repo: Path, task: dict, work: Path, job: PF.Job | None = None) -> dict:
     """The commit's own test files (overwriting whatever the agent left in them), in throwaway homes."""
     for t in task["tests"]:
         body = subprocess.run(["git", "show", f"{task['commit']}:{t}"], cwd=ROOT, capture_output=True, check=True).stdout
@@ -132,13 +155,12 @@ def score(repo: Path, task: dict, work: Path) -> dict:
     (repo / "tests" / "conftest.py").write_text(CONFTEST, encoding="utf-8")
     iso = Path(tempfile.mkdtemp(prefix="r5iso-", dir=work))
     try:
-        r = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", *task["tests"]], cwd=repo,
-                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=900,
-                           env=iso_env(iso))
-        tail = (r.stdout.strip().splitlines() or [""])[-1]
-        return {"ok": r.returncode == 0, "pytest": tail[:200]}
-    except subprocess.TimeoutExpired:
-        return {"ok": False, "pytest": "timeout"}
+        out, _err, rc, _left = PF.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", *task["tests"]],
+                                      cwd=repo, env=iso_env(iso), timeout=900, job=job)
+        if rc == -9:
+            return {"ok": False, "pytest": "timeout"}
+        tail = (out.strip().splitlines() or [""])[-1]
+        return {"ok": rc == 0, "pytest": tail[:200]}
     finally:
         r2._rmtree(iso)
 
@@ -168,22 +190,19 @@ def lead_flags_arm(arm: str) -> str:
     return "ccx" if arm in CCX_ARMS else "builtin" if arm in BUILTIN_ARMS else arm
 
 
-def lead_unit(u: dict, a, work: Path, repo: Path, hub: Path) -> dict:
+def lead_unit(u: dict, a, work: Path, repo: Path, hub: Path, iso: PF.Unit | None = None, env: dict | None = None,
+              job: PF.Job | None = None) -> dict:
     task = by_id(u["task"])
-    env = {**lead_env(), "CCX_HUB": str(hub), "CCX_NO_QUOTA_PROBE": "1", "BASH_DEFAULT_TIMEOUT_MS": "900000",
-           "BASH_MAX_TIMEOUT_MS": "1200000"}
+    env = {**(env or PF.base_env()), "CCX_HUB": str(hub), "CCX_NO_QUOTA_PROBE": "1",
+           "BASH_DEFAULT_TIMEOUT_MS": "900000", "BASH_MAX_TIMEOUT_MS": "1200000"}
     is_ccx, is_builtin = u["arm"] in CCX_ARMS, u["arm"] in BUILTIN_ARMS
     how = lead_how(u["arm"], u["label"])
     prompt = LEAD_PROMPT.format(brief=task["brief"], how=how)
     t0 = time.time()
-    try:
-        # ccx2 / builtin2 need the same lead flags as ccx / builtin (a session file; the Agent tool and worker)
-        r = subprocess.run(r3.lead_argv(lead_flags_arm(u["arm"]), a.lead_budget), input=prompt, cwd=repo, capture_output=True,
-                           text=True, encoding="utf-8", errors="replace", env=env, timeout=a.timeout)
-        out, rc = r.stdout, r.returncode
-    except subprocess.TimeoutExpired as e:
-        out = e.stdout.decode("utf-8", "replace") if isinstance(e.stdout, bytes) else (e.stdout or "")
-        rc = -9
+    # ccx2 / builtin2 need the same lead flags as ccx / builtin (a session file; the Agent tool and worker); the
+    # clean-room flags (no user settings, hooks, CLAUDE.md, auto-memory; deny rules) come from preflight
+    argv = r3.lead_argv(lead_flags_arm(u["arm"]), a.lead_budget) + (PF.lead_flags(iso) if iso else [])
+    out, _err, rc, _left = PF.run(argv, input=prompt, cwd=repo, env=env, timeout=a.timeout, job=job)
     wall = round(time.time() - t0, 1)
     key = f"{u['round']}-{u['task']}-{u['arm']}"
     (work / f"{key}.stream.jsonl").write_text(out, encoding="utf-8")
@@ -210,12 +229,14 @@ def lead_unit(u: dict, a, work: Path, repo: Path, hub: Path) -> dict:
     return row
 
 
-def direct_unit(u: dict, a, repo: Path, hub: Path) -> dict:
+def direct_unit(u: dict, a, repo: Path, hub: Path, env: dict | None = None, job: PF.Job | None = None) -> dict:
     task = by_id(u["task"])
     argv = ["run", "--mode", "write", "--new", "--no-ab", "--force", "--label", u["label"], "--minutes", "60",
             *DIRECT, task["brief"]]
     t0 = time.time()
-    res, rc, wall, err = r2.ccx(argv, repo, hub, a.timeout)
+    out, err, rc, _left = PF.run([sys.executable, str(ROOT / "ccx.py"), *argv], cwd=repo,
+                                 env={**(env or PF.base_env()), "CCX_HUB": str(hub)}, timeout=a.timeout, job=job)
+    res, err = r2.S._last_json(out), ("timeout" if rc == -9 else err[-400:])
     cost = r2.hub_cost(hub)
     rec = r2.record(hub, res.get("run_id"))
     return {"rc": rc, "wall_s": round(time.time() - t0, 1), "usd": cost["usd"], "ccx_usd": cost["usd"],
@@ -225,20 +246,44 @@ def direct_unit(u: dict, a, repo: Path, hub: Path) -> dict:
             "stderr": err if rc else ""}
 
 
+def unit_of(u: dict, a, work: Path) -> PF.Unit:
+    key = f"{u['round']}-{u['task']}-{u['arm']}"
+    return PF.Unit(key=key, work=work, repo=work / key, hub=work / f"h-{key}", label=u["label"],
+                   claude=a.claude_isolation, codex_home=Path(a.codex_home).expanduser() if a.codex_home else None,
+                   dsh=a.dsh_home)
+
+
 def run_unit(u: dict, a, work: Path) -> dict:
     task = by_id(u["task"])
-    key = f"{u['round']}-{u['task']}-{u['arm']}"
-    repo, hub = work / key, work / f"h-{key}"
+    iso = unit_of(u, a, work)
+    repo, hub = iso.repo, iso.hub
     r2._rmtree(hub)
     make_repo(task, repo)
     hinfo = r3.make_hub(hub)
-    row = direct_unit(u, a, repo, hub) if u["arm"] == "direct" else lead_unit(u, a, work, repo, hub)
-    row.update(changed(repo))
-    sc = score(repo, task, work)
-    row.update({**u, "ok": sc["ok"], "pytest": sc["pytest"], "hub": hinfo})
-    for rid in row.get("ccx_run_ids") or []:
-        r2.verify(hub, rid, bool(sc["ok"]), sc["pytest"])
-    row["archived_sessions"] = archive_hub(hub)
+    hinfo["memory_empty"] = PF.hub_memory_empty(hub)
+    env = PF.prepare(iso)
+    rep = getattr(a, "preflight", None)
+    before, job, job_pids = PF.snapshot(), PF.Job(), []
+    try:
+        row = direct_unit(u, a, repo, hub, env, job) if u["arm"] == "direct" else \
+            lead_unit(u, a, work, repo, hub, iso, env, job)
+        row.update(changed(repo))
+        sc = score(repo, task, work, job)
+        row.update({**u, "ok": sc["ok"], "pytest": sc["pytest"], "hub": hinfo})
+        for rid in row.get("ccx_run_ids") or []:
+            ccx_verify(rid, bool(sc["ok"]), f"eval-r2 hidden acceptance: {sc['pytest']}", hub=hub, env=env)
+        row["archived_sessions"] = archive_hub(hub, env=env)
+        stream = work / f"{iso.key}.stream.jsonl"
+        row["audit"] = PF.audit(iso, stream.read_text(encoding="utf-8") if stream.exists() else "")
+        job_pids = job.pids()
+    finally:
+        job.close()
+        leftovers = PF.after_unit(iso, before, job_pids)
+    row["leftovers"] = leftovers
+    if rep:
+        row["fingerprint"] = PF.fingerprint(rep, iso, env)
+    row["env_clean"] = bool(row["audit"]["clean"] and not leftovers["unkilled"] and hinfo["memory_empty"]
+                            and (not rep or rep["result"] == "pass"))
     return row
 
 
@@ -261,8 +306,7 @@ def spent(f: Path) -> float:
 
 def cmd_run(a) -> int:
     out = Path(a.out) if a.out else OUT / "results.jsonl"
-    work = Path(a.workdir or (Path(tempfile.gettempdir()) / "r5"))
-    work.mkdir(parents=True, exist_ok=True)
+    work = Path(a.workdir or (Path(tempfile.gettempdir()) / a.tag))
     arms = a.arms.split(",") if a.arms else list(ARMS)
     bad = [x for x in arms if x not in (*ARMS, *OPT_IN_ARMS)]
     if bad:
@@ -278,6 +322,20 @@ def cmd_run(a) -> int:
         for u in todo:
             print(f"[dry] {u['label']}")
         return 0
+    rep = PF.run_checks(PF.options_from(a, arms, work, canary_on=not a.no_canary))
+    for p in rep["problems"]:
+        print(f"[preflight] {p}", flush=True)
+    if not rep["ok"] and not a.force_unclean:
+        print("preflight failed: not starting (fix the above, or --force-unclean to run anyway; it is recorded)",
+              flush=True)
+        return 3
+    work.mkdir(parents=True, exist_ok=True)
+    (work / "preflight.json").write_text(json.dumps(rep, ensure_ascii=False, indent=1), encoding="utf-8")
+    print(f"[preflight] {rep['result']}: commit {rep['commit'][:12]} cli {rep['cli']} codex {rep['codex']['mode']} "
+          f"claude {rep['claude_isolation']} jobs {a.jobs} canary {rep['canary']}", flush=True)
+    a.preflight = rep
+    need_codex = any(x in PF.CODEX_ARMS for x in arms)
+    ours = [PF._norm(work), PF._norm(f"eval-r5:{a.tag}:")]
     lock, stop = threading.Lock(), threading.Event()
 
     def one(u):
@@ -293,6 +351,14 @@ def cmd_run(a) -> int:
         except Exception as e:  # noqa: BLE001 — one broken unit is recorded, the batch goes on
             row = {**u, "ok": False, "error": f"{type(e).__name__}: {e}"[:400], "usd": 0.0, "wall_s": 0}
         row["ts"] = time.time()
+        if "fingerprint" not in row:
+            row["fingerprint"] = {"preflight": rep["result"], "force_unclean": a.force_unclean}
+        between = PF.between_units(rep, need_codex, ours)
+        if between:
+            row["between_units"] = between
+            if not a.force_unclean:
+                print(f"stopping: {'; '.join(between)[:400]}", flush=True)
+                stop.set()
         with lock:
             append_jsonl(out, row)
             print(f"r{u['round']} {u['task']:18} {u['arm']:8} ok={row.get('ok')} ${row.get('usd', 0):.4f} "
@@ -306,10 +372,17 @@ def cmd_run(a) -> int:
         groups.setdefault((u["round"], u["task"]), []).append(u)
     with ThreadPoolExecutor(max_workers=a.jobs) as ex:
         list(ex.map(lambda us: [one(u) for u in us], groups.values()))
+    # the person's own state, by size and count only: the hub ledger must not have grown, no Claude session folder
+    # named after this work dir may be left in the real ~/.claude
+    rep["real_state_after"] = post = PF.real_state(PF.real_paths(), work)
+    (work / "preflight.json").write_text(json.dumps(rep, ensure_ascii=False, indent=1), encoding="utf-8")
+    if post != rep["real_state"]:
+        print(f"[postflight] the person's own state changed: {rep['real_state']} -> {post}", flush=True)
     return 2 if stop.is_set() else 0
 
 
 def summarize(rows: list[dict]) -> dict:
+    unclean = sum(r.get("env_clean") is False for r in rows if "error" not in r)
     rows = [r for r in rows if "error" not in r]
     out = {}
     for arm in (*ARMS, *OPT_IN_ARMS):
@@ -322,7 +395,7 @@ def summarize(rows: list[dict]) -> dict:
                     "cps": round(sum(r.get("usd") or 0 for r in rs) / ok, 4) if ok else None,
                     "lead_only_usd_med": med("lead_only_usd"), "lead_tokens_med": med("lead_tokens"),
                     "lead_requests_med": med("lead_requests"), "wall_med": med("wall_s")}
-    return {"arms": out, "long_style": r4.summarize_long([{**r, "arm": r["arm"]} for r in rows
+    return {"arms": out, "unclean_rows": unclean, "long_style": r4.summarize_long([{**r, "arm": r["arm"]} for r in rows
                                                           if r["arm"] in r4.LONG_ARMS])["paired"]}
 
 
@@ -335,7 +408,8 @@ def cmd_export(a) -> int:
     keep = ("tag", "round", "task", "arm", "ok", "pytest", "rc", "wall_s", "usd", "lead_usd", "lead_only_usd",
             "sub_usd", "by_model_usd", "ccx_usd", "ccx_review_usd", "ccx_agents", "lead_requests", "lead_tokens",
             "lead_output_tokens", "lead_tools", "lead_edits", "agent_calls", "ccx_runs", "ccx_resumes", "rework",
-            "delegated", "context_attached", "files_changed", "diffstat", "model", "status", "verdicts", "error")
+            "delegated", "context_attached", "files_changed", "diffstat", "model", "status", "verdicts", "error",
+            "env_clean", "fingerprint")
     rows = read_jsonl(OUT / "results.jsonl")
     data = {"summary": summarize(rows), "rows": [r3.scrub({k: r[k] for k in keep if k in r}) for r in rows]}
     Path(a.dest).write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
@@ -360,6 +434,8 @@ def parser() -> argparse.ArgumentParser:
     r.add_argument("--workdir", default="")
     r.add_argument("--timeout", type=int, default=2400)
     r.add_argument("--dry-run", action="store_true")
+    r.add_argument("--no-canary", action="store_true", help="skip the one tiny real lead that checks the isolation")
+    PF.add_options(r)
     r.set_defaults(fn=cmd_run)
     s = sub.add_parser("summary")
     s.set_defaults(fn=cmd_summary)

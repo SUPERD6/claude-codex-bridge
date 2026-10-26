@@ -128,20 +128,21 @@ def ccx_rows(label: str, hub: Path | None = None) -> list[dict]:
     return [r for r in ledger.rows(Paths(hub) if hub else paths()) if not r.get("type") and r.get("label") == label]
 
 
-def ccx_verify(run_id: str, ok: bool, note: str, hub: Path | None = None) -> str:
+def ccx_verify(run_id: str, ok: bool, note: str, hub: Path | None = None, env: dict | None = None) -> str:
     args = [sys.executable, str(ROOT / "ccx.py"), "verify", run_id, "--ok", "1" if ok else "0", "--note", note]
     if not ok:
         args += ["--reason", "wrong"]
-    env = {**lead_env(), **({"CCX_HUB": str(hub)} if hub else {})}
+    env = {**(env or lead_env()), **({"CCX_HUB": str(hub)} if hub else {})}
     r = subprocess.run(args, capture_output=True, text=True, encoding="utf-8", errors="replace", env=env)
     return (r.stdout or r.stderr).strip()[-300:]
 
 
-def archive_hub(hub: Path) -> int:
+def archive_hub(hub: Path, env: dict | None = None) -> int:
     """At the end of an eval: archive every sub-agent session a throwaway hub's runs left, final or not. Nothing will
     continue them, and the person's own hub (whose `ccx archive` would) never sees them: without this they stayed in
-    the apps' session lists (seen 2026-10-25). Returns how many sessions were archived."""
-    env = {**lead_env(), "CCX_HUB": str(hub)}
+    the apps' session lists (seen 2026-10-25). Returns how many sessions were archived. `env`: the unit's own
+    environment (scripts/eval/preflight.py), so the sessions are looked for in the homes the unit used."""
+    env = {**(env or lead_env()), "CCX_HUB": str(hub)}
     r = subprocess.run([sys.executable, str(ROOT / "ccx.py"), "archive", "--apply"], capture_output=True, text=True,
                        encoding="utf-8", errors="replace", env=env)
     try:

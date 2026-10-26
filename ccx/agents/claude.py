@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from ..config import RESULT_SCHEMA, claude_home
@@ -21,6 +22,21 @@ def claude_schema() -> dict:
     return s
 
 
+def _extra_settings() -> dict:
+    """Opt-in settings every Claude sub-agent gets on top of ccx's own: CCX_CLAUDE_SETTINGS names a JSON file (or
+    is a JSON object). An evaluation uses it to switch off hooks and auto-memory and to deny reads of the person's
+    real homes; unset (the default) it adds nothing. A file that cannot be read is an error, not a silent no-op:
+    the caller asked for isolation and must not get a run without it."""
+    raw = os.environ.get("CCX_CLAUDE_SETTINGS", "").strip()
+    if not raw:
+        return {}
+    text = raw if raw.startswith("{") else Path(raw).expanduser().read_text(encoding="utf-8")
+    data = json.loads(text)
+    if not isinstance(data, dict):
+        raise ValueError("CCX_CLAUDE_SETTINGS must hold a JSON object")
+    return data
+
+
 def claude_invocation(*, model: str, effort: str, perm: list[str], cwd: Path, prompt: str,
                       run_dir: Path, resume_id: str | None = None, lean: bool = False) -> Invocation:
     schema = json.dumps(claude_schema())
@@ -32,10 +48,16 @@ def claude_invocation(*, model: str, effort: str, perm: list[str], cwd: Path, pr
         argv += ["--strict-mcp-config"]
     if lean and "--disable-slash-commands" not in argv:
         argv += ["--disable-slash-commands"]
+    sources = os.environ.get("CCX_CLAUDE_SETTING_SOURCES", "").strip()
+    if sources and "--setting-sources" not in argv:
+        # opt-in (an evaluation's clean room): which settings layers load, e.g. "project,local" leaves out the
+        # user's ~/.claude/settings.json and its hooks (claude 2.1.309 --help: --setting-sources user,project,local)
+        argv += ["--setting-sources", sources]
     if "--settings" not in argv:
         # ultracode (standing dynamic workflows) is session-scoped, set by the desktop app or --settings; a
         # sub-run must not inherit it or opt in through the keyword in a brief (checked against 2.1.309)
-        argv += ["--settings", json.dumps({"ultracode": False, "workflowKeywordTriggerEnabled": False})]
+        argv += ["--settings", json.dumps({**_extra_settings(), "ultracode": False,
+                                           "workflowKeywordTriggerEnabled": False})]
     if resume_id:
         argv += ["--resume", resume_id]
     return Invocation(argv, prompt, cwd, None)
