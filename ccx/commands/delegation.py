@@ -58,15 +58,17 @@ def _background(argv: list[str], p) -> dict:
 
 def _check_names_real_tests(check: str | None, cwd: Path) -> str | None:
     """Stop before any sub-agent is paid when --check names test files that are not there (pytest exit 4 later).
-    A missing file with exactly one near-identical match (a typo) is swapped for it (with a one-line notice on stderr); otherwise
-    the error lists the test files that do exist, so the lead can fix the check in one retry."""
+    A missing tests/X.py is swapped for the files tests/X_*.py that exist (a guessed short name; listed one by one, not
+    a glob, so it works on Windows), else for its one near-identical match (a typo), with a one-line notice on stderr;
+    otherwise the error lists the test files that do exist, so the lead can fix the check in one retry."""
     miss = missing_test_paths(check or "", cwd)
     if not miss:
         return check
-    if all(len(m["sure"]) == 1 for m in miss):
+    if all(m["prefix"] or len(m["sure"]) == 1 for m in miss):
         for m in miss:
-            check = re.sub(r"(?<![\w./\\-])" + re.escape(m["path"]) + r"(?![\w./\\-])", m["sure"][0], check)
-            print(f"ccx: --check names {m['path']}, which does not exist; using {m['sure'][0]}", file=sys.stderr)
+            use = " ".join(m["prefix"] or m["sure"])
+            check = re.sub(r"(?<![\w./\\-])" + re.escape(m["path"]) + r"(?![\w./\\-])", lambda _: use, check)
+            print(f"ccx: --check names {m['path']}, which does not exist; using {use}", file=sys.stderr)
         return check
     tests = cwd / "tests"
     known = sorted(q.relative_to(cwd).as_posix() for q in tests.rglob("test*.py")) if tests.is_dir() else []

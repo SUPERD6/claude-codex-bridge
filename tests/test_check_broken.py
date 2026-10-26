@@ -47,13 +47,35 @@ class TestCheckHelpers(unittest.TestCase):
         self.assertEqual(out, "python -m pytest -q tests/test_board.py::test_x -x")
         self.assertIn("using tests/test_board.py", err.getvalue())
         self.assertEqual(len(err.getvalue().splitlines()), 1)
-        with self.assertRaises(ValueError) as e:                     # close, but a guessed suffix: stop
-            _check_names_real_tests("python -m pytest -q tests/test_memory.py", d)
+        with self.assertRaises(ValueError) as e:                     # close, but neither a typo nor a prefix: stop
+            _check_names_real_tests("python -m pytest -q tests/test_memry.py", d)
         self.assertIn("Existing test files: tests/test_board.py, tests/test_empty.py", str(e.exception))
         with self.assertRaises(ValueError) as e:
             _check_names_real_tests("python -m pytest -q tests/x.py", d)
         self.assertIn("tests/x.py", str(e.exception))
         self.assertIn("tests/test_memory_rank.py", str(e.exception))
+
+    def test_guessed_short_name_becomes_the_files_it_prefixes(self):
+        # r5g: the lead wrote tests/test_memory.py for tests/test_memory_e7.py (and test_quota.py for test_quota_fast.py)
+        import contextlib, io
+        from ccx.commands.delegation import _check_names_real_tests
+        d = _tree()
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            out = _check_names_real_tests("python -m pytest -q tests/test_memory.py tests/test_board.py -x", d)
+        self.assertEqual(out, "python -m pytest -q tests/test_memory_e7.py tests/test_memory_rank.py "
+                              "tests/test_board.py -x")                      # an explicit list, no glob
+        self.assertEqual(err.getvalue().strip(), "ccx: --check names tests/test_memory.py, which does not exist; "
+                         "using tests/test_memory_e7.py tests/test_memory_rank.py")
+        (d / "tests" / "test_quota_fast.py").write_text("def test_x():\n    pass\n", encoding="utf-8")
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(_check_names_real_tests("pytest tests\\test_quota.py", d), "pytest tests/test_quota_fast.py")
+        with self.assertRaises(ValueError):                           # a node id cannot be split over several files
+            _check_names_real_tests("python -m pytest -q tests/test_memory.py::test_x", d)
+        (d / "tests" / "test_a_dir").mkdir()
+        (d / "tests" / "test_a_dir" / "test_b.py").write_text("X = 1\n", encoding="utf-8")
+        with self.assertRaises(ValueError):                           # only files directly under the named folder
+            _check_names_real_tests("pytest tests/test_a.py", d)
 
     def test_pytest_usage_error_and_no_tests_are_broken_not_failed(self):
         d = _tree()
@@ -108,10 +130,10 @@ class TestCheckCli(Env):
         (self.work / "tests").mkdir()
         (self.work / "tests" / "test_memory_e7.py").write_text("def test_x():\n    pass\n", encoding="utf-8")
         r = self.ccx("run", "--from", "claude", "--tier", "T1", "--mode", "write", "--check",
-                     "python -m pytest -q tests/test_memory.py", "do it")
+                     "python -m pytest -q tests/test_memry.py", "do it")
         self.assertNotEqual(r.returncode, 0)
         out = json.loads(r.stdout)
-        self.assertIn("tests/test_memory.py", out["error"])
+        self.assertIn("tests/test_memry.py", out["error"])
         self.assertIn("tests/test_memory_e7.py", out["error"])
         self.assertEqual(self.calls(), [])                            # no sub-agent was paid
 

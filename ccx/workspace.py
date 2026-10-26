@@ -72,8 +72,10 @@ def missing_test_paths(cmd: str, cwd: Path) -> list[dict]:
             tests = cwd / "tests"
             known = sorted(q.relative_to(cwd).as_posix() for q in tests.rglob("*.py")) if tests.is_dir() else []
         want = path.replace("\\", "/")
+        stem = want.removesuffix(".py") + "_"
+        prefix = [] if "::" in tok else [k for k in known if k.startswith(stem) and "/" not in k[len(stem):]]
         out.append({"path": path, "close": difflib.get_close_matches(want, known, n=3, cutoff=0.5),
-                    "sure": [k for k in known if _typo_of(want, k)]})
+                    "sure": [k for k in known if _typo_of(want, k)], "prefix": prefix})
     return out
 
 
