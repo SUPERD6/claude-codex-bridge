@@ -86,8 +86,8 @@ def _sessions(p: Paths, run_id: str) -> list[tuple[str, str]]:
 
 
 def _claude_transcript(sid: str) -> Path | None:
-    hits = list((claude_home() / "projects").glob(f"*/{sid}.jsonl"))
-    return hits[0] if hits else None
+    from .transcript import claude_session_file
+    return claude_session_file(sid, claude_home())
 
 
 def _run(argv: list[str]) -> tuple[int, str]:

@@ -72,8 +72,9 @@ def claude_children(session: str, cwd: Path, home: Path | None = None) -> list[d
     """Usage of a Claude session's own sub-agents so far, from <projects>/<cwd slug>/<session>/subagents/."""
     from .config import claude_home
     from .runners import usage_dict
-    slug = re.sub(r"[^A-Za-z0-9]", "-", str(Path(cwd).resolve()))
-    d = (home or claude_home()) / "projects" / slug / session / "subagents"
+    from .transcript import claude_project_dirs
+    d = next((x / session / "subagents" for x in claude_project_dirs(Path(cwd), home or claude_home())
+              if (x / session / "subagents").exists()), Path(cwd) / session / "subagents")
     out, seen = [], set()
     for f in sorted(d.glob("agent-*.jsonl")) if d.exists() else []:
         try:

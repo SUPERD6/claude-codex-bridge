@@ -87,8 +87,8 @@ def lead_now(agent: str, session: str | None, home: Path | None = None) -> int |
     if not session:
         return None
     if agent == "claude":
-        from .config import claude_home
-        for f in ((home or claude_home()) / "projects").glob(f"*/{session}.jsonl"):
+        from .transcript import claude_session_file
+        for f in filter(None, [claude_session_file(session, home)]):
             got = _last_turn_claude(f)
             if got:
                 return turn_tokens(got[0])
