@@ -33,7 +33,8 @@ from .agents.codex import _add_children, _codex_growth, _codex_seen, _codex_tota
 from .ledger import write_record as _write_record  # noqa: F401
 from .plan import _fallback_plan, _plan, _provider_envs, _rung_spec, _usable, _within_budget, other  # noqa: F401
 from .prompts import (CONTINUE, ESCALATE, FOLLOWUP, NEEDS_WRITE, POLICY_MARKERS, POLICY_RETRY, PROMPT,  # noqa: F401
-                      REVIEW_FAILED, SELFCHECK, SELFCHECK_CMD, _policy_rejections)
+                      REVIEW_CALLER, REVIEW_FAILED, REVIEW_FINISH, REVIEW_PERMISSION, SELFCHECK, SELFCHECK_CMD,
+                      _policy_rejections)
 from .review import review_run as _review  # noqa: F401
 from .verdicts import (REASONS, SOFT_AFTER_H, _hard_verdict, _soft_verdict, soft_verdicts, verify,  # noqa: F401
                        verify_builtin)
@@ -417,11 +418,15 @@ def run(req: Request, p: Paths) -> dict:
                  "modify files. If finishing really needs edits, do not make them: stop "
                  f"with status blocked and start the summary with {NEEDS_WRITE}: what you would change and why"
                  if req.mode == "read" else "you may edit files in the workspace; keep changes minimal and on-task")
+    reviewer = req.caller == REVIEW_CALLER and req.mode == "read"   # ccx's reviewer: reads, runs no tests
+    if reviewer:
+        mode_text = REVIEW_PERMISSION
     if not req.allow_subagents:
         # codex-cli 0.164 offers its multi_agent v2 tools (spawn_agent ...) even with both features disabled and
         # --ignore-user-config (checked 2026-10-24), so the rule has to be said; the spend watchdog stays as backstop
         mode_text += "; do not start sub-agents of your own (no spawn_agent / Agent tool)"
-    selfcheck = SELFCHECK_CMD.format(check=req.check) if req.check else SELFCHECK
+    selfcheck = (REVIEW_FINISH if reviewer
+                 else SELFCHECK_CMD.format(check=req.check) if req.check else SELFCHECK)
     brief = req.brief.strip()
     if req.allow_subagents and (req.parallel or (req.parallel is None and subagents.has_parts(brief))):
         brief += "\n\n" + subagents.PARALLEL          # F14: the explicit request Codex's own instructions wait for

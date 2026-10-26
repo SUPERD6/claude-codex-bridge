@@ -40,6 +40,20 @@ SELFCHECK_CMD = ("The acceptance check is `{check}`; ccx runs it again afterward
                  "anything you are unsure of, or that the lead must decide, in open_questions.")
 
 
+# ccx's independent reviewer (review.py, caller "ccx-review", read mode) runs no tests: the builder's "run the
+# tests" Finish text contradicted its brief. Reading stays allowed through the shell, because a Codex reviewer reads
+# files only that way ("read-only" alone made gpt-6-luna/low say it had no tool to read files, E8 2026-10-24).
+# Measured on claude haiku only (scripts/eval/review_replay.py); a Codex reviewer with this text is not measured.
+REVIEW_CALLER = "ccx-review"
+REVIEW_PERMISSION = ("read-only review: read and search files with your file tools or shell read commands (your "
+                     "shell tool works: cat / Get-Content, rg, git diff, git log are fine), but run no tests or builds "
+                     "and modify nothing")
+REVIEW_FINISH = ("Do not run tests or builds: the Checks section above says what ccx ran, if anything. Judge from "
+                 "the task, the diff and the code; when you need more, open all the files you need at once "
+                 "(several reads in one turn), not one per turn. Leave commands_run empty and set verification to "
+                 "'not-run'.")
+
+
 FOLLOWUP = """[ccx follow-up {run_id}] Same task, continue in this session.
 {brief}
 Rules still apply; """ + KEEP_TESTS + """
