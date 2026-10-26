@@ -5,6 +5,72 @@
   a review's fix round included) instead of starting the piece over, and tells the sub-agent it was stopped. A piece
   whose run had finished before `q run` was killed is marked done without running again (`restored: finished`).
   Before, the item only learned its run id when the run returned, which a killed `q run` never reached (r2 4-I).
+- `ccx autonomy` (K4): how much the project manager does without asking. L0 only proposes (`ccx run --project`
+  answers with a `plan`: agent, model, mode, `expected_usd`), L1 (the default) dispatches read-only runs and stops
+  before a run that may edit files, L2 dispatches both and merges a small `--worktree` branch whose check passed and
+  whose review said pass into the project's working branch, only where the person allowed it for that project
+  (`ccx autonomy set L2 --project NAME --auto-merge on`) and never into `main` or another protected branch.
+  `ccx run --approved` passes an L0/L1 stop after the person said yes; `--autonomy L?` sets one run's level; a
+  project's own `.ccx/autonomy.toml` can only lower it. `[autonomy]` in `config/tiers.toml`, `autonomy.level` in
+  `ccx config set`; the project-manager skill's section 6 follows the level.
+- `ccx intake list|pull|ask|done`: tasks from outside. Issues you open with the label `ccx-task` in a PRIVATE
+  repository of yours (`ccx config set intake.github owner/repo`) become tasks for the local lead; it asks for an
+  approval and reports (result, PR/branch, cost, what was not verified) as comments on the same issue. Only issues
+  and comments by the account `gh` is signed in as count (others are skipped and logged once), a public repository
+  is refused, a pulled issue is never handed out twice (`<hub>/ccx/intake.json`), and nothing runs on a timer.
+  `ccx.intake.pending(p)` gives the open count for other tools. Docs: `docs/intake.md`, with how to reach the lead
+  from a phone by Remote Control (checked against Claude Code 2.1.309) and the feasibility of GitHub Projects and a
+  self-hosted runner (not implemented).
+- The board's private-GitHub helpers moved to `ccx/ghpriv.py`, shared by the board and the intake.
+- `ccx ui` is the manager's board (K6): every project in the `ccx projects` catalog (its work queue even without a
+  recent run here, its approval lines quoted, quiet projects in one line), and this month's sub-agent spend and saving
+  from `ccx report`'s rule, labelled as a relative estimate. Buttons that change something (stop, verify, one more
+  round / retry / continue, a raised cap, let it edit, `q done` / `q budget` / `q resume`) run their ccx command from
+  the page: the page names the button, the server answers the exact command with a one-time nonce, and the second
+  click runs it once (same origin, token, JSON only; a fixed command list as an argument list, no shell, no window;
+  logged in `<hub>/ccx/ui-actions.jsonl`). Optional slots show K4's autonomy level and K5's inbox when those exist.
+- Fix: the page's "continue the queue" command was `ccx q resume --cwd DIR`, which argparse rejects; it is now
+  `ccx q --cwd DIR resume`. The page gets a phone layout below 720px.
+- Shared memory (proposal L, L1–L3). `ccx mem search` ranks notes by BM25 (rare words count more, not every word
+  is needed; `--all-words` keeps the old filter, `--limit N`, default 10). Five fixed kinds — preference,
+  constraint, fact, pitfall, event, plus other: `ccx mem add --kind`, older notes guessed from topic and words when
+  read (`ccx mem kinds --list`). `ccx mem compact --by project` writes one short block per project to
+  `memory/scenes.md`. New `[memory]` settings, both off until the H11 trial ends on 2026-11-01: `by_kind` (a start
+  carries new preferences and constraints only, briefs pick by BM25 without events) and `start_scene` (a start adds
+  this project's block); `ccx config set memory.by_kind true`. On a fixed 40-note, 10-query set
+  (`tests/memory_bench.py`), relevant notes in the first 3: search 7 → 11 of 13, briefs 11 → 12.
+- Session hooks have a time limit (L4): `ccx mem delta`, `ccx turn` and `ccx lead --hint` run in a worker thread
+  and, past `[hooks] timeout_s` (default 2 s, `ccx config set hooks.timeout_s N`, 0 = off), print nothing and exit 0
+  instead of holding up the session start or the turn. Each one is logged in `<hub>/ccx/hook-timeouts.jsonl`
+  (command, seconds, the step it was in); `ccx doctor` shows the count of the last 7 days.
+- `ccx skills stats [--days N] [--json]` (L7): how often each shared skill was loaded in Claude Code (Skill tool,
+  /name) and Codex (reading its SKILL.md) and when last, from the tools' session files; the ones never loaded and the
+  estimated tokens their descriptions take each turn (from characters). Read only, deletes nothing.
+- `ccx setup` has an optional step for a new hub (L6): on a terminal it offers once to read the last 7 days of
+  Claude Code / Codex sessions with `ccx mem suggest`'s rules (no model) and asks about each preference or pitfall;
+  only a yes writes a note (`ccx mem accept`'s path), the rest wait in `ccx mem suggestions`.
+- Suggested notes leave out more one-off text (for L6, which reads several sessions at once): a sentence naming a
+  PR / issue / commit / proposal id, one that opens with a work verb ("修…", "fix …"), a question or a choice still
+  open ("要不要…", "等你决定"), the lead's "right now / 今天" status lines, and the person's half-sentences that open
+  with a connective ("然后…", "就是…") or are under 10 characters. Agreement with blind labels: the earlier held-out
+  set 13/30 -> 22/30 (good notes kept 5/7 both times; its misses were seen while writing the rules, so it is no
+  longer held out), the set the rules were tuned on 21/30 -> 23/30, and 8 suggestions waiting on a real hub 3/8 -> 8/8.
+- Warm lanes, off by default: `ccx batch --lanes N` and `ccx q run --lanes N` (`[lanes] default = 0`) cut pieces for
+  the same project, agent and read/write mode into at most N lanes; a lane's first piece starts a sub-session and each
+  later one continues it as a new task, while lanes run side by side. Each piece stays its own ccx run (own `--check`,
+  ledger row, undo snapshot; one commit per piece in a worktree). A piece that does not finish cleanly, a piece that
+  used more than `[lanes] max_tokens` (200k), or `max_blocks` (5) pieces hand the next piece a fresh session.
+  Measured on round 2's ten small modules (`scripts/eval/warm_lanes.py`, n = 2, Codex luna low): ~40% cheaper than
+  one fresh run per piece but not fewer tokens and slower; one run doing all ten is cheaper still
+  (docs/research/2026-10-25-warm-lanes.md).
+- Round 3 eval (`scripts/eval/r3.py`, `tasks_r3.py`; report `docs/research/2026-10-25-r3.md`): a sonnet lead doing it
+  itself vs handing it to Claude Code's built-in Agent sub-agent (haiku) vs `ccx run --tradeoff save --review on
+  --context auto`, on 10 multi-file tasks with one requirement to infer. All 60 units right (ceiling); cost per
+  success $0.045 / $0.069 / $0.071; ccx vs built-in: same total spend, 25% fewer lead tokens, 26 s slower.
+- L8 evidence: finding/reading files is a median 1.9% of a sub-agent's tokens (max 5.3%), so L8 is not built.
+- L5 fixed memory test (`scripts/eval/l5_memory.py`): one side writes a note, the other side's new session uses it;
+  memory on 15/24 vs off 2/24 (McNemar p = 0.0002); one note never picked by `memory.for_brief` (trailing punctuation,
+  stop words).
 
 ## 0.5.0 — 2026-10-25 (save, check, split, share, control: cheaper defaults, review that checks the task, project catalog, shared work context, the board, stop and archive)
 - Highlights: everything since 0.4.0 (PRs up to #104), grouped by theme below; 523 tests. Measured on real CLIs:
