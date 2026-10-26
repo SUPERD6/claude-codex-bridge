@@ -29,6 +29,7 @@ say, each from a raw record:
 | Warm lanes (`--lanes`, off) | vs 10 parallel runs ~40 % cheaper but 2–3× slower; vs one run doing all 10 pieces 4–5× dearer: fewer runs is what saves | [warm lanes](research/2026-10-25-warm-lanes.md) |
 | Cheap models on the raw request (round 4) | no lead, 15 tasks × 2: deepseek-flash 30/30, haiku 30/30, luna 26/30, sonnet 30/30 at ~10× the spend; review rescued luna's 4 failures (4 : 0, p = 0.125) | [round 4](research/2026-10-26-r4.md) |
 | Long lead session (round 4) | ~110k tokens of history, 5 tasks: all 5/5; cost per success self $0.567, ccx $0.595, built-in $0.613; the lead makes 4–7 requests either way, each re-reading the history, so delegating small tasks does not save | same |
+| Large tasks, real changes (round 5) | 10 tasks × 2: self 19/20 $0.211 per success, built-in 19/20 $0.155, ccx 17/20 $0.248, a cheap model alone 16/20 $0.054; ccx −176k lead tokens vs self (p = 0.002) but the same total, built-in $0.044 cheaper than ccx (p = 0.021); ccx's review raised issues in 10 units without raising correctness | [round 5](research/2026-10-26-r5.md) |
 | Memory search (L1 BM25) / suggested notes | relevant in top 3: 7 → 11 of 13; suggestion rules 13/30 → 22/30 (no longer held out), real hub 3/8 → 8/8 | #112, #113 |
 
 So the default shape is **one cheap model plus another vendor's cheap review**; split or parallel only when speed
@@ -45,8 +46,9 @@ sub-agent tokens); brief word splitting fixed and a `recap` line at the end of `
 2. **After the trial (2026-11-01)**: read the H11 results; decide on `memory.by_kind` / `memory.start_scene`, cheap
    rung first for clear small tasks, review on for writes, a one-line result for the lead; J0 re-measure (no
    real runs 11/1–11/7).
-3. **Larger tasks** (round 5): rounds 3–4 hit the ceiling even on the raw request, and a long lead session did not
-   save on small tasks; test edit-run-debug tasks that take the lead many requests. K7 waits for the desktop-pet project.
+3. **After round 5**: re-run the ccx and direct arms with #123/#124 (~$5); after the trial, the review raises `[must]`
+   only for the spec's stated requirements, and agent-delegate teaches `--bg` for large tasks. K7 waits for the
+   desktop-pet project.
 
 ## How sure we are (short)
 
