@@ -147,6 +147,9 @@ class TestDelegation(Env):
         c = self.calls()[-1]
         self.assertIn("sonnet", c["argv"])
         self.assertIn("--json-schema", c["argv"])
+        schema = json.loads(c["argv"][c["argv"].index("--json-schema") + 1])
+        self.assertEqual(schema["required"], ["status", "summary"])     # a missing optional key is not re-sent
+        self.assertIn("open_questions", schema["properties"])
         self.assertIn("dontAsk", c["argv"])          # "check the parser": inferred read-only
         self.assertIn("stream-json", c["argv"])      # session id arrives early
         self.assertIn("--verbose", c["argv"])
@@ -268,6 +271,17 @@ class TestDelegation(Env):
         c = self.calls()[-1]
         self.assertEqual(c["argv"][:2], ["exec", "resume"])
         self.assertIn("follow-up", c["prompt"])
+
+    def test_resume_keeps_label_check_and_risk(self):
+        # round 5 pilot: a lead's `ccx resume` lost the label and never ran the acceptance command again
+        out = json.loads(self.ccx("run", "--from", "claude", "--tier", "T2", "--label", "q:abc", "--risk", "visible",
+                                  "--review", "off", "--check", "python -c pass", "implement thing").stdout)
+        r = self.ccx("resume", "--review", "off", out["run_id"], "also add a docstring")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        res = json.loads(r.stdout)
+        rec = json.loads((self.hub / "ccx" / "runs" / res["run_id"] / "run.json").read_text(encoding="utf-8"))
+        self.assertEqual((rec["label"], rec["check_cmd"], rec["risk"]), ("q:abc", "python -c pass", "visible"))
+        self.assertTrue(res["check"]["passed"], res)
 
     def test_depth_guard(self):
         r = self.ccx("run", "--from", "codex", "--tier", "T2", "x y z w", env={"CCX_DEPTH": "1"})
