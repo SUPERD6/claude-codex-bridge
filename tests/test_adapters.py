@@ -621,3 +621,26 @@ class TestSelfCheck(AdapterEnv):
                      "--check", "python -c \"import sys; sys.exit(3)\"", "fix x")
         self.assertEqual((bad["check"]["exit"], bad["kind"]), (3, "check_failed"))
         self.assertIn("check failed", bad["hint"])
+
+
+def test_codex_gets_the_windows_shell_note(tmp_path, monkeypatch):
+    """Round 5: Codex read a UTF-8 file with plain Get-Content (PowerShell 5.1), saw mojibake and gave up."""
+    import os
+    from pathlib import Path
+    from ccx.agents.codex import WINDOWS_SHELL, codex_invocation
+    monkeypatch.setenv("CCX_CODEX_BIN", str(Path(__file__).parent / "fakes" / "fake_codex.py"))   # CI has no codex
+    new = codex_invocation(model="m", effort="low", perm=[], cwd=tmp_path, prompt="do x", run_dir=tmp_path)
+    again = codex_invocation(model="m", effort="low", perm=[], cwd=tmp_path, prompt="more", run_dir=tmp_path,
+                             resume_id="s1")
+    assert new.stdin.startswith(WINDOWS_SHELL) == (os.name == "nt")
+    assert new.stdin.endswith("do x")
+    assert again.stdin == "more"                    # the session already has it
+    assert "-Encoding UTF8" in WINDOWS_SHELL
+
+
+def test_rules_do_not_forbid_the_sub_agents_a_task_asks_for():
+    """Round 5: 'do not delegate to other agents' next to 'you are explicitly asked to use sub-agents' made a Codex
+    sub-agent stop with status blocked; the rule is about handing the task on to another CLI."""
+    from ccx.prompts import PROMPT
+    assert "do not delegate to other agents" not in PROMPT
+    assert "your own sub-agents are fine when this task asks for them" in PROMPT
