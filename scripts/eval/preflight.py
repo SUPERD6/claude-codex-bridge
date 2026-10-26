@@ -163,6 +163,24 @@ def _under(path: str, roots: list[str]) -> bool:
 
 # ------------------------------------------------------------------ the person's real homes
 
+def other_worktrees(root: Path) -> list[Path]:
+    """The checkout's other git worktrees (the main one or siblings): they hold today's code and its history, the
+    answers to every task taken from this repository's past."""
+    try:
+        r = subprocess.run(["git", "worktree", "list", "--porcelain"], cwd=root, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return []
+    here = Path(root).resolve()
+    out = []
+    for ln in r.stdout.splitlines():
+        if ln.startswith("worktree "):
+            p = Path(ln[9:].strip())
+            if p.resolve() != here:
+                out.append(p)
+    return out
+
+
 def real_paths(env=None) -> dict[str, Path]:
     """Where the person's own state lives, from the environment this eval was started in."""
     env = os.environ if env is None else env
@@ -172,7 +190,7 @@ def real_paths(env=None) -> dict[str, Path]:
            "codex_home": Path(env.get("CODEX_HOME") or home / ".codex").expanduser(), "ccx_home": home / ".ccx",
            "ccx_config": Path(env.get("CCX_CONFIG") or home / ".ccx" / "config.toml").expanduser(),
            "dsh_home": Path(env.get("DSH_HOME") or home / ".dsh").expanduser(), "agents_home": home / ".agents",
-           "root": ROOT}
+           "root": ROOT, "root_worktrees": other_worktrees(ROOT)}
     hub = env.get("CCX_HUB")
     if not hub:
         try:
@@ -262,6 +280,7 @@ def forbidden(u: Unit) -> list[Path]:
         out += [r["home_claude"], r["claude_home"]]
     if not _inside(u.work, r["root"]):
         out.append(r["root"])
+    out += [p for p in r.get("root_worktrees") or [] if not _inside(u.work, p)]
     if u.dsh == "real":
         out = [p for p in out if p != r["dsh_home"]]
     uniq: list[Path] = []
@@ -1244,6 +1263,7 @@ def run_checks(o: Options) -> dict:
                 rmtree(cw)
         probs += can["problems"]
     rep = {"ok": not probs, "problems": probs, "commit": cs["commit"], "dirty": bool(cs["dirty"]),
+           "tasks_file": Path(o.tasks_file).name,
            "tasks_sha256": (sha256_file(o.tasks_file) or "")[:16], "tiers_sha256": (sha256_file(TIERS_FILE) or "")[:16],
            "cli": versions, "codex": codex, "claude_isolation": o.claude, "dsh_home": o.dsh, "jobs": o.jobs,
            "busy": len(other), "canary": None if can is None else ("pass" if can["ok"] else "fail"),
@@ -1285,7 +1305,7 @@ def between_units(rep: dict, need_codex: bool, ours: list[str] | None = None, se
         probs.append(f"eval checkout moved: {rep['commit'][:12]} -> {cs['commit'][:12]}")
     if cs["dirty"] and not rep["dirty"]:
         probs.append(f"eval checkout changed: {cs['dirty'][:3]}")
-    if (sha256_file(TASKS_FILE) or "")[:16] != rep["tasks_sha256"]:
+    if (sha256_file(TASKS_FILE.parent / rep.get("tasks_file", TASKS_FILE.name)) or "")[:16] != rep["tasks_sha256"]:
         probs.append("task file changed")
     now = cli_versions()
     for a, v in rep["cli"].items():
@@ -1358,10 +1378,11 @@ def add_options(ap: argparse.ArgumentParser) -> None:
                     help="run although a check failed (recorded in every row)")
 
 
-def options_from(a, arms: list[str], work: Path, canary_on: bool, start: bool = False) -> Options:
+def options_from(a, arms: list[str], work: Path, canary_on: bool, start: bool = False,
+                 tasks_file: Path = TASKS_FILE) -> Options:
     return Options(work=work, arms=arms, jobs=getattr(a, "jobs", 2), claude=a.claude_isolation,
                    codex_home=Path(a.codex_home).expanduser() if a.codex_home else None, dsh=a.dsh_home,
-                   canary=canary_on, force_unclean=a.force_unclean, start=start)
+                   canary=canary_on, force_unclean=a.force_unclean, start=start, tasks_file=tasks_file)
 
 
 def main(argv=None) -> int:

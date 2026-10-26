@@ -36,8 +36,14 @@ The work dir defaults to <temp>/<tag>, so two tags never share unit folders.
   python scripts/eval/r5.py run --rounds 2 --budget 40
   python scripts/eval/r5.py run --rounds 2 --arms ccx,ccx2 --tag r5b --budget 20  # old vs new lead guidance
   python scripts/eval/r5.py run --rounds 2 --arms ccx2,builtin2 --tag r5d --budget 25  # same wording, ccx vs Agent
-  python scripts/eval/r5.py summary
+  python scripts/eval/r5.py run --taskset holdout --rounds 3 --tag ho1 --budget 20   # the unseen hold-out set (C1)
+  python scripts/eval/r5.py summary [--taskset holdout]
   python scripts/eval/r5.py export docs/research/data/2026-10-26-r5.json
+
+Hold-out (--taskset holdout, scripts/eval/tasks_holdout.py): 10 other past changes never used while tuning, for the
+final claims. Its results go to their own file, and every finished unit's repository, hub and lead stream leave the
+work dir after scoring (the stream is kept under .ccx/eval/r5/streams/<tag>/), so a later round's agents cannot find
+an earlier round's finished answer next to them. r5 keeps its old behaviour.
 """
 from __future__ import annotations
 
@@ -61,9 +67,36 @@ import r3  # noqa: E402
 import r4  # noqa: E402
 import preflight as PF  # noqa: E402
 from common import ROOT, append_jsonl, archive_hub, ccx_verify, git, read_jsonl  # noqa: E402
-from tasks_r5 import IDS, by_id  # noqa: E402
+import tasks_holdout  # noqa: E402
+import tasks_r5  # noqa: E402
+
+# r5: the 10 tasks the loop was tuned on; holdout (scripts/eval/tasks_holdout.py): 10 others never used for tuning,
+# for the final claims (backlog C1). r5 stays the default everywhere.
+TASKSETS = {"r5": tasks_r5, "holdout": tasks_holdout}
+IDS = tasks_r5.IDS
 
 OUT = ROOT / ".ccx" / "eval" / "r5"
+
+
+def by_id(task_id: str) -> dict:
+    """A task of any task set (ids are unique across sets)."""
+    for mod in TASKSETS.values():
+        if task_id in mod.IDS:
+            return mod.by_id(task_id)
+    raise KeyError(f"unknown task: {task_id}")
+
+
+def results_file(taskset: str) -> Path:
+    """Where a task set's results go by default: r5 keeps its old file, the hold-out set has its own."""
+    return OUT / ("results.jsonl" if taskset == "r5" else f"{taskset}-results.jsonl")
+
+
+def pytest_args(task: dict) -> list[str]:
+    """The hidden test files, minus the tests a task deselects (unrelated to it and flaky under load)."""
+    out = list(task["tests"])
+    for node in task.get("deselect") or ():
+        out += ["--deselect", node]
+    return out
 ARMS = ("self", "builtin", "ccx", "direct")
 CONFTEST = (ROOT / "tests" / "conftest.py").read_text(encoding="utf-8")
 LEAD_PROMPT = """You are the lead agent on this repository: relayline, the `ccx` command (Python, standard library only;
@@ -155,7 +188,7 @@ def score(repo: Path, task: dict, work: Path, job: PF.Job | None = None) -> dict
     (repo / "tests" / "conftest.py").write_text(CONFTEST, encoding="utf-8")
     iso = Path(tempfile.mkdtemp(prefix="r5iso-", dir=work))
     try:
-        out, _err, rc, _left = PF.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", *task["tests"]],
+        out, _err, rc, _left = PF.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", *pytest_args(task)],
                                       cwd=repo, env=iso_env(iso), timeout=900, job=job)
         if rc == -9:
             return {"ok": False, "pytest": "timeout"}
@@ -303,7 +336,12 @@ def run_unit(u: dict, a, work: Path) -> dict:
         except Exception as e:  # noqa: BLE001
             row["audit"] = {"clean": False, "problems": [f"audit failed: {type(e).__name__}: {e}"[:200]],
                             "session_ids": []}
-        row["leftovers"] = PF.after_unit(iso, before, job, row["audit"].get("session_ids") or [])
+        fresh = u.get("taskset", "r5") != "r5"     # hold-out: nothing of a finished unit stays in the work dir
+        if fresh and stream.exists():
+            keep = OUT / "streams" / str(u.get("tag") or "untagged")
+            keep.mkdir(parents=True, exist_ok=True)
+            os.replace(stream, keep / stream.name)
+        row["leftovers"] = PF.after_unit(iso, before, job, row["audit"].get("session_ids") or [], keep_repo=not fresh)
     if rep:
         row["fingerprint"] = PF.fingerprint(rep, iso, env, unit_models(u, row))
     return row
@@ -327,7 +365,12 @@ def spent(f: Path) -> float:
 
 
 def cmd_run(a) -> int:
-    out = Path(a.out) if a.out else OUT / "results.jsonl"
+    out = Path(a.out) if a.out else results_file(a.taskset)
+    ids = TASKSETS[a.taskset].IDS
+    tasks = a.tasks.split(",") if a.tasks else ids
+    bad_t = [x for x in tasks if x not in ids]
+    if bad_t:
+        raise SystemExit(f"unknown task(s) in task set {a.taskset}: {', '.join(bad_t)} (known: {', '.join(ids)})")
     work = Path(a.workdir or (Path(tempfile.gettempdir()) / a.tag))
     arms = a.arms.split(",") if a.arms else list(ARMS)
     bad = [x for x in arms if x not in (*ARMS, *OPT_IN_ARMS)]
@@ -335,8 +378,9 @@ def cmd_run(a) -> int:
         raise SystemExit(f"unknown arm(s): {', '.join(bad)} (known: {', '.join((*ARMS, *OPT_IN_ARMS))})")
     done = {(r["tag"], r["round"], r["task"], r["arm"]) for r in read_jsonl(out)}
     todo = []
-    for u in schedule(a.rounds, a.seed, a.tasks.split(",") if a.tasks else IDS, arms):
-        u = {**u, "tag": a.tag, "seed": a.seed, "label": f"eval-r5:{a.tag}:{u['round']}:{u['task']}:{u['arm']}"}
+    for u in schedule(a.rounds, a.seed, tasks, arms):
+        u = {**u, "tag": a.tag, "seed": a.seed, "taskset": a.taskset,
+             "label": f"eval-r5:{a.tag}:{u['round']}:{u['task']}:{u['arm']}"}
         if (a.tag, u["round"], u["task"], u["arm"]) not in done:
             todo.append(u)
     print(f"work dir: {work}  results: {out}  units: {len(todo)}", flush=True)
@@ -344,7 +388,8 @@ def cmd_run(a) -> int:
         for u in todo:
             print(f"[dry] {u['label']}")
         return 0
-    rep = PF.run_checks(PF.options_from(a, arms, work, canary_on=not a.no_canary, start=True))
+    rep = PF.run_checks(PF.options_from(a, arms, work, canary_on=not a.no_canary, start=True,
+                                        tasks_file=Path(TASKSETS[a.taskset].__file__)))
     for p in rep["problems"]:
         print(f"[preflight] {p}", flush=True)
     if not rep["ok"] and not a.force_unclean:
@@ -441,17 +486,17 @@ def tagged(rows: list[dict], tag: str | None) -> list[dict]:
 
 
 def cmd_summary(a) -> int:
-    print(json.dumps(summarize(tagged(read_jsonl(OUT / "results.jsonl"), a.tag)), ensure_ascii=False, indent=1))
+    print(json.dumps(summarize(tagged(read_jsonl(results_file(a.taskset)), a.tag)), ensure_ascii=False, indent=1))
     return 0
 
 
 def cmd_export(a) -> int:
-    keep = ("tag", "round", "task", "arm", "ok", "pytest", "rc", "wall_s", "usd", "lead_usd", "lead_only_usd",
+    keep = ("tag", "taskset", "round", "task", "arm", "ok", "pytest", "rc", "wall_s", "usd", "lead_usd", "lead_only_usd",
             "sub_usd", "by_model_usd", "ccx_usd", "ccx_review_usd", "ccx_agents", "lead_requests", "lead_tokens",
             "lead_output_tokens", "lead_tools", "lead_edits", "agent_calls", "ccx_runs", "ccx_resumes", "rework",
             "delegated", "context_attached", "files_changed", "diffstat", "model", "status", "verdicts", "error",
             "env_clean", "fingerprint")
-    rows = tagged(read_jsonl(OUT / "results.jsonl"), a.tag)
+    rows = tagged(read_jsonl(results_file(a.taskset)), a.tag)
     data = {"summary": summarize(rows),
             "rows": [r3.scrub({**{k: r[k] for k in keep if k in r},
                                **({"audit": {"problems": r["audit"].get("problems"),
@@ -469,7 +514,9 @@ def parser() -> argparse.ArgumentParser:
     r.add_argument("--tag", default="r5")
     r.add_argument("--seed", type=int, default=53)
     r.add_argument("--rounds", type=int, default=2)
-    r.add_argument("--tasks", default="")
+    r.add_argument("--taskset", choices=sorted(TASKSETS), default="r5",
+                   help="r5 (default: the tasks the loop was tuned on) or holdout (unseen, for final claims)")
+    r.add_argument("--tasks", default="", help="comma-separated ids from the task set (default: all of it)")
     r.add_argument("--arms", default="")
     r.add_argument("--budget", type=float, default=3.0, help="stop before a new unit once the results reach $")
     r.add_argument("--extra-spent", type=float, default=0.0)
@@ -484,10 +531,12 @@ def parser() -> argparse.ArgumentParser:
     r.set_defaults(fn=cmd_run)
     s = sub.add_parser("summary")
     s.add_argument("--tag", default=None, help="only this round's rows (default: all; the tags are listed)")
+    s.add_argument("--taskset", choices=sorted(TASKSETS), default="r5")
     s.set_defaults(fn=cmd_summary)
     e = sub.add_parser("export")
     e.add_argument("dest")
     e.add_argument("--tag", default=None)
+    e.add_argument("--taskset", choices=sorted(TASKSETS), default="r5")
     e.set_defaults(fn=cmd_export)
     return ap
 
