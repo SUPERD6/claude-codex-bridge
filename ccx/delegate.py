@@ -617,7 +617,7 @@ def run(req: Request, p: Paths) -> dict:
             # (needed once tradeoff = save picks cheap models first, 2026-10-25)
             chk = run_check(req.check, cwd, int(cfg["defaults"].get("check_timeout_sec", 900)))
             early_check = (len(record["attempts"]), chk)
-            if not chk["passed"]:
+            if not chk["passed"] and not chk.get("broken"):   # a broken check is no reason to climb
                 record["attempts"][-1]["kind"] = "check_failed"
                 _write_record(run_dir, record)
                 summary = f"you said done, but `{chk['cmd']}` failed (exit {chk['exit']}):\n{chk['tail'][-400:]}"
@@ -652,11 +652,14 @@ def run(req: Request, p: Paths) -> dict:
         record["check"] = early_check[1] if reuse else run_check(req.check, cwd,
                                                                  int(cfg["defaults"].get("check_timeout_sec", 900)))
         check_passed = record["check"]["passed"]
-        if not check_passed:
+        if record["check"].get("broken"):
+            # the command tested nothing (pytest exit 4/5): no verdict on the work, the lead fixes the check
+            record["kind"], check_passed = "check_broken", None
+        elif not check_passed:
             # the sub-agent said it was done; the check says otherwise: that's a failure, and it is learned as one
             record["kind"] = "check_failed"
     if (req.mode == "write" and req.review != "off" and not req.ephemeral and oc.ok and status in ("done", "partial")
-            and record.get("kind") != "check_failed"):
+            and record.get("kind") not in ("check_failed", "check_broken")):
         try:
             _review(req, p, cfg, record, cwd, run_dir)
         except Exception as e:  # noqa: BLE001 — a review that can't run never fails the work itself
@@ -678,7 +681,7 @@ def run(req: Request, p: Paths) -> dict:
     # `ccx verify` (the lead's verdict) adds or corrects this later.
     verified = check_passed is not None or (oc.result or {}).get("verification", "not-run") not in ("", "not-run")
     if oc.kind not in ("quota", "auth", "timeout", "model", "needs_write", "split", "over_budget", "user_stopped",
-                       "review_issues", "review_failed") and (status in ("blocked", "failed") or not oc.ok
+                       "review_issues", "review_failed") and record.get("kind") != "check_broken" and (status in ("blocked", "failed") or not oc.ok
                                                         or (status == "done" and verified)):
         try:
             learn.record_outcomes(p, record, final_ok=oc.ok and status == "done" and check_passed is not False)
@@ -732,7 +735,7 @@ def compact(record: dict) -> dict:
     out = {
         "run_id": record["run_id"], "agent": record["to"], "tier": record["tier"],
         "model": f"{last.get('model')}/{last.get('effort')}",
-        "ok": record["ok"],
+        "ok": bool(record["ok"]) and record.get("kind") not in ("review_failed", "check_broken"),
         "status": r.get("status") or ("running" if record.get("state") == "running" else "error"),
         "summary": r.get("summary") or record.get("error"),
         "files_changed": r.get("files_changed", []),
@@ -759,6 +762,9 @@ def compact(record: dict) -> dict:
             out["hint"] = (f"the sub-agent reported done, but the check failed (exit {record['check']['exit']}); "
                            f"see `ccx show {record['run_id']} --full`, or continue: ccx resume {record['run_id']} "
                            f"\"the check fails: fix it\"")
+        if record["kind"] == "check_broken":
+            out["hint"] = record["check"].get("broken") or "the check tested nothing"
+            out["needs_lead"] = "check_broken: " + out["hint"].split(";")[0]
         if record["kind"] == "needs_write":
             out["hint"] = ("read-only run: the sub-agent says it needs to edit files (see summary). If you agree, "
                            f"run it again with --mode write")
@@ -770,18 +776,25 @@ def compact(record: dict) -> dict:
                 out["retry_after"] = ra
     if record.get("review"):
         rv = record["review"]
-        out["review"] = {k: rv[k] for k in ("verdict", "reason", "by", "issues", "notes", "usd", "error")
-                         if rv.get(k)}
+        out["review"] = {k: rv[k] for k in ("verdict", "reason", "by", "issues", "notes", "usd", "error",
+                                            "edited_tests") if rv.get(k)}
+        if rv.get("edited_tests"):                    # a builder that changed existing tests: the lead looks first
+            out["edited_tests"] = rv["edited_tests"]
     if record.get("first_review"):
         out.setdefault("review", {})["first_round"] = {k: record["first_review"].get(k) for k in ("verdict", "issues")}
         out["fixed_after_review_of"] = record["review_of"]
     if record.get("kind") == "review_failed":
         out["hint"] = ("an independent review still finds problems after one fix round (review.issues): decide "
                        f"yourself, or `ccx resume {record['run_id']} \"...\"`")
+        first = ((record.get("review") or {}).get("issues") or ["(see review)"])[0]
+        out["needs_lead"] = f"review_failed: {first}"[:300]
     if record.get("check"):
         c = record["check"]
         out["check"] = {"cmd": c["cmd"], "passed": c["passed"], "exit": c["exit"],
-                        **({"weak": c["weak"], "note": c["note"]} if c.get("weak") else {})}
+                        **({"weak": c["weak"], "note": c["note"]} if c.get("weak") else {}),
+                        **({"status": "check_broken"} if c.get("broken") else {})}
+    if record.get("edited_tests") and "edited_tests" not in out:
+        out["edited_tests"] = record["edited_tests"]
     if record["cwd"] and "/.ccx-worktrees/" in record["cwd"].replace("\\", "/"):
         out["worktree"] = record["cwd"]
     if record.get("auth_problem"):
@@ -793,8 +806,11 @@ def recap(record: dict, res: dict) -> str:
     """One line for the end of `ccx run`'s output (its last key), so a lead that pipes it through `tail` still has
     the run_id: status, check, review, API-equivalent cost and what to run next."""
     c = res.get("check")
-    check = "none" if not c else ("passed" if c.get("passed") else f"failed (exit {c.get('exit')})")
+    check = "none" if not c else ("passed" if c.get("passed") else
+                                  f"{'broken' if record.get('kind') == 'check_broken' else 'failed'} (exit {c.get('exit')})")
     review = (res.get("review") or {}).get("verdict") or "none"
     usd = sum(a.get("ae_usd") or 0 for a in record.get("attempts") or []) + ((res.get("review") or {}).get("usd") or 0)
-    return (f"ccx run {record['run_id']}: status={res.get('status')} ok={str(bool(record.get('ok'))).lower()} "
-            f"check={check} review={review} cost=~${usd:.4f}; next: ccx show {record['run_id']}")
+    ok = res.get("ok", record.get("ok"))
+    lead = f" needs_lead={res['needs_lead'].split(':')[0]}" if res.get("needs_lead") else ""
+    return (f"ccx run {record['run_id']}: status={res.get('status')} ok={str(bool(ok)).lower()} "
+            f"check={check} review={review}{lead} cost=~${usd:.4f}; next: ccx show {record['run_id']}")

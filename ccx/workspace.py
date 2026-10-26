@@ -2,8 +2,11 @@
 before the run and `ccx undo` (from delegate.py)."""
 from __future__ import annotations
 
+import difflib
+import glob
 import json
 import os
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -27,16 +30,60 @@ def make_worktree(cwd: Path, run_id: str) -> Path:
     return wt
 
 
+# pytest's own exit codes for "this command did not test anything": 4 = usage error (e.g. a file that does not
+# exist), 5 = no tests collected. Neither says the work is wrong; the check itself is broken.
+PYTEST_BROKEN = {4: "pytest usage error (exit 4): a named file or option does not exist",
+                 5: "pytest collected no tests (exit 5): the paths or -k filter match nothing"}
+_TOKEN = re.compile(r"\"[^\"]*\"|'[^']*'|\S+")
+
+
+def _expand_globs(cmd: str, cwd: Path) -> str:
+    """cmd.exe passes `tests/test_*.py` on unexpanded (pytest then finds nothing): expand unquoted * / ? tokens
+    relative to cwd the way a POSIX shell would. A token with no match stays as it is."""
+    def one(m: re.Match) -> str:
+        tok = m.group(0)
+        if tok[0] in "\"'" or not any(c in tok for c in "*?") or tok.startswith("-"):
+            return tok
+        hits = sorted(glob.glob(tok, root_dir=str(cwd)))
+        return " ".join(h.replace("\\", "/") for h in hits) if hits else tok
+    return _TOKEN.sub(one, cmd)
+
+
+def missing_test_paths(cmd: str, cwd: Path) -> list[dict]:
+    """`tests/....py` paths the check names that do not exist under cwd, each with close matches, so a check that
+    could never pass (a guessed file name) stops before a sub-agent is paid to satisfy it."""
+    known = None
+    out = []
+    for tok in _TOKEN.findall(cmd or ""):
+        path = tok.strip("\"'").split("::")[0]
+        if not re.match(r"^(\./)?tests[/\\].*\.py$", path) or any(c in path for c in "*?"):
+            continue
+        if (cwd / path).exists():
+            continue
+        if known is None:
+            tests = cwd / "tests"
+            known = sorted(q.relative_to(cwd).as_posix() for q in tests.rglob("*.py")) if tests.is_dir() else []
+        out.append({"path": path, "close": difflib.get_close_matches(path.replace("\\", "/"), known, n=3, cutoff=0.5)})
+    return out
+
+
 def run_check(cmd: str, cwd: Path, timeout: int = 900) -> dict:
-    """The lead's acceptance command, run by ccx after the sub-agent says it is done (not trusting its report)."""
+    """The lead's acceptance command, run by ccx after the sub-agent says it is done (not trusting its report).
+    `broken` (status check_broken) = the command could not test anything, which is not a verdict on the work."""
     t0 = time.time()
+    ran = _expand_globs(cmd, cwd) if os.name == "nt" else cmd
     try:
-        r = subprocess.run(cmd, shell=True, cwd=cwd, capture_output=True, text=True, timeout=timeout,
+        r = subprocess.run(ran, shell=True, cwd=cwd, capture_output=True, text=True, timeout=timeout,
                            stdin=subprocess.DEVNULL, encoding="utf-8", errors="replace")
         code, tail = r.returncode, (r.stdout + r.stderr)[-800:]
     except subprocess.TimeoutExpired:
         code, tail = -1, f"timed out after {timeout}s"
     out = {"cmd": cmd, "exit": code, "passed": code == 0, "seconds": round(time.time() - t0, 1), "tail": tail}
+    if ran != cmd:
+        out["ran"] = ran
+    if code in PYTEST_BROKEN and "pytest" in cmd:
+        out.update(status="check_broken", broken=PYTEST_BROKEN[code] + "; fix the check (ccx resume <run_id> "
+                   "--check \"...\"), not the code")
     if out["passed"]:
         out.update(_check_doubt(cmd, cwd))
     return out
