@@ -62,7 +62,50 @@ class TestReason(unittest.TestCase):
     def test_brief_asks_for_requirements_not_tests(self):
         b = review.brief("r1", "task", "did it", "+x", 100)
         self.assertIn("requirement by requirement", b)
-        self.assertIn("Missing tests, inputs the task doesn't cover, typing or docs taste and style are `[note]", b)
+        # round 5: [must] only with a basis in the task or a broken existing behaviour; the rest is a note
+        self.assertIn('`[must] file:line — "task words" — what is wrong` is only for', b)
+        self.assertIn("quoting the task sentence it rests on", b)
+        self.assertIn("existing tests, or crashes on inputs the task itself names", b)
+        self.assertIn("A [must] without such a basis is treated as a note", b)
+        self.assertIn("hardening, extra validation, edge cases or robustness the task did not ask for", b)
+
+    def test_out_of_scope_must_is_a_note(self):
+        for item in ("[must] (out of scope) run.json may be missing", "[must] Hardening: corrupt JSON crashes load()",
+                     "[must] — not asked for: make it idempotent", "[MUST] [beyond the task] retry on EOF",
+                     "  [must] robustness — no guard for empty files"):
+            v = review.verdict({"summary": "REVIEW: issues", "open_questions": [item]})
+            self.assertEqual((v["verdict"], v["issues"]), ("pass", []), item)
+            self.assertTrue(v["notes"][0].startswith("[note]"), v)
+        # a real [must] next to an out-of-scope one still triggers the fix round, with only the real one
+        v = review.verdict({"summary": "REVIEW: issues", "open_questions": [
+            "[must] (out of scope) no lock", '[must] a.py:3 — "return the SKUs" — returns Item objects']})
+        self.assertEqual((v["verdict"], len(v["issues"])), ("issues", 1))
+        self.assertIn("SKUs", v["issues"][0])
+        # words like "robustness" later in a real item do not demote it
+        v = review.verdict({"summary": "REVIEW: issues", "open_questions": [
+            '[must] a.py:3 — "raise ValueError for n < 1" — no robustness check, n=0 passes']})
+        self.assertEqual(v["verdict"], "issues")
+
+    def test_at_most_one_fix_round(self):
+        self.assertEqual([review.fix_rounds({"fix_rounds": n}) for n in (0, 1, 2, 5, "x")], [0, 1, 1, 1, 1])
+        self.assertEqual(review.fix_rounds({}), 1)
+
+    def test_fix_round_is_reviewed_against_the_first_task(self):
+        import tempfile
+        from ccx.config import Paths
+        from ccx.delegate import Request
+        with tempfile.TemporaryDirectory() as d:
+            p = Paths(Path(d))
+            (p.runs / "r0").mkdir(parents=True)
+            (p.runs / "r0" / "brief.md").write_text("change x to 2", encoding="utf-8")
+            (p.runs / "r1").mkdir()                                 # a resume of r0: no brief.md of its own
+            (p.runs / "r1" / "run.json").write_text(json.dumps({"resumed_from": "r0"}), encoding="utf-8")
+            fix = Request(to="codex", brief="An independent review found ...", resume_run="r1", review_round=1)
+            self.assertEqual(review.task_for_review(p, fix), "change x to 2")
+            plain = Request(to="codex", brief="follow-up", resume_run="r1")      # not a fix round: its own brief
+            self.assertEqual(review.task_for_review(p, plain), "follow-up")
+            lost = Request(to="codex", brief="issues", resume_run="gone", review_round=1)
+            self.assertEqual(review.task_for_review(p, lost), "issues")
 
     def test_reviewers_from_routing_data(self):
         import tempfile
@@ -246,6 +289,11 @@ class TestReviewRun(Env):
         self.assertIn("x = 2", rv[0]["prompt"])                          # the reviewer saw the diff
         fix = [c for c in self.calls() if c["agent"] == "codex" and c["argv"][:2] == ["exec", "resume"]]
         self.assertTrue(fix and "off by one" in fix[-1]["prompt"])           # the issues went back to the worker
+        self.assertIn("did not ask for", fix[-1]["prompt"])
+        # the fix is judged against the task, not against the issue list it was handed
+        task = rv[1]["prompt"].split("## The task it was given", 1)[1].split("## What it says it did", 1)[0]
+        self.assertIn("change x to 2 in a.py", task)
+        self.assertNotIn("off by one", task)
 
     def test_still_failing_after_fix(self):
         out = self.go("--review", "on", review_seq="issues")

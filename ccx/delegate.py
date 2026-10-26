@@ -703,13 +703,14 @@ def run(req: Request, p: Paths) -> dict:
     except Exception:  # noqa: BLE001 — housekeeping never fails the work
         pass
     if record.get("kind") == "review_issues" and record.get("session_id"):
-        # hand the problems back to the same sub-session once; its fix is reviewed again (review_round 1)
+        # hand the problems back to the same sub-session once; its fix is reviewed again, against the same task
         issues = "\n".join(f"- {x}" for x in record["review"]["issues"]) or record["review"]["summary"]
         fix = run(Request(to=req.to, brief=f"An independent review of your change found problems:\n{issues}\n"
-                          "Fix the real ones (say which you think are wrong and why), run the checks again.",
+                          "Fix the real ones (say which you think are wrong and why), run the checks again. "
+                          "Change only what the task needs; do not add checks or hardening it did not ask for.",
                           resume_run=run_id, caller=req.caller, cwd=req.cwd, review="on", risk=req.risk,
-                          review_round=1, check=req.check, fallback=False, task=req.task, step=req.step,
-                          label=req.label), p)
+                          review_round=req.review_round + 1, check=req.check, fallback=False, task=req.task,
+                          step=req.step, label=req.label), p)
         fix["review_of"], fix["first_review"] = run_id, record["review"]
         _write_record(p.runs / fix["run_id"], fix)
         return fix
