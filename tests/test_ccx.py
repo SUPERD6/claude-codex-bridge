@@ -85,6 +85,16 @@ class TestRouting(unittest.TestCase):
 
 
 class TestDelegation(Env):
+    def test_run_ends_with_a_recap_line(self):
+        r = self.ccx("run", "--from", "claude", "--tier", "T1", "--mode", "write", "--check", "python -c pass",
+                     "rename foo to bar in a.py")
+        out = json.loads(r.stdout)
+        self.assertEqual(list(out)[-1], "recap")                     # last key: still there after `| tail -5`
+        rid = out["run_id"]
+        self.assertIn(f"ccx run {rid}: status=done ok=true check=passed review=", out["recap"])
+        self.assertTrue(out["recap"].endswith(f"next: ccx show {rid}"))
+        self.assertIn(rid, "\n".join(r.stdout.splitlines()[-3:]))
+
     def test_claude_to_codex(self):
         r = self.ccx("run", "--from", "claude", "--tier", "T1", "--mode", "write",
                      "rename foo to bar in a.py")

@@ -335,18 +335,27 @@ BRIEF_NOTES = 4
 BRIEF_CHARS = 1200          # ~300 tokens: what a sub-agent's brief may spend on shared notes
 
 
-def _words(text: str) -> set[str]:
-    """Latin words of 3+ letters and CJK pairs: enough to tell which notes a task is about."""
-    t = (text or "").lower()
-    out = set(re.findall(r"[a-z0-9_][a-z0-9_.-]{2,}", t))
-    for run in re.findall(r"[一-鿿]{2,}", t):
-        out.update(run[i:i + 2] for i in range(len(run) - 1))
-    return out
-
-
 _STOP = frozenset("the and for with this that are was were from not but you all can has have had into its our "
                   "out any one two who how what when then than them they their there here will would should could "
                   "also just like more most some such only very use used using".split())
+# CJK pairs too common to say what a note is about
+_STOP_ZH = frozenset("我们 你们 他们 它们 这个 那个 一个 一些 这些 那些 没有 可以 就是 什么 如果 因为 所以 但是 还是 "
+                     "已经 不是 时候 自己 然后 或者 以及 并且 而且 这样 那样 怎么 为了".split())
+
+
+def _cjk_pairs(t: str) -> list[str]:
+    return [run[i:i + 2] for run in re.findall(r"[一-鿿]{2,}", t) for i in range(len(run) - 1)
+            if run[i:i + 2] not in _STOP_ZH]
+
+
+def _words(text: str) -> set[str]:
+    """Latin words of 3+ letters (dots and dashes at either end off: `JSON.` is `json`) and CJK pairs, without common
+    English and Chinese words: enough to tell which notes a task is about."""
+    t = (text or "").lower()
+    out = {w.strip(".-") for w in re.findall(r"[a-z0-9_][a-z0-9_.-]{2,}", t)}
+    out = {w for w in out if len(w) >= 3 and w not in _STOP}
+    out.update(_cjk_pairs(t))
+    return out
 
 
 def _tokens(text: str) -> list[str]:
@@ -361,8 +370,7 @@ def _tokens(text: str) -> list[str]:
         parts = [x for x in re.split(r"[.-]", w) if len(x) >= 3 and x not in _STOP]
         if len(parts) > 1:
             out.extend(parts)
-    for run in re.findall(r"[一-鿿]{2,}", t):
-        out.extend(run[i:i + 2] for i in range(len(run) - 1))
+    out.extend(_cjk_pairs(t))
     return out
 
 
