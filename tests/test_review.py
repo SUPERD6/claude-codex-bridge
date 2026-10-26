@@ -279,10 +279,10 @@ class TestReviewRun(Env):
         out = json.loads(r.stdout)
         self.assertTrue(out["check"]["passed"], out)
         self.assertEqual(out["review"]["reason"], "existing tests edited: test_a.py")
-        # kept in run.json; the run's printed summary shows it once delegate.py passes the field through
+        self.assertEqual((out["edited_tests"], out["review"]["edited_tests"]), (["test_a.py"], ["test_a.py"]))
         from ccx.config import Paths
         rec = json.loads((Paths(self.hub).runs / out["run_id"] / "run.json").read_text(encoding="utf-8"))
-        self.assertEqual(rec["review"]["edited_tests"], ["test_a.py"])
+        self.assertEqual((rec["review"]["edited_tests"], rec["edited_tests"]), (["test_a.py"], ["test_a.py"]))
         self.assertIn("Existing tests edited: test_a.py", self.reviews()[0]["prompt"])
 
     def test_check_without_tests_is_reviewed_with_no_history(self):

@@ -389,7 +389,8 @@ def verdict(result: dict | None) -> dict:
 
 def review_run(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path, run_dir: Path) -> None:
     """F1: maybe have another vendor's cheap model review this write run's diff; sets record["review"]. When the
-    change edited pre-existing tests, record["review"]["edited_tests"] lists them (also if no review could run)."""
+    change edited pre-existing tests, record["edited_tests"] (and record["review"]["edited_tests"] when a review
+    is recorded) lists them."""
     from .delegate import Request, run
     from .runners import find_bin
     import sys
@@ -402,6 +403,8 @@ def review_run(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path, run_d
     actual, diff = rv.changes(cwd, snap)
     res = record.get("result") or {}
     edited = rv.edited_tests(diff)
+    if edited:                                # shown to the lead even when no review runs (e.g. `weak = false`)
+        record["edited_tests"] = edited
     why = rv.reason(mode, req.risk, res, res.get("files_changed") or [], actual, rv.code_lines(diff),
                     int(rc.get("min_lines", 50)))
     weak = False
