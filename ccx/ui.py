@@ -856,6 +856,11 @@ def _queue_pieces(rd: Reader, root: Path, q: dict, recs: dict, verdicts: dict, n
             b[0] = _btn(b[0]["label"], ["ccx", "q", "done", it["id"], "--ok", "1", "--cwd", str(root)], b[0]["style"])
             b[1] = _btn(b[1]["label"], ["ccx", "q", "done", it["id"], "--ok", "0", "--note", "{note}", "--cwd",
                                         str(root)], b[1]["style"])
+        elif st == "dep_blocked":
+            # waits on a piece that did not finish: the lead settles that one (`ccx q done <id> --ok 1`)
+            pc.update(status="decide", act={"kind": "decide", "what": "a_q_dep_blocked",
+                                            "why": ["w_q_dep_blocked", {"s": ", ".join(it.get("blocked_by") or [])}],
+                                            "buttons": [_btn("b_tree", "ccx q tree")]})
         elif st in ("needs_write", "blocked", "failed") and not pc.get("act"):
             show = _btn("b_see", f"ccx show {it['run']} --full") if it.get("run") else _btn("b_tree", "ccx q tree")
             pc.update(status="decide", act={"kind": "decide", "what": "a_q_" + st, "why": ["w_q_" + st,

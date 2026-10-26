@@ -45,7 +45,8 @@ class TestPlan(QEnv):
         self.assertEqual(items[ids["wire"]]["deps"], [ids["disk"]])
         self.assertEqual(items[ids["disk"]]["deps"], [ids["api"]])
         self.assertEqual(items[ids["wire"]]["files"], ["loader.py"])
-        self.assertEqual(items[ids["api"]]["brief"], "define the api")             # title stands in for a brief
+        self.assertTrue(items[ids["api"]]["brief"].startswith("define the api."))  # built from the title
+        self.assertIn("cache/api.py", items[ids["api"]]["brief"])
         self.assertEqual(self.q("ls")["ready"], [ids["api"]])
         res = self.q("run")["results"]
         self.assertEqual([r["id"] for r in res], [ids["api"], ids["disk"], ids["wire"]])
@@ -80,7 +81,9 @@ class TestFailedDependency(QEnv):
         c = self.q("add", "c", "--brief", "look at c", "--minutes", "5", "--dep", b["id"])
         out = self.q("run")
         self.assertEqual(out["results"][0]["status"], "failed")
-        self.assertEqual(out["dep_blocked"], {b["id"]: [a["id"]], c["id"]: [b["id"]]})   # transitively
+        # transitively, and each names the piece that failed (b never ran: accepting it would be wrong)
+        self.assertEqual(out["dep_blocked"], {b["id"]: [a["id"]], c["id"]: [a["id"]]})
+        self.assertIn("settle", out)
         items = self.items()
         self.assertEqual((items[b["id"]]["status"], items[c["id"]]["status"]), ("dep_blocked", "dep_blocked"))
         # the lead fixes a itself and accepts it: the rest goes back to todo and runs
