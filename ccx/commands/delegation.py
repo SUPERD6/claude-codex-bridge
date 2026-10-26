@@ -353,6 +353,45 @@ def cmd_plan(a) -> int:
     return int(sp.main(a.args) or 0)
 
 
+def cmd_namecheck(a) -> int:
+    """The static undefined-name check by hand: a run's changes (what fail mode ran), the working tree's changes
+    since --base, or whole files. Exit 1 on a hit."""
+    from .. import namecheck as nck
+    from ..review import _git
+    from ..workspace import run_snapshot
+    if a.files:
+        res: dict = {"hits": [], "files": 0}
+        for f in a.files:
+            try:
+                data = Path(f).read_bytes()
+            except OSError as e:
+                res.setdefault("not_checked", []).append(f"{f}: {e.strerror or e}")
+                continue
+            res["files"] += 1
+            hits, why = nck.check_source(data, f)
+            res["hits"] += hits
+            if why:
+                res.setdefault("not_checked", []).append(f"{f}: {why}")
+    elif a.run:
+        p = paths()
+        rec = ledger.load_run(p, a.run)
+        res = nck.scan(Path(rec.get("cwd") or os.getcwd()), run_snapshot(p, rec))
+    else:
+        cwd = Path.cwd()
+        top = _git(cwd, "rev-parse", "--show-toplevel").strip()
+        if not top:
+            print("ccx namecheck: not in a git repo; name the files to check", file=sys.stderr)
+            return 2
+        res = nck.scan(cwd, {"repo": top, "base": a.base, "untracked": []})
+    for h in res["hits"]:
+        print(nck.line(h))
+    if a.json:
+        _out(res)
+    elif not res["hits"]:
+        print(f"namecheck: no undefined names ({res['files']} file{'s' if res['files'] != 1 else ''})")
+    return 1 if res["hits"] else 0
+
+
 def cmd_resume(a) -> int:
     p = paths()
     from ..recover import sweep
@@ -698,6 +737,14 @@ def register(sub) -> None:
                     "defines in the functions the run changed: warn = shown to you and the reviewer (default, "
                     "[defaults] namecheck); fail = a hit fails the work like a failed --check; off")
     rs.set_defaults(fn=cmd_resume)
+    nc = sub.add_parser("namecheck", help="static check for names no scope defines (NameError waiting to happen) "
+                        "in changed Python functions; exit 1 on a hit")
+    nc.add_argument("files", nargs="*", help="check these whole files instead of changed functions")
+    nc.add_argument("--run", metavar="RUN_ID", help="the changes of that ccx run (what its namecheck saw)")
+    nc.add_argument("--base", default="HEAD", help="without --run or files: changes since this commit "
+                    "(default HEAD; untracked .py files count as new)")
+    nc.add_argument("--json", action="store_true")
+    nc.set_defaults(fn=cmd_namecheck)
     sp = sub.add_parser("stop", help="stop a running delegation (its whole process tree); `ccx resume` continues it")
     sp.add_argument("run_id")
     sp.add_argument("--wait", type=float, default=15.0, help="seconds to wait for the run to record the stop (15)")

@@ -121,6 +121,24 @@ class TestTruePositives(unittest.TestCase):
         self.assertEqual(got, [("m.py", "f", "json"), ("new.py", "g", "undefined_here")])
         self.assertEqual(res["files"], 2)
 
+    def test_non_ascii_paths_and_new_files_from_a_subfolder(self):
+        g = ["git", "-c", "user.name=t", "-c", "user.email=t@t"]
+        import tempfile
+        with tempfile.TemporaryDirectory() as d:
+            w = Path(d)
+            (w / "sub").mkdir()
+            subprocess.run(["git", "init", "-q"], cwd=w, check=True)
+            (w / "sub" / "\u4e2d\u6587.py").write_text("import json\n\n\ndef f():\n    return 1\n", encoding="utf-8")
+            (w / "util.py").write_text("def ok():\n    return 1\n", encoding="utf-8")
+            subprocess.run([*g, "add", "."], cwd=w, check=True)
+            subprocess.run([*g, "commit", "-qm", "init"], cwd=w, check=True)
+            head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=w, capture_output=True, text=True).stdout.strip()
+            (w / "sub" / "\u4e2d\u6587.py").write_text("\n\n\ndef f():\n    return json.dumps(1)\n", encoding="utf-8")
+            (w / "sub" / "util.py").write_text("def g():\n    return missing\n", encoding="utf-8")
+            res = namecheck.scan(w / "sub", {"repo": str(w), "base": head, "untracked": []})
+        got = sorted((h["file"], h["name"]) for h in res["hits"])
+        self.assertEqual(got, [("sub/util.py", "missing"), ("sub/\u4e2d\u6587.py", "json")])
+
 
 class TestNoFalsePositives(unittest.TestCase):
     def test_candidates_are_per_function(self):
@@ -234,9 +252,42 @@ class TestNoFalsePositives(unittest.TestCase):
                          ("mod = globals()\nmod['X'] = 1\ndef f():\n    return X\n", "globals"),
                          ("exec('Y = 1')\ndef f():\n    return Y\n", "exec"),
                          ("import builtins\nbuiltins.Z = 1\ndef f():\n    return Z\n", "writes builtins"),
-                         ("import cython\ndef f():\n    return lib\n", "Cython source")]:
+                         ("import cython\ndef f():\n    return lib\n", "Cython source"),
+                         ("import sys\nfor n in ('A',):\n    setattr(sys.modules[__name__], n, 1)\n"
+                          "def f():\n    return A\n", "sys.modules[__name__]"),
+                         ("import sys\nsys.modules[__name__].__dict__.update(A=1)\ndef f():\n    return A\n",
+                          "sys.modules[__name__]"),
+                         ("vars().update({'X': 1})\ndef f():\n    return X\n", "vars() at module level"),
+                         ("locals()['A'] = 1\ndef f():\n    return A\n", "locals() at module level"),
+                         ("import builtins as b\nb.foo = 1\ndef f():\n    return foo\n", "writes builtins"),
+                         ("import builtins as b\nsetattr(b, 'foo', 1)\ndef f():\n    return foo\n",
+                          "writes builtins")]:
             hits, got = names(src)
             self.assertEqual((hits, got), ([], why), src)
+
+
+    def test_locals_and_vars_inside_functions_keep_the_file_checked(self):
+        src = "def f(a):\n    return vars(a), '{x}'.format(**locals()), nope\n"
+        self.assertEqual(names(src), ([(2, "f", "nope")], None))
+
+    def test_class_namespace_names_display_and_package_submodules(self):
+        src = """\
+        def f():
+            class C:
+                m = __module__
+                q = __qualname__
+            return C, display
+        """
+        self.assertEqual(names(src)[0], [])
+        self.assertEqual(names("def f():\n    return __qualname__\n")[0], [(2, "f", "__qualname__")])
+        pkg = "from .utils import x\nfrom .a.b import y\n\n\ndef f():\n    return utils.z, a.b\n"
+        self.assertEqual(namecheck.check_source(pkg, "pkg/__init__.py")[0], [])
+        self.assertEqual(sorted(h["name"] for h in namecheck.check_source(pkg, "pkg/mod.py")[0]), ["a", "utils"])
+
+    def test_a_very_deep_expression_skips_only_that_file(self):
+        hits, why = names("def f():\n    return " + " + ".join(["x"] * 20000) + "\n")
+        self.assertEqual(hits, [])
+        self.assertTrue(why and ("RecursionError" in why or "deeply nested" in why), why)
 
 
 class TestScopes(unittest.TestCase):
@@ -256,6 +307,23 @@ class TestScopes(unittest.TestCase):
             global H
             H = 2
             return tomllib, Path, H
+        """
+        # Path is imported only for the type checker: the annotation is fine, the run-time read is a NameError
+        self.assertEqual(names(src)[0], [(14, "f", "Path")])
+
+    def test_type_checking_import_with_a_run_time_fallback(self):
+        src = """\
+        import typing
+        if typing.TYPE_CHECKING:
+            from pathlib import Path
+            import collections.abc
+        else:
+            Path = str
+        import collections
+
+
+        def f(x: "Path"):
+            return Path(x), collections.abc
         """
         self.assertEqual(names(src)[0], [])
 
@@ -359,11 +427,72 @@ class TestRuns(Env):
         check = f'"{sys.executable}" -c "open(r\'{marker}\', \'w\').close()"'
         out, rec = self.go(self.BAD, "--namecheck", "fail", "--check", check)
         self.assertEqual(rec["kind"], "check_failed")
-        self.assertEqual(out["check"]["cmd"], "ccx namecheck")
+        self.assertEqual(out["check"]["cmd"], f"ccx namecheck --run {rec['run_id']}")
         self.assertFalse(out["check"]["passed"])
         self.assertEqual(rec["check"]["reason"], "namecheck")
         self.assertFalse(marker.exists())
         self.assertIn("hint", out)
+
+    def test_fail_mode_climbs_a_rung_and_the_next_rung_runs_the_real_check(self):
+        marker = self.hub / "check-runs.txt"
+        check = (f'"{sys.executable}" -c "import pathlib;f=pathlib.Path(r\'{marker}\');'
+                 f'f.write_text(f.read_text()+\'x\' if f.exists() else \'x\')"')
+        env = {"FAKE_WRITE": f"{self.work / 'a.py'}={self.BAD}",
+               "FAKE_WRITE_RESUMED": f"{self.work / 'a.py'}=def f():\n    return 2\n"}
+        r = self.ccx("run", "--to", "codex", "--tier", "T1", "--mode", "write", "--review", "off",
+                     "--namecheck", "fail", "--check", check, "add f to a.py", env=env)
+        out = json.loads(r.stdout)
+        rec = json.loads((Paths(self.hub).runs / out["run_id"] / "run.json").read_text(encoding="utf-8"))
+        self.assertTrue(out["ok"], out)
+        self.assertIn("->", out.get("escalated", ""))
+        self.assertEqual(rec["attempts"][0]["kind"], "check_failed")
+        self.assertEqual(marker.read_text(), "x")             # not on the first rung, once on the second
+        self.assertTrue(rec["check"]["passed"])
+        self.assertEqual(rec["namecheck"]["hits"], [])        # the final scan replaced the first rung's hits
+        prompts = [c["prompt"] for c in self.calls() if c["agent"] == "codex"]
+        self.assertIn("`ccx namecheck --run", "".join(prompts))     # the ESCALATE prompt names the re-run
+
+    def test_resume_keeps_the_mode_and_the_command_reruns_it(self):
+        out, rec = self.go(self.BAD, "--namecheck", "fail", "--review", "off")
+        self.assertEqual((rec["kind"], rec["namecheck_mode"]), ("check_failed", "fail"))
+        self.assertIn("undefined names", out["hint"])
+        r = self.ccx("namecheck", "--run", out["run_id"])
+        self.assertEqual(r.returncode, 1, r.stderr)
+        self.assertIn("helper_never_imported", r.stdout)
+        r = self.ccx("resume", out["run_id"], "try again", "--review", "off",
+                     env={"FAKE_WRITE": f"{self.work / 'a.py'}={self.BAD}"})
+        self.assertTrue(r.stdout, r.stderr)
+        again = json.loads(r.stdout)
+        rec2 = json.loads((Paths(self.hub).runs / again["run_id"] / "run.json").read_text(encoding="utf-8"))
+        self.assertEqual((rec2["namecheck"]["mode"], rec2["kind"]), ("fail", "check_failed"))
+
+    def test_a_blocked_run_still_gets_a_fresh_scan_but_is_not_failed_by_it(self):
+        env = {"FAKE_WRITE": f"{self.work / 'a.py'}={self.BAD}", "FAKE_STATUS": "blocked"}
+        r = self.ccx("run", "--to", "codex", "--model", "gpt-6-luna", "--effort", "low", "--mode", "write",
+                     "--no-fallback", "--no-escalate", "--namecheck", "fail", "--review", "off", "x", env=env)
+        out = json.loads(r.stdout)
+        rec = json.loads((Paths(self.hub).runs / out["run_id"] / "run.json").read_text(encoding="utf-8"))
+        self.assertNotEqual(rec.get("kind"), "check_failed")
+        self.assertEqual(len(rec["namecheck"]["hits"]), 1)
+
+    def test_a_hit_holds_back_the_probable_verdict(self):
+        bad, _ = self.go(self.BAD, "--check", "exit 0", "--review", "off")
+        good, _ = self.go("def f():\n    return 2\n", "--check", "exit 0", "--review", "off")
+        r = self.ccx("verify", "--sweep", "--after-h", "0")
+        got = [g["run_id"] for g in json.loads(r.stdout)["recorded"]]
+        self.assertEqual(got, [good["run_id"]])
+        self.assertNotIn(bad["run_id"], got)
+
+    def test_command_on_files_and_on_the_working_tree(self):
+        (self.work / "b.py").write_text(self.BAD, encoding="utf-8")
+        r = self.ccx("namecheck", str(self.work / "b.py"))
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("helper_never_imported", r.stdout)
+        r = subprocess.run([sys.executable, str(ROOT / "ccx.py"), "namecheck", "--json"], cwd=self.work,
+                           capture_output=True, text=True, env=self.env, encoding="utf-8")
+        self.assertEqual(r.returncode, 1, r.stderr)              # b.py is untracked: a new file, checked whole
+        r = self.ccx("namecheck", str(self.work / "a.py"))
+        self.assertEqual(r.returncode, 0)
 
     def test_clean_change_and_off(self):
         _, rec = self.go("def f():\n    return 2\n")

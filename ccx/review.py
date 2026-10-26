@@ -74,10 +74,13 @@ def changes(cwd: Path, snap: dict | None) -> tuple[list[str], str]:
     if not snap:
         return [], ""
     base = snap["base"]
-    names = [n for n in _git(cwd, "diff", "--name-only", base).splitlines() if n and not n.startswith(".ccx/")]
-    diff = _git(cwd, "diff", base, "--", ".", ":(exclude).ccx")
+    # paths as git has them from the repo root (like the snapshot's untracked list), unquoted: with core.quotepath
+    # on (git's default) a non-ASCII name came back as "sub/ä..." and matched no file
+    q = ("-c", "core.quotepath=off")
+    names = [n for n in _git(cwd, *q, "diff", "--name-only", base).splitlines() if n and not n.startswith(".ccx/")]
+    diff = _git(cwd, *q, "diff", base, "--", ".", ":(exclude).ccx")
     before = set(snap.get("untracked") or [])
-    for n in _git(cwd, "ls-files", "--others", "--exclude-standard").splitlines():
+    for n in _git(cwd, *q, "ls-files", "--others", "--exclude-standard", "--full-name").splitlines():
         if n and n not in before and not n.startswith(".ccx/"):
             names.append(n)
             try:

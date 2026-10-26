@@ -20,8 +20,8 @@ tradeoff = "save"         # 省钱 save | 平衡 balanced | 快 fast，或 0..1 
 ab_self_rate = 0.1        # 约 10% 的可派任务让主智能体自己做，用来实测“到底省了多少”（0 = 关）
 namecheck = "warn"        # 写入运行后，静态查改动过的函数里有没有未定义的名字（ccx/namecheck.py，标准库，毫秒级）：
 # warn = 命中写进记录、给主智能体的结果和评审简报，作为弱证据，不判失败（默认）；fail = 命中算验收失败（check_failed）；
-# off = 不查。也可 ccx run --namecheck。默认 warn 是因为误报率只在本仓库、标准库和本机 site-packages 上测过，
-# 换成 fail 要等 r5 前后对比的数据。
+# off = 不查。也可 ccx run --namecheck；手动查用 ccx namecheck。默认 warn 的依据：本仓库、标准库 0 误报，r5 的
+# 3 万多个文件里唯一命中是真 bug，没命中时没有代价；有命中的运行不自动记“大概率对”。换成 fail 要等 r5 前后对比。
 
 [lead]                    # 主智能体平时用的模型，只用来估算“如果自己做要花多少”
 claude = "opus"

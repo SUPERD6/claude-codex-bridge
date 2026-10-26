@@ -8,19 +8,25 @@ Mode (`[defaults] namecheck` in tiers.toml, or `ccx run --namecheck`):
   warn (default) - hits go to the record (`namecheck`), the lead's compact result and the review brief, as weak
                    evidence; the work is not failed.
   fail           - a hit fails the work like a failed acceptance check: kind `check_failed`, check.reason
-                   "namecheck"; the acceptance command is not run.
+                   "namecheck", check.cmd `ccx namecheck --run <id>` (re-runs it); the acceptance command is not run.
   off            - not run.
+`ccx namecheck` runs it by hand: on a run's changes (--run), the working tree's changes since --base, or whole files.
 
 What it deliberately does not report (it misses a bug rather than flag good code):
-  - a file with `from x import *`, `exec(...)`, `globals()`, writes through `builtins` / `__builtins__`, enum
-    members exported to the module (`enum.global_enum`, `_convert_`), or `import cython`;
+  - a file with `from x import *`, `exec(...)`, `globals()`, `vars()` / `locals()` at module level,
+    `sys.modules[__name__]`, writes through `builtins` / `__builtins__` (or an alias of it), enum members exported
+    to the module (`enum.global_enum`, `_convert_`), or `import cython`;
+  - `__module__` / `__qualname__` in a class body; in a package's `__init__.py`, the submodule a relative import
+    binds (`from .utils import x` binds `utils`);
   - names inside a `try:` whose handler catches NameError (the compatibility idiom);
   - every annotation: local variable annotations are never evaluated (PEP 526), argument and return annotations
     are not under `from __future__ import annotations` or Python 3.14 (PEP 649);
   - decorators, defaults and module-level code (they run at import, which any test of the module does);
-  - `_` and `get_ipython` (installed into builtins by gettext.install / IPython);
+  - `_`, `get_ipython` and `display` (installed into builtins by gettext.install / IPython);
   - a file that does not parse (listed as `unparsed`, never a failure: it may be newer syntax than ccx's Python).
 Only functions whose lines the run changed count, plus any function using a module-level name the run removed.
+A name imported only under `if TYPE_CHECKING:` does count when a function reads it at run time (not in an
+annotation): it does not exist then.
 
 Builtins are a fixed set so the verdict does not depend on which Python runs ccx: every name `dir(builtins)` has
 on 3.11 (Windows, which adds WindowsError), plus the ones 3.13 added, plus whatever the running interpreter has
@@ -31,6 +37,7 @@ from __future__ import annotations
 
 import ast
 import builtins
+import copy
 import io
 import symtable
 import time
@@ -59,7 +66,7 @@ set setattr slice sorted staticmethod str sum super tuple type vars zip
 PythonFinalizationError _IncompleteInputError
 """.split())
 MODULE_NAMES = frozenset({"__file__", "__cached__", "__path__", "__builtins__", "__annotations__"})
-INJECTED = frozenset({"_", "get_ipython"})
+INJECTED = frozenset({"_", "get_ipython", "display"})
 KNOWN = _BUILTINS_FIXED | frozenset(dir(builtins)) | MODULE_NAMES | INJECTED
 
 _FUNCS = (ast.FunctionDef, ast.AsyncFunctionDef)
@@ -108,25 +115,52 @@ def _candidates(top: symtable.SymbolTable) -> dict[tuple[str, int], set[str]]:
     return out
 
 
+def _module_level(tree: ast.Module):
+    """The nodes evaluated in the module namespace: everything but function and lambda bodies."""
+    stack = list(tree.body)
+    while stack:
+        n = stack.pop()
+        yield n
+        if isinstance(n, (*_FUNCS, ast.Lambda)):
+            continue
+        stack.extend(ast.iter_child_nodes(n))
+
+
+def _is_self_module(v) -> bool:
+    """`sys.modules[__name__]`: the module object itself, whose attributes are its globals."""
+    return (isinstance(v, ast.Subscript) and isinstance(v.value, ast.Attribute) and v.value.attr == "modules"
+            and isinstance(v.slice, ast.Name) and v.slice.id == "__name__")
+
+
 def _dynamic(tree: ast.Module) -> str | None:
     """Why names in this file may come from somewhere a static check can't see; None when they can't."""
+    bi = {"builtins", "__builtins__", "__builtin__"}
+    for n in ast.walk(tree):                               # `import builtins as b`: b.foo = 1 writes builtins too
+        if isinstance(n, ast.Import):
+            bi.update(a.asname for a in n.names if a.asname and a.name in ("builtins", "__builtin__"))
+    for n in _module_level(tree):                          # vars().update(...), locals()["A"] = 1 at module level
+        if (isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in ("vars", "locals")
+                and not n.args):
+            return f"{n.func.id}() at module level"
     for n in ast.walk(tree):
+        if _is_self_module(n):
+            return "sys.modules[__name__]"                 # setattr(sys.modules[__name__], ...), its __dict__
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "setattr" and n.args \
+                and isinstance(n.args[0], ast.Name) and n.args[0].id in bi:
+            return "writes builtins"
+        if isinstance(n, (ast.Subscript, ast.Attribute)) and isinstance(n.ctx, (ast.Store, ast.Del)) \
+                and isinstance(n.value, ast.Name) and n.value.id in bi:
+            return "writes builtins"
         if isinstance(n, ast.ImportFrom) and any(a.name == "*" for a in n.names):
             return "star import"
         if isinstance(n, ast.Import) and any(a.name == "cython" for a in n.names):
             return "Cython source"                         # pure-Python mode: cimported names are not imports
-        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name):
-            if n.func.id in ("exec", "globals"):          # globals() kept in a variable and written later
-                return n.func.id
-            if (n.func.id == "setattr" and n.args and isinstance(n.args[0], ast.Name)
-                    and n.args[0].id in ("builtins", "__builtins__")):
-                return "writes builtins"
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in ("exec", "globals"):
+            return n.func.id                               # globals() kept in a variable and written later
         if isinstance(n, (ast.Subscript, ast.Attribute)) and isinstance(n.ctx, (ast.Store, ast.Del)):
             v = n.value
             if isinstance(v, ast.Call) and isinstance(v.func, ast.Name) and v.func.id in ("globals", "vars"):
                 return "writes globals()"
-            if isinstance(v, ast.Name) and v.id in ("builtins", "__builtins__"):
-                return "writes builtins"
         if isinstance(n, (ast.Attribute, ast.Name)) and (getattr(n, "attr", None) or getattr(n, "id", "")) in (
                 "global_enum", "_convert_"):
             return "enum members exported to the module"   # enum.global_enum, IntEnum._convert_ (stdlib ssl, re)
@@ -141,6 +175,33 @@ def module_names(tree: ast.Module, top: symtable.SymbolTable) -> set[str]:
         if isinstance(n, ast.Global):
             out.update(n.names)
     return out
+
+
+def _is_tc(test) -> bool:
+    return (isinstance(test, ast.Name) and test.id == "TYPE_CHECKING") or \
+        (isinstance(test, ast.Attribute) and test.attr == "TYPE_CHECKING")
+
+
+def type_checking_only(tree: ast.Module) -> set[str]:
+    """Names imported under a module-level `if TYPE_CHECKING:` and bound nowhere else at module level: they do not
+    exist when the code runs, so a function reading one at run time (not in an annotation) raises NameError."""
+    tc, rest = set(), copy.deepcopy(tree)
+    for i, st in enumerate(rest.body):
+        if isinstance(st, ast.If) and _is_tc(st.test):
+            for n in st.body:
+                if isinstance(n, (ast.Import, ast.ImportFrom)):
+                    tc.update(a.asname or a.name.split(".")[0] for a in n.names)
+            rest.body[i] = ast.If(test=st.test, body=[ast.Pass()], orelse=st.orelse)
+    if not tc:
+        return set()
+    text = ast.unparse(rest)
+    return tc - module_names(ast.parse(text), symtable.symtable(text, "<rest>", "exec"))
+
+
+def _package_submodules(tree: ast.Module) -> set[str]:
+    """In a package's __init__.py, `from .utils import x` also binds `utils` (the submodule) in the package."""
+    return {n.module.split(".")[0] for n in ast.walk(tree)
+            if isinstance(n, ast.ImportFrom) and n.level == 1 and n.module}
 
 
 def _catches_nameerror(t) -> bool:
@@ -235,20 +296,28 @@ def check_source(src: bytes | str, path: str = "<src>", changed: set[int] | None
         text = _decode(src)
         tree = ast.parse(text, path)
         top = symtable.symtable(text, path, "exec")
-    except (SyntaxError, ValueError, UnicodeError) as e:
+    except (SyntaxError, ValueError, UnicodeError, RecursionError, MemoryError) as e:
         return [], f"unparsed: {type(e).__name__} line {getattr(e, 'lineno', '?')}"
     why = _dynamic(tree)
     if why:
         return [], why
     defined = module_names(tree, top) | KNOWN
-    cands = _candidates(top)
+    if path.replace("\\", "/").rsplit("/", 1)[-1] == "__init__.py":
+        defined |= _package_submodules(tree)
     walker = _Loads()
-    for x in tree.body:
-        walker.visit(x, (), (), frozenset(), False)
+    try:
+        defined -= type_checking_only(tree)
+        cands = _candidates(top)
+        for x in tree.body:
+            walker.visit(x, (), (), frozenset(), False)
+    except RecursionError:                    # one very deep expression: this file only, not the whole run
+        return [], "too deeply nested"
     hits, seen = [], set()
     for name, scopes, funcs, _ in walker.out:
         if name.id in defined or (name.lineno, name.id) in seen:
             continue
+        if name.id in ("__module__", "__qualname__") and isinstance(scopes[-1], ast.ClassDef):
+            continue                          # bound in every class namespace
         resolved = None
         for sc in reversed(scopes):            # an inlined comprehension (3.12+) has no table of its own
             resolved = cands.get(_scope_key(sc))
@@ -269,7 +338,7 @@ def defined_names(src: bytes | str) -> set[str]:
     try:
         text = _decode(src)
         return module_names(ast.parse(text), symtable.symtable(text, "<old>", "exec"))
-    except (SyntaxError, ValueError, UnicodeError):
+    except (SyntaxError, ValueError, UnicodeError, RecursionError, MemoryError):
         return set()
 
 
@@ -279,6 +348,8 @@ def scan(cwd: Path, snap: dict | None, names: list[str] | None = None, diff: str
     from . import review as rv
     t0 = time.perf_counter()
     out: dict = {"hits": [], "files": 0}
+    if snap and snap.get("base"):
+        out["base"] = snap["base"]
     if not snap:
         out["skipped"] = "no undo snapshot (not a git repo?)"
         return out
@@ -290,8 +361,8 @@ def scan(cwd: Path, snap: dict | None, names: list[str] | None = None, diff: str
     for n in names:
         if not n.endswith(".py"):
             continue
-        f = next((x for x in (repo / n, Path(cwd) / n) if x.is_file()), None)
-        if f is None:
+        f = repo / n                                       # review.changes: paths from the repo root
+        if not f.is_file():
             continue                                       # deleted
         try:
             data = f.read_bytes()
@@ -329,6 +400,7 @@ def for_run(req, cfg: dict, p, record: dict, cwd: Path) -> dict | None:
     try:
         from .workspace import run_snapshot
         res = scan(Path(cwd), run_snapshot(p, record))
+        res["run"] = record.get("run_id")
     except Exception as e:  # noqa: BLE001 — a static check never breaks the run
         res = {"hits": [], "files": 0, "error": f"{type(e).__name__}: {e}"[:200]}
     res["mode"] = m
@@ -338,7 +410,8 @@ def for_run(req, cfg: dict, p, record: dict, cwd: Path) -> dict | None:
 def as_check(nc: dict, cmd: str | None) -> dict:
     """mode fail: the record's `check` for a hit, read by everything that already knows check_failed."""
     tail = "\n".join(line(h) for h in nc["hits"])
-    return {"cmd": "ccx namecheck", "passed": False, "exit": 1, "reason": "namecheck", "tail": tail,
+    cmd_nc = f"ccx namecheck --run {nc['run']}" if nc.get("run") else "ccx namecheck"
+    return {"cmd": cmd_nc, "passed": False, "exit": 1, "reason": "namecheck", "tail": tail,
             "duration_sec": round(nc.get("ms", 0) / 1000, 3), **({"not_run": cmd} if cmd else {})}
 
 
@@ -346,5 +419,5 @@ def brief_note(nc: dict | None) -> str:
     """For the reviewer: weak evidence, to confirm or dismiss."""
     if not nc or not nc.get("hits"):
         return ""
-    return ("\nA static check (ccx namecheck, weak evidence: confirm by reading the code) found names that no "
+    return ("\nA static check (`ccx namecheck`, weak evidence: confirm by reading the code) found names that no "
             "scope defines in the changed functions:\n" + "".join(f"- {line(h)}\n" for h in nc["hits"][:8]))

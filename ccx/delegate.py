@@ -393,6 +393,7 @@ def run(req: Request, p: Paths) -> dict:
         req.label = req.label or prev.get("label") or ""
         req.check = req.check or prev.get("check_cmd")
         req.risk = req.risk or prev.get("risk")
+        req.namecheck = req.namecheck or prev.get("namecheck_mode")
         last = (prev.get("attempts") or [{}])[-1]
         if not req.model and last.get("model"):
             req.model, req.effort = last["model"], last.get("effort")
@@ -470,6 +471,7 @@ def run(req: Request, p: Paths) -> dict:
         "continue_depth": (int(prev.get("continue_depth", 0)) + 1) if cont else 0,
         "forked_from_lead": bool(req.fork_lead), "ephemeral": req.ephemeral,
         "mode_source": req.mode_source, "mode_why": req.mode_why, "check_cmd": req.check, "risk": req.risk,
+        "namecheck_mode": req.namecheck,
         "shared_context": shared_meta,
     }
     _write_record(run_dir, record)          # visible to `ccx show` at once (background runs, crashes)
@@ -734,8 +736,8 @@ def run(req: Request, p: Paths) -> dict:
     if bg_review is not None and not (want_review and early_check and early_check[0] == len(record["attempts"])):
         _finish_review(bg_review, record, p, keep=False)         # not this attempt's (cannot happen; be safe)
         bg_review = None
-    nc_fail = _namecheck(req, p, cfg, record, cwd) if oc.ok and status in ("done", "partial") else None
-    if nc_fail:
+    nc_fail = _namecheck(req, p, cfg, record, cwd)      # always: an earlier rung's hits are stale now
+    if nc_fail and oc.ok and status in ("done", "partial"):
         record["check"], record["kind"], check_passed = nc_fail, "check_failed", False
     elif req.check and oc.ok and status in ("done", "partial"):
         reuse = early_check and early_check[0] == len(record["attempts"])    # already run on this very attempt
@@ -855,7 +857,10 @@ def compact(record: dict) -> dict:
         out["kind"] = record["kind"]
         if record["kind"] == "over_budget":
             out["hint"] = (record.get("error") or "stopped over the sub-agent spending cap") +                 f"; what it did so far: `ccx show {record['run_id']} --full`"
-        if record["kind"] == "check_failed":
+        if record["kind"] == "check_failed" and record["check"].get("reason") == "namecheck":
+            out["hint"] = (f"the changed code uses names no scope defines (see namecheck; `{record['check']['cmd']}` "
+                           f"re-runs it); fix them: ccx resume {record['run_id']} \"fix the undefined names\"")
+        elif record["kind"] == "check_failed":
             out["hint"] = (f"the sub-agent reported done, but the check failed (exit {record['check']['exit']}); "
                            f"see `ccx show {record['run_id']} --full`, or continue: ccx resume {record['run_id']} "
                            f"\"the check fails: fix it\"")
