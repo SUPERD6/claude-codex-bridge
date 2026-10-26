@@ -27,8 +27,9 @@ python scripts/task_routing.py route --files 3 --coupling cross --clarity goal -
 
 Use `--not-verifiable` if available checks cannot establish success; it disables cheap-first
 escalation. Add `--lead`, `--ctx-tokens`, `--lead-ctx` (your conversation's size: each of your turns re-reads it;
-ccx reads it by itself) and `--remaining-turns` when comparing continuation with delegation. To offer a delegation
-nobody asked for, use `ccx propose` (agent-delegate, section 0): the same estimate, recorded, one line to ask. Use `--agents` to restrict providers; `--explain` shows alternatives.
+ccx reads it by itself) and `--remaining-turns` when comparing continuation with delegation; an unrequested
+delegation offer is `ccx propose` (agent-delegate section 0). `--agents` restricts providers; `--explain` shows
+alternatives. Judging the tier yourself (`ccx run --tier`): agent-delegate's `references/rubric.md`.
 `--agents codex,claude,deepseek` adds DeepSeek, which costs real money per token; through ccx it is offered only
 once every subscription's quota reaches 70% (agent-delegate's `references/three-way.md`).
 Consult `--help` only for needed unfamiliar options.

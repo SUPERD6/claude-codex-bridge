@@ -7,11 +7,9 @@ description: Act as the project manager of a coordinating lead session - take on
 
 One sentence in, one or two sentences out. In between: find the project, choose the cheapest way that will be
 right, dispatch, check, tidy up. The person does not want to be interrupted: routine, reversible steps you just do;
-what your autonomy level holds back and the few things in section 6 you ask about. How to write a brief, run and check one piece is the agent-delegate
-skill; this skill decides *what* to send *where* and in what shape.
-
-Keep your own side cheap: you need this skill, `ccx where` and the brief. Don't open the project's README, STATUS or
-docs yourself to plan; the sub-agent reads the project's rule files (`--project` puts them at the top of its brief).
+what your autonomy level holds back and the few things in section 6 you ask about. How to write a brief, run and
+check one piece is the agent-delegate skill; this skill decides *what* to send *where* and in what shape.
+Don't open the project's README, STATUS or docs to plan: `--project` puts its rule files at the top of the brief.
 
 ## 1. Understand the sentence
 
@@ -32,20 +30,22 @@ not tested):
 
 | Shape | When | Why |
 |---|---|---|
-| **One cheap model + another vendor's cheap review** (default) | almost always | as often right as the costlier ways of splitting the work, at about 7% of the cost of `ccx way` (review ~$0.006 a task) |
+| **One cheap model, reviewed when ccx's auto rule calls for it** (default) | almost always | as often right as the costlier ways of splitting the work, at about 7% of the cost of `ccx way` (review ~$0.006 a task) |
 | **Parallel** | only if the person wants it fast *and* the work is independent pieces | faster, never cheaper: each extra run costs ~93k start-up tokens; 10 runs used ~4.7× the tokens of 1. Say "faster, not cheaper" when you choose it |
 | **Draft, then reviewed draft** | large work (many files, several hours, unclear seams) | settle the split before paying for it |
 
 Default:
 ```
-ccx run --project <name> --minutes <n> --tradeoff save --review on --check "CMD" "brief..."
+ccx run --project <name> --minutes <n> --tradeoff save --check "CMD" "brief..."
 ```
-`--review on` has another vendor's cheap model read the diff. `--tradeoff save` keeps routing cheap; in that round
+Review stays on auto: another vendor's cheap model reads the diff when the evidence is weak, the diff large or the
+risk visible (round 5, 2026-10-26: the lead arm on auto was right 19/20 and 20/20, confounded with its lean brief).
+`--review on` only for an L2 auto-merge (section 6) or visible risk. `--tradeoff save` keeps routing cheap; in that round
 routing still picked a mid-tier model for 15-30 minute tasks the cheapest model got right 97% of the time, so for a
 clearly specified piece you may name the cheap rung with `--model <m> --effort low`.
 
 Parallel: one `ccx run --project <name> --bg --worktree ...` per piece (each keeps the project's rule files and
-approval stop), followed with `ccx show <run_id>`. `ccx batch plan.json` and `ccx q run` also run in parallel, but
+approval stop), followed with `ccx show <run_id> --wait`. `ccx batch plan.json` and `ccx q run` also run in parallel, but
 take a plain `"cwd"` per task (the path from `ccx projects show`) and do not add the rule files, so use them only
 where the project has no approval rules. Merge pieces under ~5 minutes into fewer runs: the start-up cost, not the
 work, dominates small runs.
@@ -61,9 +61,9 @@ write run. Pass `--context on` for a read run (such as the draft review) that de
 
 ## 4. Check
 
-Follow agent-delegate section 4: read `check` and the diff, don't re-run a check ccx already passed, and record
-`ccx verify <run_id> --ok 1|0` for every run you looked at. A `review` with `issues` gets one `ccx resume <run_id>`
-fix round; after that it's your call. For several pieces, check each before reporting any as done.
+Follow agent-delegate section 4 (how much to look at, `needs_lead`, review fix rounds) and record
+`ccx verify <run_id> --ok 1|0` for every run you looked at. For several pieces, check each before reporting any as
+done.
 
 ## 5. Tidy up and report
 
@@ -71,6 +71,10 @@ fix round; after that it's your call. For several pieces, check each before repo
   if your app has its own session list, archive the sessions you started once their work is merged.
 - Report in one or two sentences: what is now true, where it is (branch, PR, files), what costs it had, and what
   was **not** verified. No step-by-step story.
+
+Other tools: `ccx ui` (a live page of who works on what, what waits for the person), `ccx say` / `ccx board` /
+`ccx peek` (talk to or read the other open sessions here), `ccx intake` (tasks the person filed as issues in their
+private repository), `ccx stats` / `ccx report` (spend and savings).
 
 ## 6. Autonomy level, and what always goes to the person
 

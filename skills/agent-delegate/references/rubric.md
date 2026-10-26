@@ -23,7 +23,8 @@ Adjustments
 
 Which agent
 - Default: the *other* agent (that is the point — it spends the other account's tokens).
-- Same-agent sub-tasks are better done with your own built-in sub-agents, not ccx.
+- Same-agent sub-tasks: yourself, your built-in sub-agent or ccx — compare them with `three-way.md`
+  (ccx's slim start is usually the cheapest).
 - Check `ccx stats` after a while: if a tier's done_rate is low for one agent, raise
   that tier in `<hub>/ccx/tiers.toml`; if it is ~1.0 and cheap, try one tier lower.
 

@@ -7,22 +7,20 @@ description: Execute an authorized cross-agent delegation through ccx and verify
 
 `ccx` runs the other agent headless and returns a small JSON result. Use the configured command;
 if it is not on PATH, resolve this skill directory to the bridge checkout and run
-`python -X utf8 <checkout>/ccx.py`. Sub-agents never delegate again.
+`python -X utf8 <checkout>/ccx.py`. Sub-agents never delegate again. Only if you can't find the command, run
+`ccx -h` / `ccx run -h`.
 
-**Keep your own side cheap** (section 2). Only if you can't find the ccx command, run `ccx -h` / `ccx run -h`.
-Your own context is the biggest cost: every turn re-reads the whole conversation. Send big reads (many files, long
-logs, research) out read-only and take back the conclusion; when the conversation is long and the next piece is
-new work, hand over to a fresh one (section 5). Run long-output commands as `ccx sum -- <command>` (tests, logs,
-`git diff`): you get the failures or the per-file summary, the full output stays on disk. `ccx lead` shows what a
-turn costs you now; `ccx lead --breakdown` what it is made of.
+**Your own context is the biggest cost:** every turn re-reads the whole conversation. Send big reads (many files,
+long logs, research) out read-only and take back the conclusion. Run long-output commands as
+`ccx sum -- <command>` (tests, logs, `git diff`): you get the failures or the per-file summary, the full output
+stays on disk. `ccx lead` shows what a turn costs you now; `ccx lead --breakdown` what it is made of.
 
-**If you are DeepSeek.** ccx tells who leads from the environment, so `--from` is not needed: DeepSeek Harness
-(dsh) sets `DSH_SESSION_ID`; Claude Code on DeepSeek is known by its `ANTHROPIC_BASE_URL`; Codex on DeepSeek only by
-`model_provider` in its config.toml, otherwise set `CCX_LEAD=deepseek-codex`. As dsh on Windows your shell is
-Windows PowerShell 5.1: call the configured command as `& "<python>" "<ccx.py>" run ...`, and put a brief longer than
-a line in a file (`--brief-file`). dsh must run with `DSH_PERMISSION_MODE=danger-full-access`: in `workspace-write`
-ccx cannot write its run records and headless dsh has no one to approve more (0.2.1-rc.3, real run). That gives every
-command you run the person's rights; say so before asking for it.
+**If you are DeepSeek:** ccx tells who leads from the environment (dsh: `DSH_SESSION_ID`; Claude Code on DeepSeek:
+`ANTHROPIC_BASE_URL`; Codex on DeepSeek: `model_provider` in config.toml, else set `CCX_LEAD=deepseek-codex`), so
+`--from` is not needed. dsh on Windows has Windows PowerShell 5.1: call `& "<python>" "<ccx.py>" run ...` and put a
+brief longer than a line in a file (`--brief-file`). dsh needs `DSH_PERMISSION_MODE=danger-full-access` (in
+`workspace-write` ccx cannot write its run records; 0.2.1-rc.3, real run). That gives every command the person's
+rights: say so before asking for it.
 
 ## 0. Offer it; the person decides
 
@@ -32,8 +30,8 @@ Estimate before saying anything:
 ```
 ccx propose --lead <your rung, e.g. claude:opus:high> --minutes <n> [--files N --coupling one|cross|system] "the task in one line"
 ```
-It reads your own conversation's size by itself (each extra turn of yours re-reads it) and returns `worth_offering`,
-the cost delegated vs here, the odds, and `say`.
+It reads your own conversation's size by itself and returns `worth_offering`, the cost delegated vs here, the
+odds, and `say`.
 - `worth_offering: false` → do it yourself and don't mention it.
 - `true` → ask with that one line (cost and odds, nothing more) and wait; don't start the work meanwhile.
 - yes → `ccx run --proposal <id> --minutes <n> [--check "CMD"] "brief"`, **without `--no-ab`** (that flag marks an
@@ -51,7 +49,7 @@ and task-split only if the job needs decomposition. When the requested target/mo
 stay fixed, use `--no-escalate --no-fallback`. Delegate self-contained, checkable pieces;
 parallel execution requires authorization as well as independent work.
 Choosing between doing it yourself, your own built-in sub-agent and ccx, and when DeepSeek fits:
-`references/three-way.md`.
+`references/three-way.md`. Picking a tier yourself (`--tier T0..T4`): `references/rubric.md`.
 
 ## 2. Delegate cheaply
 
@@ -64,25 +62,22 @@ sub-agent. The extra requests came from the habits below.
 - **Long or multi-file work:** `ccx run --bg ...` prints the run_id; then `ccx show <run_id> --wait`, again while it
   says running. Never `ccx resume` a run that is still running. Don't pipe ccx output through `tail`/`head`: the
   result is one small JSON object, and a pipe on a long run hits your shell's timeout.
-- **Afterwards:** a passed `check` that runs the relevant tests, plus the result's `files_changed` / `diffstat`, is
-  enough, unless the result has `needs_lead` or `edited_tests` (look at those first). Run tests or read the full
-  diff yourself only when the check failed, was absent or `weak`, or the status is partial/blocked.
-  `check_broken` = the check tested nothing: `ccx resume <run_id> --check "..."`. The task names an entry point
-  (a command, a CLI) and no test runs it as a real process: resume once asking for one.
-- **Leave `--review` at its default (auto)**; `--review on` / `--risk visible` only for risky or user-facing work.
+- **Leave `--review` at its default (auto)**; `--review on` / `--risk visible` only for risky or user-facing work
+  (and for an L2 auto-merge, which needs a passed review).
 - **Never ask the sub-agent to commit** (Codex's sandbox blocks `.git` writes: wasted turns). You commit after
   accepting.
-
-**A project named, no path given** ("the desk pet", "that harness PR"): `ccx where "<their words>"` first (code only, free). One `pick` → use it; several candidates → ask which. Delegate into it with `ccx run --project <name>`: the run goes to that folder and the brief starts with its rule files. If the project's rules speak of approval, ccx stops and quotes them (`approval_rules`); you decide from them, or ask the person, and only then run again with `--rules-ok`.
+- **A project named, no path given** ("the desk pet"): `ccx where "<their words>"` (code only, free); one `pick` →
+  `ccx run --project <name>`, several → ask which. If its rules speak of approval, ccx stops and quotes them
+  (`approval_rules`): decide from them or ask the person; only then run again with `--rules-ok`. More: project-manager.
 
 ## 3. Run
 
 ```
 ccx run --from <you> --files 3 --coupling cross --clarity goal "brief..."  # routed; may edit (default)
 ccx run --from <you> --model <m> --effort <e> --minutes <n> "brief..."   # explicit pick; --minutes = how long a
-#   skilled engineer would need. Without it (or the rubric flags) the run has no difficulty and its verdict can't
-#   teach routing: in the seven-cores A/B dozens of luna-low runs taught it nothing (2026-10-24)
+#   skilled engineer would need. Without it (or the rubric flags) the verdict can't teach routing
 ccx run --bg ...; ccx show <run_id> --wait   # long work: detached, then wait (again while running)
+ccx stop <run_id>                # stop a running delegation (its whole process tree); resume continues it
 ccx run ... --task <id> --step <n>   # session id saved into task-checkpoint at once
 ccx run ... --mode read          # analysis only (without --mode, ccx infers read/write from the brief; follow it)
 ccx run ... --check "CMD"        # acceptance command: the sub-agent runs it, ccx runs it again (failure = failure)
@@ -98,28 +93,36 @@ ccx resume <run_id> "follow-up"  # same sub-session: no re-briefing, cache stays
 ```
 Result JSON: status, summary, files_changed, diffstat, check, verification, open_questions, next_step, tokens.
 A quota/rate-limit stop retries once on the other agent (`--no-fallback` to stop instead);
-a timeout or crash keeps the session id — `ccx resume <run_id>` continues where it stopped.
+a timeout, crash or `ccx stop` keeps the session id — `ccx resume <run_id>` continues where it stopped.
 
-For work where a wrong result costs more, let the risk choose how it is done: `ccx way --risk low|visible|critical
-"brief" [--check CMD]`. low = one agent (review when worth it); visible = another vendor plans, one builds, the
+For work where a wrong result costs more, let the risk choose how it is done:
+`ccx way --risk low|visible|critical "brief" [--check CMD]`. low = one agent (review when worth it); visible = another vendor plans, one builds, the
 planner accepts (one fix round); critical = two vendors each build a version in a worktree and a third compares —
 about twice the cost, so ask the person first and pass `--yes`. Nothing is merged for you. Builders are ordered by
 their first-time-right rate for that kind of work (`ccx way --stats`).
 
 ## 4. Check, don't trust
 
-A printed result with a `run_id` means that delegation ran: do not send the same brief again (a real Codex lead
-did, after a run that had already passed, in the seven-cores check of 2026-10-24); to add to it, `ccx resume <run_id>`.
-The summary is a claim; a passed `check` is evidence you don't re-run (section 2; in H11, 2026-10-24, a lead that
-re-ran it saved nothing by delegating). `weak` in `check` = that command has passed wrong work here before.
-`verification: not-run` = unverified — say so. A `review` field is that independent review: `pass` (its notes
-are optional reading) or `issues` with `file:line`; after one fix round, `kind: review_failed` is yours to decide.
+A printed result with a `run_id` means that delegation ran: do not send the same brief again; to add to it,
+`ccx resume <run_id>`. The summary is a claim.
+- **Look first at `needs_lead` and `edited_tests`** when the result has them.
+- **A passed `check` that runs the relevant tests, plus `files_changed` / `diffstat`, is enough**: don't re-run it
+  (H11, 2026-10-24: a lead that re-ran it saved nothing by delegating). Run tests or read the full diff yourself
+  only when the check failed, was absent or `weak` (that command has passed wrong work here before), or the status
+  is partial/blocked.
+- `check_broken` = the check tested nothing: `ccx resume <run_id> --check "..."`. The task names an entry point
+  (a command, a CLI) and no test runs it as a real process: resume once asking for one.
+- `verification: not-run` = unverified — say so.
+- A `review` field is the independent review: `pass` (its notes are optional reading) or `issues` with
+  `file:line`. ccx runs one fix round itself (`show --wait` follows it); after that, `review_failed` /
+  `needs_lead` is your call. Still `kind: review_issues` (no fix round ran) → one `ccx resume <run_id>`.
+
 Then give your verdict:
 `ccx verify <run_id> --ok 1|0 [--reason unfinished|wrong|overreach|other] [--note "..."]` — this calibrates
-routing (and splitting, if `--minutes` was given) and closes the checkpoint step. Runs nobody judges get a
-probable verdict after 12 h when ccx's check or the self-check and the review passed (an undone run waits for
-yours: `ccx undo --apply --wrong` records it as wrong in the same step); your verdict always overrides it, so give one whenever you actually looked.
-`ccx show <id> --full` only when the compact result is not enough.
+routing (and splitting, if `--minutes` was given) and closes the checkpoint step. Unjudged runs get a probable
+verdict after 12 h when the check or self-check and the review passed; an undone run waits for yours
+(`ccx undo --apply --wrong` records it as wrong in the same step). Your verdict always overrides it, so give one
+whenever you actually looked. `ccx show <id> --full` only when the compact result is not enough.
 
 ## 5. Switching leads
 
@@ -136,7 +139,8 @@ with it.
 ## 6. Memory
 
 Only when memory maintenance is authorized: store a needed durable fact with
-`ccx mem add "one sentence" --by <you>`. Delegation alone does not authorize a memory write.
+`ccx mem add "one sentence" --by <you>` (`--project` puts it in this project's journal under `.ccx/` instead;
+`ccx project status` shows that layer). Delegation alone does not authorize a memory write.
 No task chatter; the other side receives only new lines at its next session start.
 Add `--source` (where it came from); replace a note that stopped being true with `--supersedes N`. A standing rule
 the user states goes to the user's shared instructions, only after they agree; never copy one tool's own
@@ -145,12 +149,10 @@ automatic memory into the other.
 ## 7. A decision that is costly to get wrong
 
 Hard to undo (a data format, a migration, a public interface, a dependency), touching safety or money, or the person
-said it matters: before committing to one answer, offer a discussion between models from other vendors the way
-section 0 offers a delegation: one line with the question and what it may cost (`ccx discuss --dry-run "question"`:
-who takes part, at most how many calls, estimated $, which model each uses), then wait. Only on their yes:
-`ccx discuss --confirmed "question" [--context-file notes.md] [--with codex,claude,gemini] [--rounds 1-3]` (without
-`--confirmed` you get only the estimate; add `--bg` to keep working and follow it with `ccx discuss --show ID`) —
-one proposes, one
-finds faults, one judges; only points travel between turns. Read `result` (recommendation, consensus,
-disagreements, reasons); the person sees the turns in `ccx ui`. It advises; the decision stays with you and the person.
-Not for routine choices: every turn is a full model call.
+said it matters: offer a discussion between models from other vendors the way section 0 offers a delegation — one
+line with the question and what it may cost (`ccx discuss --dry-run "question"`: who takes part, how many calls at
+most, estimated $), then wait. Only on a yes:
+`ccx discuss --confirmed "question" [--context-file notes.md] [--with codex,claude,gemini] [--rounds 1-3]` (`--bg` to keep working; follow it with `ccx discuss --show ID`).
+One proposes, one finds faults, one judges. Read `result` (recommendation, consensus, disagreements, reasons); the
+person sees the turns in `ccx ui`. It advises; the decision stays with you and the person. Not for routine choices:
+every turn is a full model call.

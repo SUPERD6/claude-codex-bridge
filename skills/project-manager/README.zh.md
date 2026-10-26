@@ -6,7 +6,7 @@
 
 **和 agent-delegate 的分工**：agent-delegate 管“一块活怎么写简报、怎么派、怎么验收”；本技能管“派什么、派到哪个项目、用什么形状派”。目标已经定死的单次委派直接用 agent-delegate。
 
-**总管自己要省**：只需要本技能、`ccx where` 和简报。别为了做计划去读项目的 README、STATUS 或文档；`--project` 会把项目的规则文件放在子智能体简报开头，由它去读。
+别为了做计划去读项目的 README、STATUS 或文档：`--project` 会把项目的规则文件放在简报开头。
 
 ## 1. 听懂这句话
 
@@ -25,17 +25,17 @@
 
 | 形状 | 什么时候 | 为什么 |
 |---|---|---|
-| **一个便宜模型做 + 另一家便宜模型审**（默认） | 几乎所有时候 | 做对率和更贵的分工方式一样，花费约为 `ccx way` 的 7%（审查每个任务约 $0.006） |
+| **一个便宜模型做，ccx 的自动规则认为需要时再审**（默认） | 几乎所有时候 | 做对率和更贵的分工方式一样，花费约为 `ccx way` 的 7%（审查每个任务约 $0.006） |
 | **并行** | 只有用户要快、而且活能拆成互不依赖的块 | 更快但不省：每多一路约多 9.3 万 token 启动开销，10 路的 token 是 1 路的约 4.7 倍。选它时要跟用户说“更快但不省” |
 | **先出分工草案，再审草案** | 大活（很多文件、几个小时、边界不清） | 先把拆法定下来，再花钱做 |
 
 默认命令：
 ```
-ccx run --project <名字> --minutes <n> --tradeoff save --review on --check "CMD" "简报..."
+ccx run --project <名字> --minutes <n> --tradeoff save --check "CMD" "简报..."
 ```
-`--review on` 让另一家的便宜模型看改动。`--tradeoff save` 让路由选便宜的；那一轮里 15–30 分钟的任务路由仍选中档模型，而最便宜的模型在这类任务上做对 97%，所以说明写清楚的活可以直接用 `--model <模型> --effort low` 指定便宜档。
+审查保持 auto：证据弱、改动大或风险 visible 时由另一家的便宜模型看改动（第 5 轮，2026-10-26：用 auto 的主智能体组做对 19/20 和 20/20，但同时用了精简简报，因素混在一起）。只有 L2 自动合并（第 6 节）或风险 visible 时才 `--review on`。`--tradeoff save` 让路由选便宜的；那一轮里 15–30 分钟的任务路由仍选中档模型，而最便宜的模型在这类任务上做对 97%，所以说明写清楚的活可以直接用 `--model <模型> --effort low` 指定便宜档。
 
-并行：每块一条 `ccx run --project <名字> --bg --worktree ...`（每块都带项目规则文件和审批停顿），再用 `ccx show <run_id>` 看结果。`ccx batch plan.json` 和 `ccx q run` 也能并行，但每个任务只给普通的 `"cwd"`（路径来自 `ccx projects show`），不会附上规则文件，所以只在项目没有审批规则时用。不到 5 分钟的小块合并成少数几路：小块的花费主要是启动开销，不是活本身。
+并行：每块一条 `ccx run --project <名字> --bg --worktree ...`（每块都带项目规则文件和审批停顿），再用 `ccx show <run_id> --wait` 等结果。`ccx batch plan.json` 和 `ccx q run` 也能并行，但每个任务只给普通的 `"cwd"`（路径来自 `ccx projects show`），不会附上规则文件，所以只在项目没有审批规则时用。不到 5 分钟的小块合并成少数几路：小块的花费主要是启动开销，不是活本身。
 
 大活：自己用 task-split 技能出草案（必须先读代码时，用只读的 `ccx run --project <名字> --mode read`），再让另一家的便宜模型只读审草案：`ccx run --project <名字> --mode read --to <另一家> --effort low --brief-file draft.md`。改掉它标成 must 的问题，再按默认方式一块一块派。除非做错代价很高（agent-delegate 第 7 节），不要用 `ccx way` 或 `ccx discuss`：在这类任务上它们贵 20–39 倍，做对率一样。
 
@@ -43,12 +43,14 @@ ccx run --project <名字> --minutes <n> --tradeoff save --review on --check "CM
 
 ## 4. 验收
 
-按 agent-delegate 第 4 节：看 `check` 和改动，ccx 已经跑过且通过的验收命令不再重跑，每个看过的运行都 `ccx verify <run_id> --ok 1|0`。`review` 是 `issues` 时用 `ccx resume <run_id>` 改一轮，之后由你判断。有好几块时，每块都验过才说做完。
+按 agent-delegate 第 4 节（看多少、`needs_lead`、审查后的修改轮），每个看过的运行都 `ccx verify <run_id> --ok 1|0`。有好几块时，每块都验过才说做完。
 
 ## 5. 收尾和汇报
 
 - 已结束的运行用 `ccx archive --older-than 1 --apply` 归档（不确定会动哪些就先不加 `--apply` 看一遍）；客户端有自己的会话列表时，自己开的会话在它的活合并后归档。
 - 汇报一两句：现在什么成立了、在哪里（分支、PR、文件）、花了多少、哪些**没验证**。不讲过程。
+
+其他工具：`ccx ui`（本机实时页面：谁在做什么、什么在等用户）、`ccx say` / `ccx board` / `ccx peek`（给本项目其他打开的会话留言、看它们在做什么）、`ccx intake`（用户在自己私有仓库里以 issue 提的任务）、`ccx stats` / `ccx report`（花费和节省）。
 
 ## 6. 自动档位，以及始终要问用户的事
 
