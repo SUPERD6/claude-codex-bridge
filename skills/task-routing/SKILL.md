@@ -39,6 +39,22 @@ subscription quota predictions. Inspect `calibration`, `stale`, and `new_models_
 unverified priors must stay labelled as such. Verify current official prices only when using
 stale prices to make a cost decision, not for every ordinary task.
 
+## Tiers (whole workflow)
+
+`--tradeoff` is also the tier: who does each task, sized from your brief plus `--minutes` and `--files`
+(`ccx propose`, or `scripts/task_routing.py tier`). Thresholds are provisional (`config/tiers.toml [policy.*]` in ccx).
+
+| Tier | Who does it |
+|---|---|
+| `save` | everything delegated through ccx (`ccx2`), models picked like save; you accept by check + review |
+| `balanced` | small/medium yourself, large to `ccx2`; uncertain size and state-machine/resume-type tasks yourself |
+| `fast` | everything yourself |
+| `cheapest` | `direct`: ccx with no acceptance by you; tell the person the result may be wrong |
+
+A tier the person explicitly picked (you pass `--tradeoff`) pre-authorises what it delegates: `ccx propose` then
+says `authorized`. With no tier picked, offer first as before (agent-delegate section 0); the tier is only shown.
+The default tier stays `save` until a confirmation run decides.
+
 ## Act within the task's scope
 
 Use the estimate alongside checkability, startup/handoff cost and actual availability.

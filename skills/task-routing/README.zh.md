@@ -22,6 +22,21 @@ python scripts/task_routing.py route --files 3 --coupling cross --clarity goal -
 python scripts/task_routing.py record --rung codex:gpt-6.1-sol:medium --b 4 --ok 1
 ```
 
+## 档位（整个流程）
+
+`--tradeoff` 也是档位：决定每块活谁做。分档看主智能体的简报，加上 `--minutes` 和 `--files`（`ccx propose`，或
+`scripts/task_routing.py tier`）。阈值是暂定值，在 ccx 的 `config/tiers.toml [policy.*]`。
+
+| 档 | 谁做 |
+|---|---|
+| `save` | 全部经 ccx 委派（`ccx2`），模型按 save 选；主智能体按 check + 审查验收 |
+| `balanced` | 小、中自己做，大的交 `ccx2`；大小拿不准、状态机/续跑类自己做 |
+| `fast` | 全部自己做 |
+| `cheapest` | `direct`：交 ccx，主智能体不验收；要告诉用户结果可能做错 |
+
+人明确选了档位（主智能体带上 `--tradeoff`）就等于预先授权按该档委派：`ccx propose` 返回 `authorized`。
+没选档位时照旧“先提议一句”（agent-delegate 第 0 节），档位结果只展示。默认档仍是 `save`，等确认实验再定。
+
 ## 自动校准
 
 每次检查通过或失败后，记一次结果（ccx 会自动记）。参数会自动向真实情况靠拢：task-routing 校准成功率和花费，task-split 校准每个模型能做多长的任务。Claude 和 Codex 用的是同一个技能目录，所以学到的东西共用一份。价格表超过 30 天没更新会提醒，提醒后对照官方价格页更新。

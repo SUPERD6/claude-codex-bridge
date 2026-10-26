@@ -14,7 +14,7 @@ max_escalations = 1
 max_parallel = 3          # batch 并行上限
 max_depth = 1             # 子智能体不能再派子智能体，防止套娃烧 token
 timeout_sec = 1800
-tradeoff = "save"         # 省钱 save | 平衡 balanced | 快 fast，或 0..1 的旋钮（0 最省，1 最快）；ccx config set defaults.tradeoff 0.3
+tradeoff = "save"         # 省钱 save | 平衡 balanced | 快 fast | 最便宜 cheapest（见下面 [policy.*]），或 0..1 的旋钮（0 最省，1 最快）；ccx config set defaults.tradeoff 0.3
 # save：小活先用便宜模型，没做成（含 ccx 重跑 --check 没过）就自动升一档。2026-10-25 起默认；之前是 balanced，
 # 七核心 A/B（PR #30）里它在 5 分钟的小活上选 sonnet medium，比 luna low 贵约 10 倍，luna low 那时 55/63 做对。
 ab_self_rate = 0.1        # 约 10% 的可派任务让主智能体自己做，用来实测“到底省了多少”（0 = 关）
@@ -22,6 +22,54 @@ namecheck = "warn"        # 写入运行后，静态查改动过的函数里有�
 # warn = 命中写进记录、给主智能体的结果和评审简报，作为弱证据，不判失败（默认）；fail = 命中算验收失败（check_failed）；
 # off = 不查。也可 ccx run --namecheck；手动查用 ccx namecheck。默认 warn 的依据：本仓库、标准库 0 误报，r5 的
 # 3 万多个文件里唯一命中是真 bug，没命中时没有代价；有命中的运行不自动记“大概率对”。换成 fail 要等 r5 前后对比。
+
+# 整个流程的档位（task-routing 的 tier_plan，docs/DECISIONS.md「档位」）：--tradeoff save|balanced|fast|cheapest
+# 不只选模型，还决定每块活谁做：self = 主智能体自己做；ccx2 = 交给 ccx、主智能体验收（模型按 save 选）；
+# direct = 交给 ccx、没人复核（标“可能做错”，适合脚本/CI）。
+# 只有明确给了 --tradeoff（人选了档位）时，ccx propose 才按档位直接派（预先授权）；没给时仍是“先提议一句”。
+# 默认档仍是上面的 defaults.tradeoff（save），等确认实验定了再改。分档阈值是从第 5 轮看出来的暂定值。
+[policy.bands]
+large_files = 3           # 大：改 >= 3 个源文件，或估计 >= 45 分钟，或简报 >= 180 词（中文按字数 / 2.5）
+large_minutes = 45
+large_words = 180
+medium_files = 2
+medium_minutes = 15
+medium_words = 80
+cjk_chars_per_word = 2.5
+lead_ctx_large = 150000   # balanced：主智能体上下文到这么多 token 时，中任务也交给 ccx2
+knob = [0.34, 0.67]       # 0..1 旋钮：低于第一个 = save，低于第二个 = balanced，否则 fast
+# 状态机、续跑/恢复/kill 这类新机制：balanced 下留给自己做（q-resume-session：ccx2 8/10，direct 2/6，self 2/2）
+hard_words = ["state machine", "state-machine", "resume", "kill", "restart", "crash", "race",
+              "状态机", "续跑", "恢复", "中断", "杀掉"]
+
+[policy.save]             # 全交 ccx2；拿不准也交
+small = "ccx2"
+medium = "ccx2"
+large = "ccx2"
+uncertain = "ccx2"
+hard = "ccx2"
+
+[policy.balanced]         # 小、中自己做，大的交 ccx2；拿不准、状态机类自己做
+small = "self"
+medium = "self"
+large = "ccx2"
+uncertain = "self"
+hard = "self"
+medium_big_ctx = "ccx2"
+
+[policy.fast]             # 全部自己做
+small = "self"
+medium = "self"
+large = "self"
+uncertain = "self"
+hard = "self"
+
+[policy.cheapest]         # 不经主智能体验收，结果标“可能做错”
+small = "direct"
+medium = "direct"
+large = "direct"
+uncertain = "direct"
+hard = "direct"
 
 [lead]                    # 主智能体平时用的模型，只用来估算“如果自己做要花多少”
 claude = "opus"

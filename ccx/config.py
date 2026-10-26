@@ -218,7 +218,7 @@ _bool.__name__ = "true/false"
 
 
 SETTINGS = {   # key -> (type, help). Only these can be set with `ccx config set`.
-    "defaults.tradeoff": (str, "save | balanced | fast, or a knob 0..1 (0 = cheapest, 1 = fastest)"),
+    "defaults.tradeoff": (str, "tier: save | balanced | fast | cheapest, or a knob 0..1 (0 = cheapest, 1 = fastest)"),
     "defaults.ab_self_rate": (float, "share of routed tasks the lead does itself to measure savings (0 = off)"),
     "defaults.max_escalations": (int, "stronger rungs to try after a verified failure"),
     "defaults.max_parallel": (int, "parallel sub-agents in ccx batch"),
@@ -269,7 +269,7 @@ def set_setting(p: Paths, key: str, raw: str) -> dict:
     if key not in SETTINGS:
         raise ValueError(f"unknown setting {key!r}; known: {', '.join(SETTINGS)}")
     typ = SETTINGS[key][0]
-    if key == "defaults.tradeoff" and raw not in ("save", "balanced", "fast"):
+    if key == "defaults.tradeoff" and raw not in ("save", "balanced", "fast", "cheapest"):
         k = float(raw)
         if not 0 <= k <= 1:
             raise ValueError("tradeoff knob must be between 0 and 1")

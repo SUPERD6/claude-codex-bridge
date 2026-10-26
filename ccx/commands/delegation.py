@@ -18,7 +18,7 @@ from ..delegate import Request, compact, recap, run, verify
 from ..runners import find_bin
 from ..workspace import missing_test_paths
 from .common import (_brief, _caller, _out, _routing_args, _spec_from_args, _target, find_continuable,
-    apply_mode, find_seat, installed_agents, lead_session_id, parse_quota, provider_agents, resolve)
+    apply_mode, find_seat, installed_agents, lead_session_id, parse_quota, provider_agents, resolve, tier_policy)
 from .install import tier_spec_safe
 from ..subagents import parse_spec as subagents_spec
 
@@ -542,6 +542,10 @@ def _route(a) -> dict:
                 lead_ctx = context.lead_now(lead_agent, lead_session_id(lead_agent))
                 src = "none" if lead_ctx is None else "lead_session"
             lead_ctx = lead_ctx or 0
+            if route.get("policy") and lead_ctx:           # balanced: a big lead context sends medium tasks out
+                tp = tier_policy(p, cfg, {**spec, "files": a.files, "lead_ctx": lead_ctx}, route["tradeoff"])
+                if tp:
+                    route["policy"] = tp
             route["self_vs_delegate"] = learn.self_vs_delegate(p, route["b"], a.lead, route["rung"], ctx,
                                                                a.turns_left, route["tradeoff"], lead_ctx)
             route["self_vs_delegate"].update(ctx_tokens=ctx, lead_ctx_tokens=lead_ctx, ctx_source=src)
@@ -585,18 +589,41 @@ def cmd_propose(a) -> int:
     lead_agent = a.lead.split(":")[0]
     row = proposals.new(p, route, " ".join(a.text or []), lead_session_id(lead_agent))
     c = route.get("choice") or route.get("self_vs_delegate") or {}
-    worth = (c.get("recommend") == "delegate")
+    tp = route.get("policy") or {}
     def usd(x):
         return "?" if x is None else (f"${x:.4f}" if x < 0.01 else f"${x:.2f}")
     odds = "odds unknown" if row["p"] is None else f"about {row['p']:.0%} likely to work"
-    _out({"proposal": row["proposal"], "worth_offering": worth, "recommend": c.get("recommend"),
-          "why": c.get("why"), "self_usd": row["self_usd"], "delegate_usd": row["delegate_usd"], "p": row["p"],
-          "lead_ctx_tokens": row["lead_ctx_tokens"], "ctx_source": c.get("ctx_source"),
-          "say": (f"This looks delegable: about {usd(row['delegate_usd'])} delegated vs {usd(row['self_usd'])} "
-                  f"if I do it here, {odds}. Delegate it?") if worth else None,
-          "next": (f"on yes: ccx run --proposal {row['proposal']} ... (no --no-ab), then ccx verify <run_id>; "
-                   f"on no: ccx propose --no {row['proposal']}") if worth else
-                  "not worth offering: do it yourself, nothing to ask"})
+    out = {"proposal": row["proposal"]}
+    if tp.get("explicit"):
+        # the person picked this tier: it pre-authorises what the tier delegates (docs/DECISIONS.md, tiers)
+        mode = tp["mode"]
+        out.update(worth_offering=False, authorized=mode != "self", recommend=mode, why=tp["why"])
+        if mode == "self":
+            out["next"] = f"tier {tp['tier']}: do it yourself, nothing to ask"
+        else:
+            # the delegated part picks its model like save; the proposal row keeps the tier
+            out["next"] = (f"tier {tp['tier']} pre-authorises this: ccx run --tradeoff save --proposal "
+                           f"{row['proposal']} --minutes ... --files ... \"<brief>\""
+                           + (", then accept its check result as it is: label the result may-be-wrong to the "
+                              "person (no lead review)" if mode == "direct" else
+                              ", then accept by its check + review; on review_failed fix it yourself"))
+            if mode == "direct":
+                out["may_be_wrong"] = True
+    else:
+        worth = (c.get("recommend") == "delegate")
+        out.update(worth_offering=worth, recommend=c.get("recommend"), why=c.get("why"),
+                   say=(f"This looks delegable: about {usd(row['delegate_usd'])} delegated vs {usd(row['self_usd'])} "
+                        f"if I do it here, {odds}. Delegate it?") if worth else None,
+                   next=(f"on yes: ccx run --proposal {row['proposal']} ... (no --no-ab), then ccx verify <run_id>; "
+                         f"on no: ccx propose --no {row['proposal']}") if worth else
+                   "not worth offering: do it yourself, nothing to ask")
+    out.update(self_usd=row["self_usd"], delegate_usd=row["delegate_usd"], p=row["p"],
+               lead_ctx_tokens=row["lead_ctx_tokens"], ctx_source=c.get("ctx_source"))
+    if tp:
+        out["tier"] = {k: tp.get(k) for k in ("tier", "band", "mode", "uncertain", "hard", "explicit", "provisional")}
+        if not tp.get("explicit"):
+            out["tier"]["note"] = "informational: no tier picked, the offer-first rule above applies"
+    _out(out)
     return 0
 
 

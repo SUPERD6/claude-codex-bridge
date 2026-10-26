@@ -277,6 +277,7 @@ def resolve(spec: dict, caller: str, p, cfg: dict) -> tuple[dict | None, dict]:
     if spec.get("minutes"):
         route["minutes"] = float(spec["minutes"])
     rubric = {k: spec[k] for k in learn.RUBRIC_KEYS[1:] if spec.get(k)}
+    given_files = int(spec.get("files") or 0)      # the lead's own estimate (sizing a tier), before any guess below
     if spec.get("brief") and (rubric or spec.get("minutes")):
         from ..signals import measure        # what the brief and the folder show, the same for everyone
         obj = measure(spec["brief"], Path(spec.get("cwd") or os.getcwd()))
@@ -296,6 +297,10 @@ def resolve(spec: dict, caller: str, p, cfg: dict) -> tuple[dict | None, dict]:
             route["rubric"] = rubric
         d = learn.combine_difficulty(p, b_rub, spec.get("minutes"), caller)
         route["b"], route["difficulty"] = d["b"], d["parts"]
+    if "b" in route:
+        tp = tier_policy(p, cfg, {**spec, "files": given_files}, tradeoff)
+        if tp:
+            route["policy"] = tp
 
     if spec.get("provider"):
         pv = (cfg.get("providers") or {}).get(spec["provider"])
@@ -330,13 +335,16 @@ def resolve(spec: dict, caller: str, p, cfg: dict) -> tuple[dict | None, dict]:
             return None, route
         from .. import trial
         rate = float(os.environ.get("CCX_AB_RATE") or cfg["defaults"].get("ab_self_rate", 0) or 0)
-        tr = trial.active(p) if caller in AGENTS and not spec.get("force") and not spec.get("no_ab") else None
+        # a tier the person picked (--tradeoff given) decides who does the task: no random A/B self-run then
+        explicit = bool(spec.get("tradeoff"))
+        tr = (trial.active(p) if caller in AGENTS and not spec.get("force") and not spec.get("no_ab")
+              and not explicit else None)
         if tr:                                # H11: a formal comparison is running: balanced halves
             route.update(trial=tr["id"], bucket=trial.bucket(route["kind"], route["b"]))
             self_run = trial.assign(p, tr, route["kind"], route["b"]) == "self"
         else:
             self_run = (rate > 0 and caller in AGENTS and not spec.get("force") and not spec.get("no_ab")
-                        and random.random() < rate)
+                        and not explicit and random.random() < rate)
         if self_run:
             route["ab"] = _ab_open(p, caller, route["b"], pk["rung"], spec.get("brief", ""),
                                    **({"trial": tr["id"], "bucket": route["bucket"], "kind": route["kind"],
@@ -358,6 +366,19 @@ def resolve(spec: dict, caller: str, p, cfg: dict) -> tuple[dict | None, dict]:
     if tier == "T0":
         tier = "T1"
     return {"to": _target(to, caller), "tier": tier, "route": route}, route
+
+
+def tier_policy(p, cfg: dict, spec: dict, tradeoff) -> dict | None:
+    """The whole-workflow tier for this task (task-routing tier_plan, [policy.*] in config): who does it (self |
+    ccx2 | direct), its size band, and whether the person picked the tier (explicit: --tradeoff given)."""
+    try:
+        tp = learn.tier_plan(p, tradeoff, spec.get("brief", ""), spec.get("minutes"), int(spec.get("files") or 0),
+                             int(spec.get("lead_ctx") or 0), cfg.get("policy"))
+    except Exception:  # noqa: BLE001 — a bad [policy] entry must not stop routing; ccx doctor shows config errors
+        return None
+    if tp:
+        tp["explicit"] = bool(spec.get("tradeoff"))
+    return tp
 
 
 def _ab_open(p, caller: str, b: float, rung: str, brief: str, **extra) -> str:
@@ -397,5 +418,8 @@ def _routing_args(ap) -> None:
     g.add_argument("--b", type=float, help="difficulty 0-10 directly instead of the rubric")
     g.add_argument("--kind", choices=["code", "read", "research", "write"],
                    help="kind of work: decides which public benchmarks count (default: read-only -> read, else code)")
-    g.add_argument("--tradeoff", choices=["save", "balanced", "fast"],
-                   help="default from config (defaults.tradeoff, initially balanced)")
+    g.add_argument("--tradeoff", choices=["save", "balanced", "fast", "cheapest"],
+                   help="tier: save | balanced | fast | cheapest (task-routing). Picks the models and, in "
+                        "`ccx propose`, who does the task (self, ccx, or ccx unchecked for cheapest). Given "
+                        "explicitly = the person picked it: it pre-authorises what the tier delegates and skips "
+                        "the A/B self-run. Default from config defaults.tradeoff (shipped: save)")

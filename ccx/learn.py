@@ -72,13 +72,27 @@ def combine_difficulty(p: Paths, b_rubric, minutes, lead: str | None) -> dict:
     return tr.combine_difficulty(b_rubric, minutes, tr.lead_bias(tr.load_state(), lead))
 
 
+def model_tradeoff(tradeoff):
+    """The whole-workflow tier "cheapest" picks models like save (an older skill copy knows no "cheapest")."""
+    return "save" if tradeoff == "cheapest" else tradeoff
+
+
+def tier_plan(p: Paths, tradeoff, brief: str = "", minutes: float | None = None, files: int = 0,
+              lead_ctx: int = 0, policy: dict | None = None) -> dict | None:
+    """task-routing's whole-workflow tier for one task (self | ccx2 | direct); None with an older skill copy."""
+    tr = module(p, "routing")
+    if not hasattr(tr, "tier_plan"):
+        return None
+    return tr.tier_plan(tradeoff, brief, minutes, files, lead_ctx, policy)
+
+
 def pick(p: Paths, b: float, agents: list[str], tradeoff: str, verifiable: bool = True,
          max_escalations: int = 1, mode: str | None = None, kind: str | None = None, quota: dict | None = None,
          risk: str | None = None) -> dict:
     """-> {rung, agent, model, effort, ladder:[rung...], p, advice, b}"""
     tr = module(p, "routing")
     pri, st = tr.load_priors(), tr.load_state()
-    kw = dict(tradeoff=tradeoff, verifiable=verifiable, max_escalations=max_escalations)
+    kw = dict(tradeoff=model_tradeoff(tradeoff), verifiable=verifiable, max_escalations=max_escalations)
     try:
         res = tr.route(b, pri, st, agents, mode=mode, kind=kind or task_kind(mode), quota=known_quota(quota, p),
                        risk=risk or "low", **kw)
@@ -119,6 +133,7 @@ def self_vs_delegate(p: Paths, b: float, lead: str, best_rung: str, ctx_tokens: 
     tr = module(p, "routing")
     pri, st = tr.load_priors(), tr.load_state()
     agent = best_rung.split(":", 1)[0]
+    tradeoff = model_tradeoff(tradeoff)
     res = tr.route(b, pri, st, [agent], tradeoff=tradeoff, ctx_tokens=0)
     best = next((x for x in res["rows"] if x["rung"] == best_rung), res["pick"])
     try:
@@ -136,6 +151,7 @@ def three_way(p: Paths, b: float, lead: str, delegate_agents: list[str], ctx_tok
     if not hasattr(tr, "three_way"):
         return None                                      # an older installed skill copy
     q = known_quota(quota, p)
+    tradeoff = model_tradeoff(tradeoff)
     pri, st = tr.load_priors(), tr.load_state()
     try:
         out = tr.three_way(b, pri, st, lead, delegate_agents, ctx_tokens, remaining_turns, tradeoff=tradeoff,

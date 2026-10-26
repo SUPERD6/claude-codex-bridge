@@ -23,6 +23,11 @@ def new(p: Paths, route: dict, text: str, lead_session: str | None) -> dict:
            "p": (opt.get("delegate") or {}).get("p", route.get("chain_p")),
            "lead_ctx_tokens": c.get("lead_ctx_tokens", sv.get("lead_ctx_tokens")),
            "lead_session": lead_session, "task": text[:200]}
+    tp = route.get("policy") or {}
+    if tp:                       # the whole-workflow tier: its size band, the estimate it used, the mode it planned
+        row.update(policy_tier=tp.get("tier"), band=tp.get("band"), planned_mode=tp.get("mode"),
+                   tier_explicit=bool(tp.get("explicit")), estimate_minutes=(tp.get("signals") or {}).get("minutes"),
+                   estimate_files=(tp.get("signals") or {}).get("files"))
     ledger.append_event(p, row)
     return row
 
@@ -31,7 +36,8 @@ def answer(p: Paths, proposal: str, yes: bool) -> dict:
     from . import ledger
     if not any(r.get("type") == "proposal" and r.get("proposal") == proposal for r in ledger.rows(p)):
         raise ValueError(f"no proposal {proposal!r} (`ccx propose` prints its id)")
-    row = {"type": "proposal_answer", "proposal": proposal, "yes": yes, "ts": time.time()}
+    row = {"type": "proposal_answer", "proposal": proposal, "yes": yes, "ts": time.time(),
+           "actual_mode": "ccx2" if yes else "self"}     # a no: the lead does it itself
     ledger.append_event(p, row)
     return row
 

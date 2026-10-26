@@ -242,7 +242,13 @@ def cmd_turn(a) -> int:
     """For a per-turn hook (UserPromptSubmit in Claude Code and Codex): reads the hook's JSON on stdin."""
     import json
     try:
-        data = json.loads(sys.stdin.read() or "{}") if not sys.stdin.isatty() else {}
+        # the hook's JSON as UTF-8 bytes: on Windows sys.stdin decodes with the console code page (GBK etc.), which
+        # garbles or rejects a Chinese prompt. Read here, not in a helper: the hook-timeout log names this frame.
+        data = {}
+        if not sys.stdin.isatty():
+            raw = getattr(sys.stdin, "buffer", None)
+            data = json.loads((raw.read().decode("utf-8", "replace") if raw is not None else sys.stdin.read())
+                              or "{}")
     except ValueError:
         data = {}
     try:

@@ -33,7 +33,7 @@ from .agents.codex import _add_children, _codex_growth, _codex_seen, _codex_tota
 from .ledger import write_record as _write_record  # noqa: F401
 from .plan import _fallback_plan, _plan, _provider_envs, _rung_spec, _usable, _within_budget, other  # noqa: F401
 from .prompts import (CONTINUE, ESCALATE, FOLLOWUP, NEEDS_WRITE, POLICY_MARKERS, POLICY_RETRY, PROMPT,  # noqa: F401
-                      SELFCHECK, SELFCHECK_CMD, _policy_rejections)
+                      REVIEW_FAILED, SELFCHECK, SELFCHECK_CMD, _policy_rejections)
 from .review import review_run as _review  # noqa: F401
 from .verdicts import (REASONS, SOFT_AFTER_H, _hard_verdict, _soft_verdict, soft_verdicts, verify,  # noqa: F401
                        verify_builtin)
@@ -469,6 +469,8 @@ def run(req: Request, p: Paths) -> dict:
         "provider": req.provider, "lead_session": req.lead_session, "continued": cont,
         "first_rung": plan[0]["rung"],
         "continue_depth": (int(prev.get("continue_depth", 0)) + 1) if cont else 0,
+        # follow-ups of the same task in a row (ccx resume, review fix rounds); a continued session is a new task
+        "resume_chain": (int(prev.get("resume_chain", 0)) + 1) if prev and not cont else 0,
         "forked_from_lead": bool(req.fork_lead), "ephemeral": req.ephemeral,
         "mode_source": req.mode_source, "mode_why": req.mode_why, "check_cmd": req.check, "risk": req.risk,
         "namecheck_mode": req.namecheck,
@@ -886,8 +888,7 @@ def compact(record: dict) -> dict:
         out.setdefault("review", {})["first_round"] = {k: record["first_review"].get(k) for k in ("verdict", "issues")}
         out["fixed_after_review_of"] = record["review_of"]
     if record.get("kind") == "review_failed":
-        out["hint"] = ("an independent review still finds problems after one fix round (review.issues): decide "
-                       f"yourself, or `ccx resume {record['run_id']} \"...\"`")
+        out["hint"] = REVIEW_FAILED.format(run_id=record["run_id"])
         first = ((record.get("review") or {}).get("issues") or ["(see review)"])[0]
         out["needs_lead"] = f"review_failed: {first}"[:300]
     if record.get("check"):
