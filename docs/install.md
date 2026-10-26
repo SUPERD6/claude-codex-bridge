@@ -118,6 +118,8 @@ ccx q run | resume | tree | done q3 --ok 1   # run every ready piece in parallel
 ccx route --files 3 --coupling cross ... [--lead claude:opus:high --ctx-files log.txt]  # recommendation; + self vs delegate
 ccx plan size --minutes 240 --rung codex:gpt-6.1-sol:medium # how many pieces for a big task (task-split)
 ccx show <run_id> [--full]            # compact result by default
+ccx show <run_id> --wait [SECONDS]    # block until it (and a review fix round) is done, default 540 s; then the
+                                      # same result as ccx run, else status=running: call it again
 ccx stats [--summary]                 # per agent × tier; --summary: spend, savings, cache share
 ccx report [--days 30] [--publish]    # offline one-file dashboard; --publish commits it to your private repo
 ccx ui [--project DIR] [--no-open] [--export FILE]   # live page on 127.0.0.1 (never calls a model; writes only yes/no on suggested notes)

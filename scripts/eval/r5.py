@@ -8,6 +8,8 @@ so doing it takes many requests. Arms (the lead is a fresh headless Claude Code,
   builtin  the lead must hand the implementation to its built-in sub-agent (Agent tool, a haiku `worker`)
   ccx      the lead must hand it to `ccx run --tradeoff save --review on --context auto`
   direct   no lead: `ccx run` straight to Codex gpt-6-luna low with another vendor's cheap review on
+  ccx2     opt-in (--arms ccx2): ccx as the agent-delegate skill now says (verbatim brief, --bg + show --wait,
+           default review, trust a passed check, no commit request); not in the default schedule
 
 Every unit: the repository at the task commit's parent, with today's tests/conftest.py committed into it (old
 commits' tests may predate per-test hubs, #73), a fresh throwaway hub (CCX_HUB, as round 3). The hidden test is the
@@ -15,6 +17,7 @@ commit's own test files, run in a throwaway HOME / CCX_HUB / CODEX_HOME / CLAUDE
 
   python scripts/eval/r5.py run --rounds 1 --tasks waiting-evals --budget 3      # the pilot
   python scripts/eval/r5.py run --rounds 2 --budget 40
+  python scripts/eval/r5.py run --rounds 2 --arms ccx,ccx2 --tag r5b --budget 20  # old vs new lead guidance
   python scripts/eval/r5.py summary
   python scripts/eval/r5.py export docs/research/data/2026-10-26-r5.json
 """
@@ -58,6 +61,24 @@ HOW_CCX = ("Do not edit files yourself: hand the implementation to a sub-agent t
            "It prints one JSON object (run_id, ok, summary, check, review, ...). When it reports back, check the "
            "result (read the diff, run the tests); if something is wrong or missing, send it back with\n"
            "  {ccx} resume <run_id> \"<what to fix>\"")
+# ccx2 (opt-in, `--arms ccx2`): the lead follows the agent-delegate skill's "Delegate cheaply" guidance written
+# after round 5 (verbatim brief, --bg + show --wait, default review, trust a passed check, no commit request)
+HOW_CCX2 = ("Do not edit files yourself: hand the implementation to a sub-agent through ccx. Run\n"
+            "  {ccx} run --bg --tradeoff save --context auto --mode write --new --no-ab --label {label} "
+            "--check \"<a pytest command for the relevant test files>\" \"<brief>\"\n"
+            "then wait for it with\n"
+            "  {ccx} show <run_id> --wait\n"
+            "and call that again while it says the run is still running (never resume a running run; do not pipe ccx "
+            "output through tail or head). The brief is the person's request above copied verbatim (do not re-word "
+            "interfaces, names, strings or numbers), plus file paths you already know and the acceptance command; do "
+            "not read the code base first to write it, and do not ask the sub-agent to commit. When the result's "
+            "check passed and its files_changed / diffstat fit the request, accept it without re-running the tests "
+            "or reading the full diff; only if the check failed or is missing, or the status is partial or blocked, "
+            "look yourself and send it back with\n"
+            "  {ccx} resume <run_id> \"<what to fix>\"\n"
+            "After accepting, commit the work yourself.")
+CCX_ARMS = ("ccx", "ccx2")
+OPT_IN_ARMS = ("ccx2",)        # not in ARMS: the default schedule (and its done-keys for old tags) stays the same
 DIRECT = ["--to", "codex", "--model", "gpt-6-luna", "--effort", "low", "--review", "on", "--context", "off",
           "--no-escalate", "--no-fallback"]
 
@@ -114,15 +135,26 @@ def changed(repo: Path) -> dict:
             "commits": len(git(repo, "rev-list", f"{start}..HEAD").split())}
 
 
+def lead_how(arm: str, label: str) -> str:
+    """What the lead is told about how to do the work, per arm."""
+    if arm == "ccx":
+        return HOW_CCX.format(ccx=r3.CCX_CMD, label=label)
+    if arm == "ccx2":
+        return HOW_CCX2.format(ccx=r3.CCX_CMD, label=label)
+    return r3.HOW[arm]
+
+
 def lead_unit(u: dict, a, work: Path, repo: Path, hub: Path) -> dict:
     task = by_id(u["task"])
     env = {**lead_env(), "CCX_HUB": str(hub), "CCX_NO_QUOTA_PROBE": "1", "BASH_DEFAULT_TIMEOUT_MS": "900000",
            "BASH_MAX_TIMEOUT_MS": "1200000"}
-    how = HOW_CCX.format(ccx=r3.CCX_CMD, label=u["label"]) if u["arm"] == "ccx" else r3.HOW[u["arm"]]
+    is_ccx = u["arm"] in CCX_ARMS
+    how = lead_how(u["arm"], u["label"])
     prompt = LEAD_PROMPT.format(brief=task["brief"], how=how)
     t0 = time.time()
     try:
-        r = subprocess.run(r3.lead_argv(u["arm"], a.lead_budget), input=prompt, cwd=repo, capture_output=True,
+        # ccx2 needs the same lead flags as ccx (a session file for --context auto)
+        r = subprocess.run(r3.lead_argv("ccx" if is_ccx else u["arm"], a.lead_budget), input=prompt, cwd=repo, capture_output=True,
                            text=True, encoding="utf-8", errors="replace", env=env, timeout=a.timeout)
         out, rc = r.stdout, r.returncode
     except subprocess.TimeoutExpired as e:
@@ -144,11 +176,11 @@ def lead_unit(u: dict, a, work: Path, repo: Path, hub: Path) -> dict:
     row["lead_only_usd"] = round(row["usd"] - row["sub_usd"], 6)
     ccx_runs = len([x for x in cost["run_ids"] if not str(x).startswith("review")])
     row["delegated"] = bool(lm["agent_calls"]) if u["arm"] == "builtin" else bool(cost["run_ids"]) \
-        if u["arm"] == "ccx" else None
+        if is_ccx else None
     row["rework"] = max(0, lm["agent_calls"] - 1) if u["arm"] == "builtin" else \
-        (lm["ccx_resumes"] + max(0, lm["ccx_runs"] - 1)) if u["arm"] == "ccx" else 0
+        (lm["ccx_resumes"] + max(0, lm["ccx_runs"] - 1)) if is_ccx else 0
     row["ccx_ledger_rows"] = ccx_runs
-    if u["arm"] == "ccx":
+    if is_ccx:
         row["context_attached"] = sum((hub / "ccx" / "runs" / str(rid) / "shared-context.md").exists()
                                       for rid in cost["run_ids"])
     return row
@@ -207,10 +239,13 @@ def cmd_run(a) -> int:
     out = Path(a.out) if a.out else OUT / "results.jsonl"
     work = Path(a.workdir or (Path(tempfile.gettempdir()) / "r5"))
     work.mkdir(parents=True, exist_ok=True)
+    arms = a.arms.split(",") if a.arms else list(ARMS)
+    bad = [x for x in arms if x not in (*ARMS, *OPT_IN_ARMS)]
+    if bad:
+        raise SystemExit(f"unknown arm(s): {', '.join(bad)} (known: {', '.join((*ARMS, *OPT_IN_ARMS))})")
     done = {(r["tag"], r["round"], r["task"], r["arm"]) for r in read_jsonl(out)}
     todo = []
-    for u in schedule(a.rounds, a.seed, a.tasks.split(",") if a.tasks else IDS,
-                      a.arms.split(",") if a.arms else list(ARMS)):
+    for u in schedule(a.rounds, a.seed, a.tasks.split(",") if a.tasks else IDS, arms):
         u = {**u, "tag": a.tag, "seed": a.seed, "label": f"eval-r5:{a.tag}:{u['round']}:{u['task']}:{u['arm']}"}
         if (a.tag, u["round"], u["task"], u["arm"]) not in done:
             todo.append(u)
@@ -253,7 +288,7 @@ def cmd_run(a) -> int:
 def summarize(rows: list[dict]) -> dict:
     rows = [r for r in rows if "error" not in r]
     out = {}
-    for arm in ARMS:
+    for arm in (*ARMS, *OPT_IN_ARMS):
         rs = [r for r in rows if r["arm"] == arm]
         if not rs:
             continue

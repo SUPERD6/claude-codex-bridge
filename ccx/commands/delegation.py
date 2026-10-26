@@ -50,7 +50,8 @@ def _background(argv: list[str], p) -> dict:
     run_id = time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:4]
     log = p.runs / run_id / "bg.log"
     detach(argv, log, {"CCX_RUN_ID": run_id})
-    return {"run_id": run_id, "state": "started", "check": f"ccx show {run_id}", "log": str(log)}
+    return {"run_id": run_id, "state": "started", "check": f"ccx show {run_id}", "log": str(log),
+            "next": f"ccx show {run_id} --wait"}     # blocks until done, under a 10-minute tool-call limit
 
 
 def cmd_run(a) -> int:
@@ -536,7 +537,7 @@ def register(sub) -> None:
     r.add_argument("--to", choices=["auto", *DELEGATE_AGENTS, *PROVIDER_AGENTS], default="auto")
     r.add_argument("--from", dest="caller", choices=[*DELEGATE_AGENTS, *PROVIDER_AGENTS, "user"])
     r.add_argument("--provider", help="model API behind an agent CLI, e.g. deepseek (see [providers] in config)")
-    r.add_argument("--bg", action="store_true", help="run detached; poll with `ccx show <run_id>`")
+    r.add_argument("--bg", action="store_true", help="run detached; wait for it with `ccx show <run_id> --wait`")
     r.add_argument("--tier", choices=["auto", *TIER_ORDER], default="auto")
     r.add_argument("--mode", choices=["read", "write"],
                    help="read: analyse only; write: may edit files. Not given: inferred from the task text "

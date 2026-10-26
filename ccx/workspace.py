@@ -75,6 +75,44 @@ def undo_snapshot(cwd: Path) -> dict | None:
     return {"repo": top, "base": base, "untracked": untracked.splitlines()}
 
 
+def run_snapshot(p: Paths, record: dict, depth: int = 5) -> dict | None:
+    """The undo snapshot a run's changes count from: its own, or (a resume, a review fix round) the one of the
+    run it continued, followed back a few links."""
+    rec = record
+    for _ in range(depth):
+        f = p.runs / str(rec.get("run_id")) / "undo.json"
+        try:
+            if f.exists():
+                return json.loads(f.read_text(encoding="utf-8"))
+            if not rec.get("resumed_from"):
+                return None
+            rec = ledger.read_record(p.runs / rec["resumed_from"] / "run.json")
+        except (OSError, ValueError):
+            return None
+    return None
+
+
+def diffstat(snap: dict | None) -> str | None:
+    """One line of what a write run changed since its snapshot: `git diff --shortstat` plus files that are new
+    since then (untracked). None when there is no snapshot or git can't answer: the lead then just has no line."""
+    if not snap:
+        return None
+    try:
+        repo = Path(snap["repo"])
+        rc, stat = _git(repo, "diff", "--shortstat", snap["base"], "--", ".", ":(exclude).ccx")
+        if rc != 0:
+            return None
+        rc, others = _git(repo, "ls-files", "--others", "--exclude-standard")
+    except (OSError, KeyError, TypeError, ValueError):       # git missing, odd snapshot
+        return None
+    before = set(snap.get("untracked") or [])
+    new = [n for n in (others.splitlines() if rc == 0 else []) if n and n not in before and not n.startswith(".ccx/")]
+    parts = [stat.strip()] if stat.strip() else []
+    if new:
+        parts.append(f"{len(new)} new untracked file{'s' if len(new) > 1 else ''}")
+    return "; ".join(parts) or "no changes"
+
+
 def undo(p: Paths, run_id: str, apply: bool = False, wrong: bool = False) -> dict:
     """Put back the files a write run changed. Dry run unless apply. New files are moved aside, not deleted.
     Undoing is not a verdict by itself (people undo to try again, or to split the work); `wrong` says it was."""

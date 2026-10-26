@@ -41,11 +41,20 @@ BRIEF = """{mark} of run {run_id}] Review a change another agent made. Do not ed
 ## Answer
 You cannot run commands; judge from the diff and the files. Do not report that tests were not run.
 First go through the task above requirement by requirement (each return value, case, rule and error it names) and
-check the code meets it; the acceptance tests may cover only some of them. Report a problem as
-`[must] file:line — what is wrong` only if it makes the change wrong for the task as stated: a requirement not met,
-a bug a test would catch, a broken behaviour that worked before, or a real safety problem (code execution, secrets,
-data loss). Missing tests, inputs the task doesn't cover, typing or docs taste and style are `[note] ...`, at most 3. Start summary with exactly `REVIEW: pass` (no [must]) or
-`REVIEW: issues` (at least one [must]); put the items in open_questions, [must] first. Status done."""
+check the code meets it; the acceptance tests may cover only some of them.
+`[must] file:line — "task words" — what is wrong` is only for: (a) a requirement stated in the task that the change
+does not meet or gets wrong, quoting the task sentence it rests on; (b) a bug that breaks existing behaviour or
+existing tests, or crashes on inputs the task itself names (say which); (c) a real safety problem the change adds
+(code execution, secrets, data loss). A [must] without such a basis is treated as a note. Everything else is
+`[note] ...`, at most 3: hardening, extra validation, edge cases or robustness the task did not ask for, style,
+missing extra tests. Start summary with exactly `REVIEW: pass` (no [must]) or `REVIEW: issues` (at least one
+[must]); put the items in open_questions, [must] first. Status done."""
+
+# a [must] that labels itself as outside the task right after the tag ("[must] (out of scope) ...", "[must] Hardening:
+# ...") is a note: round 5 found fix rounds spent on robustness the task never asked for, none of them making a unit right
+_OUT_OF_SCOPE = re.compile(r"^\s*\[must\][\s:—–-]*[(\[]?\s*(out[- ]of[- ]scope|beyond the task|not (asked|required|"
+                           r"in the task|part of the task)|outside the task|hardening|robustness|nice[- ]to[- ]have)\b",
+                           re.I)
 
 
 def _git(cwd: Path, *args: str) -> str:
@@ -329,7 +338,8 @@ def verdict(result: dict | None) -> dict:
     m = _PREFIX.match(s)
     v = m.group(1).lower() if m else "unclear"
     items = [str(x)[:300] for x in (r.get("open_questions") or [])]
-    must = [x for x in items if x.lstrip().lower().startswith("[must]")]
+    items = ["[note]" + x.lstrip()[len("[must]"):] if _OUT_OF_SCOPE.match(x) else x for x in items]
+    must =[x for x in items if x.lstrip().lower().startswith("[must]")]
     notes = [x for x in items if x not in must]
     lenient = False
     if v == "unclear" and items:
@@ -375,8 +385,8 @@ def review_run(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path, run_d
     if not cands:
         record["review"] = {"verdict": "not-run", "reason": why, "error": "no reviewer from another vendor installed"}
         return
-    text = rv.brief(record["run_id"], req.brief, res.get("summary", ""), diff, int(rc.get("max_diff_chars", 12000)),
-                    record.get("check"))
+    text = rv.brief(record["run_id"], task_for_review(p, req), res.get("summary", ""), diff,
+                    int(rc.get("max_diff_chars", 12000)), record.get("check"))
     usd, tried = 0.0, []
     for agent, model, effort in cands[:2]:
         rev = run(Request(to=agent, model=model, effort=effort, tier="auto", mode="read", cwd=cwd, brief=text,
@@ -392,4 +402,33 @@ def review_run(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path, run_d
     if len(tried) > 1:
         record["review"]["tried"] = tried
     if v["verdict"] == "issues":
-        record["kind"] = ("review_issues" if req.review_round < int(rc.get("fix_rounds", 1)) else "review_failed")
+        record["kind"] = ("review_issues" if req.review_round < fix_rounds(rc) else "review_failed")
+
+
+def fix_rounds(rc: dict) -> int:
+    """Fix rounds after a review: 0 or 1. Round 5: more rounds cost time and did not make units more often right."""
+    try:
+        return max(0, min(1, int(rc.get("fix_rounds", 1))))
+    except (TypeError, ValueError):
+        return 1
+
+
+def task_for_review(p: Paths, req: Request) -> str:
+    """The task a review judges against. A fix round's own brief is the list of review issues; judging the fix
+    against that list would make every issue a requirement, so its review gets the first run's task instead."""
+    rid = req.resume_run if (req.review_round and not req.continued) else None
+    for _ in range(5):                       # the reviewed run may itself be a resume: walk back to the run with a task
+        if not rid:
+            break
+        try:
+            first = (p.runs / rid / "brief.md").read_text(encoding="utf-8")
+            if first.strip():
+                return first
+        except OSError:
+            pass
+        try:
+            prev = json.loads((p.runs / rid / "run.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            break
+        rid = None if prev.get("continued") else prev.get("resumed_from")
+    return req.brief

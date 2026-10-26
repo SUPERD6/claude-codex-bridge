@@ -37,7 +37,7 @@ from .prompts import (CONTINUE, ESCALATE, FOLLOWUP, NEEDS_WRITE, POLICY_MARKERS,
 from .review import review_run as _review  # noqa: F401
 from .verdicts import (REASONS, SOFT_AFTER_H, _hard_verdict, _soft_verdict, soft_verdicts, verify,  # noqa: F401
                        verify_builtin)
-from .workspace import _git, make_worktree, run_check, undo, undo_snapshot  # noqa: F401
+from .workspace import _git, diffstat, make_worktree, run_check, run_snapshot, undo, undo_snapshot  # noqa: F401
 
 AGENTS = DELEGATE_AGENTS
 
@@ -290,8 +290,8 @@ def run(req: Request, p: Paths) -> dict:
     if busy:
         raise RuntimeError(
             f"run {busy} is still working in that session (its check, review or fix round included): wait for it "
-            f"with `ccx show {busy}`, or stop it with `ccx stop {busy}`, then resume. Starting another run in the "
-            "same session now would fail (Codex: 'thread already has an active writer').")
+            f"with `ccx show {busy} --wait`, or stop it with `ccx stop {busy}`, then resume. Starting another run "
+            "in the same session now would fail (Codex: 'thread already has an active writer').")
     if prev and prev.get("session_id"):
         try:                               # archived after its run (or by hand): put it back before continuing it
             from . import archive
@@ -685,6 +685,13 @@ def run(req: Request, p: Paths) -> dict:
             record["learned"] = "auto" if (record.get("route") or {}).get("b") is not None else None
         except Exception:  # noqa: BLE001 — learning is best effort
             pass
+    if req.mode == "write":
+        try:                               # what changed, so the lead needs no `git diff --stat` of its own
+            ds = diffstat(run_snapshot(p, record))
+        except Exception:  # noqa: BLE001 — a missing git never fails the run
+            ds = None
+        if ds:
+            record["diffstat"] = ds
     beat.set()
     record.pop("current", None)
     if not ledger.claim_final(run_dir, "run"):
@@ -703,13 +710,14 @@ def run(req: Request, p: Paths) -> dict:
     except Exception:  # noqa: BLE001 — housekeeping never fails the work
         pass
     if record.get("kind") == "review_issues" and record.get("session_id"):
-        # hand the problems back to the same sub-session once; its fix is reviewed again (review_round 1)
+        # hand the problems back to the same sub-session once; its fix is reviewed again, against the same task
         issues = "\n".join(f"- {x}" for x in record["review"]["issues"]) or record["review"]["summary"]
         fix = run(Request(to=req.to, brief=f"An independent review of your change found problems:\n{issues}\n"
-                          "Fix the real ones (say which you think are wrong and why), run the checks again.",
+                          "Fix the real ones (say which you think are wrong and why), run the checks again. "
+                          "Change only what the task needs; do not add checks or hardening it did not ask for.",
                           resume_run=run_id, caller=req.caller, cwd=req.cwd, review="on", risk=req.risk,
-                          review_round=1, check=req.check, fallback=False, task=req.task, step=req.step,
-                          label=req.label), p)
+                          review_round=req.review_round + 1, check=req.check, fallback=False, task=req.task,
+                          step=req.step, label=req.label), p)
         fix["review_of"], fix["first_review"] = run_id, record["review"]
         _write_record(p.runs / fix["run_id"], fix)
         return fix
@@ -733,6 +741,8 @@ def compact(record: dict) -> dict:
         "next_step": r.get("next_step", ""),
         "tokens": tok,
     }
+    if record.get("diffstat"):
+        out["diffstat"] = record["diffstat"]          # `git diff --shortstat` since the run's undo snapshot
     atts = record["attempts"]
     chain = [a.get("tier") or a.get("rung") or "?" for k, a in enumerate(atts)   # a policy retry stays on its rung
              if not (k and atts[k - 1].get("kind") == "policy" and atts[k - 1]["rung"] == a["rung"])]
