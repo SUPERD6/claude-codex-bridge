@@ -18,7 +18,8 @@ from typing import Callable
 from .workspace import _git
 
 # what ends a lane's session: the next piece then starts a new one
-BAD_KINDS = ("quota", "auth", "timeout", "user_stopped", "interrupted", "check_failed", "review_failed",
+BAD_KINDS = ("quota", "auth", "timeout", "user_stopped", "interrupted", "check_failed", "check_broken",
+             "review_failed",
              "review_issues", "needs_write", "over_budget", "split")
 
 

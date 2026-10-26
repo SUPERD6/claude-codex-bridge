@@ -49,6 +49,14 @@ def _expand_globs(cmd: str, cwd: Path) -> str:
     return _TOKEN.sub(one, cmd)
 
 
+def _typo_of(want: str, have: str) -> bool:
+    """`have` is `want` with a typo (same folder, file name a letter or two off), not a different file that merely
+    looks alike, so swapping it into the check is safe."""
+    (wd, _, wn), (hd, _, hn) = want.rpartition("/"), have.rpartition("/")
+    wn, hn = wn.removeprefix("test_"), hn.removeprefix("test_")
+    return wd == hd and abs(len(wn) - len(hn)) <= 2 and difflib.SequenceMatcher(None, wn, hn).ratio() >= 0.85
+
+
 def missing_test_paths(cmd: str, cwd: Path) -> list[dict]:
     """`tests/....py` paths the check names that do not exist under cwd, each with close matches, so a check that
     could never pass (a guessed file name) stops before a sub-agent is paid to satisfy it."""
@@ -63,7 +71,9 @@ def missing_test_paths(cmd: str, cwd: Path) -> list[dict]:
         if known is None:
             tests = cwd / "tests"
             known = sorted(q.relative_to(cwd).as_posix() for q in tests.rglob("*.py")) if tests.is_dir() else []
-        out.append({"path": path, "close": difflib.get_close_matches(path.replace("\\", "/"), known, n=3, cutoff=0.5)})
+        want = path.replace("\\", "/")
+        out.append({"path": path, "close": difflib.get_close_matches(want, known, n=3, cutoff=0.5),
+                    "sure": [k for k in known if _typo_of(want, k)]})
     return out
 
 

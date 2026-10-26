@@ -102,6 +102,64 @@ def _busy(p: Paths, prev: dict, scan: int = 300) -> str | None:
     return None
 
 
+def _start_review(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path, run_dir: Path, result: dict | None) -> dict:
+    """Start the independent review in a thread while ccx runs the check. It works on a copy of the record whose
+    check is the command as if it passed (what the review is told when its verdict counts at all), so the check's
+    own result never races with it."""
+    from .workspace import _check_doubt
+    shadow = dict(record, result=result)
+    shadow["check"] = {"cmd": req.check, "passed": True, **_check_doubt(req.check, cwd)}
+    cancel = threading.Event()
+
+    def go() -> None:
+        try:
+            _review(req, p, cfg, shadow, cwd, run_dir, cancel=cancel)
+        except Exception as e:  # noqa: BLE001 — a review that can't run never fails the work itself
+            shadow["review"] = {"verdict": "not-run", "error": f"{type(e).__name__}: {e}"[:200]}
+
+    t = threading.Thread(target=go, name=f"ccx-review-{record['run_id']}", daemon=True)
+    t.start()
+    return {"thread": t, "cancel": cancel, "shadow": shadow, "run_id": record["run_id"]}
+
+
+def _stop_reviews(p: Paths, run_id: str, scan: int = 50) -> None:
+    """Ask the review runs of `run_id` that are still going to stop (the same stop file `ccx stop` writes)."""
+    try:
+        dirs = sorted((d for d in p.runs.iterdir() if d.is_dir()), reverse=True)[:scan]
+    except OSError:
+        return
+    for d in dirs:
+        try:
+            rec = ledger.read_record(d / "run.json") or {}
+        except (OSError, ValueError):
+            continue
+        if rec.get("label") == f"review:{run_id}" and rec.get("state") == "running":
+            try:
+                (d / "stop.request").write_text("ccx: the check failed, this review is not needed",
+                                                encoding="utf-8")
+            except OSError:
+                pass
+
+
+def _finish_review(bg: dict, record: dict, p: Paths, keep: bool, wait: float = 120.0) -> None:
+    """keep: the check passed (or was not run anew), so the review's outcome goes into the record. Otherwise the
+    review is stopped and whatever it found is dropped, as when it never ran."""
+    t, shadow = bg["thread"], bg["shadow"]
+    if keep:
+        t.join()
+        for k in ("review", "edited_tests"):
+            if k in shadow:
+                record[k] = shadow[k]
+        if shadow.get("kind") in ("review_issues", "review_failed"):
+            record["kind"] = shadow["kind"]
+        return
+    bg["cancel"].set()
+    end = time.time() + wait
+    while t.is_alive() and time.time() < end:
+        _stop_reviews(p, bg["run_id"])
+        t.join(0.5)
+
+
 def depth_guard(cfg: dict) -> None:
     depth = int(os.environ.get("CCX_DEPTH", "0") or 0)
     if depth >= int(cfg["defaults"].get("max_depth", 1)):
@@ -415,7 +473,8 @@ def run(req: Request, p: Paths) -> dict:
     kids = dict((prev or {}).get("codex_children") or {})   # child sessions it spawned -> totals counted
     record["codex_children"] = kids
     prompt, i, fell_back, swaps, policy_retried = first_prompt, 0, False, 0, False
-    oc, early_check = None, None
+    oc, early_check, bg_review = None, None, None
+    want_review = req.mode == "write" and req.review != "off" and not req.ephemeral
     stop_file = run_dir / "stop.request"         # written by `ccx stop <run_id>`
 
     def on_start(pid: int) -> None:
@@ -615,9 +674,14 @@ def run(req: Request, p: Paths) -> dict:
             # "done" but ccx's own run of the check fails: that is a failure too, so climb while a rung is left.
             # Before, only blocked/failed escalated, and a cheap model that wrongly said done stopped there
             # (needed once tradeoff = save picks cheap models first, 2026-10-25)
+            if want_review:                    # reviewed while the check runs; dropped if the check fails
+                bg_review = _start_review(req, p, cfg, record, cwd, run_dir, oc.result)
             chk = run_check(req.check, cwd, int(cfg["defaults"].get("check_timeout_sec", 900)))
             early_check = (len(record["attempts"]), chk)
             if not chk["passed"] and not chk.get("broken"):   # a broken check is no reason to climb
+                if bg_review is not None:
+                    _finish_review(bg_review, record, p, keep=False)
+                    bg_review = None
                 record["attempts"][-1]["kind"] = "check_failed"
                 _write_record(run_dir, record)
                 summary = f"you said done, but `{chk['cmd']}` failed (exit {chk['exit']}):\n{chk['tail'][-400:]}"
@@ -647,8 +711,16 @@ def run(req: Request, p: Paths) -> dict:
     if stop_file.exists():
         record["stop_requested"] = True
     check_passed = None
+    want_review = want_review and oc.ok and status in ("done", "partial")
+    if bg_review is not None and not (want_review and early_check and early_check[0] == len(record["attempts"])):
+        _finish_review(bg_review, record, p, keep=False)         # not this attempt's (cannot happen; be safe)
+        bg_review = None
     if req.check and oc.ok and status in ("done", "partial"):
         reuse = early_check and early_check[0] == len(record["attempts"])    # already run on this very attempt
+        if not reuse and want_review and bg_review is None:
+            # the review runs while ccx runs the check (it needs only the command, not its result); it counts
+            # only if the check passes, and is stopped otherwise
+            bg_review = _start_review(req, p, cfg, record, cwd, run_dir, oc.result)
         record["check"] = early_check[1] if reuse else run_check(req.check, cwd,
                                                                  int(cfg["defaults"].get("check_timeout_sec", 900)))
         check_passed = record["check"]["passed"]
@@ -658,8 +730,9 @@ def run(req: Request, p: Paths) -> dict:
         elif not check_passed:
             # the sub-agent said it was done; the check says otherwise: that's a failure, and it is learned as one
             record["kind"] = "check_failed"
-    if (req.mode == "write" and req.review != "off" and not req.ephemeral and oc.ok and status in ("done", "partial")
-            and record.get("kind") not in ("check_failed", "check_broken")):
+    if bg_review is not None:
+        _finish_review(bg_review, record, p, keep=record.get("kind") not in ("check_failed", "check_broken"))
+    elif want_review and record.get("kind") not in ("check_failed", "check_broken"):
         try:
             _review(req, p, cfg, record, cwd, run_dir)
         except Exception as e:  # noqa: BLE001 — a review that can't run never fails the work itself

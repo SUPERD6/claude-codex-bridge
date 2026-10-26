@@ -387,10 +387,10 @@ def verdict(result: dict | None) -> dict:
     return out
 
 
-def review_run(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path, run_dir: Path) -> None:
+def review_run(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path, run_dir: Path, cancel=None) -> None:
     """F1: maybe have another vendor's cheap model review this write run's diff; sets record["review"]. When the
     change edited pre-existing tests, record["edited_tests"] (and record["review"]["edited_tests"] when a review
-    is recorded) lists them."""
+    is recorded) lists them. `cancel` (a threading.Event, set when ccx's check failed meanwhile): start no reviewer."""
     from .delegate import Request, run
     from .runners import find_bin
     import sys
@@ -424,6 +424,8 @@ def review_run(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path, run_d
                     int(rc.get("max_diff_chars", 12000)), record.get("check"), edited)
     usd, tried = 0.0, []
     for agent, model, effort in cands[:2]:
+        if cancel is not None and cancel.is_set():
+            return
         rev = run(Request(to=agent, model=model, effort=effort, tier="auto", mode="read", cwd=cwd, brief=text,
                           caller="ccx-review", escalate=False, fallback=False, review="off", allow_subagents=False,
                           ephemeral=True, label=f"review:{record['run_id']}"), p)
