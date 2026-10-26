@@ -18,7 +18,8 @@ from ..delegate import Request, compact, recap, run, verify
 from ..runners import find_bin
 from ..workspace import missing_test_paths
 from .common import (_brief, _caller, _out, _routing_args, _spec_from_args, _target, find_continuable,
-    apply_mode, find_seat, installed_agents, lead_session_id, parse_quota, provider_agents, resolve, tier_policy)
+    apply_mode, find_seat, installed_agents, lead_session_id, parse_quota, picked_tier, provider_agents, resolve,
+    tier_policy)
 from .install import tier_spec_safe
 from ..subagents import parse_spec as subagents_spec
 
@@ -102,12 +103,24 @@ def cmd_run(a) -> int:
     text = _brief(a)
     caller = _caller(a.caller)
     spec = _spec_from_args(a, text)
+    preauth = None
+    if a.proposal:
+        from .. import proposals
+        preauth = proposals.preauthorized(p, a.proposal)    # a tier the person picked, not a yes to this offer
+        if preauth and preauth.get("tier") != picked_tier(cfg):
+            raise ValueError(f"proposal {a.proposal} was pre-authorised by tier {preauth.get('tier')}, which the "
+                             "person's settings no longer pick (policy.picked): run `ccx propose` again and offer it")
+        if preauth:
+            spec["tier_preauth"] = True          # the tier decided who does it: no random A/B self-run, no trial
     mode = apply_mode(spec)                      # before routing: start-up cost depends on read/write
     kw, route = resolve(spec, caller, p, cfg)
     route["mode"] = mode
-    if a.proposal:                               # the person said yes to an offer (H12)
-        from .. import proposals
-        proposals.answer(p, a.proposal, True)
+    if a.proposal:
+        if preauth:                              # the run row keeps the proposal's tier, band and planned mode
+            route["policy"] = preauth
+        # the person said yes to an offer (H12), or the tier they picked pre-authorised it (source "tier": not
+        # counted as a yes in proposals.stats)
+        proposals.answer(p, a.proposal, True, source="tier" if preauth else "person")
         route["proposal"] = a.proposal
     if kw is None:
         _out({"delegated": False, "advice": route.get("advice"), "route": route,
@@ -118,7 +131,8 @@ def cmd_run(a) -> int:
                 **{k: route[k] for k in ("rung", "p", "expected_usd") if route.get(k) is not None},
                 **({"check": a.check} if a.check else {}), **({"budget_usd": a.budget} if a.budget else {}),
                 **({"project": proj["name"]} if proj else {})}
-        stop = autonomy.gate(auto, mode["mode"], bool(a.approved or a.proposal), plan)
+        # a yes to an offer is the person's approval; a tier pre-authorisation is not (L0/L1 still ask)
+        stop = autonomy.gate(auto, mode["mode"], bool(a.approved or (a.proposal and not preauth)), plan)
         if stop:
             _out(stop)
             return 0
@@ -594,18 +608,26 @@ def cmd_propose(a) -> int:
         return "?" if x is None else (f"${x:.4f}" if x < 0.01 else f"${x:.2f}")
     odds = "odds unknown" if row["p"] is None else f"about {row['p']:.0%} likely to work"
     out = {"proposal": row["proposal"]}
-    if tp.get("explicit"):
-        # the person picked this tier: it pre-authorises what the tier delegates (docs/DECISIONS.md, tiers)
+    if tp.get("explicit") and tp.get("mode"):
+        # the person picked this tier in their settings (policy.picked): it pre-authorises what the tier delegates
+        # (docs/DECISIONS.md, tiers). worth_offering agrees with authorized: true when the tier delegates (a skill
+        # copy that predates `authorized` then asks with `say`, the conservative side), false when it says self
         mode = tp["mode"]
-        out.update(worth_offering=False, authorized=mode != "self", recommend=mode, why=tp["why"])
+        out.update(worth_offering=mode != "self", authorized=mode != "self", recommend=mode, why=tp["why"])
+        if mode != "self":
+            out["say"] = (f"Your picked tier {tp['tier']} delegates this: about {usd(row['delegate_usd'])} delegated "
+                          f"vs {usd(row['self_usd'])} here, {odds}.")
         if mode == "self":
             out["next"] = f"tier {tp['tier']}: do it yourself, nothing to ask"
         else:
             # the delegated part picks its model like save; the proposal row keeps the tier
-            out["next"] = (f"tier {tp['tier']} pre-authorises this: ccx run --tradeoff save --proposal "
-                           f"{row['proposal']} --minutes ... --files ... \"<brief>\""
-                           + (", then accept its check result as it is: label the result may-be-wrong to the "
-                              "person (no lead review)" if mode == "direct" else
+            out["next"] = (f"tier {tp['tier']} pre-authorises this: ccx run --tradeoff save "
+                           + ("--review off " if mode == "direct" else "")
+                           + f"--proposal {row['proposal']} --minutes ... --files ... [--check \"CMD\"] \"<brief>\""
+                           + (", then take its --check result as it is (no review, no acceptance by you) and tell "
+                              "the person the result may be wrong. Run through you, your own turns are still paid: "
+                              "only a script or CI calling ccx run itself skips the lead's cost"
+                              if mode == "direct" else
                               ", then accept by its check + review; on review_failed fix it yourself"))
             if mode == "direct":
                 out["may_be_wrong"] = True
@@ -620,9 +642,12 @@ def cmd_propose(a) -> int:
     out.update(self_usd=row["self_usd"], delegate_usd=row["delegate_usd"], p=row["p"],
                lead_ctx_tokens=row["lead_ctx_tokens"], ctx_source=c.get("ctx_source"))
     if tp:
-        out["tier"] = {k: tp.get(k) for k in ("tier", "band", "mode", "uncertain", "hard", "explicit", "provisional")}
+        out["tier"] = {k: tp.get(k) for k in ("tier", "band", "mode", "uncertain", "hard", "explicit", "provisional",
+                                              "error") if k in tp}
         if not tp.get("explicit"):
             out["tier"]["note"] = "informational: no tier picked, the offer-first rule above applies"
+        elif not tp.get("mode"):
+            out["tier"]["note"] = "the tier could not be planned: the offer-first rule above applies"
     _out(out)
     return 0
 

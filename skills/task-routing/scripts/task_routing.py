@@ -29,6 +29,7 @@ import argparse
 import json
 import math
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -717,9 +718,24 @@ def brief_words(text: str, cjk_per_word: float = 2.5) -> float:
     return round(latin + cjk / max(cjk_per_word, 0.1), 1)
 
 
+def names_word(text: str, word: str) -> bool:
+    """Does `text` name `word`? Latin words match whole (case-insensitive, "skill" is not "kill", "traceback" is not
+    "race"); a word with CJK characters matches as written (Chinese has no spaces between words)."""
+    w = (word or "").strip().lower()
+    if not w:
+        return False
+    if any("㐀" <= ch <= "鿿" or "豈" <= ch <= "﫿" for ch in w):
+        return w in (text or "").lower()
+    # plain English endings count ("resumed", "crashes", "killing", "racing"); a longer word does not ("skills" is
+    # still not "kill": the start is a word boundary)
+    stem = re.escape(w[:-1]) + "(?:e|es|ed|ing)" if w.endswith("e") else re.escape(w) + "(?:s|es|ed|ing)?"
+    return re.search(r"(?<![a-z0-9_])" + stem + r"(?![a-z0-9_])", (text or "").lower()) is not None
+
+
 def size_band(brief: str = "", minutes: float | None = None, files: int = 0, policy: dict | None = None) -> dict:
-    """small / medium / large from the lead's estimate. uncertain = no --minutes and no --files (the brief's length
-    alone), or the given signals disagree by two bands; hard = the brief names a state-machine/resume-type mechanism."""
+    """small / medium / large from the lead's estimate: any one signal (files, minutes, brief words) reaching a band
+    is enough. uncertain = no --minutes and no --files (the brief's length alone); hard = the brief names a
+    state-machine/resume-type mechanism (whole words: "skill" does not name "kill"; CJK words as written)."""
     bd = merged_policy(policy)["bands"]
     words = brief_words(brief, float(bd["cjk_chars_per_word"]))
 
@@ -732,11 +748,8 @@ def size_band(brief: str = "", minutes: float | None = None, files: int = 0, pol
         votes["files"] = band_of(int(files), "files")
     order = ("small", "medium", "large")
     band = max(votes.values(), key=order.index)
-    hard_votes = [votes[k] for k in ("minutes", "files") if k in votes]
-    uncertain = not hard_votes or (len(hard_votes) == 2 and abs(order.index(hard_votes[0])
-                                                                  - order.index(hard_votes[1])) >= 2)
-    low = (brief or "").lower()
-    hard = [w for w in bd.get("hard_words") or [] if w.lower() in low]
+    uncertain = "minutes" not in votes and "files" not in votes
+    hard = [w for w in bd.get("hard_words") or [] if names_word(brief, w)]
     return {"band": band, "uncertain": uncertain, "hard": hard, "votes": votes,
             "signals": {"words": words, "minutes": minutes, "files": files or 0}}
 
@@ -752,8 +765,7 @@ def tier_plan(tradeoff, brief: str = "", minutes: float | None = None, files: in
     if sz["hard"] and "hard" in rules:
         mode, why = rules["hard"], f"state-machine/resume-type task ({', '.join(sz['hard'][:3])})"
     elif sz["uncertain"] and "uncertain" in rules:
-        mode, why = rules["uncertain"], ("size uncertain (give --minutes and --files)" if not
-                                         (minutes or files) else "size signals disagree")
+        mode, why = rules["uncertain"], "size uncertain (give --minutes and --files)"
     elif (band == "medium" and "medium_big_ctx" in rules
           and lead_ctx >= int(pol["bands"]["lead_ctx_large"])):
         mode, why = rules["medium_big_ctx"], f"medium task, your context is large ({lead_ctx} tokens)"

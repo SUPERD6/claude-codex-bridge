@@ -17,7 +17,7 @@
 
 ## 步骤
 
-0. **提议委派，用户决定**：没人要求委派、但下一块活大（熟练工程师约 15 分钟以上）且能检查时，先 `ccx propose --lead <你的档> --minutes <n> "一句话任务"`。`worth_offering: false` 就自己做、不提；`true` 就用它给的那一句话问用户并等待。同意 → `ccx run --proposal <id> ...`（不要加 `--no-ab`），验收后一定 `ccx verify`；不同意 → `ccx propose --no <id>`，自己做，本对话不再提这类活。
+0. **提议委派，用户决定**：没人要求委派、但下一块活大（熟练工程师约 15 分钟以上）且能检查时，先 `ccx propose --lead <你的档> --minutes <n> "一句话任务"`。`authorized: true`（总是和 `worth_offering: true` 一起出现；只在用户自己在设置里选了档位 `ccx config set policy.picked <档>` 时才有，你传的任何参数都不会产生它）表示档位已经决定，不用问：把它的 `say` 那句告诉用户，照它的 `next` 跑并按它说的验收（task-routing「档位」）；项目自主级别 L0/L1 仍可能在改文件前停下，那时按输出去问。`worth_offering: false` 就自己做、不提；`worth_offering: true` 但没有 `authorized` 就用它给的那一句话问用户并等待。同意 → `ccx run --proposal <id> ...`（不要加 `--no-ab`），验收后一定 `ccx verify`；不同意 → `ccx propose --no <id>`，自己做，本对话不再提这类活。
 1. **沿用已确定的选择**：保留获准的目标、模型、强度和读写范围。指定模型时跳过路由；确实需要选模型才用 task-routing，需要拆任务才用 task-split。必须固定目标/模型时使用 `--no-escalate --no-fallback`。并行也须在授权范围内。自己做、自带子智能体还是 ccx，见 `references/three-way.md`；自己定档（`--tier`）见 `references/rubric.md`。
 2. **派得省**（第 5 轮评测，2026-10-26：大任务上用 ccx 的主智能体请求数中位 8 次，用自带子智能体 6 次，多出来的就是下面这些习惯）：
    - **简报 = 用户原话照抄**（尤其接口、名字、精确字符串、数字）+ 你已经知道的文件路径 + 验收命令。不要转述接口（“第一个匹配的提示”被改写成“最早的位置”，结果做错）；不要为了写简报先读代码库或 README/STATUS/文档，子智能体自己读（还会读 `.ccx/context.md`），花的是便宜模型。复用已有 `.ccx/context.md`；只有上下文维护属于本次授权时才更新它。格式见 `references/brief-template.md`。

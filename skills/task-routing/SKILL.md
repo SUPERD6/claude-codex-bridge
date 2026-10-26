@@ -42,17 +42,27 @@ stale prices to make a cost decision, not for every ordinary task.
 ## Tiers (whole workflow)
 
 `--tradeoff` is also the tier: who does each task, sized from your brief plus `--minutes` and `--files`
-(`ccx propose`, or `scripts/task_routing.py tier`). Thresholds are provisional (`config/tiers.toml [policy.*]` in ccx).
+(`ccx propose`, or `scripts/task_routing.py tier`). Any one of files, minutes or brief length reaching a band is
+enough; with neither `--minutes` nor `--files` the size counts as uncertain. Thresholds are provisional
+(`config/tiers.toml [policy.*]` in ccx).
 
 | Tier | Who does it |
 |---|---|
-| `save` | everything delegated through ccx (`ccx2`), models picked like save; you accept by check + review |
+| `save` | everything delegated through ccx (`ccx2`); you accept by check + review |
 | `balanced` | small/medium yourself, large to `ccx2`; uncertain size and state-machine/resume-type tasks yourself |
 | `fast` | everything yourself |
 | `cheapest` | `direct`: ccx with no acceptance by you; tell the person the result may be wrong |
 
-A tier the person explicitly picked (you pass `--tradeoff`) pre-authorises what it delegates: `ccx propose` then
-says `authorized`. With no tier picked, offer first as before (agent-delegate section 0); the tier is only shown.
+Only the person picks a tier, in their own settings: `ccx config set policy.picked <tier>` (`none` = off,
+shipped). Then `ccx propose` (with no `--tradeoff`, or that same tier) pre-authorises what the tier delegates:
+`authorized: true` with `worth_offering: true`; tell the person its `say` line and run its `next` (it picks the
+delegated part's models like save), whose run skips the random A/B self-run. A project's autonomy level (L0/L1)
+still stops before edits, and the answer is logged as the tier's, not as the person's yes. Never set
+`policy.picked` yourself. A `--tradeoff` you pass authorises nothing: it is a model pick, the offer-first rule
+stays (agent-delegate section 0), A/B and trials are unchanged, and the tier plan is only shown. If the person
+names a tier in the conversation, that is their say for the pieces it delegates: run those with an ordinary
+`ccx run` (an approved handoff). `cheapest` run through you still costs your own turns; only a script or CI calling
+`ccx run` itself skips the lead. A `ccx run --tradeoff balanced|fast` you start yourself picks that tier's models.
 The default tier stays `save` until a confirmation run decides.
 
 ## Act within the task's scope

@@ -40,7 +40,9 @@ class TestTierPlan(unittest.TestCase):
         self.assertEqual(tr.brief_words("修好解析器"), 2.0)                                 # 5 CJK chars / 2.5
         self.assertTrue(tr.size_band("x")["uncertain"])                                   # no --minutes / --files
         self.assertFalse(tr.size_band("x", 5)["uncertain"])
-        self.assertTrue(tr.size_band("x", 60, 1)["uncertain"])                            # large vs small: disagree
+        one = tr.size_band("x", 60, 1)                     # any one signal is enough: a 60-minute one-file task
+        self.assertEqual((one["band"], one["uncertain"]), ("large", False))
+        self.assertEqual(tr.tier_plan("balanced", "x", 60, 1)["mode"], "ccx2")
 
     def test_uncertain_and_hard_tasks(self):
         self.assertEqual(tr.tier_plan("balanced", "big thing")["mode"], "self")          # uncertain -> self
@@ -49,6 +51,17 @@ class TestTierPlan(unittest.TestCase):
         self.assertEqual(hard["mode"], "self")
         self.assertIn("resume", hard["hard"])
         self.assertEqual(tr.tier_plan("balanced", "续跑时恢复状态", 90, 5)["mode"], "self")
+        # whole words: "skill" does not name "kill", "traceback" not "race"
+        for brief in ("Update the agent-delegate skill text", "Fix the traceback in report.py", "which skill ran"):
+            plan = tr.tier_plan("balanced", brief, 60, 5)
+            self.assertEqual((plan["hard"], plan["mode"]), ([], "ccx2"), brief)
+        self.assertEqual(tr.tier_plan("balanced", "ccx resume, then Kill it", 60, 5)["hard"], ["resume", "kill"])
+        # plain endings still count; a longer word does not
+        for brief, word in (("the run resumed twice", "resume"), ("it crashes", "crash"), ("killing it", "kill"),
+                            ("racing writers", "race"), ("two state machines", "state machine")):
+            self.assertIn(word, tr.size_band(brief, 60, 5)["hard"], brief)
+        for brief in ("list the skills", "add tracebacks", "the restarter tool", "a crashpad"):
+            self.assertEqual(tr.size_band(brief, 60, 5)["hard"], [], brief)
 
     def test_big_lead_context_sends_medium_out_in_balanced(self):
         self.assertEqual(tr.tier_plan("balanced", "x", 20, 2)["mode"], "self")
@@ -80,58 +93,186 @@ class TestTierPlan(unittest.TestCase):
 
 
 class TestProposeTiers(ReportEnv):
+    LEAD = ("--to", "codex", "--lead", "claude:opus:high", "--lead-ctx", "0")
+
+    def pick(self, tier):
+        """What only the person does: pick a tier in their hub settings."""
+        self.j("config", "set", "policy.picked", tier)
+
+    def rows(self):
+        return [json.loads(x) for x in (self.hub / "ccx" / "ledger.jsonl").read_text(encoding="utf-8").splitlines()]
+
+    def run_row(self, run_id):
+        return next(r for r in self.rows() if r.get("run_id") == run_id and not r.get("type"))
+
     def test_no_tier_keeps_the_offer_first_rule(self):
-        out = self.j("propose", "--minutes", "60", "--files", "4", "--to", "codex", "--lead", "claude:opus:high",
-                     "--lead-ctx", "0", "rework the parser")
+        out = self.j("propose", "--minutes", "60", "--files", "4", *self.LEAD, "rework the parser")
         self.assertNotIn("authorized", out)
         self.assertEqual(out["worth_offering"], out["recommend"] == "delegate")
         self.assertFalse(out["tier"]["explicit"])
         self.assertEqual(out["tier"]["tier"], "save")                     # the shipped default, shown only
         self.assertIn("informational", out["tier"]["note"])
 
-    def test_explicit_tier_preauthorises_its_delegation(self):
-        big = self.j("propose", "--tradeoff", "balanced", "--minutes", "60", "--files", "4", "--to", "codex",
-                     "--lead", "claude:opus:high", "--lead-ctx", "0", "rework the parser")
-        self.assertEqual((big["recommend"], big["authorized"], big["worth_offering"]), ("ccx2", True, False))
+    def test_tradeoff_from_the_lead_authorises_nothing(self):
+        # project-manager passes --tradeoff save on every dispatch; a lead may pass any tier: none of it is a pick
+        for tier in ("save", "balanced", "cheapest"):
+            out = self.j("propose", "--tradeoff", tier, "--minutes", "60", "--files", "4", *self.LEAD, "rework it")
+            self.assertNotIn("authorized", out, tier)
+            self.assertEqual(out["worth_offering"], out["recommend"] == "delegate")
+            self.assertFalse(out["tier"]["explicit"])
+        r = self.ccx("propose", "--tier-picked", "--minutes", "60", "--lead", "claude:opus:high", "x")
+        self.assertNotEqual(r.returncode, 0)                  # no flag a lead could add to authorise itself
+        self.pick("balanced")
+        other = self.j("propose", "--tradeoff", "save", "--minutes", "60", "--files", "4", *self.LEAD, "rework it")
+        self.assertNotIn("authorized", other)                 # a different tier than the person picked
+        self.assertFalse(other["tier"]["explicit"])
+
+    def test_picked_tier_setting_is_checked(self):
+        r = self.ccx("config", "set", "policy.picked", "turbo")
+        self.assertNotEqual(r.returncode, 0)
+        self.pick("cheapest")
+        self.pick("none")
+        out = self.j("propose", "--minutes", "60", "--files", "4", *self.LEAD, "rework the parser")
+        self.assertNotIn("authorized", out)                   # none = off again
+
+    def test_bad_policy_falls_back_to_offer_first_and_doctor_says_so(self):
+        (self.hub / "ccx").mkdir(parents=True, exist_ok=True)
+        with open(self.hub / "ccx" / "tiers.toml", "a", encoding="utf-8") as fh:      # the hand-edited overrides
+            fh.write('\n[policy.balanced]\nlarge = "teleport"\n')
+        self.pick("balanced")
+        out = self.j("propose", "--minutes", "60", "--files", "4", *self.LEAD, "rework the parser")
+        self.assertNotIn("authorized", out)
+        self.assertIn("teleport", out["tier"]["error"])
+        self.assertIn("offer-first", out["tier"]["note"])
+        from ccx import doctor, proposals
+        from ccx.config import paths
+        state, detail = doctor.tier_policy_check(paths())
+        self.assertEqual(state, "WARN")
+        self.assertIn("teleport", detail)
+        self.assertEqual(proposals.stats(paths())["proposals"]["proposed"], 1)   # it fell back: still an offer
+
+    def test_doctor_names_the_picked_tier(self):
+        from ccx import doctor
+        from ccx.config import paths
+        self.assertEqual(doctor.tier_policy_check(paths()), ("ok", "no tier picked: offer first (policy.picked)"))
+        self.pick("balanced")
+        state, detail = doctor.tier_policy_check(paths())
+        self.assertEqual(state, "ok")
+        self.assertIn("balanced", detail)
+
+    def test_picked_tier_preauthorises_its_delegation(self):
+        self.pick("balanced")
+        big = self.j("propose", "--minutes", "60", "--files", "4", *self.LEAD, "rework the parser")
+        # worth_offering and authorized agree: never "false" next to "authorized: true"
+        self.assertEqual((big["recommend"], big["authorized"], big["worth_offering"]), ("ccx2", True, True))
+        self.assertIn("balanced", big["say"])
         self.assertIn("--tradeoff save", big["next"])                       # delegated part: save's model pick
         self.assertIn(f"--proposal {big['proposal']}", big["next"])
-        self.assertNotIn("say", big)
-        small = self.j("propose", "--tradeoff", "balanced", "--minutes", "5", "--files", "1", "--to", "codex",
-                       "--lead", "claude:opus:high", "--lead-ctx", "0", "rename a flag")
-        self.assertEqual((small["recommend"], small["authorized"]), ("self", False))
-        cheap = self.j("propose", "--tradeoff", "cheapest", "--minutes", "5", "--files", "1", "--to", "codex",
-                       "--lead", "claude:opus:high", "--lead-ctx", "0", "rename a flag")
-        self.assertEqual((cheap["recommend"], cheap["may_be_wrong"]), ("direct", True))
-        self.assertIn("may-be-wrong", cheap["next"])
-        rows = [json.loads(x) for x in (self.hub / "ccx" / "ledger.jsonl").read_text(encoding="utf-8").splitlines()]
-        prop = next(r for r in rows if r.get("proposal") == big["proposal"] and r.get("type") == "proposal")
+        same = self.j("propose", "--tradeoff", "balanced", "--minutes", "60", "--files", "4", *self.LEAD, "rework")
+        self.assertTrue(same["authorized"])                                 # the same tier given again
+        small = self.j("propose", "--minutes", "5", "--files", "1", *self.LEAD, "rename a flag")
+        self.assertEqual((small["recommend"], small["authorized"], small["worth_offering"]), ("self", False, False))
+        self.pick("cheapest")
+        cheap = self.j("propose", "--minutes", "5", "--files", "1", *self.LEAD, "rename a flag")
+        self.assertEqual((cheap["recommend"], cheap["may_be_wrong"], cheap["worth_offering"]), ("direct", True, True))
+        self.assertIn("may be wrong", cheap["next"])
+        self.assertIn("--review off", cheap["next"])
+        self.assertIn("still paid", cheap["next"])                          # through a lead, its cost stays
+        prop = next(r for r in self.rows() if r.get("proposal") == big["proposal"] and r.get("type") == "proposal")
         self.assertEqual((prop["policy_tier"], prop["band"], prop["planned_mode"], prop["tier_explicit"],
-                          prop["estimate_minutes"], prop["estimate_files"]), ("balanced", "large", "ccx2", True, 60, 4))
+                          prop["estimate_minutes"], prop["estimate_files"], prop["preauthorized"]),
+                         ("balanced", "large", "ccx2", True, 60, 4, True))
         self.j("propose", "--no", small["proposal"])
-        rows = [json.loads(x) for x in (self.hub / "ccx" / "ledger.jsonl").read_text(encoding="utf-8").splitlines()]
-        self.assertEqual(rows[-1]["actual_mode"], "self")
+        self.assertEqual(self.rows()[-1]["actual_mode"], "self")
 
     def test_run_ledger_row_carries_the_tier(self):
-        out = self.j("run", "--from", "claude", "--to", "codex", "--tradeoff", "cheapest", "--minutes", "30",
-                     "--files", "2", "--kind", "code", "add a parser")
+        self.pick("cheapest")
+        out = self.j("run", "--from", "claude", "--to", "codex", "--minutes", "30", "--files", "2", "--kind", "code",
+                     "add a parser")
         self.assertEqual(out["status"], "done", out)
-        rows = [json.loads(x) for x in (self.hub / "ccx" / "ledger.jsonl").read_text(encoding="utf-8").splitlines()]
-        row = next(r for r in rows if r.get("run_id") == out["run_id"] and not r.get("type"))
+        row = self.run_row(out["run_id"])
+        # not a pre-authorised proposal: the lead started it and accepts it, whatever the tier planned
         self.assertEqual((row["policy_tier"], row["band"], row["planned_mode"], row["tier_explicit"],
-                          row["estimate_minutes"], row["actual_mode"]), ("cheapest", "medium", "direct", True, 30, "ccx2"))
+                          row["estimate_minutes"], row["actual_mode"]),
+                         ("cheapest", "medium", "direct", True, 30, "ccx2"))
+        out = self.j("run", "--from", "claude", "--to", "codex", "--tradeoff", "fast", "--minutes", "30",
+                     "--files", "2", "--kind", "code", "add a parser")
+        row = self.run_row(out["run_id"])
+        # the tier said self, the run went out anyway: planned and actual differ, which is what both are for
+        self.assertEqual((row["planned_mode"], row["tier_explicit"], row["actual_mode"]), ("self", False, "ccx2"))
 
-    def test_explicit_tier_skips_the_ab_self_run(self):
-        env = {"CCX_AB_RATE": "1"}
-        sampled = self.ccx("run", "--from", "claude", "--to", "codex", "--b", "4", "--kind", "code", "add x", env=env)
+    def test_preauthorised_run_keeps_the_tier_and_is_not_a_yes(self):
+        self.pick("cheapest")
+        cheap = self.j("propose", "--minutes", "30", "--files", "2", *self.LEAD, "add a parser")
+        out = self.j("run", "--from", "claude", "--to", "codex", "--tradeoff", "save", "--review", "off",
+                     "--proposal", cheap["proposal"], "--minutes", "30", "--files", "2", "--kind", "code",
+                     "add a parser", env={**self.env, "CCX_AB_RATE": "1"})
+        self.assertEqual(out["status"], "done", out)                  # no A/B self-run for the tier's proposal
+        row = self.run_row(out["run_id"])
+        self.assertEqual((row["policy_tier"], row["planned_mode"], row["actual_mode"], row["proposal"]),
+                         ("cheapest", "direct", "direct", cheap["proposal"]))
+        ans = next(r for r in self.rows() if r.get("type") == "proposal_answer" and r["proposal"] == cheap["proposal"])
+        self.assertEqual((ans["source"], ans["actual_mode"]), ("tier", "direct"))
+        self.pick("none")
+        offered = self.j("propose", "--minutes", "60", "--files", "4", *self.LEAD, "rework the parser")
+        self.j("propose", "--no", offered["proposal"])
+        from ccx import proposals
+        from ccx.config import paths
+        st = proposals.stats(paths())["proposals"]
+        # the H12 chain counts only the offer the person answered; the tier-decided one is counted apart
+        self.assertEqual((st["proposed"], st["agreed"], st["declined"], st["unanswered"], st["tier_decided"]),
+                         (1, 0, 1, 0, 1))
+
+    def test_preauthorisation_lapses_when_the_setting_changes(self):
+        self.pick("save")
+        big = self.j("propose", "--minutes", "60", "--files", "4", *self.LEAD, "rework the parser")
+        self.assertTrue(big["authorized"])
+        self.pick("none")
+        r = self.ccx("run", "--from", "claude", "--to", "codex", "--proposal", big["proposal"], "--b", "4",
+                     "rework the parser")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("policy.picked", r.stdout + r.stderr)
+        self.assertFalse(any(r.get("type") == "proposal_answer" for r in self.rows()))   # nothing recorded as a yes
+
+    def test_preauthorisation_does_not_pass_the_autonomy_gate(self):
+        self.pick("save")
+        big = self.j("propose", "--minutes", "60", "--files", "4", *self.LEAD, "rework the parser")
+        self.assertTrue(big["authorized"])
+        for level in ("L0", "L1"):
+            out = self.j("run", "--from", "claude", "--to", "codex", "--tradeoff", "save", "--autonomy", level,
+                         "--mode", "write", "--proposal", big["proposal"], "--b", "4", "rework the parser")
+            self.assertIs(out["delegated"], False, level)
+            self.assertIn(level, out["why"])
+        self.pick("none")
+        offered = self.j("propose", "--minutes", "60", "--files", "4", *self.LEAD, "rework the parser")
+        out = self.j("run", "--from", "claude", "--to", "codex", "--autonomy", "L1", "--mode", "write",
+                     "--proposal", offered["proposal"], "--b", "4", "rework the parser")
+        self.assertIn("run_id", out, out)                             # a person's yes still approves, as before
+
+    def test_ab_and_trial_sampling_stay_for_plain_runs(self):
+        env = {**self.env, "CCX_AB_RATE": "1"}
+        base = ("run", "--from", "claude", "--to", "codex", "--b", "4", "--kind", "code")
+        sampled = self.ccx(*base, "add x", env=env)
         self.assertIn("ab-sample", sampled.stdout + sampled.stderr)            # unchanged without a tier
-        out = self.j("run", "--from", "claude", "--to", "codex", "--b", "4", "--kind", "code", "--tradeoff", "save",
-                     "add x", env=env)
-        self.assertEqual(out["status"], "done", out)
+        plain = self.ccx(*base, "--tradeoff", "save", "add x", env=env)
+        self.assertIn("ab-sample", plain.stdout + plain.stderr)                # --tradeoff: A/B as before
+        self.pick("save")
+        picked = self.ccx(*base, "add x", env=env)
+        self.assertIn("ab-sample", picked.stdout + picked.stderr)              # not a tier's proposal: as before
+        from ccx.commands import common
+        from ccx.config import load_config, paths
+        with mock.patch("ccx.trial.active", return_value={"id": "h11", "rate": 0.5}) as act, \
+                mock.patch("ccx.trial.assign", return_value="self"), mock.patch("ccx.trial.bucket", return_value="b"):
+            kw, route = common.resolve({"b": 4, "tradeoff": "save", "kind": "code", "to": "codex"}, "claude",
+                                       paths(), load_config(paths()))
+        self.assertTrue(act.called)                                            # the H11 trial still assigns
+        self.assertEqual((kw, route.get("trial")), (None, "h11"))
 
     def test_tradeoff_help_is_current(self):
         r = self.ccx("run", "-h")
         self.assertNotIn("initially balanced", r.stdout)
         self.assertIn("cheapest", r.stdout)
+        self.assertNotIn("--tier-picked", r.stdout)
 
 
 class TestResumeChain(AdapterEnv):
@@ -143,6 +284,17 @@ class TestResumeChain(AdapterEnv):
         self.assertEqual((self.rec(r2["run_id"])["resume_chain"], self.rec(r3["run_id"])["resume_chain"]), (1, 2))
         rows = [json.loads(x) for x in (self.hub / "ccx" / "ledger.jsonl").read_text(encoding="utf-8").splitlines()]
         self.assertEqual(next(r for r in rows if r.get("run_id") == r3["run_id"])["resume_chain"], 2)
+
+    def test_a_board_message_into_the_session_is_not_a_follow_up(self):
+        import os
+        from ccx.config import Paths
+        from ccx.delegate import Request, run
+        out = self.j("run", "--from", "claude", "--to", "gemini", "--tier", "T2", "--mode", "read", "review x")
+        with mock.patch.dict(os.environ, self.env):
+            r = run(Request(to="gemini", brief="a question from the board", resume_run=out["run_id"],
+                            caller="claude", escalate=False, mode="read", cwd=self.work, side_message=True),
+                    Paths(self.hub))
+        self.assertEqual(self.rec(r["run_id"])["resume_chain"], 0)
 
 
 class TestReviewFailedHint(unittest.TestCase):
@@ -166,6 +318,22 @@ class TestTurnStdinUtf8(unittest.TestCase):
         with mock.patch.object(bcmd.sys, "stdin", fake), mock.patch.object(bcmd, "turn_output", capture):
             self.assertEqual(bcmd.cmd_turn(argparse.Namespace(as_="claude", threshold=None)), 0)
         self.assertEqual(seen.get("prompt"), "修好续跑的状态机")
+        seen.clear()
+        fake = io.TextIOWrapper(io.BytesIO(b"\xef\xbb\xbf" + payload), encoding="gbk")   # with a UTF-8 BOM
+        with mock.patch.object(bcmd.sys, "stdin", fake), mock.patch.object(bcmd, "turn_output", capture):
+            self.assertEqual(bcmd.cmd_turn(argparse.Namespace(as_="claude", threshold=None)), 0)
+        self.assertEqual(seen.get("prompt"), "修好续跑的状态机")
+
+
+class TestSkillsAgree(unittest.TestCase):
+    def test_both_skills_teach_the_picked_tier(self):
+        for name in ("SKILL.md", "README.zh.md"):
+            for skill in ("agent-delegate", "task-routing"):
+                txt = (ROOT / "skills" / skill / name).read_text(encoding="utf-8")
+                self.assertIn("authorized: true", txt, (skill, name))
+                self.assertIn("worth_offering: true", txt, (skill, name))     # what ccx propose returns with it
+                self.assertIn("policy.picked", txt, (skill, name))            # only the person's setting
+                self.assertNotIn("--tier-picked", txt, (skill, name))
 
 
 if __name__ == "__main__":

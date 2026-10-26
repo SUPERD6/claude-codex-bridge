@@ -111,7 +111,7 @@ def resume_answer(root: Path, e: dict, run_id: str) -> dict:
     """Continue a headless sub-session with the message and put its answer back on the board."""
     from ..delegate import Request, compact, run
     req = Request(to="codex", brief=pushed_text(e, posted_for_you=True), resume_run=run_id, caller=board.vendor_of(e["from"]),
-                  escalate=False, cwd=root)
+                  escalate=False, cwd=root, side_message=True)
     out = compact(run(req, paths()))
     answer, who = out.get("summary") or "", board.vendor_of(out.get("agent") or "")
     if out.get("ok") and answer and who in board.VENDORS:
@@ -242,12 +242,13 @@ def cmd_turn(a) -> int:
     """For a per-turn hook (UserPromptSubmit in Claude Code and Codex): reads the hook's JSON on stdin."""
     import json
     try:
-        # the hook's JSON as UTF-8 bytes: on Windows sys.stdin decodes with the console code page (GBK etc.), which
-        # garbles or rejects a Chinese prompt. Read here, not in a helper: the hook-timeout log names this frame.
+        # the hook's JSON as UTF-8 bytes (a BOM dropped): on Windows sys.stdin decodes with the console code page
+        # (GBK etc.), which garbles or rejects a Chinese prompt. Read here, not in a helper: the hook-timeout log
+        # names this frame.
         data = {}
         if not sys.stdin.isatty():
             raw = getattr(sys.stdin, "buffer", None)
-            data = json.loads((raw.read().decode("utf-8", "replace") if raw is not None else sys.stdin.read())
+            data = json.loads((raw.read().decode("utf-8-sig", "replace") if raw is not None else sys.stdin.read())
                               or "{}")
     except ValueError:
         data = {}

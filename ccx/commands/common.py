@@ -270,7 +270,9 @@ def resolve(spec: dict, caller: str, p, cfg: dict) -> tuple[dict | None, dict]:
     Order: explicit --model/--effort  >  rubric (task-routing, learns from outcomes)  >  --tier  >
     keyword heuristic (fallback when no rubric is given)."""
     to = spec.get("to") or "auto"
-    tradeoff = spec.get("tradeoff") or cfg["defaults"].get("tradeoff", "save")
+    # a tier the person picked in their settings (`ccx config set policy.picked <tier>`) is the tier when the lead
+    # names none; unset (shipped) = defaults.tradeoff as before
+    tradeoff = spec.get("tradeoff") or picked_tier(cfg) or cfg["defaults"].get("tradeoff", "save")
     route = {"tradeoff": tradeoff}
     if spec.get("no_ab"):                     # kept in the ledger: ledger.is_eval leaves such runs out
         route["no_ab"] = True
@@ -335,8 +337,10 @@ def resolve(spec: dict, caller: str, p, cfg: dict) -> tuple[dict | None, dict]:
             return None, route
         from .. import trial
         rate = float(os.environ.get("CCX_AB_RATE") or cfg["defaults"].get("ab_self_rate", 0) or 0)
-        # a tier the person picked (--tradeoff given) decides who does the task: no random A/B self-run then
-        explicit = bool(spec.get("tradeoff"))
+        # only the run of a proposal the person's picked tier pre-authorised skips the random A/B self-run and the
+        # trial (the tier decided who does it). A plain --tradeoff (project-manager passes --tradeoff save) is a
+        # model pick and keeps A/B and the H11 trial exactly as before
+        explicit = bool(spec.get("tier_preauth"))
         tr = (trial.active(p) if caller in AGENTS and not spec.get("force") and not spec.get("no_ab")
               and not explicit else None)
         if tr:                                # H11: a formal comparison is running: balanced halves
@@ -370,15 +374,27 @@ def resolve(spec: dict, caller: str, p, cfg: dict) -> tuple[dict | None, dict]:
 
 def tier_policy(p, cfg: dict, spec: dict, tradeoff) -> dict | None:
     """The whole-workflow tier for this task (task-routing tier_plan, [policy.*] in config): who does it (self |
-    ccx2 | direct), its size band, and whether the person picked the tier (explicit: --tradeoff given)."""
+    ccx2 | direct), its size band, and whether the person picked the tier (explicit: this is the tier set in the
+    person's settings, `policy.picked`; a --tradeoff the lead passes is only a model pick and authorises nothing).
+    A bad [policy] entry does not stop routing: it comes back as {"error": ...} (no mode), and an explicit tier then
+    falls back to offer-first; `ccx doctor` shows the same error."""
+    picked = picked_tier(cfg)
+    explicit = bool(picked) and str(tradeoff) == picked
     try:
         tp = learn.tier_plan(p, tradeoff, spec.get("brief", ""), spec.get("minutes"), int(spec.get("files") or 0),
                              int(spec.get("lead_ctx") or 0), cfg.get("policy"))
-    except Exception:  # noqa: BLE001 — a bad [policy] entry must not stop routing; ccx doctor shows config errors
-        return None
+    except Exception as e:  # noqa: BLE001 — a bad [policy] entry must not stop routing
+        return {"error": f"tier plan failed ({type(e).__name__}: {e}); check config [policy.*]",
+                "tier": str(tradeoff), "explicit": explicit}
     if tp:
-        tp["explicit"] = bool(spec.get("tradeoff"))
+        tp["explicit"] = explicit
     return tp
+
+
+def picked_tier(cfg: dict) -> str:
+    """The tier the person picked for all work (`ccx config set policy.picked balanced`; "" = none, shipped)."""
+    v = str(((cfg.get("policy") or {}).get("picked")) or "").strip().lower()
+    return v if v in ("save", "balanced", "fast", "cheapest") else ""
 
 
 def _ab_open(p, caller: str, b: float, rung: str, brief: str, **extra) -> str:
@@ -419,7 +435,7 @@ def _routing_args(ap) -> None:
     g.add_argument("--kind", choices=["code", "read", "research", "write"],
                    help="kind of work: decides which public benchmarks count (default: read-only -> read, else code)")
     g.add_argument("--tradeoff", choices=["save", "balanced", "fast", "cheapest"],
-                   help="tier: save | balanced | fast | cheapest (task-routing). Picks the models and, in "
-                        "`ccx propose`, who does the task (self, ccx, or ccx unchecked for cheapest). Given "
-                        "explicitly = the person picked it: it pre-authorises what the tier delegates and skips "
-                        "the A/B self-run. Default from config defaults.tradeoff (shipped: save)")
+                   help="tier: save | balanced | fast | cheapest (task-routing). Picks the models; `ccx propose` "
+                        "also shows who would do the task (self, ccx, or ccx unchecked for cheapest). Passing it "
+                        "authorises nothing. Default: the tier the person picked (`ccx config set policy.picked`, "
+                        "which pre-authorises what it delegates), else config defaults.tradeoff (shipped: save)")

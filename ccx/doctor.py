@@ -200,6 +200,29 @@ def routing_prior(p: Paths) -> tuple[str, str]:
                   f"{pri['observed'].get('weight', 0.5)}: " + ", ".join(parts))
 
 
+def tier_policy_check(p: Paths, cfg: dict | None = None) -> tuple[str, str]:
+    """Can every tier be planned with the [policy.*] config (a bad entry makes `ccx propose` fall back to
+    offer-first), and which tier, if any, the person picked (policy.picked pre-authorises its delegation)."""
+    try:
+        from . import learn
+        cfg = cfg if cfg is not None else load_config(p)
+        pol = cfg.get("policy") or {}
+        raw = str(pol.get("picked") or "").strip()
+        tiers = ("save", "balanced", "fast", "cheapest")
+        if raw and raw not in tiers:
+            return "WARN", f"policy.picked = {raw!r} is not a tier ({', '.join(tiers)}): no tier is picked"
+        for tier in tiers:
+            for brief, minutes, files, ctx in (("x", 5, 1, 0), ("x", 20, 2, 10 ** 9), ("x", 60, 4, 0),
+                                               ("x", None, 0, 0), ("resume after a crash", 60, 4, 0)):
+                if learn.tier_plan(p, tier, brief, minutes, files, ctx, pol) is None:
+                    return "ok", "the hub's task-routing predates tiers (no tier plan): offer-first everywhere"
+    except Exception as e:  # noqa: BLE001 — shown, not raised: routing itself goes on without a tier plan
+        return "WARN", (f"[policy.*] cannot be planned ({type(e).__name__}: {e}); "
+                        "ccx propose falls back to offer-first")[:200]
+    return "ok", (f"picked tier: {raw} (pre-authorises what it delegates; L0/L1 still ask)" if raw else
+                  "no tier picked: offer first (policy.picked)")
+
+
 def doctor(p: Paths) -> bool:
     rows: list[tuple[str, str, str]] = []
 
@@ -277,6 +300,7 @@ def doctor(p: Paths) -> bool:
     add("hub layout", "ok", f"snapshot={lay['snapshot']} ({lay['snapshot_mode']})"
         + (f", external sync: {lay['external_sync']}" if lay.get("external_sync") else ""))
     add("routing prior", *routing_prior(p))
+    add("tier policy", *tier_policy_check(p))
     if p.snapshot_external:
         add("snapshot wiring", "ok (external)", "the tools load the snapshot themselves; ccx writes no blocks")
     else:
