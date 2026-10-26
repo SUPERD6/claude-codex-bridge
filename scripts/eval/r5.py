@@ -41,17 +41,25 @@ The work dir defaults to <temp>/<tag>, so two tags never share unit folders.
   python scripts/eval/r5.py export docs/research/data/2026-10-26-r5.json
 
 Hold-out (--taskset holdout, scripts/eval/tasks_holdout.py): 10 other past changes never used while tuning, for the
-final claims. Its results go to their own file, and every finished unit's repository, hub and lead stream leave the
+final claims, five of them from other open-source repositories (scripts/eval/ext_repo.py: before the canary, each is
+cloned once into a temporary folder outside the work dir, from its URL or from a local copy given with
+--ext-cache DIR, read into memory and removed; a unit gets the parent's tree as a fresh one-commit repository; the
+copies are denied to its agents along with Claude's web tools, pip has no index, and the audit flags installing or
+fetching packages; tests run with PYTHONPATH=src and the Python given with --ext-python, which must have the modules
+the repository's tests need and not the library itself, and must not sit next to the --ext-cache copies). Its
+results go to their own file, and every finished unit's repository, hub and lead stream leave the
 work dir after scoring (the stream is kept under .ccx/eval/r5/streams/<tag>/), so a later round's agents cannot find
 an earlier round's finished answer next to them. r5 keeps its old behaviour.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import io
 import json
 import os
 import random
+import re
 import subprocess
 import sys
 import tarfile
@@ -67,6 +75,7 @@ import r3  # noqa: E402
 import r4  # noqa: E402
 import preflight as PF  # noqa: E402
 from common import ROOT, append_jsonl, archive_hub, ccx_verify, git, read_jsonl  # noqa: E402
+import ext_repo  # noqa: E402
 import tasks_holdout  # noqa: E402
 import tasks_r5  # noqa: E402
 
@@ -76,6 +85,7 @@ TASKSETS = {"r5": tasks_r5, "holdout": tasks_holdout}
 IDS = tasks_r5.IDS
 
 OUT = ROOT / ".ccx" / "eval" / "r5"
+ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 
 def by_id(task_id: str) -> dict:
@@ -102,6 +112,18 @@ CONFTEST = (ROOT / "tests" / "conftest.py").read_text(encoding="utf-8")
 LEAD_PROMPT = """You are the lead agent on this repository: relayline, the `ccx` command (Python, standard library only;
 see AGENTS.md). The full test suite takes about 7 minutes, so run the tests that matter for your change, e.g.
 `python -m pytest -q tests/test_<area>.py`. The person asked:
+
+{brief}
+
+{how}
+
+When the work is done and the relevant tests pass, end with one line: DONE: <what changed>."""
+# A task of another repository (tasks_holdout.REPOS): same shape, that repository's own description. It is not
+# installed; PYTHONPATH=src is set (relative, so it also works in a ccx worktree), so tests run from the root.
+LEAD_PROMPT_EXT = """You are the lead agent on this repository: {name}. It is not installed, and nothing can be
+installed (pip has no package index here): PYTHONPATH=src is set, so from the repository root
+`python -m pytest -q tests/...` tests the code in src/. {note}Run the tests that matter for your change. The person
+asked:
 
 {brief}
 
@@ -150,9 +172,55 @@ DIRECT = ["--to", "codex", "--model", "gpt-6-luna", "--effort", "low", "--review
           "--no-escalate", "--no-fallback"]
 
 
-def make_repo(task: dict, dest: Path) -> None:
-    """The repository at the commit's parent, today's conftest committed into it."""
+def ext_spec(task: dict) -> dict | None:
+    """The other repository a task belongs to (tasks_holdout.REPOS), or None for a task of this one."""
+    return tasks_holdout.REPOS[task["repo"]] if task.get("repo") else None
+
+
+def ext_cache(work: Path) -> Path:
+    """Where a run keeps its clones of the other repositories (one per repository per work dir)."""
+    return Path(work) / "ext-cache"
+
+
+_FETCH = threading.Lock()
+# (repo, commit, tests) -> ext_repo.material: what the units of an external task need, read once out of the clone.
+# A run fills it before the first unit from a clone outside the work dir that it then removes (prepare_external).
+_EXT: dict[tuple, dict] = {}
+
+
+def ext_clone(task: dict, work: Path, source: str | Path | None = None, cache: Path | None = None) -> Path:
+    """The cached clone of a task's repository, fetched on first use (one fetch at a time) and its sha checked."""
+    with _FETCH:
+        repo = ext_repo.fetch(task["repo"], ext_spec(task), Path(cache) if cache else ext_cache(work),
+                              Path(source) if source else None)
+        ext_repo.pin(repo, task["commit"])
+    return repo
+
+
+def _ext_key(task: dict) -> tuple:
+    return (task["repo"], task["commit"], tuple(task["tests"]))
+
+
+def ext_material(task: dict, work: Path | None = None, source: str | Path | None = None,
+                 cache: Path | None = None) -> dict:
+    """The task's material (ext_repo.material), read from its clone on first use: the clone in `cache`, else in the
+    work dir's ext-cache (holdout_check; a run has always filled it before, from outside the work dir)."""
+    key = _ext_key(task)
+    if key not in _EXT:
+        repo = ext_clone(task, work, source, cache)
+        m = ext_repo.material(repo, task["commit"], task["tests"])
+        with _FETCH:
+            _EXT.setdefault(key, m)
+    return _EXT[key]
+
+
+def make_repo(task: dict, dest: Path, work: Path | None = None, source: str | Path | None = None) -> None:
+    """The repository at the commit's parent, today's conftest committed into it. A task of another repository:
+    the parent's tree alone in a fresh repository (ext_repo.repo_from_tar), nothing of this one added."""
     r2._rmtree(dest)
+    if ext_spec(task):
+        ext_repo.repo_from_tar(ext_material(task, work or dest.parent, source)["tar"], ext_spec(task), dest)
+        return
     dest.mkdir(parents=True)
     data = subprocess.run(["git", "archive", f"{task['commit']}^"], cwd=ROOT, capture_output=True, check=True).stdout
     tarfile.open(fileobj=io.BytesIO(data)).extractall(dest)
@@ -162,11 +230,55 @@ def make_repo(task: dict, dest: Path) -> None:
     git(dest, "commit", "-q", "-m", "start")
 
 
-def iso_env(d: Path) -> dict:
+def ext_python(a=None) -> str:
+    """The Python that runs another repository's tests (and that its agents find first on PATH)."""
+    return str(getattr(a, "ext_python", "") or sys.executable)
+
+
+def task_env(task: dict, env: dict, python: str | None = None) -> dict:
+    """A unit's environment for its task: for another repository, PYTHONPATH=src and its Python first on PATH."""
+    spec = ext_spec(task)
+    if not spec:
+        return env
+    py = python or sys.executable
+    return {**env, **ext_repo.run_env(spec), "PATH": str(Path(py).parent) + os.pathsep + env.get("PATH", "")}
+
+
+def ext_note(spec: dict) -> str:
+    """The repository's own remark for the lead prompt (e.g. a test file that needs plugins not installed)."""
+    return f"{spec['note']} " if spec.get("note") else ""
+
+
+# what the audit flags in an external unit's tool calls: the run's clone folder, installing or downloading packages,
+# fetching from the code hosts or package index (the released library has the fix)
+EXT_FLAGS = (r"ext-cache", r"\bpip3?(\.exe)?[\"']?\s+(install|download)\b", r"-m\s+pip\s+(install|download)\b",
+             r"\b(curl|wget|invoke-webrequest|iwr|invoke-restmethod|irm|git\s+clone)\b[^\n]*"
+             r"(github\.com|gitlab\.com|pypi\.org|pythonhosted\.org)")
+
+
+def ext_guard(task: dict, a, work: Path) -> dict:
+    """Unit fields for an external task: folders denied (the work dir's ext-cache, the --ext-cache copies), Claude's
+    web tools denied, and the audit's flags (EXT_FLAGS, the repository's URL, the copies' folder by its last two
+    names, so a relative path to it is flagged too)."""
+    spec = ext_spec(task)
+    if not spec:
+        return {}
+    hidden, flags = [ext_cache(work)], list(EXT_FLAGS)
+    url = re.sub(r"^\w+://|\.git$", "", spec["url"]).lower()
+    flags.append(re.escape(url))
+    src = getattr(a, "ext_cache", "") or ""
+    if src:
+        sp = Path(src).expanduser()
+        hidden.append(sp)
+        flags.append(re.escape(f"{sp.parent.name}/{sp.name}".lower()))
+    return {"hidden": tuple(hidden), "deny": ("WebFetch", "WebSearch"), "flags": tuple(flags)}
+
+
+def iso_env(d: Path, python: str | None = None) -> dict:
     env = {k: v for k, v in PF.base_env().items() if not k.endswith(PF.ENV_KEEP_SUFFIX)
            and not k.startswith(("CCX_", "CLAUDE", "CODEX"))}
     env["PYTHONIOENCODING"] = "utf-8"
-    env["PATH"] = str(Path(sys.executable).parent) + os.pathsep + env.get("PATH", "")
+    env["PATH"] = str(Path(python or sys.executable).parent) + os.pathsep + env.get("PATH", "")
     env.update({"TMP": str(d / "tmp"), "TEMP": str(d / "tmp"), "TMPDIR": str(d / "tmp"), "GIT_CONFIG_NOSYSTEM": "1",
                 "GIT_CONFIG_GLOBAL": str(d / "gitconfig")})
     (d / "tmp").mkdir(parents=True, exist_ok=True)
@@ -179,20 +291,42 @@ def iso_env(d: Path) -> dict:
     return env
 
 
-def score(repo: Path, task: dict, work: Path, job: PF.Job | None = None) -> dict:
-    """The commit's own test files (overwriting whatever the agent left in them), in throwaway homes."""
-    for t in task["tests"]:
-        body = subprocess.run(["git", "show", f"{task['commit']}:{t}"], cwd=ROOT, capture_output=True, check=True).stdout
+def hidden(task: dict, work: Path, source: str | Path | None = None) -> dict[str, bytes]:
+    """The commit's own test files: from this checkout, or from the cached clone of the task's repository."""
+    if ext_spec(task):
+        return ext_material(task, work, source)["tests"]
+    return {t: subprocess.run(["git", "show", f"{task['commit']}:{t}"], cwd=ROOT, capture_output=True,
+                              check=True).stdout for t in task["tests"]}
+
+
+def score(repo: Path, task: dict, work: Path, job: PF.Job | None = None, python: str | None = None,
+          source: str | Path | None = None) -> dict:
+    """The commit's own test files (overwriting whatever the agent left in them), in throwaway homes. Another
+    repository's: its test folder and test configuration put back from the parent first (ext_repo.
+    restore_test_setup), no conftest of ours, its install-time stubs put back if gone, PYTHONPATH=src, `python`."""
+    spec = ext_spec(task)
+    if spec:
+        m = ext_material(task, work, source)
+        ext_repo.restore_test_setup(repo, m["tar"], spec, keep=m["changed"])
+    for t, body in hidden(task, work, source).items():
         (repo / t).parent.mkdir(parents=True, exist_ok=True)
         (repo / t).write_bytes(body)
-    (repo / "tests" / "conftest.py").write_text(CONFTEST, encoding="utf-8")
+    if spec:
+        ext_repo.write_stubs(repo, spec)
+    else:
+        (repo / "tests" / "conftest.py").write_text(CONFTEST, encoding="utf-8")
+    py = python or sys.executable
     iso = Path(tempfile.mkdtemp(prefix="r5iso-", dir=work))
     try:
-        out, _err, rc, _left = PF.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", *pytest_args(task)],
-                                      cwd=repo, env=iso_env(iso), timeout=900, job=job)
+        env = iso_env(iso, py)
+        if spec:
+            env.update(ext_repo.run_env(spec))
+        color = ["--color=no"] if spec else []         # humanize's addopts asks for colour: keep the row's text plain
+        out, _err, rc, _left = PF.run([py, "-m", "pytest", "-q", "-p", "no:cacheprovider", *color,
+                                       *pytest_args(task)], cwd=repo, env=env, timeout=900, job=job)
         if rc == -9:
             return {"ok": False, "pytest": "timeout"}
-        tail = (out.strip().splitlines() or [""])[-1]
+        tail = ANSI.sub("", (out.strip().splitlines() or [""])[-1])
         return {"ok": rc == 0, "pytest": tail[:200]}
     finally:
         r2._rmtree(iso)
@@ -229,8 +363,11 @@ def lead_unit(u: dict, a, work: Path, repo: Path, hub: Path, iso: PF.Unit | None
     env = {**(env or PF.base_env()), "CCX_HUB": str(hub), "CCX_NO_QUOTA_PROBE": "1",
            "BASH_DEFAULT_TIMEOUT_MS": "900000", "BASH_MAX_TIMEOUT_MS": "1200000"}
     is_ccx, is_builtin = u["arm"] in CCX_ARMS, u["arm"] in BUILTIN_ARMS
+    env = task_env(task, env, ext_python(a))
     how = lead_how(u["arm"], u["label"])
-    prompt = LEAD_PROMPT.format(brief=task["brief"], how=how)
+    spec = ext_spec(task)
+    prompt = (LEAD_PROMPT_EXT.format(name=spec["name"], note=ext_note(spec), brief=task["brief"], how=how)
+              if spec else LEAD_PROMPT.format(brief=task["brief"], how=how))
     t0 = time.time()
     # ccx2 / builtin2 need the same lead flags as ccx / builtin (a session file; the Agent tool and worker); the
     # clean-room flags (no user settings, hooks, CLAUDE.md, auto-memory; deny rules) come from preflight
@@ -267,8 +404,9 @@ def direct_unit(u: dict, a, repo: Path, hub: Path, env: dict | None = None, job:
     argv = ["run", "--mode", "write", "--new", "--no-ab", "--force", "--label", u["label"], "--minutes", "60",
             *DIRECT, task["brief"]]
     t0 = time.time()
-    out, err, rc, _left = PF.run([sys.executable, str(ROOT / "ccx.py"), *argv], cwd=repo,
-                                 env={**(env or PF.base_env()), "CCX_HUB": str(hub)}, timeout=a.timeout, job=job)
+    env = task_env(task, {**(env or PF.base_env()), "CCX_HUB": str(hub)}, ext_python(a))
+    out, err, rc, _left = PF.run([sys.executable, str(ROOT / "ccx.py"), *argv], cwd=repo, env=env,
+                                 timeout=a.timeout, job=job)
     res, err = r2.S._last_json(out), ("timeout" if rc == -9 else err[-400:])
     cost = r2.hub_cost(hub)
     rec = r2.record(hub, res.get("run_id"))
@@ -283,7 +421,7 @@ def unit_of(u: dict, a, work: Path) -> PF.Unit:
     key = f"{u['round']}-{u['task']}-{u['arm']}"
     return PF.Unit(key=key, work=work, repo=work / key, hub=work / f"h-{key}", label=u["label"],
                    claude=a.claude_isolation, codex_home=Path(a.codex_home).expanduser() if a.codex_home else None,
-                   dsh=a.dsh_home, agents=tuple(r3.WORKER))
+                   dsh=a.dsh_home, agents=tuple(r3.WORKER), **ext_guard(by_id(u["task"]), a, work))
 
 
 def unit_models(u: dict, row: dict) -> dict:
@@ -313,7 +451,15 @@ def run_unit(u: dict, a, work: Path) -> dict:
     before, job = PF.snapshot(), PF.Job()
     try:
         r2._rmtree(hub)
-        make_repo(task, repo)
+        # a task of another repository: its material was read before the first unit (prepare_external), from a
+        # clone outside the work dir that is gone now; a unit never clones into the work dir itself
+        xkw = {"work": work, "source": getattr(a, "ext_cache", None)} if ext_spec(task) else {}
+        if xkw and _ext_key(task) not in _EXT:
+            raise RuntimeError(f"{task['id']}: the other repository was not prepared before the run")
+        make_repo(task, repo, **xkw)
+        if ext_spec(task):
+            row["ext"] = {"repo": task["repo"], "commit": task["commit"], "date": _EXT[_ext_key(task)]["date"],
+                          **(getattr(a, "ext_info", None) or {"python": ext_python(a)})}
         hinfo = r3.make_hub(hub)
         hinfo["memory_empty"] = PF.hub_memory_empty(hub)
         row["hub"] = hinfo
@@ -321,7 +467,7 @@ def run_unit(u: dict, a, work: Path) -> dict:
         row.update(direct_unit(u, a, repo, hub, env, job) if u["arm"] == "direct" else
                    lead_unit(u, a, work, repo, hub, iso, env, job))
         row.update(changed(repo))
-        sc = score(repo, task, work, job)
+        sc = score(repo, task, work, job, **({"python": ext_python(a), "source": xkw["source"]} if xkw else {}))
         row.update({**u, "ok": sc["ok"], "pytest": sc["pytest"], "hub": hinfo})
         for rid in row.get("ccx_run_ids") or []:
             ccx_verify(rid, bool(sc["ok"]), f"eval-r2 hidden acceptance: {sc['pytest']}", hub=hub, env=env)
@@ -342,6 +488,14 @@ def run_unit(u: dict, a, work: Path) -> dict:
             keep.mkdir(parents=True, exist_ok=True)
             os.replace(stream, keep / stream.name)
         row["leftovers"] = PF.after_unit(iso, before, job, row["audit"].get("session_ids") or [], keep_repo=not fresh)
+        if "ext" in row and getattr(a, "ext_venv", None):
+            # the Python that scores every unit is shared: something installed into it changes later units
+            try:
+                now = venv_state(ext_python(a))
+            except Exception as e:  # noqa: BLE001
+                now = f"unreadable: {type(e).__name__}"
+            if now != a.ext_venv:
+                row["ext"]["venv_changed"] = True
     if rep:
         row["fingerprint"] = PF.fingerprint(rep, iso, env, unit_models(u, row))
     return row
@@ -362,6 +516,95 @@ def schedule(rounds: int, seed: int, tasks: list[str], arms: list[str]) -> list[
 
 def spent(f: Path) -> float:
     return round(sum(r.get("usd") or 0 for r in read_jsonl(f)), 4)
+
+
+def _py(python: str, code: str) -> str:
+    """The output of a little code of ours run by `python` in isolated mode (nothing of the repositories)."""
+    r = subprocess.run([python, "-I", "-c", code], capture_output=True, text=True, encoding="utf-8",
+                       errors="replace", timeout=120)
+    if r.returncode:
+        raise RuntimeError(f"{python} failed: {(r.stderr or '').strip()[-200:]}")
+    return r.stdout.strip()
+
+
+def missing_modules(python: str, names: list[str]) -> list[str]:
+    """Which of these modules `python` cannot find (found, not imported: nothing of them is run)."""
+    out = _py(python, "import importlib.util as u, json; print(json.dumps([n for n in %r if u.find_spec(n) is None]))"
+              % (list(names),))
+    return json.loads(out)
+
+
+def python_info(python: str) -> dict:
+    """The version of `python` and of its pytest (or None)."""
+    out = _py(python, "import sys, json\ntry:\n    from importlib.metadata import version; p = version('pytest')\n"
+                      "except Exception:\n    p = None\nprint(json.dumps(['%d.%d.%d' % sys.version_info[:3], p]))")
+    v, p = json.loads(out)
+    return {"python_version": v, "pytest": p}
+
+
+def venv_state(python: str) -> str:
+    """A fingerprint of what is installed for `python` (the names in its site-packages folders)."""
+    out = _py(python, "import site, os, json\nds = site.getsitepackages() + [site.getusersitepackages()]\n"
+                      "print(json.dumps(sorted(d + '|' + n for d in ds if os.path.isdir(d) for n in os.listdir(d))))")
+    return hashlib.sha256(out.encode("utf-8")).hexdigest()
+
+
+def _version(s: str | None) -> tuple:
+    return tuple(int(x) for x in re.findall(r"\d+", s or "")[:3])
+
+
+def prepare_external(todo: list[dict], a, work: Path) -> list[str]:
+    """Before the first unit (and before the paid canary): read every other repository the units need out of a
+    clone made in a temporary folder outside the work dir, which is then removed (the fix is never on disk next to
+    a unit), check each pinned sha, and check the Python for their tests: 3.11 or newer (ccx runs on it too, it is
+    first on PATH), has the modules the tests need and a new enough pytest, does not have the library itself
+    installed (its released code has the fix), and is not kept next to the --ext-cache copies (an agent sees its
+    folder on PATH). Records that Python's versions and a fingerprint of what is installed in it on `a` (ext_info,
+    ext_venv). Returns the problems (none: ready)."""
+    tasks = {u["task"]: by_id(u["task"]) for u in todo}
+    ext = [t for t in tasks.values() if ext_spec(t)]
+    if not ext:
+        return []
+    probs = []
+    tmp = Path(tempfile.mkdtemp(prefix="ccx-ext-"))
+    try:
+        for t in ext:
+            try:
+                ext_material(t, work, getattr(a, "ext_cache", None), cache=tmp)
+            except Exception as e:  # noqa: BLE001 — reported, the run does not start
+                probs.append(f"{t['id']}: {type(e).__name__}: {e}"[:300])
+    finally:
+        ext_repo._rmtree(tmp)
+    py = ext_python(a)
+    try:
+        info = python_info(py)
+    except Exception as e:  # noqa: BLE001
+        return probs + [f"--ext-python {py} does not run: {e}"[:300]]
+    a.ext_info = {"python": py, **info}
+    if _version(info["python_version"]) < (3, 11):
+        probs.append(f"{py} is Python {info['python_version']}: ccx runs on it in external units, it needs 3.11+")
+    specs = {t["repo"]: ext_spec(t) for t in ext}
+    needs = sorted({n for s in specs.values() for n in s.get("needs") or ()})
+    gone = missing_modules(py, needs) if needs else []
+    if gone:
+        probs.append(f"{py} cannot import {', '.join(gone)} (the other repositories' tests need "
+                     f"them): install them there or pass --ext-python")
+    low = sorted({s["pytest_min"] for s in specs.values() if s.get("pytest_min")}, key=_version)
+    if low and info["pytest"] and _version(info["pytest"]) < _version(low[-1]):
+        probs.append(f"{py} has pytest {info['pytest']}; the other repositories' tests need {low[-1]} or newer")
+    mods = sorted(s["module"] for s in specs.values() if s.get("module"))
+    there = sorted(set(mods) - set(missing_modules(py, mods))) if mods else []
+    if there:
+        probs.append(f"{py} has {', '.join(there)} installed: its released code has the fix; use a Python without it")
+    src = getattr(a, "ext_cache", "") or ""
+    if src and PF._inside(Path(py).parent, Path(src).expanduser().resolve().parent):
+        probs.append(f"{py} is in the folder that holds the --ext-cache copies ({Path(src).parent}): an agent finds "
+                     f"that folder on PATH; keep the Python somewhere else")
+    try:
+        a.ext_venv = venv_state(py)
+    except Exception as e:  # noqa: BLE001
+        probs.append(f"cannot list what {py} has installed: {e}"[:300])
+    return probs
 
 
 def cmd_run(a) -> int:
@@ -388,6 +631,13 @@ def cmd_run(a) -> int:
         for u in todo:
             print(f"[dry] {u['label']}")
         return 0
+    # the other repositories first: a bad --ext-python or copy must not cost the paid canary
+    probs = prepare_external(todo, a, work)
+    for p in probs:
+        print(f"[external] {p}", flush=True)
+    if probs:
+        print("other repositories not ready: not starting", flush=True)
+        return 3
     rep = PF.run_checks(PF.options_from(a, arms, work, canary_on=not a.no_canary, start=True,
                                         tasks_file=Path(TASKSETS[a.taskset].__file__)))
     for p in rep["problems"]:
@@ -426,6 +676,9 @@ def cmd_run(a) -> int:
             row["between_units"] = between
         row["env_clean"] = PF.env_clean(row, rep)
         why = list(between)
+        if (row.get("ext") or {}).get("venv_changed"):
+            row["env_clean"] = False
+            why.append(f"something was installed into {ext_python(a)} during the unit (it scores every unit)")
         if (row.get("leftovers") or {}).get("unkilled"):
             why.append(f"processes that could not be killed: {row['leftovers']['unkilled']}")
         if why and not a.force_unclean:
@@ -475,9 +728,21 @@ def summarize(rows: list[dict]) -> dict:
                     "cps": round(sum(r.get("usd") or 0 for r in rs) / ok, 4) if ok else None,
                     "lead_only_usd_med": med("lead_only_usd"), "lead_tokens_med": med("lead_tokens"),
                     "lead_requests_med": med("lead_requests"), "wall_med": med("wall_s")}
-    return {"arms": out, "unclean_rows": unclean, "env_unknown_rows": unknown, "tags": tags,
-            "long_style": r4.summarize_long([{**r, "arm": r["arm"]} for r in rows
-                                                          if r["arm"] in r4.LONG_ARMS])["paired"]}
+    res = {"arms": out, "unclean_rows": unclean, "env_unknown_rows": unknown, "tags": tags,
+           "long_style": r4.summarize_long([{**r, "arm": r["arm"]} for r in rows
+                                                         if r["arm"] in r4.LONG_ARMS])["paired"]}
+    if any(r.get("ext") for r in rows):
+        # per code base, with each external task's commit date (results are reported per repository and by date:
+        # a fix from before a model's training cutoff may be remembered)
+        by: dict = {}
+        for r in rows:
+            e = r.get("ext") or {}
+            cell = by.setdefault(e.get("repo") or "this repository", {}).setdefault(r["arm"], {"ok": 0, "n": 0})
+            cell["ok"] += bool(r.get("ok"))
+            cell["n"] += 1
+        res["by_repo"] = by
+        res["ext_dates"] = {r["task"]: r["ext"].get("date") for r in rows if r.get("ext")}
+    return res
 
 
 def tagged(rows: list[dict], tag: str | None) -> list[dict]:
@@ -527,6 +792,11 @@ def parser() -> argparse.ArgumentParser:
     r.add_argument("--timeout", type=int, default=2400)
     r.add_argument("--dry-run", action="store_true")
     r.add_argument("--no-canary", action="store_true", help="skip the one tiny real lead that checks the isolation")
+    r.add_argument("--ext-cache", default="", help="a folder with local copies (clones) of the other repositories "
+                   "of the hold-out set, named after them, to clone from instead of their URLs")
+    r.add_argument("--ext-python", default="", help="the Python that runs the other repositories' tests (needs "
+                   "Python 3.11+, pytest and their test modules, e.g. freezegun, and not the libraries themselves; "
+                   "keep it away from the --ext-cache folder; default: this one)")
     PF.add_options(r)
     r.set_defaults(fn=cmd_run)
     s = sub.add_parser("summary")

@@ -16,7 +16,7 @@ import tasks_r5  # noqa: E402
 def test_holdout_tasks_are_complete_and_in_band():
     assert len(tasks_holdout.IDS) == len(set(tasks_holdout.IDS)) == 10
     lo, hi = holdout_check.BAND_LINES
-    for t in tasks_holdout.T:
+    for t in tasks_holdout.T + tasks_holdout.DROPPED:
         assert t["brief"] and t["area"] and len(t["commit"]) >= 7
         assert len(t["tests"]) == 1 and t["tests"][0].startswith("tests/") and t["tests"][0].endswith(".py")
         assert lo <= t["size"] <= hi and holdout_check.BAND_FILES[0] <= t["files"] <= holdout_check.BAND_FILES[1]
@@ -29,6 +29,27 @@ def test_holdout_shares_nothing_with_r5():
     for t in tasks_holdout.T:
         assert not any(c.startswith(t["commit"]) or t["commit"].startswith(c) for c in r5_commits), t["id"]
     assert len({t["area"] for t in tasks_holdout.T}) == 10                # one task per feature area
+
+
+def test_holdout_is_half_this_repo_half_other_repos():
+    ext = [t for t in tasks_holdout.T if tasks_holdout.external(t)]
+    assert len(ext) == 5 and {t["repo"] for t in ext} == set(tasks_holdout.REPOS)
+    for t in ext:                                       # pinned by the full sha, tests and stubs named
+        assert len(t["commit"]) == 40 and all(c in "0123456789abcdef" for c in t["commit"])
+        spec = tasks_holdout.REPOS[t["repo"]]
+        assert spec["url"].startswith("https://") and spec["needs"] and spec["pythonpath"] == "src"
+        assert "relayline" not in t["brief"] and "ccx" not in t["brief"]
+    sizes = sorted(t["size"] for t in tasks_holdout.T)
+    assert sizes[0] < 15 and sizes[-1] > 80                # a size spread like r5's (5-91)
+
+
+def test_dropped_candidates_are_recorded_and_not_scheduled():
+    ids = {t["id"] for t in tasks_holdout.DROPPED}
+    assert len(ids) == 6 and not ids & set(tasks_holdout.IDS)
+    assert all(t["dropped"] for t in tasks_holdout.DROPPED)
+    with pytest.raises(StopIteration):
+        tasks_holdout.by_id("send-busy-guard")
+    assert tasks_holdout.dropped_by_id("send-busy-guard")["deselect"]
 
 
 def test_r5_stays_the_default():
@@ -70,7 +91,7 @@ def test_tasks_must_belong_to_the_chosen_set(tmp_path):
 
 
 def test_deselected_tests_are_left_out_of_scoring():
-    t = tasks_holdout.by_id("send-busy-guard")
+    t = tasks_holdout.dropped_by_id("send-busy-guard")
     assert t["deselect"] and all(n.startswith(t["tests"][0] + "::") for n in t["deselect"])
     assert r5.pytest_args(t) == [*t["tests"], "--deselect", t["deselect"][0]]
     assert r5.pytest_args(tasks_r5.T[0]) == tasks_r5.T[0]["tests"]          # r5 tasks run as before
