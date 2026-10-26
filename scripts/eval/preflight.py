@@ -401,18 +401,27 @@ def snapshot() -> list[dict] | None:
                             "CommandLine | ConvertTo-Json -Compress")
             return [{"pid": int(r.get("ProcessId") or 0), "ppid": int(r.get("ParentProcessId") or 0),
                      "name": str(r.get("Name") or ""), "cmd": str(r.get("CommandLine") or "")} for r in rows]
-        r = subprocess.run(["ps", "-A", "-o", "pid=", "-o", "ppid=", "-o", "args="], capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", timeout=60)
-        out = []
-        for line in r.stdout.splitlines():
-            parts = line.strip().split(None, 2)
-            if len(parts) >= 2 and parts[0].isdigit():
-                cmd = parts[2] if len(parts) > 2 else ""
-                out.append({"pid": int(parts[0]), "ppid": int(parts[1]),
-                            "name": Path(cmd.split(" ")[0]).name if cmd else "", "cmd": cmd})
-        return out
+        # -ww: procps cuts every line at 80 columns when its output is a pipe, which hid the unit's path (the
+        # marker) at the end of a long command line. stat= lets parse_ps drop zombies: nothing left to kill.
+        r = subprocess.run(["ps", "-A", "-ww", "-o", "pid=", "-o", "ppid=", "-o", "stat=", "-o", "args="],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+        return parse_ps(r.stdout)
     except (OSError, subprocess.SubprocessError, ValueError):
         return None
+
+
+def parse_ps(text: str) -> list[dict]:
+    """Rows of `ps -o pid= -o ppid= -o stat= -o args=`; zombies (dead, not yet reaped) are left out."""
+    out = []
+    for line in text.splitlines():
+        parts = line.strip().split(None, 3)
+        if len(parts) >= 3 and parts[0].isdigit() and parts[1].isdigit():
+            if parts[2].startswith("Z"):
+                continue
+            cmd = parts[3] if len(parts) > 3 else ""
+            out.append({"pid": int(parts[0]), "ppid": int(parts[1]),
+                        "name": Path(cmd.split(" ")[0]).name if cmd else "", "cmd": cmd})
+    return out
 
 
 def _env_marker(pid: int, key: str) -> bool:
@@ -505,6 +514,11 @@ def kill(pids: list[int]) -> list[int]:
             if os.name == "nt":
                 subprocess.run(["taskkill", "/T", "/F", "/PID", str(pid)], capture_output=True, timeout=30)
             else:
+                try:                       # a detached leftover leads its own process group: take the group too
+                    if os.getpgid(pid) == pid and pid != os.getpgid(0):
+                        os.killpg(pid, signal.SIGKILL)
+                except OSError:
+                    pass
                 os.kill(pid, signal.SIGKILL)
         except (OSError, subprocess.SubprocessError):
             pass
@@ -521,10 +535,18 @@ def alive(pid: int) -> bool:
         os.kill(pid, 0)
     except OSError:
         return False
-    try:                                   # a zombie (killed, not yet reaped by its parent) counts as gone
-        return Path(f"/proc/{pid}/stat").read_text().split()[2] != "Z"
+    # a zombie (killed, not yet reaped by its parent) counts as gone; macOS has no /proc, so ask ps there
+    try:
+        return Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[0] != "Z"
     except (OSError, IndexError):
+        pass
+    try:
+        r = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=30)
+    except (OSError, subprocess.SubprocessError):
         return True
+    st = r.stdout.strip()
+    return bool(st) and not st.startswith("Z")
 
 
 def listening_ports(pids: list[int]) -> list[dict]:

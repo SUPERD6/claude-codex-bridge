@@ -4,6 +4,7 @@ permission rules as /c/..., claudeMdExcludes globs on absolute paths) and report
 import json
 import os
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -15,7 +16,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "eval")
 import preflight as PF  # noqa: E402
 import r5  # noqa: E402
 
-FAKE = Path(__file__).resolve().parent / "fakes" / "fake_clean_lead.py"
+FAKES = Path(__file__).resolve().parent / "fakes"
+FAKE = FAKES / "fake_clean_lead.py"
 NT = os.name == "nt"
 
 
@@ -23,6 +25,7 @@ NT = os.name == "nt"
 
 def test_claude_subagent_isolation_is_opt_in(monkeypatch, tmp_path):
     from ccx.agents.claude import claude_invocation
+    monkeypatch.setenv("CCX_CLAUDE_BIN", str(FAKES / "fake_claude.py"))       # CI has no claude
     kw = dict(model="m", effort="low", perm=[], cwd=tmp_path, prompt="x", run_dir=tmp_path)
     for k in ("CCX_CLAUDE_SETTING_SOURCES", "CCX_CLAUDE_SETTINGS", "CCX_CLAUDE_NO_SKILLS"):
         monkeypatch.delenv(k, raising=False)
@@ -49,6 +52,7 @@ def test_claude_subagent_isolation_is_opt_in(monkeypatch, tmp_path):
 
 def test_codex_isolation_is_opt_in(monkeypatch, tmp_path):
     from ccx.agents.codex import codex_invocation
+    monkeypatch.setenv("CCX_CODEX_BIN", str(FAKES / "fake_codex.py"))         # CI has no codex
     kw = dict(model="m", effort="medium", perm=[], cwd=tmp_path, prompt="x", run_dir=tmp_path)
     monkeypatch.delenv("CCX_CODEX_ISOLATE", raising=False)
     plain = codex_invocation(**kw).argv
@@ -331,6 +335,33 @@ def test_busy_ignores_this_run_and_its_detached_children():
 def _spawn_detached(marker: str) -> subprocess.Popen:
     kw = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if NT else {"start_new_session": True}
     return subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)", marker], **kw)
+
+
+def test_parse_ps_keeps_long_command_lines_and_drops_zombies():
+    long_cmd = "/opt/python/bin/python3 -c import time; time.sleep(120) " + "/tmp/" + "x" * 150 + "/1-t-ccx/marker"
+    text = (f"  101     1 Ss   {long_cmd}\n"
+            "  102   101 Z+   [python3] <defunct>\n"
+            "  103   101 S\n"
+            "garbage line\n")
+    rows = PF.parse_ps(text)
+    assert [r["pid"] for r in rows] == [101, 103]
+    assert rows[0]["cmd"] == long_cmd and rows[0]["ppid"] == 1 and rows[0]["name"] == "python3"
+    assert rows[1]["cmd"] == "" and rows[1]["name"] == ""
+
+
+@pytest.mark.skipif(NT, reason="zombies are a POSIX thing")
+def test_a_killed_but_unreaped_child_does_not_count_as_alive():
+    p = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"])
+    try:
+        assert PF.alive(p.pid)
+        os.kill(p.pid, signal.SIGKILL)
+        deadline = time.time() + 10
+        while PF.alive(p.pid) and time.time() < deadline:     # not reaped yet: a zombie, which is gone for us
+            time.sleep(0.1)
+        assert not PF.alive(p.pid)
+    finally:
+        p.kill()
+        p.wait(timeout=20)
 
 
 def test_after_unit_kills_and_logs_a_leftover_process(tmp_path, capsys):
