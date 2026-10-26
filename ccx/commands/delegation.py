@@ -15,6 +15,7 @@ from .. import lanes, learn, ledger, router, usage
 from ..config import AGENTS, DELEGATE_AGENTS, PROVIDER_AGENTS, TIER_ORDER, load_config, paths
 from ..delegate import Request, compact, recap, run, verify
 from ..runners import find_bin
+from ..workspace import missing_test_paths
 from .common import (_brief, _caller, _out, _routing_args, _spec_from_args, _target, find_continuable,
     apply_mode, find_seat, installed_agents, lead_session_id, parse_quota, provider_agents, resolve)
 from .install import tier_spec_safe
@@ -54,6 +55,15 @@ def _background(argv: list[str], p) -> dict:
             "next": f"ccx show {run_id} --wait"}     # blocks until done, under a 10-minute tool-call limit
 
 
+def _check_names_real_tests(check: str | None, cwd: Path) -> None:
+    """Stop before any sub-agent is paid when --check names test files that are not there (pytest exit 4 later)."""
+    miss = missing_test_paths(check or "", cwd)
+    if miss:
+        raise ValueError("--check names test files that do not exist in " + str(cwd) + ": " + "; ".join(
+            m["path"] + (" (close: " + ", ".join(m["close"]) + ")" if m["close"] else " (no close match)")
+            for m in miss))
+
+
 def cmd_run(a) -> int:
     p = paths()
     cfg = load_config(p)
@@ -68,6 +78,8 @@ def cmd_run(a) -> int:
     if proj or a.autonomy:                       # a manager's dispatch: its autonomy level decides (K4)
         from .. import autonomy
         auto = autonomy.level_for(proj["name"] if proj else None, p, cfg, flag=a.autonomy)
+    if a.check:
+        _check_names_real_tests(a.check, Path(a.cwd or os.getcwd()))
     if a.bg and not a.brief and not a.brief_file:
         raise ValueError("--bg needs the task as text or --brief-file (stdin is not passed on)")
     if a.bg and not auto:
@@ -140,7 +152,7 @@ def cmd_run(a) -> int:
         res["route"]["learns"] = "no: give --minutes (or the rubric flags) so this run's verdict can teach routing"
     res["recap"] = recap(rec, res)              # last key: survives `| tail`
     _out(res)
-    return 0 if rec["ok"] else 2
+    return 0 if res["ok"] else 2
 
 
 def cmd_send(a) -> int:
@@ -332,12 +344,15 @@ def cmd_resume(a) -> int:
     sweep(p)                            # closes it as interrupted first if its ccx process died mid-run
     req = Request(to="codex", brief=_brief(a), tier=a.tier, resume_run=a.run_id,
                   caller=_caller(a.caller), escalate=False if a.no_escalate else None,
-                  model=a.model, effort=a.effort, budget_usd=a.budget, review=a.review)
+                  model=a.model, effort=a.effort, budget_usd=a.budget, review=a.review, check=a.check)
+    if a.check:                         # replaces the stored check (one that named a missing file, say)
+        prev = ledger.load_run(p, a.run_id)
+        _check_names_real_tests(a.check, Path(prev.get("cwd") or os.getcwd()))
     rec = run(req, p)
     res = compact(rec)
     res["recap"] = recap(rec, res)
     _out(res)
-    return 0 if rec["ok"] else 2
+    return 0 if res["ok"] else 2
 
 
 def cmd_stop(a) -> int:
@@ -658,6 +673,8 @@ def register(sub) -> None:
                     "an over_budget stop)")
     rs.add_argument("--review", choices=["auto", "on", "off"], default="auto", help="independent review of what this "
                     "follow-up changed, as for ccx run (default auto)")
+    rs.add_argument("--check", metavar="CMD", help="replace the run's acceptance command from here on (e.g. one "
+                    "that named a missing file or ran no tests)")
     rs.set_defaults(fn=cmd_resume)
     sp = sub.add_parser("stop", help="stop a running delegation (its whole process tree); `ccx resume` continues it")
     sp.add_argument("run_id")
