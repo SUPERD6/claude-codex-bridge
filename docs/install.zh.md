@@ -87,6 +87,11 @@ ccx ask "问题"                       # 让另一个模型快速给个第二意
 ccx archive [--apply] | --restore <run>   # 归档用完的子会话（结果确定时自动归档；
                                           # sessions.archive = after_run | hours | off）
 ccx batch plan.json                 # 互不依赖的任务并行；多个写任务自动分到不同 worktree
+ccx q add "标题" --brief "..." [--dep q1] [--check CMD]   # 项目的待办队列；--plan plan.json 一次加整份计划
+                                    # （{"tasks": ...} 或 task-split 的 {"pieces": ...}，认 depends_on、files）
+ccx q run [--gate] | resume | tree | done q3 --ok 1   # 就绪的块并行跑；多个写任务各开 worktree（仅限没有未提交改动时），依赖它们的块
+                                    # 等你合并并 q done --ok 1；--gate（默认关）让所有下游都等你的结论；
+                                    # 依赖失败的块标成 dep_blocked，不再一直卡着
 ccx route --files 3 --coupling cross ... [--lead claude:opus:high --ctx-files 日志.txt]  # 只看推荐；加 --lead 还会比较自己做 vs 派出去
 ccx plan size --minutes 240 --rung codex:gpt-6.1-sol:medium   # 大任务拆几块（task-split）
 ccx show <run_id> [--full]          # 默认只显示压缩结果

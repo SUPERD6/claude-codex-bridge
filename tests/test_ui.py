@@ -96,6 +96,11 @@ class TestData(Env):
         self.assertEqual((a["status"], a["act"]["kind"]), ("review", "review"))
         self.assertIn("ccx q done q2 --ok 1", a["act"]["buttons"][0]["cmd"])
         self.assertEqual((b["status"], b["act"]["what"]), ("decide", "a_q_needs_write"))
+        wq.add(self.work, "after B", "c", deps=["q3"])
+        wq.update(self.work, "q4", status="dep_blocked", blocked_by=["q3"])
+        pr = ui.collect(self.p)["projects"][0]
+        after = next(t for t in pr["tasks"] if t["kind"] == "queue")["pieces"][-1]
+        self.assertEqual((after["status"], after["act"]["what"]), ("decide", "a_q_dep_blocked"))   # not "queued"
         self.assertNotIn("r-q2", by)                                          # queue runs live on the queue page
         json.dumps(data)                                                      # the page gets plain JSON
 

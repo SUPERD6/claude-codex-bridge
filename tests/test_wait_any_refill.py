@@ -256,6 +256,76 @@ class TestRefill(unittest.TestCase):
         self.assertEqual(self.starts(), [a])
 
 
+class TestRefillWithBatchRules(unittest.TestCase):
+    """Refill and lanes keep the batch rules: dep_blocked, worktrees for writers side by side, quota stops lanes."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.saved = (workqueue._one, workqueue._in_git, workqueue._clean)
+        self.trees: dict[str, bool] = {}
+        self.fail: set[str] = set()
+        self.kinds: dict[str, list] = {}
+        workqueue._one = self.fake_one
+
+    def tearDown(self):
+        workqueue._one, workqueue._in_git, workqueue._clean = self.saved
+        self.tmp.cleanup()
+
+    def fake_one(self, it, root, caller, p, cfg, warm=None, got=None, worktree=False):
+        self.trees[it["id"]] = worktree
+        wq.update(root, it["id"], status="doing")
+        time.sleep(float(it["brief"]))
+        rec = {"run_id": "r-" + it["id"], "attempts": [{"kind": k} for k in self.kinds.get(it["id"], [])]}
+        if got is not None:
+            got["rec"] = rec
+        status = "failed" if it["id"] in self.fail else "done"
+        wq.update(root, it["id"], status=status)
+        return {"id": it["id"], "status": status, "run": rec["run_id"]}
+
+    def add(self, sec, mode="read", deps=()):
+        return wq.add(self.root, "t", str(sec), deps=list(deps), mode=mode)["id"]
+
+    def test_dependents_of_a_failed_item_are_dep_blocked_not_started(self):
+        a = self.add(0.1)
+        b = self.add(0.1, deps=[a])
+        self.fail.add(a)
+        done: list = []
+        stop = workqueue._refill(_args(), self.root, "claude", None, {}, 2, done)
+        self.assertNotIn(b, self.trees)
+        out, code = workqueue._finish(self.root, done, stop)
+        self.assertEqual((code, out["dep_blocked"]), (0, {b: [a]}))
+
+    def test_a_writer_started_beside_a_running_writer_gets_a_worktree(self):
+        workqueue._in_git = lambda root: True
+        workqueue._clean = lambda root: True
+        w1 = self.add(0.8, "write")
+        r = self.add(0.1, "read")
+        w2 = self.add(0.1, "write")
+        workqueue._refill(_args(), self.root, "claude", None, {}, 2, [])
+        self.assertEqual(self.trees, {w1: False, r: False, w2: True})     # w1 started alone, w2 beside it
+
+    def test_writers_beside_each_other_share_the_folder_when_it_is_dirty(self):
+        workqueue._in_git = lambda root: True
+        workqueue._clean = lambda root: False
+        w1, w2 = self.add(0.2, "write"), self.add(0.2, "write")
+        shared: list = []
+        done: list = []
+        stop = workqueue._refill(_args(), self.root, "claude", None, {}, 2, done, shared)
+        self.assertEqual(self.trees, {w1: False, w2: False})
+        out, _ = workqueue._finish(self.root, done, stop, False, shared)
+        self.assertEqual(out["shared_folder"]["ids"], [w1, w2])
+
+    def test_quota_stops_a_lane_before_its_next_item(self):
+        a, b = self.add(0.1), self.add(0.1)
+        self.kinds[a] = ["quota"]
+        done: list = []
+        stop = workqueue._waves(_args(), self.root, "claude", None, {}, 1, 1, done)
+        self.assertEqual((stop["stopped"], stop["run"]), ("backpressure", "r-" + a))
+        self.assertNotIn(b, self.trees)
+        self.assertEqual(wq.load(self.root)["items"][b]["status"], "todo")
+
+
 class TestRunnerLock(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
