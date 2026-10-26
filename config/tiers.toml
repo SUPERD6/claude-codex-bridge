@@ -172,6 +172,9 @@ weak = true           # auto 时：证据弱也审一次，只用另一家最便
 weak_daily = 20       # 上面这种审查每天最多几次（约 $0.005 一次）
 fix_rounds = 1        # 0 或 1（更大按 1 算）：第 5 轮评测里多轮修改更慢，也没让结果更常做对
 max_diff_chars = 12000
+# true：审查简报在 diff 后附“改动附近的代码”（改动的函数全文、它们调用的定义、点名它们的测试），占 diff 用剩的 max_diff_chars。
+# 默认关：回放第 5 轮录下的 10 次审查（每种提示约 43 遍，scripts/eval/review_replay.py，只测了 claude haiku），用时和输出 token 约减半，但已知真 bug 的 28 次尝试只抓到 11 次（不附时 19，旧提示 15）。
+context = false
 # 审查者默认：已安装、另一家厂商（I3），先用它 T1 那一档（最便宜），再用选模型算出的“简单只读”那一档（提案 I4）。
 # 七核心 A/B（PR #30）里按数据选成了 sonnet medium，一次的花费是被审的活的 20–40 倍，通过率没提高。
 # 想固定某家的审查者就在这里写，例如 by = { codex = "claude:haiku:low" }（写了的排在最前）。
