@@ -222,6 +222,9 @@ class Unit:
     codex_home: Path | None = None        # the dedicated eval CODEX_HOME (None: the real one, recorded as such)
     dsh: str = "unit"                     # unit (fresh DSH_HOME per unit) | real
     agents: tuple = ()                    # agents the eval itself defines (--agents), allowed in the init event
+    hidden: tuple = ()                    # more folders its agents must not open (the other repositories' copies)
+    deny: tuple = ()                      # more Claude deny rules (e.g. WebFetch for a task whose fix is public)
+    flags: tuple = ()                     # regexes the audit flags in any tool call (fetching the fix, a cache name)
     real: dict = field(default_factory=real_paths)
 
     @property
@@ -281,6 +284,7 @@ def forbidden(u: Unit) -> list[Path]:
     if not _inside(u.work, r["root"]):
         out.append(r["root"])
     out += [p for p in r.get("root_worktrees") or [] if not _inside(u.work, p)]
+    out += [Path(p) for p in u.hidden]
     if u.dsh == "real":
         out = [p for p in out if p != r["dsh_home"]]
     uniq: list[Path] = []
@@ -306,7 +310,7 @@ def claude_files(u: Unit) -> list[str]:
 
 
 def claude_settings(u: Unit, extra_deny: list[str] = ()) -> dict:
-    deny = list(extra_deny)
+    deny = list(extra_deny) + list(u.deny)
     for p in forbidden(u):
         deny += [f"Read({_rule_path(p)}/**)", f"Edit({_rule_path(p)}/**)"]
     deny += [f"Read({_rule_path(u.real['claude_json'])})", f"Edit({_rule_path(u.real['claude_json'])})"]
@@ -836,7 +840,7 @@ def _pattern(p: str) -> re.Pattern:
 
 def path_hits(inputs: list[str], u: Unit) -> list[str]:
     """Tool calls that name a real home, hub, skills or this checkout (shell commands are not confined: this is the
-    check), in any of the spellings canon() understands."""
+    check), in any of the spellings canon() understands, and tool calls that match one of the unit's `flags`."""
     home = u.real["home"]
     c = lambda p: canon(Path(p).as_posix() if not isinstance(p, str) else p, home)      # noqa: E731
     bad = [_pattern(c(p)) for p in forbidden(u)] + [_pattern(c(u.real["claude_json"]))]
@@ -848,12 +852,13 @@ def path_hits(inputs: list[str], u: Unit) -> list[str]:
     for s in u.session_prefixes():
         tail = "" if s.endswith("-") else r"(?![A-Za-z0-9_.-])"
         allowed.append(re.compile(re.escape(proj + canon(s, home)) + (r"[^/\s\"']*" if not tail else "") + tail))
+    flags = [re.compile(f, re.I) for f in u.flags]
     hits = []
     for s in inputs:
         t = canon(s, home)
         for a in allowed:
             t = a.sub("<unit>", t)
-        if any(b.search(t) for b in bad):
+        if any(b.search(t) for b in bad) or any(f.search(t) for f in flags):
             hits.append(s[:200])
     return hits
 
