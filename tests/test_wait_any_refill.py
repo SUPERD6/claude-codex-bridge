@@ -2,6 +2,7 @@
 slot as soon as a run finishes (not wave by wave), stops starting new work when a run hit quota/rate/auth, and runs
 detached with --bg. Fake CLIs or an in-process stand-in for one item's run; never a real CLI."""
 import json
+import os
 import sys
 import tempfile
 import threading
@@ -69,10 +70,21 @@ class TestShowAny(Env):
         a = "20991231-170000-aaaa"
         self.put(_rec(a, state="running", result=None, kind=None, ok=False, pid=None))
         (self.hub / "ccx" / "runs" / a / "beat").write_text(str(time.time()), encoding="utf-8")
-        t0 = time.time()
         out = json.loads(self.ccx("show", a, "--any").stdout)
         self.assertEqual((out["finished"], out["running"]), ([], [a]))
-        self.assertLess(time.time() - t0, 20)
+        self.assertLess(out["waited_s"], 1)                             # one look, no polling
+
+    def test_running_lists_the_asked_id_while_its_fix_round_runs(self):
+        first, fix = "20991231-171000-aaaa", "20991231-171500-bbbb"
+        self.put(_rec(first, kind="review_issues", ok=False, review={"verdict": "issues", "issues": ["a.py:1"]}))
+        self.put(_rec(fix, state="running", result=None, kind=None, ok=False, pid=None, resumed_from=first,
+                      review_of=first))
+        (self.hub / "ccx" / "runs" / fix / "beat").write_text(str(time.time()), encoding="utf-8")
+        out = json.loads(self.ccx("show", first, "--any").stdout)
+        self.assertEqual((out["finished"], out["running"]), ([], [first]))
+        self.assertEqual(out["next"], f"ccx show {first} --any --wait")
+        w = json.loads(self.ccx("show", first, "--wait", "0").stdout)  # single id: still names the fix round
+        self.assertEqual((w["run_id"], w["status"]), (fix, "running"))
 
     def test_any_follows_a_review_fix_round(self):
         first, fix = "20991231-180000-aaaa", "20991231-180500-bbbb"
@@ -173,9 +185,58 @@ class TestRefill(unittest.TestCase):
         self.kinds[hit] = ["quota", "ok"]                               # fell back to another agent and succeeded
         done: list = []
         stop = workqueue._refill(_args(), self.root, "claude", None, {}, 2, done)
-        self.assertEqual((stop["stopped"], stop["kind"], stop["width"]), ("backpressure", "quota", 1))
+        self.assertEqual((stop["stopped"], stop["kind"], stop["run"]), ("backpressure", "quota", "r-" + hit))
         self.assertEqual(sorted(r["id"] for r in done), sorted([hit, other]))   # the run in flight finished
         self.assertTrue(all(i not in self.starts() for i in later))
+
+    def test_several_runs_hitting_quota_at_once_stop_once(self):
+        a, b = self.add(0.3), self.add(0.3)
+        later = [self.add(0.1) for _ in range(3)]
+        self.kinds[a] = self.kinds[b] = ["quota"]
+        done: list = []
+        stop = workqueue._refill(_args(), self.root, "claude", None, {}, 2, done)
+        self.assertEqual(stop["stopped"], "backpressure")
+        self.assertIn(stop["run"], ("r-" + a, "r-" + b))                 # the first one seen, not overwritten
+        self.assertEqual(sorted(r["id"] for r in done), sorted([a, b]))
+        self.assertTrue(all(i not in self.starts() for i in later))
+
+    def test_backpressure_with_nothing_left_is_a_normal_finish(self):
+        only = self.add(0.1)
+        self.kinds[only] = ["quota", "ok"]                              # fell back and finished the last item
+        done: list = []
+        stop = workqueue._refill(_args(), self.root, "claude", None, {}, 2, done)
+        out, code = workqueue._finish(self.root, done, stop)
+        self.assertEqual(code, 0)
+        self.assertNotIn("stopped", out)
+        self.assertEqual((out["open"], out["backpressure"]["kind"]), ([], "quota"))
+
+    def test_backpressure_with_work_left_reports_the_summary_too(self):
+        hit = self.add(0.1)
+        rest = self.add(0.1, deps=[hit])
+        self.kinds[hit] = ["quota"]
+        done: list = []
+        stop = workqueue._refill(_args(), self.root, "claude", None, {}, 2, done)
+        out, code = workqueue._finish(self.root, done, stop)
+        self.assertEqual((code, out["stopped"]), (2, "backpressure"))
+        self.assertEqual(out["open"], [rest])
+        self.assertEqual(out["spent_usd"], 0.01)                        # counted after the run in flight finished
+
+    def test_budget_spent_is_counted_after_the_runs_in_flight(self):
+        self.add(0.1)
+        wq.set_budget(self.root, 0.0)
+        out, code = workqueue._finish(self.root, [], {"stopped": "budget reached", "spent_usd": -1,
+                                                       "budget_usd": 0.0, "ask": "x"})
+        self.assertEqual((code, out["stopped"], out["spent_usd"]), (2, "budget reached", 0.0))
+
+    def test_lanes_try_a_skipped_item_once_too(self):
+        a = self.add(0.1)
+
+        def skip(it, root, *x, **k):
+            self.events.append(("start", it["id"], time.time()))
+            return {"id": it["id"], "skipped": "ask first"}
+        workqueue._one = skip
+        workqueue._waves(_args(), self.root, "claude", None, {}, 2, 2, [])
+        self.assertEqual(self.starts(), [a])
 
     def test_budget_stops_before_submitting(self):
         self.add(0.1)
@@ -195,6 +256,62 @@ class TestRefill(unittest.TestCase):
         self.assertEqual(self.starts(), [a])
 
 
+class TestRunnerLock(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_a_second_runner_is_refused_and_a_dead_ones_lock_taken_over(self):
+        import io
+        from contextlib import redirect_stdout
+        self.assertIsNone(workqueue._claim(self.root))
+        self.assertEqual(workqueue.runner(self.root)["pid"], os.getpid())
+        self.assertEqual(workqueue._claim(self.root)["pid"], os.getpid())     # held by a live process
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            code = workqueue._run(SimpleNamespace(bg=False, q_cmd="resume"), self.root)
+        self.assertEqual((code, json.loads(buf.getvalue())["stopped"]), (2, "already running"))
+        workqueue._release(self.root)
+        self.assertIsNone(workqueue.runner(self.root))
+        (wq.qdir(self.root) / workqueue.RUNNER).write_text(json.dumps({"pid": 0}), encoding="utf-8")
+        self.assertIsNone(workqueue._claim(self.root))                         # a killed runner's lock
+        workqueue._release(self.root)
+
+
+class TestLiveRunId(unittest.TestCase):
+    """_one names the run before it starts, so `q ls` shows it (`live`) while it runs."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.saved = (workqueue.resolve, workqueue.run, workqueue.compact)
+
+    def tearDown(self):
+        workqueue.resolve, workqueue.run, workqueue.compact = self.saved
+        self.tmp.cleanup()
+
+    def test_live_id_is_the_run_id_and_cleared_after(self):
+        it = wq.add(self.root, "t", "do t", minutes=5)
+        seen = {}
+
+        def fake_run(req, p):
+            seen["live"] = wq.load(self.root)["items"][it["id"]].get("live")
+            seen["req"] = req.run_id
+            return {"run_id": req.run_id, "to": "codex", "ok": True, "attempts": []}
+        workqueue.resolve = lambda spec, caller, p, cfg: ({"to": "codex"}, {})
+        workqueue.run = fake_run
+        workqueue.compact = lambda rec: {"status": "done", "summary": "ok"}
+        res = workqueue._one(wq.load(self.root)["items"][it["id"]], self.root, "claude", None, {})
+        self.assertTrue(seen["live"])
+        self.assertEqual(seen["live"], seen["req"])
+        self.assertEqual(res["run"], seen["live"])
+        after = wq.load(self.root)["items"][it["id"]]
+        self.assertEqual((after["status"], after["live"], after["run"]), ("done", None, seen["live"]))
+
+
 class TestQueueBackground(test_adapters.AdapterEnv):
     def test_q_run_bg_returns_at_once_and_finishes_detached(self):
         a = self.j("q", "add", "x", "--brief", "do x", "--minutes", "5")
@@ -210,6 +327,13 @@ class TestQueueBackground(test_adapters.AdapterEnv):
             time.sleep(0.5)
         self.assertEqual(status, "done", Path(out["log"]).read_text(encoding="utf-8", errors="replace")
                          if Path(out["log"]).exists() else "no log")
+        ls = self.j("q", "ls")
+        while time.time() < deadline and ("runner" in ls or "last_run" not in ls):
+            time.sleep(0.5)                 # let the detached runner finish writing before the folder is removed
+            ls = self.j("q", "ls")
+        self.assertNotIn("runner", ls)
+        self.assertEqual(ls["last_run"]["code"], 0)
+        self.assertIsNone(ls["items"][0]["live"])
 
 
 if __name__ == "__main__":

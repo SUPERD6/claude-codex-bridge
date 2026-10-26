@@ -116,9 +116,10 @@ class RunWaiter:
             return None
 
 
-def wait_any(p, run_ids: list[str], seconds: float) -> tuple[list[tuple[str, dict, str]], list[str]]:
+def wait_any(p, run_ids: list[str], seconds: float) -> tuple[list[tuple[str, dict, str]], list[tuple[str, str]]]:
     """Block until at least one of run_ids (with any review fix round it started) is finished, or `seconds` pass.
-    Returns ([(asked id, last record, last id)] for every finished one, [ids still running])."""
+    Returns ([(asked id, last record, last id)] for every finished one, [(asked id, id being waited on)] for the
+    ones still running: a fix round's id, when its first run has handed over to one)."""
     waiters = [RunWaiter(p, r) for r in dict.fromkeys(run_ids)]        # unknown id -> FileNotFoundError up front
     deadline = time.time() + max(0.0, seconds)
     swept = 0.0
@@ -130,7 +131,7 @@ def wait_any(p, run_ids: list[str], seconds: float) -> tuple[list[tuple[str, dic
         for w in waiters:
             rec = w.poll()
             if rec is None:
-                running.append(w.rid)
+                running.append((w.run_id, w.rid))
             else:
                 done.append((w.run_id, rec, w.rid))
         if done or time.time() >= deadline:
@@ -144,7 +145,7 @@ def wait_run(p, run_id: str, seconds: float) -> tuple[dict | None, str]:
     done, running = wait_any(p, [run_id], seconds)
     if done:
         return done[0][1], done[0][2]
-    return None, running[0]
+    return None, running[0][1]
 
 
 def _result(rec: dict, asked: str, rid: str, full: bool) -> dict:
@@ -164,6 +165,9 @@ def cmd_show(a) -> int:
         # several runs in flight: hand back every one that has finished (blocking with --wait until one has)
         t0 = time.time()
         done, running = wait_any(p, ids, a.wait if a.wait is not None else 0.0)
+        # running: the ids as asked, so the next call still reports the chain (asked -> fix round) and the lead
+        # can match them up
+        running = [asked for asked, _ in running]
         out = {"finished": [_result(rec, asked, rid, a.full) for asked, rec, rid in done], "running": running,
                "waited_s": round(time.time() - t0, 1)}
         if running:

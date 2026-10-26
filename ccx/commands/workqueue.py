@@ -4,6 +4,8 @@ from __future__ import annotations
 import json
 import os
 import sys
+import time
+import uuid
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
@@ -43,8 +45,16 @@ def cmd_q(a) -> int:
         if a.q_cmd == "tree":
             print("\n".join(wq.tree(q)) or "(queue empty)")
         else:
-            _out({"items": [q["items"][i] for i in q["order"]], "ready": [x["id"] for x in wq.ready(q)],
-                  "spent_usd": wq.spent(q), "budget_usd": q["budget_usd"]})
+            out = {"items": [q["items"][i] for i in q["order"]], "ready": [x["id"] for x in wq.ready(q)],
+                   "spent_usd": wq.spent(q), "budget_usd": q["budget_usd"]}
+            held = runner(root)
+            if held:
+                out["runner"] = held                 # a `q run` (--bg or not) is working on it now
+            try:
+                out["last_run"] = json.loads((wq.qdir(root) / LAST).read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                pass
+            _out(out)
     elif a.q_cmd == "budget":
         wq.set_budget(root, a.usd)
         _out({"budget_usd": a.usd})
@@ -117,12 +127,14 @@ def _one(it: dict, root: Path, caller: str, p, cfg, warm: str | None = None, got
         if kw is None:
             wq.update(root, it["id"], status="todo", summary=route.get("advice"))
             return {"id": it["id"], "skipped": route.get("advice")}
-        wq.update(root, it["id"], status="doing", agent=kw["to"])
+        # named up front: `ccx q ls` shows it as `live` while it runs, so a lead can `ccx show <ids> --any --wait`
+        live = time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:4]
+        wq.update(root, it["id"], status="doing", agent=kw["to"], live=live)
         resume = it.get("run") if it.get("resume") else None
         left = (max(0.0, float(it["budget_usd"]) - float(it.get("cost_usd") or 0))   # F11: the cap is what it has left
                 if it.get("budget_usd") is not None else None)
         brief = (RESUME_NOTE + spec["brief"]) if resume else spec["brief"]
-        rec = run(Request(brief=brief, mode=spec["mode"], mode_source=spec["mode_source"],
+        rec = run(Request(brief=brief, mode=spec["mode"], mode_source=spec["mode_source"], run_id=live,
                           mode_why=spec["mode_why"], cwd=root, caller=caller, label=f"q:{it['id']}",
                           check=it.get("check"), resume_run=resume or warm, continued=bool(warm and not resume),
                           budget_usd=left, **kw), p)
@@ -132,7 +144,7 @@ def _one(it: dict, root: Path, caller: str, p, cfg, warm: str | None = None, got
         status = res.get("status")
         cost = _cost(rec)
         fields = {"run": rec["run_id"], "agent": rec["to"], "summary": (res.get("summary") or "")[:300],
-                  "cost_usd": round(float(it.get("cost_usd") or 0) + cost, 6), "resume": False}
+                  "cost_usd": round(float(it.get("cost_usd") or 0) + cost, 6), "resume": False, "live": None}
         pieces = wq.parse_split(rec.get("result")) if status == "blocked" else None
         if pieces and it.get("depth", 0) < wq.MAX_DEPTH:
             wq.update(root, it["id"], **fields)
@@ -152,15 +164,15 @@ def _one(it: dict, root: Path, caller: str, p, cfg, warm: str | None = None, got
             out["restored"] = restored(resume, rec)
         return out
     except Exception as e:  # noqa: BLE001
-        wq.update(root, it["id"], status="failed", summary=f"{type(e).__name__}: {e}"[:300])
+        wq.update(root, it["id"], status="failed", summary=f"{type(e).__name__}: {e}"[:300], live=None)
         return {"id": it["id"], "error": str(e)}
 
 
-PRESSURE_KINDS = ("quota", "rate", "rate_limit", "auth")   # an attempt that hit these: start nothing new
+PRESSURE_KINDS = ("quota", "auth")   # an attempt that hit these (runners.py: rate limits are `quota`): start nothing new
 
 
 def _pressure(rec: dict | None) -> str | None:
-    """The quota/rate/auth kind any attempt of this run hit (a fallback to another agent included), else None."""
+    """The quota/auth kind any attempt of this run hit (a fallback to another agent included), else None."""
     for x in (rec or {}).get("attempts") or []:
         if x.get("kind") in PRESSURE_KINDS:
             return x["kind"]
@@ -176,14 +188,17 @@ def _over_budget(root: Path) -> dict | None:
 
 
 def _waves(a, root: Path, caller: str, p, cfg, width: int, n: int, done: list) -> dict | None:
-    """Warm lanes: ready items for the same agent and mode share at most n sessions, one after another."""
+    """Warm lanes: ready items for the same agent and mode share at most n sessions, one after another. An item is
+    tried once per `q run` (one routing skipped stays todo and would otherwise be picked again and again)."""
+    started: set[str] = set()
     while True:
         stop = _over_budget(root)
         if stop:
             return stop
-        batch = wq.ready(wq.load(root))
+        batch = [it for it in wq.ready(wq.load(root)) if it["id"] not in started]
         if not batch:
             return None
+        started.update(it["id"] for it in batch)
         def step(it, warm):
             got: dict = {}
             return _one(it, root, caller, p, cfg, warm=warm, got=got), got.get("rec")
@@ -196,8 +211,8 @@ def _waves(a, root: Path, caller: str, p, cfg, width: int, n: int, done: list) -
 
 def _refill(a, root: Path, caller: str, p, cfg, width: int, done: list) -> dict | None:
     """At most `width` runs at once; whenever one finishes, the slot goes to the next ready item (submit +
-    wait-first-completed, not wave by wave). --once: only the items ready at the start. A run whose attempts hit
-    quota/rate/auth: nothing new starts (width 1), the runs in flight finish, then it stops."""
+    wait-first-completed, not wave by wave). --once: only the items ready at the start. A run any of whose attempts
+    hit quota/auth: nothing new starts, the runs in flight finish, then it stops (`stopped: backpressure`)."""
     started: set[str] = set()           # an item is tried once per `q run` (one routing skipped stays todo)
     stop: dict | None = None
     first = True
@@ -225,26 +240,119 @@ def _refill(a, root: Path, caller: str, p, cfg, width: int, done: list) -> dict 
                 kind = _pressure(got.get("rec"))
                 if kind and stop is None:
                     stop = {"stopped": "backpressure", "kind": kind, "run": (got.get("rec") or {}).get("run_id"),
-                            "width": 1, "ask": "a run hit a quota/rate/auth limit: nothing new was started; run "
-                                               "`ccx q run --max 1` when it has reset"}
+                            "ask": "a run hit a quota/auth limit (its fallback may have finished the item): nothing "
+                                   "new was started; run `ccx q run --max 1` when it has reset"}
             wq.close_parents(root)
 
 
+RUNNER = "run.lock"                     # the live `q run` / `q resume` of this queue: {"pid", "started"}
+LAST = "last-run.json"                  # how the last one ended (read by `ccx q ls`, for a --bg run's lead)
+
+
+def runner(root: Path) -> dict | None:
+    """The `q run` working on this queue now, or None (no lock, or its process is gone)."""
+    from ..runners import pid_alive
+    try:
+        info = json.loads((wq.qdir(root) / RUNNER).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return info if isinstance(info, dict) and pid_alive(info.get("pid")) else None
+
+
+def _claim(root: Path) -> dict | None:
+    """Take the queue's runner lock; the holder's info if another live `q run` has it (two runners would hand
+    the same ready item out twice, and `q resume` would re-dispatch items the other one is running)."""
+    wq.qdir(root).mkdir(parents=True, exist_ok=True)
+    f = wq.qdir(root) / RUNNER
+    for _ in range(2):
+        try:
+            fd = os.open(f, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            held = runner(root)
+            if held:
+                return held
+            try:
+                f.unlink()              # left by a `q run` that was killed
+            except FileNotFoundError:
+                pass
+            continue
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump({"pid": os.getpid(), "started": time.time()}, fh)
+        return None
+    return runner(root) or {"pid": None}
+
+
+def _release(root: Path) -> None:
+    f = wq.qdir(root) / RUNNER
+    try:
+        if json.loads(f.read_text(encoding="utf-8")).get("pid") == os.getpid():
+            f.unlink()
+    except (OSError, ValueError):
+        pass
+
+
 def _background(a, root: Path) -> int:
-    """`ccx q run --bg`: the same command detached (hidden console on Windows), its output in the queue folder."""
+    """`ccx q run --bg`: the same command detached (hidden console on Windows), its output in the queue folder.
+    detach() drops --bg from the child's arguments, so the child runs in the foreground of its hidden console."""
     from .common import detach
-    import time as _t
-    log = wq.qdir(root) / f"run-bg-{_t.strftime('%Y%m%d-%H%M%S')}.log"
-    detach(sys.argv[1:], log, {"CCX_Q_BG": "1"})
+    held = runner(root)
+    if held:
+        _out(_busy(held))
+        return 2
+    log = wq.qdir(root) / f"run-bg-{time.strftime('%Y%m%d-%H%M%S')}-{os.getpid()}.log"
+    detach(sys.argv[1:], log, {})
     _out({"state": "started", "log": str(log),
-          "next": "ccx q ls (each item's run id appears there; `ccx show <run ids> --any --wait` hands back "
-                  "every one that has finished)"})
+          "next": "ccx q ls: an item being run shows its run id as `live`; `ccx show <live ids> --any --wait` hands "
+                  "back each one as it finishes; `runner` is set while the batch runs, `last_run` says how it ended"})
     return 0
 
 
+def _busy(held: dict) -> dict:
+    return {"stopped": "already running", "pid": held.get("pid"),
+            "ask": "another `ccx q run` is working on this queue: follow it with `ccx q ls`, or stop that process "
+                   "first"}
+
+
+def _finish(root: Path, done: list, stop: dict | None) -> tuple[dict, int]:
+    """The summary `q run` prints and its exit code. A stop adds its fields (exit 2) unless it is backpressure and
+    nothing is left open: then every item is closed and the summary only notes the limit (exit 0)."""
+    q = wq.load(root)
+    out = {"results": done, "open": [i for i in q["order"] if q["items"][i]["status"] not in ("done", "failed")],
+           "spent_usd": wq.spent(q), "tree": wq.tree(q)}
+    back = {r["id"]: r["restored"] for r in done if r.get("restored")}
+    if back:
+        # resumed = same session; fresh = started again; decide = needs you; finished = it had finished already
+        out["restored"] = back
+    if stop and stop.get("stopped") == "backpressure" and not out["open"]:
+        out["backpressure"] = {"kind": stop["kind"], "run": stop.get("run")}
+        stop = None
+    if stop:
+        return {**stop, **out}, 2       # out's spent_usd: counted after the runs in flight finished
+    return out, 0
+
+
 def _run(a, root: Path) -> int:
-    if getattr(a, "bg", False) and not os.environ.get("CCX_Q_BG"):
+    if getattr(a, "bg", False):
         return _background(a, root)
+    held = _claim(root)
+    if held:
+        _out(_busy(held))
+        return 2
+    try:
+        out, code = _locked_run(a, root)
+    finally:
+        _release(root)
+    try:
+        (wq.qdir(root) / LAST).write_text(json.dumps(
+            {"ended": time.time(), "code": code, "stopped": out.get("stopped"), "kind": out.get("kind"),
+             "open": out.get("open"), "ask": out.get("ask")}, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
+    _out(out)
+    return code
+
+
+def _locked_run(a, root: Path) -> tuple[dict, int]:
     p = paths()
     cfg = load_config(p)
     caller = _caller(a.caller)
@@ -263,30 +371,20 @@ def _run(a, root: Path) -> int:
                 if last.get("ok") and last.get("state") == "finished" and (last.get("result") or {}).get("status") == "done":
                     # it finished; only writing it back to the queue was cut off
                     wq.update(root, it["id"], status="done", run=last["run_id"], agent=last.get("to"), cost_usd=cost,
-                              summary=str((last.get("result") or {}).get("summary") or "")[:300], resume=False)
+                              summary=str((last.get("result") or {}).get("summary") or "")[:300], resume=False,
+                              live=None)
                     done.append({"id": it["id"], "status": "done", "run": last["run_id"], "restored": "finished"})
                     continue
                 # the run it was in the middle of (a review's fix round included): its session goes on
                 run_id = last["run_id"] if last.get("session_id") else it.get("run")
-                wq.update(root, it["id"], status="todo", resume=bool(run_id), run=run_id, cost_usd=cost)
+                wq.update(root, it["id"], status="todo", resume=bool(run_id), run=run_id, cost_usd=cost, live=None)
     width = int(a.max or cfg["defaults"].get("max_parallel", 3))
     n = lanes.width(getattr(a, "lanes", None), cfg)
     if n:
         stop = _waves(a, root, caller, p, cfg, width, n, done)
     else:
         stop = _refill(a, root, caller, p, cfg, width, done)
-    if stop:
-        _out({**stop, "results": done})
-        return 2
-    q = wq.load(root)
-    out = {"results": done, "open": [i for i in q["order"] if q["items"][i]["status"] not in ("done", "failed")],
-           "spent_usd": wq.spent(q), "tree": wq.tree(q)}
-    back = {r["id"]: r["restored"] for r in done if r.get("restored")}
-    if back:
-        # resumed = same session; fresh = started again; decide = needs you; finished = it had finished already
-        out["restored"] = back
-    _out(out)
-    return 0
+    return _finish(root, done, stop)
 
 
 def register(sub) -> None:
@@ -321,7 +419,8 @@ def register(sub) -> None:
                        "most N sub-sessions, one item after another (default: [lanes] default, 0 = off)")
         r.add_argument("--from", dest="caller")
         r.add_argument("--bg", action="store_true", help="run detached; its output goes to a log in the queue "
-                       "folder; see progress with `ccx q ls`")
+                       "folder; `ccx q ls` shows each running item's run id (`live`), the runner and how the last "
+                       "run ended")
     for x in (ad, bu, dn):
         x.add_argument("--cwd")
     qp.add_argument("--cwd")

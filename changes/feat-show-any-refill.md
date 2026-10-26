@@ -1,8 +1,10 @@
 - `ccx show ID... --any [--wait N]`: every finished run among several ids (`finished`) and the ones still running
-  (`running`, `next`); one id without `--any` is unchanged.
+  (`running`, as asked, and `next`); one id without `--any` is unchanged.
 - `ccx q run` refills a slot as soon as a run finishes instead of waiting for the wave; a run whose attempts hit
-  quota/rate/auth stops new submissions (`stopped: backpressure`); new `ccx q run --bg`. An item routing skipped is
-  tried once per `q run` instead of looping.
-- Skills: agent-delegate teaches pipelining several pieces (`q run --bg`, `show --any --wait`) and that on
-  `review_failed` the lead checks the `[must]` items and fixes them itself; task-split says `files` decides what runs
-  in parallel.
+  quota/auth stops new submissions (`stopped: backpressure`, or a `backpressure` note when nothing is left open);
+  new `ccx q run --bg`. An item routing skipped is tried once per `q run` (also with `--lanes`) instead of looping.
+- One runner per queue: a second `q run` / `q resume` while one is alive exits 2 (`stopped: already running`).
+  `q ls` shows each running item's run id (`live`), the live `runner` and `last_run`.
+- Skills: agent-delegate teaches pipelining several pieces (`q add`, `q run --bg`, `show <live ids> --any --wait`)
+  and that on `review_failed` the lead checks the `[must]` items and fixes them itself; task-split says `files`
+  decides what runs in parallel.

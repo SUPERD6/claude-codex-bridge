@@ -22,7 +22,7 @@
 2. **派得省**（第 5 轮评测，2026-10-26：大任务上用 ccx 的主智能体请求数中位 8 次，用自带子智能体 6 次，多出来的就是下面这些习惯）：
    - **简报 = 用户原话照抄**（尤其接口、名字、精确字符串、数字）+ 你已经知道的文件路径 + 验收命令。不要转述接口（“第一个匹配的提示”被改写成“最早的位置”，结果做错）；不要为了写简报先读代码库或 README/STATUS/文档，子智能体自己读（还会读 `.ccx/context.md`），花的是便宜模型。复用已有 `.ccx/context.md`；只有上下文维护属于本次授权时才更新它。格式见 `references/brief-template.md`。
    - **大活或多文件**：`ccx run --bg ...` 打印 run_id，再 `ccx show <run_id> --wait`，显示还在跑就再调一次。还在跑的运行不要 `ccx resume`。不要把 ccx 输出接到 `tail`/`head`。
-   - **几块已获授权的活**：先用 task-split `check` 排计划；改同一个文件的块合成一块或你自己做，绝不并行。`ccx q add --plan`、`ccx q run --bg`，自己的块按从短到长做，再 `ccx show <ids> --any --wait`。验收看 check+review 再扫一眼 diff；review_failed 就自己修。续跑有冲突的块前，先把那个 worktree rebase 到 main。按依赖顺序合并，再跑所有块验收命令的并集。出现背压（额度/限流/登录）就不再开新活。
+   - **几块已获授权的活**：先用 task-split `check` 排计划；改同一个文件的块合成一块或你自己做，绝不并行（`q run` 让所有块在当前检出里跑）。每块 `ccx q add "<标题>" --brief "..." --check "..."`（有先后用 `--dep <id>`），再 `ccx q run --bg`。自己的块从短到长做，不要碰排队块的文件（它的 undo 快照和验收会把你的改动算进去）。`ccx q ls` 里正在跑的块的 run id 是 `live`：`ccx show <live ids> --any --wait` 谁先结束先交回谁。验收看 check+review 再扫一眼 diff，最后跑所有块验收命令的并集。`last_run` 是 `stopped: backpressure`（额度/登录）时，在额度恢复前不再开新活。
    - **`--review` 保持默认（auto）**；只有高风险或用户能直接看到的改动（以及需要审查通过的 L2 自动合并）才 `--review on` / `--risk visible`。
    - **不要让子智能体提交**（Codex 沙盒禁止写 `.git`）；你验收后自己提交。
    - **用户说到某个项目但没给路径**：先 `ccx where "<用户原话>"`；一个 `pick` 就 `ccx run --project <名字>`，几个候选就问。项目规则讲到审批时 ccx 停下并列出（`approval_rules`）：按规则判断或问用户，之后才加 `--rules-ok` 重跑。细节见 project-manager。
@@ -34,7 +34,7 @@
    - `check` 通过且跑的是相关测试，再看 `files_changed` / `diffstat` 就够了，**不要自己重跑**（H11 实测 2026-10-24）。只有 check 失败、没有、带 `weak`（这个命令在这里放过过做错的结果），或状态是 partial/blocked 时，才自己跑测试或读完整 diff。
    - `check_broken` = 验收命令什么都没测：`ccx resume <run_id> --check "..."`。任务点名了一个入口（命令、CLI）却没有测试把它当真实进程跑：resume 一次，要求补一个。
    - `verification: not-run` 就照实说“没验证”。
-   - `review` 是独立审查：`pass` 或 `issues`（带文件:行）。ccx 自己会跑一轮修改（`show --wait` 会等它）；之后的 `review_failed` / `needs_lead` 由你决定。`kind` 只按 `ccx show <run_id> --wait` 的结果判断（不带 `--wait` 的 `show` 可能在修改轮开始前看到第一条记录，这时续跑会和修改轮撞上）。`--wait` 之后仍是 `review_issues`，说明修改轮没跑成（没有可续的会话，或没能启动）：自己改，或重新派。
+   - `review` 是独立审查：`pass` 或 `issues`（带文件:行）。ccx 自己会跑一轮修改（`show --wait` 会等它）；之后的 `needs_lead` 由你决定，`review_failed` 见下一条。`kind` 只按 `ccx show <run_id> --wait` 的结果判断（不带 `--wait` 的 `show` 可能在修改轮开始前看到第一条记录，这时续跑会和修改轮撞上）。`--wait` 之后仍是 `review_issues`，说明修改轮没跑成（没有可续的会话，或没能启动）：自己改，或重新派。
    - `review_failed`（修改轮之后审查仍不过）：对着 diff 逐条核对 `[must]` 项，属实的自己修，不属实的放下；不要为此 `ccx resume`。
    - 然后 `ccx verify <run_id> --ok 1|0 [--reason unfinished|wrong|overreach|other]`：校准路由（给了 `--minutes` 还校准拆分），并把 checkpoint 的这一步标成完成。没人判断的运行，12 小时后验收或自查通过、审查也通过会记成“大概率对”；`ccx undo --apply` 撤回的等你判，加 `--wrong` 同时记成“错”。只要真的看过，就记一下。
 5. **换主智能体**：用户说“交接给 X”时，自己还能写就 `ccx handoff --by <你> --to X "…"`；原主智能体写不了（额度用完、崩了、窗口关了）就 `ccx handoff --from-transcript <原主智能体> --to X`。接手方先核对其中的说法。自己的对话太长、下一块又是新活时：先问用户，再 `ccx fresh`（用本对话的记录写交接，新对话开局就能看到）。
