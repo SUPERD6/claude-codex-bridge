@@ -5,7 +5,9 @@ agent (or the next lead) sees the same state. Each item: id, parent, title, brie
 check, to/model (optional pins), status, run (last ccx run id), owner agent, cost, summary, depth.
 
 status: todo -> doing -> done | failed | blocked | needs_write | split (waits for its children) ; review is set by
-the lead's verdict through `ccx q done`. Ready = todo with every dependency done. Layered splitting: a sub-agent that
+the lead's verdict through `ccx q done`. Ready = todo with every dependency done (and accepted by the lead when the
+dependency's work is in a worktree, or under `q run --gate`). A todo item whose dependency did not finish (failed,
+blocked, needs_write) becomes dep_blocked, and todo again once that dependency is settled. Layered splitting: a sub-agent that
 finds its piece too big returns status blocked with a summary starting SPLIT: and the pieces as JSON in next_step;
 ccx adds them as children (depth + 1, at most MAX_DEPTH), and the parent is done when all of them are."""
 from __future__ import annotations
@@ -117,10 +119,142 @@ def spent(q: dict) -> float:
     return round(sum(float(it.get("cost_usd") or 0) for it in q["items"].values()), 6)
 
 
-def ready(q: dict) -> list[dict]:
+def accepted(it: dict, gate: bool = False, q: dict | None = None) -> bool:
+    """Does a finished item release the items that wait on it? Done, and, when its work sits in a worktree (not in
+    the project folder, so a dependent started now would not see it) or under `q run --gate`, also accepted by
+    the lead (`ccx q done <id> --ok 1`, after merging that worktree's branch). A split item (q given) releases
+    them when every part does: its parts' work may sit in worktrees too."""
+    if it.get("status") != "done":
+        return False
+    kids = children(q, it["id"]) if q else []
+    if kids:
+        return all(accepted(k, gate, q) for k in kids)
+    return it.get("verdict") is True if (gate or it.get("worktree")) else True
+
+
+def _unaccepted(it: dict, gate: bool, q: dict) -> list[dict]:
+    """The finished pieces behind `it` (it, or its parts) that still wait for the lead's verdict."""
+    kids = children(q, it["id"])
+    if kids:
+        return [x for k in kids for x in _unaccepted(k, gate, q)]
+    return [] if accepted(it, gate, q) else [it]
+
+
+def held_by(q: dict, it: dict, gate: bool = False) -> list[str]:
+    """Items that name a common file (task-split `files`) never run side by side, and one never starts from code
+    that lacks the other's change: it waits while the other runs, while the other is finished but not accepted
+    (its work still in a worktree), or while the other is earlier in the queue and still todo. Items without
+    `files` are never held (as before)."""
+    if not it.get("files"):
+        return []
+    out, before = [], True
+    for j in q["order"]:
+        if j == it["id"]:
+            before = False
+            continue
+        o = q["items"][j]
+        if not overlaps(it, o):
+            continue
+        st = o["status"]
+        if st == "doing" or (st == "done" and not accepted(o, gate, q)) or (before and st == "todo"):
+            out.append(j)
+    return out
+
+
+def ready(q: dict, gate: bool = False) -> list[dict]:
     items = q["items"]
     return [items[i] for i in q["order"] if items[i]["status"] == "todo"
-            and all(items.get(d, {}).get("status") == "done" for d in items[i].get("deps", []))]
+            and all(accepted(items.get(d, {}), gate, q) for d in items[i].get("deps", []))
+            and not held_by(q, items[i], gate)]
+
+
+def waiting(q: dict, gate: bool = False) -> list[dict]:
+    """Todo items whose dependencies are all done but not yet accepted (see accepted), or that share a file with a
+    finished piece not yet accepted (see held_by): they wait on the lead."""
+    items = q["items"]
+    out = []
+    for i in q["order"]:
+        it = items[i]
+        deps = [items.get(d, {}) for d in it.get("deps", [])]
+        if it["status"] != "todo" or not all(d.get("status") == "done" for d in deps):
+            continue
+        on = [x for d in deps for x in _unaccepted(d, gate, q)]
+        on += [items[j] for j in held_by(q, it, gate) if items[j]["status"] == "done"]
+        if not on:
+            continue
+        row = {"id": i, "on": list(dict.fromkeys(x["id"] for x in on))}
+        trees = {x["id"]: x["worktree"] for x in on if x.get("worktree")}
+        if trees:
+            row["worktrees"] = trees                 # merge each branch into the project first, then accept it
+        out.append(row)
+    return out
+
+
+def unmerged(q: dict) -> list[dict]:
+    """Finished pieces whose work sits in a worktree branch the lead has not accepted yet (merge it, then
+    `ccx q done <id> --ok 1`), so a branch nothing waits on is not forgotten."""
+    items = q["items"]
+    return [{"id": i, "branch": items[i].get("branch"), "worktree": items[i]["worktree"]} for i in q["order"]
+            if items[i]["status"] == "done" and items[i].get("worktree") and items[i].get("verdict") is not True]
+
+
+# a dependency in one of these will not release what waits on it until the lead settles it
+STUCK = ("failed", "blocked", "needs_write")
+
+
+def stuck_on(q: dict) -> dict[str, list[str]]:
+    """{todo or dep_blocked item: the pieces that did not finish (failed, blocked, needs_write) that it waits on,
+    directly or through other waiting pieces}. Names the piece to fix, never a piece that only waits itself."""
+    items, memo = q["items"], {}
+
+    def causes(i: str) -> list[str]:
+        if i not in memo:
+            memo[i] = []                        # a guard; add() and add_plan never make a cycle
+            out = []
+            for d in items.get(i, {}).get("deps", []):
+                st = items.get(d, {}).get("status")
+                if st in STUCK:
+                    out.append(d)
+                elif st in ("todo", "dep_blocked"):
+                    out += causes(d)
+            memo[i] = list(dict.fromkeys(out))
+        return memo[i]
+    return {i: causes(i) for i in q["order"] if items[i]["status"] in ("todo", "dep_blocked") and causes(i)}
+
+
+def view(q: dict) -> dict:
+    """The queue as propagate would leave it, without writing (`q ls` / `q tree` only read)."""
+    stuck = stuck_on(q)
+    items = {}
+    for i, it in q["items"].items():
+        if i in stuck:
+            it = {**it, "status": "dep_blocked", "blocked_by": stuck[i]}
+        elif it["status"] == "dep_blocked":
+            it = {**it, "status": "todo", "blocked_by": []}
+        items[i] = it
+    return {**q, "items": items}
+
+
+def propagate(root: Path) -> dict:
+    """A dependency that did not finish (failed, blocked, needs_write) can never release its dependents: mark them
+    (and theirs) dep_blocked with the piece to fix in blocked_by, so a run ends with an answer instead of leaving
+    them todo forever. Once the lead settles it (`ccx q done <id> --ok 1`), they go back to todo. One read and its
+    writes under the queue lock; the summary is left alone. -> {"dep_blocked": [ids], "unblocked": [ids]}"""
+    out: dict[str, list[str]] = {"dep_blocked": [], "unblocked": []}
+    with _lock(root):
+        q = load(root)
+        stuck = stuck_on(q)
+        for i in q["order"]:
+            it = q["items"][i]
+            if it["status"] == "todo" and i in stuck:
+                _append(root, {"ev": "update", "id": i, "status": "dep_blocked", "blocked_by": stuck[i]})
+                out["dep_blocked"].append(i)
+            elif it["status"] == "dep_blocked" and i not in stuck:
+                _append(root, {"ev": "update", "id": i, "status": "todo", "blocked_by": []})
+                out["unblocked"].append(i)
+            elif it["status"] == "dep_blocked" and it.get("blocked_by") != stuck[i]:
+                _append(root, {"ev": "update", "id": i, "blocked_by": stuck[i]})
+    return out
 
 
 def children(q: dict, item_id: str) -> list[dict]:
@@ -182,6 +316,86 @@ def add_split(root: Path, parent: dict, pieces: list[dict]) -> list[str]:
     return ids
 
 
+def _piece_brief(t: dict, plan_title: str, titles: dict[str, str], deps: list[str]) -> str:
+    """A task-split piece has a title, not a brief: give the sub-agent what the plan knows about it."""
+    lines = [str(t["title"]).rstrip(".") + "."]
+    if plan_title:
+        lines.append(f"This is one piece of a larger plan: {plan_title}.")
+    if t.get("files"):
+        lines.append("Files: " + ", ".join(str(f) for f in t["files"]) + ".")
+    done_before = [titles[d] for d in deps if d in titles]
+    if done_before:
+        lines.append("Already done before this piece: " + "; ".join(done_before) + ".")
+    return "\n".join(lines)
+
+
+def add_plan(root: Path, plan) -> dict:
+    """Queue a whole plan: `{"tasks": [...]}` (ids + deps, as `ccx batch`), task-split's `{"pieces": [...]}`
+    (ids + depends_on + files; a piece without a brief gets one from its title, the plan's title, its files and
+    what comes before it, and its read/write mode is inferred from its own title) or a bare list. Dependencies may
+    name any piece of the plan, earlier or later, or an item already in the queue (a plan id wins over a queue id
+    of the same name); they are resolved once every id is known, and an unknown id or a cycle is an error before
+    anything is added (it used to be dropped silently, so a piece ran before what it needed).
+    -> {"added": [queue ids in plan order], "ids": {plan id: queue id}, "warnings": [...] when there are any}"""
+    tasks = plan if isinstance(plan, list) else (plan.get("tasks") or plan.get("pieces") or [])
+    plan_title = "" if isinstance(plan, list) else str(plan.get("title") or "")
+    if not tasks:
+        raise ValueError('the plan has no tasks: give {"tasks": [...]} or task-split\'s {"pieces": [...]}')
+    existing = load(root)["items"]
+    keys: list[str] = []
+    for n, t in enumerate(tasks):
+        if not (t.get("brief") or t.get("title")):
+            raise ValueError(f"plan task {t.get('id') or n}: needs a brief or a title")
+        k = str(t.get("id") or f"#{n}")
+        if k in keys:
+            raise ValueError(f"plan id {k!r} is used twice")
+        keys.append(k)
+    deps: dict[str, list[str]] = {}
+    unknown = []
+    for k, t in zip(keys, tasks):
+        named = [str(d) for d in [*(t.get("deps") or []), *(t.get("depends_on") or [])]]
+        deps[k] = list(dict.fromkeys(named))
+        unknown += [f"{k} -> {d}" for d in deps[k] if d not in keys and d not in existing]
+    if unknown:
+        raise ValueError(f"unknown dependencies in the plan: {', '.join(unknown)} (plan ids: {', '.join(keys)})")
+    warnings = [f"plan id {k!r} is also a queue item: inside this plan it means the plan's piece"
+                for k in keys if k in existing and any(k in deps[o] for o in keys)]
+    order, placed = [], set()
+    while len(order) < len(keys):              # earlier pieces first, each after what it waits for
+        nxt = next((k for k in keys if k not in placed and all(d in placed or d not in keys for d in deps[k])), None)
+        if nxt is None:
+            raise ValueError("the plan's dependencies form a cycle: " + ", ".join(k for k in keys if k not in placed))
+        order.append(nxt)
+        placed.add(nxt)
+    titles = {k: str(t.get("title") or t.get("brief") or "")[:80] for k, t in zip(keys, tasks)}
+    thin = [k for k, t in zip(keys, tasks) if not t.get("brief")]
+    if thin:
+        warnings.append(f"{', '.join(thin)}: no brief, so each one's brief was built from its title, the plan's "
+                        "title, its files and what comes before it; give a brief where that is not enough")
+    ids: dict[str, str] = {}
+    for k in order:
+        t = tasks[keys.index(k)]
+        own = str(t.get("brief") or t["title"])
+        brief = own if t.get("brief") else _piece_brief(t, plan_title, titles, deps[k])
+        files = [str(f) for f in t.get("files") or []] or None
+        it = add(root, str(t.get("title") or own[:60]), brief,
+                 deps=[ids.get(d, d) for d in deps[k]], check=t.get("check"), minutes=t.get("minutes"),
+                 mode=t.get("mode"), kind=t.get("kind"), to=t.get("to"), files=files,
+                 mode_from=None if t.get("brief") else own,     # read or write: from the piece's own words
+                 budget_usd=t.get("budget_usd", t.get("budget")))
+        ids[k] = it["id"]
+    out = {"added": [ids[k] for k in keys], "ids": {k: ids[k] for k in keys if not k.startswith("#")}}
+    if warnings:
+        out["warnings"] = warnings
+    return out
+
+
+def overlaps(a: dict, b: dict) -> bool:
+    """Two items that name a common file (`files`, from task-split) must not run side by side."""
+    fa = {f.replace("\\", "/").removeprefix("./") for f in a.get("files") or []}
+    return bool(fa & {f.replace("\\", "/").removeprefix("./") for f in b.get("files") or []})
+
+
 SPLIT_HINT = ("If this piece is clearly too big to finish well in one go, don't do half of it: stop with status "
               "blocked, start the summary with SPLIT: and put the parts in next_step as a JSON list of "
               '{"title", "brief", "deps": [indexes of earlier parts], "check"}. ccx queues and routes each part.')
@@ -195,6 +409,10 @@ def tree(q: dict) -> list[str]:
         it = items[i]
         deps = f"  after {', '.join(it['deps'])}" if it.get("deps") else ""
         who = f"  [{it.get('agent')} {it.get('run')}]" if it.get("run") else ""
+        if it["status"] == "dep_blocked" and it.get("blocked_by"):
+            who += f"  (fix {', '.join(it['blocked_by'])} first)"
+        elif it["status"] == "done" and it.get("worktree") and it.get("verdict") is not True:
+            who += f"  (unmerged: {it.get('branch') or it['worktree']})"
         lines.append(f"{'  ' * depth}{it['id']} {it['status']:<11} {it['title']}{deps}{who}")
         for k in children(q, i):
             walk(k["id"], depth + 1)
