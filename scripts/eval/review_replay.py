@@ -14,6 +14,9 @@ parts apart.
 Each review runs in its own process with the round-5 clean room (scripts/eval/preflight.py: allow-listed
 environment, no user settings, hooks, CLAUDE.md or auto-memory for the Claude reviewer).
 
+Not reproducible from the repository alone: KNOWN below names round-5 run ids that live only in the round-5 work
+folder of the machine that ran it (see temp_root); elsewhere `list` finds no cases.
+
 This spends real money (about $0.01-0.03 a review). --budget caps the total: a review starts only while the money
 spent so far plus a reserve per running review stays under it.
 
@@ -52,7 +55,7 @@ KNOWN = {
                   lambda t: "Paths(" in t or ("TypeError" in t and "str" in t)),
     "bg_path": ("r5h", "h-1-brief-words-ccx2", "20261026-131138-31cb", lambda t: "--bg" in t or "_background" in t),
     "status_done": ("r5e", "h-2-brief-words-ccx2", "20261026-081415-b907",
-                    lambda t: "done" in t and ("finished" in t or "state" in t)),
+                    lambda t: bool(re.search(r"get\(\s*['\"](status|state)['\"]|status\s*==\s*['\"]done", t))),
 }
 EST_MAX_USD = 0.06            # reserve per running review when checking the budget
 
@@ -139,13 +142,22 @@ def split_diff(diff: str) -> tuple[str, dict[str, str]]:
     return "\n".join(out).strip("\n") + "\n", new
 
 
+def _untar(data: bytes, dest: Path) -> None:
+    """Unpack a `git archive` tar; the "data" filter where Python has it (3.12+ warns without one)."""
+    with tarfile.open(fileobj=io.BytesIO(data)) as tf:
+        if hasattr(tarfile, "data_filter"):
+            tf.extractall(dest, filter="data")
+        else:
+            tf.extractall(dest)
+
+
 def rebuild(case_dir: Path, repo: Path, base: str, diff: str, dest: Path) -> dict:
     """The tree the reviewer saw: `base` from the unit repo, then the diff, uncommitted (so git diff shows it)."""
     data = git(repo, "archive", "--format=tar", base).stdout
     if not data:
         return {"ok": False, "why": f"git archive {base} failed in {repo}"}
     dest.mkdir(parents=True, exist_ok=True)
-    tarfile.open(fileobj=io.BytesIO(data)).extractall(dest)
+    _untar(data, dest)
     git(dest, "init", "-q")
     git(dest, "add", "-A")
     git(dest, "commit", "-qm", "base")
@@ -191,7 +203,7 @@ def old_ccx(ref: str, work: Path) -> Path:
         if not data:
             raise SystemExit(f"git archive {ref} failed")
         dest.mkdir(parents=True, exist_ok=True)
-        tarfile.open(fileobj=io.BytesIO(data)).extractall(dest)
+        _untar(data, dest)
     return dest
 
 
@@ -342,7 +354,8 @@ def summary(*out_files: Path) -> None:
         line = []
         for v in names:
             rs = [r for r in res if r.get("known") == known and r["variant"] == v]
-            line.append(f"{v} {sum(bool(r.get('found')) for r in rs)}/{len(rs)}")
+            hit = sum(any(KNOWN[known][3](m) for m in r.get("musts") or []) for r in rs)   # today's matcher
+            line.append(f"{v} {hit}/{len(rs)}")
         print(f"  {known}: " + ", ".join(line))
     ctrl = [r for r in res if not r.get("known")]
     for v in names:

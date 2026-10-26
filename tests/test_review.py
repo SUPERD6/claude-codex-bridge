@@ -283,7 +283,7 @@ class TestCheckGap(unittest.TestCase):
         self.assertNotIn("getcwd", ctx.split("```", 1)[0] + "".join(ctx.split("### ")[2:]))   # stdlib: not shown
         self.assertEqual(review._imports(d, "inv/report.py", "from . import store\nfrom .store import Store as S\n"
                                                             "def f():\n    from inv.report import summary\n"),
-                         {"store": "inv/__init__.py", "S": "inv/store.py", "summary": "inv/report.py"})
+                         {"store": "inv/store.py", "S": "inv/store.py", "summary": "inv/report.py"})
 
     def test_spans(self):
         src = ["def f(", "    a,", "):", "    return a", "", "x = 1", "function g() {", "  return 1;", "}", "y()"]
@@ -358,12 +358,34 @@ class TestReviewRun(Env):
         rev = self.reviews()[0]["prompt"]
         self.assertIn(prompts.REVIEW_FINISH, rev)
         self.assertIn("Permission: " + prompts.REVIEW_PERMISSION, rev)
-        for builder_text in ("The acceptance check is", "run the relevant tests", "your shell tool works"):
+        for builder_text in ("The acceptance check is", "run the relevant tests"):
             self.assertNotIn(builder_text, rev)
         self.assertIn("cannot run commands", rev)
+        self.assertIn("ccx ran the acceptance command `exit 0`", rev)
         build = [c["prompt"] for c in self.calls() if c["agent"] == "codex"][0]
         self.assertIn("The acceptance check is `exit 0`", build)
         self.assertNotIn(prompts.REVIEW_FINISH, build)
+
+    def test_reviewer_text_without_a_check(self):
+        # H13 weak-evidence review: no --check, so the Finish text must not claim ccx ran one
+        from ccx import prompts
+        self.go()
+        rev = self.reviews()[0]["prompt"]
+        self.assertIn(prompts.REVIEW_FINISH, rev)
+        self.assertIn("No acceptance command was given", rev)
+        self.assertNotIn("already ran the acceptance check", rev)
+
+    def test_codex_reviewer_may_still_read_through_its_shell(self):
+        # a Codex reviewer reads files only with shell commands; "run no commands" would leave it nothing to read
+        from ccx import prompts
+        env = {"FAKE_WRITE": f"{self.work / 'a.py'}=x = 2\n"}
+        self.ccx("run", "--to", "claude", "--model", "haiku", "--effort", "low", "--mode", "write", "--no-fallback",
+                 "--review", "on", "--check", "exit 0", "change x to 2 in a.py", env=env)
+        rev = [c["prompt"] for c in self.calls() if c["agent"] == "codex" and "[ccx review" in c["prompt"]]
+        self.assertTrue(rev, self.calls())
+        self.assertIn("Permission: " + prompts.REVIEW_PERMISSION, rev[0])
+        self.assertIn("your shell tool works", rev[0])
+        self.assertIn(prompts.REVIEW_FINISH, rev[0])
 
     def test_code_context_is_opt_in(self):
         # off by default (the replay found fewer real bugs with it); [review] context = true adds it

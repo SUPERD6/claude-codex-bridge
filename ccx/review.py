@@ -225,7 +225,7 @@ def _test_texts(cwd: Path, cmd: str) -> list[str]:
 
 def _test_files(cwd: Path, cmd: str) -> list[tuple[str, str]]:
     """(path, text) of the tests the acceptance command runs (see _test_texts)."""
-    files =[f for f in (_git(cwd, "ls-files").splitlines() + _git(cwd, "ls-files", "--others", "--exclude-standard")
+    files = [f for f in (_git(cwd, "ls-files").splitlines() + _git(cwd, "ls-files", "--others", "--exclude-standard")
                          .splitlines()) if f and not f.startswith(".ccx/")]
     named = [t.strip("'\"") for t in re.split(r"\s+", cmd) if t.strip("'\"") and (cwd / t.strip("'\"")).exists()
              and t.strip("'\"") not in (".", "./")]
@@ -279,10 +279,10 @@ def check_gap(cmd: str, cwd: Path, actual: list[str], diff: str) -> str | None:
 
 # Code around the change (r5 design, PR A; opt-in, [review] context = true): the Haiku reviewer makes 6-18
 # sequential tool turns to read what the diff leaves out. With the changed functions, the definitions they call
-# and the tests naming them in the brief, a replay of 43 recorded round-5 reviews (scripts/eval/review_replay.py,
-# 2026-10-26) took half the time and output tokens (median 15 s vs 30 s) but found fewer of the known real bugs
-# (11/28, vs 19/28 without it and 16/28 for the old prompt: the reviewer stopped reading after ~2 tool uses),
-# so it is off by default.
+# and the tests naming them in the brief, a replay of 10 recorded round-5 reviews, ~43 runs per variant
+# (scripts/eval/review_replay.py, claude haiku low, 2026-10-26), took about half the time and output tokens
+# (median 15 s vs 23 s with the read-only Finish text alone, 30 s with the old prompt) but found fewer of the
+# known real bugs (11 of 28 tries, vs 19 and 16: the reviewer stopped reading after ~2 tool uses), so it is off.
 CONTEXT_HEAD = ("\n## Code around the change\nAs the files are now: the changed functions in full, the definitions "
                 "of names they call (in the same file, or imported from this repository), and tests that name "
                 "them{cut}. It is where to start, not the whole review: still trace the entry point the task names "
@@ -299,7 +299,7 @@ def _imports(cwd: Path, f: str, text: str) -> dict[str, str]:
     import ast
     try:
         tree = ast.parse(text)
-    except (SyntaxError, ValueError):
+    except (SyntaxError, ValueError, RecursionError, MemoryError):
         return {}
     out: dict[str, str] = {}
     for node in ast.walk(tree):
@@ -310,11 +310,14 @@ def _imports(cwd: Path, f: str, text: str) -> dict[str, str]:
             base = base.parent
         parts = node.module.split(".") if node.module else []
         mod = (base if node.level else Path()).joinpath(*parts)
-        for cand in ((mod.with_suffix(".py") if parts else None), mod / "__init__.py"):
-            if cand is not None and (cwd / cand).is_file():
-                for a in node.names:
-                    out.setdefault(a.asname or a.name, cand.as_posix())
-                break
+        cands = [c for c in ((mod.with_suffix(".py") if parts else None), mod / "__init__.py")
+                 if c is not None and (cwd / c).is_file()]
+        for a in node.names:
+            sub = mod / (a.name + ".py")          # `from pkg import store`: the name is the submodule pkg/store.py
+            if (cwd / sub).is_file():
+                out.setdefault(a.asname or a.name, sub.as_posix())
+            elif cands:
+                out.setdefault(a.asname or a.name, cands[0].as_posix())
     return out
 
 
@@ -517,7 +520,12 @@ def brief(run_id: str, task: str, summary: str, diff: str, max_chars: int, check
            f"{'passed' if check.get('passed') else 'FAILED (exit %s)' % check.get('exit')}." if check
            else "No acceptance command was given; nobody ran the tests for you.")
     shown = diff[:max_chars]
-    context = code_context(cwd, diff, max_chars - len(shown), (check or {}).get("cmd") or "") if cwd else ""
+    context = ""
+    if cwd:
+        try:                                  # an opt-in extra: a file it cannot parse must not stop the review
+            context = code_context(cwd, diff, max_chars - len(shown), (check or {}).get("cmd") or "")
+        except (OSError, ValueError, RecursionError, re.error):
+            context = ""
     return BRIEF.format(mark=MARK, run_id=run_id, task=task.strip()[:2000], summary=(summary or "")[:800],
                         diff=shown or "(empty)", cut=cut, check=ran, edited=ed, context=context)
 

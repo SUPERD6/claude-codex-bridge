@@ -403,13 +403,14 @@ def run(req: Request, p: Paths) -> dict:
                  "modify files. If finishing really needs edits, do not make them: stop "
                  f"with status blocked and start the summary with {NEEDS_WRITE}: what you would change and why"
                  if req.mode == "read" else "you may edit files in the workspace; keep changes minimal and on-task")
-    if req.caller == REVIEW_CALLER:                   # the reviewer reads only: no builder's "run the tests" text
+    reviewer = req.caller == REVIEW_CALLER and req.mode == "read"   # ccx's reviewer: reads, runs no tests
+    if reviewer:
         mode_text = REVIEW_PERMISSION
     if not req.allow_subagents:
         # codex-cli 0.164 offers its multi_agent v2 tools (spawn_agent ...) even with both features disabled and
         # --ignore-user-config (checked 2026-10-24), so the rule has to be said; the spend watchdog stays as backstop
         mode_text += "; do not start sub-agents of your own (no spawn_agent / Agent tool)"
-    selfcheck = (REVIEW_FINISH if req.caller == REVIEW_CALLER
+    selfcheck = (REVIEW_FINISH if reviewer
                  else SELFCHECK_CMD.format(check=req.check) if req.check else SELFCHECK)
     brief = req.brief.strip()
     if req.allow_subagents and (req.parallel or (req.parallel is None and subagents.has_parts(brief))):

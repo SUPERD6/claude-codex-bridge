@@ -1,7 +1,6 @@
 """scripts/eval/review_replay.py: the parts that run no CLI (brief parsing, tree rebuild, diff split)."""
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -11,8 +10,8 @@ import review_replay as R  # noqa: E402
 from ccx import review  # noqa: E402
 
 
-def _repo() -> tuple[Path, str]:
-    d = Path(tempfile.mkdtemp())
+def _repo(d: Path) -> tuple[Path, str]:
+    d.mkdir(parents=True)
     g = ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "core.autocrlf=false"]
     subprocess.run(["git", "init", "-q"], cwd=d, check=True)
     (d / "a.py").write_text("def f():\n    return 1\n", encoding="utf-8", newline="\n")
@@ -33,14 +32,14 @@ def test_parse_brief_round_trips_review_brief():
     assert R.parse_brief(review.brief("r1", "t", "s", "+" * 50, 10))["cut"] is True
 
 
-def test_rebuild_applies_tracked_and_new_files():
-    d, base = _repo()
+def test_rebuild_applies_tracked_and_new_files(tmp_path):
+    d, base = _repo(tmp_path / "repo")
     (d / "a.py").write_text("def f():\n    return 2\n", encoding="utf-8", newline="\n")
     (d / "b.py").write_text("X = 1\n", encoding="utf-8", newline="\n")
     _names, diff = review.changes(d, {"base": base, "untracked": [], "repo": str(d)})
     tracked, new = R.split_diff(diff)
     assert new == {"b.py": "X = 1\n"} and "b.py" not in tracked
-    out = Path(tempfile.mkdtemp()) / "tree"
+    out = tmp_path / "tree"
     rb = R.rebuild(out, d, base, diff, out)
     assert rb["ok"], rb
     assert (out / "a.py").read_text(encoding="utf-8") == "def f():\n    return 2\n"
@@ -55,3 +54,6 @@ def test_known_finding_tests():
     assert t["paths_str"]("[must] Paths(str) -> TypeError")
     assert t["bg_path"]("[must] the --bg path has no recap")
     assert not t["bg_path"]("[must] something else")
+    assert t["status_done"]("[must] recap treats status == 'done' as finished; it should read get('status')")
+    # a check.get('ok') finding that quotes status=done and check_state is not this bug
+    assert not t["status_done"]("[must] check.get('ok') is never set (status=done, check_state=passed)")
