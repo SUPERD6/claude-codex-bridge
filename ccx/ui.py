@@ -1144,6 +1144,7 @@ class UI:
                 pass
 
             def _send(self, code: int, body: bytes, ctype: str = "application/json; charset=utf-8"):
+                self._drain()
                 self.send_response(code)
                 self.send_header("Content-Type", ctype)
                 self.send_header("Content-Length", str(len(body)))
@@ -1205,8 +1206,19 @@ class UI:
                     return self._act(urlsplit(self.path).path.rsplit("/", 1)[1])
                 return self._send(404, b'{"error":"not found"}')
 
+            def _drain(self):
+                """Read a POST body nobody read before answering: closing with unread data makes Windows reset the
+                connection, and the client sees ConnectionAbortedError instead of our 403 (a flaky CI test)."""
+                if self.command != "POST" or getattr(self, "_drained", False):
+                    return
+                self._drained = True
+                n = int(self.headers.get("Content-Length") or 0)
+                if 0 < n <= 65536:
+                    self.rfile.read(n)
+
             def _body(self, limit: int = 4000):
                 n = int(self.headers.get("Content-Length") or 0)
+                self._drained = 0 < n <= limit
                 body = json.loads(self.rfile.read(n).decode("utf-8")) if 0 < n <= limit else None
                 if not isinstance(body, dict):
                     raise ValueError("a JSON object")
@@ -1248,8 +1260,7 @@ class UI:
                 if not self.headers.get("Content-Type", "").startswith("application/json"):
                     return self._send(415, b'{"error":"json only"}')
                 try:
-                    n = int(self.headers.get("Content-Length") or 0)
-                    body = json.loads(self.rfile.read(n).decode("utf-8")) if 0 < n <= 1000 else None
+                    body = self._body(1000)
                     sid, accept = int(body["id"]), body["accept"]
                     if not isinstance(accept, bool):
                         raise ValueError("accept: true or false")
