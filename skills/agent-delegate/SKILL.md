@@ -107,7 +107,8 @@ their first-time-right rate for that kind of work (`ccx way --stats`).
 
 A printed result with a `run_id` means that delegation ran: do not send the same brief again; to add to it,
 `ccx resume <run_id>`. The summary is a claim.
-- **Look first at `needs_lead` and `edited_tests`** when the result has them.
+- **Look first at `needs_lead`, `edited_tests` and `namecheck`** when the result has them (`namecheck`: names
+  no scope defines in the changed functions, a likely NameError the tests missed).
 - **A passed `check` that runs the relevant tests, plus `files_changed` / `diffstat`, is enough**: don't re-run it
   (H11, 2026-10-24: a lead that re-ran it saved nothing by delegating). Run tests or read the full diff yourself
   only when the check failed, was absent or `weak` (that command has passed wrong work here before), or the status
