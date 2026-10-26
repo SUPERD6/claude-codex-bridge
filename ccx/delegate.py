@@ -78,6 +78,7 @@ class Request:
     risk: str | None = None         # low | visible | critical (from the routing rubric): visible+ is reviewed
     review_round: int = 0           # 1 = this run fixes what a review found
     share_context: str | None = None  # auto | on | off: the lead's recent work, from its session file (context_share)
+    namecheck: str | None = None    # warn | fail | off: static undefined-name check (None = [defaults] namecheck)
 
 
 def _busy(p: Paths, prev: dict, scan: int = 300) -> str | None:
@@ -166,6 +167,17 @@ def depth_guard(cfg: dict) -> None:
         raise PermissionError(
             "ccx: refusing to delegate from inside a sub-agent (CCX_DEPTH="
             f"{depth}). Do the work yourself or report it in open_questions.")
+
+
+def _namecheck(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path) -> dict | None:
+    """The static undefined-name check of the functions this run changed (ccx/namecheck.py), run before the
+    acceptance command (ms, not minutes). Sets record["namecheck"]. Mode fail and a hit: returns a failed check
+    (cmd "ccx namecheck", reason "namecheck") that stands in for the command, which is then not run."""
+    from . import namecheck
+    nc = namecheck.for_run(req, cfg, p, record, cwd)
+    if nc is not None:
+        record["namecheck"] = nc
+    return namecheck.as_check(nc, req.check) if nc and nc["mode"] == "fail" and nc["hits"] else None
 
 
 def _project_context(cwd: Path) -> Path | None:
@@ -381,6 +393,7 @@ def run(req: Request, p: Paths) -> dict:
         req.label = req.label or prev.get("label") or ""
         req.check = req.check or prev.get("check_cmd")
         req.risk = req.risk or prev.get("risk")
+        req.namecheck = req.namecheck or prev.get("namecheck_mode")
         last = (prev.get("attempts") or [{}])[-1]
         if not req.model and last.get("model"):
             req.model, req.effort = last["model"], last.get("effort")
@@ -458,6 +471,7 @@ def run(req: Request, p: Paths) -> dict:
         "continue_depth": (int(prev.get("continue_depth", 0)) + 1) if cont else 0,
         "forked_from_lead": bool(req.fork_lead), "ephemeral": req.ephemeral,
         "mode_source": req.mode_source, "mode_why": req.mode_why, "check_cmd": req.check, "risk": req.risk,
+        "namecheck_mode": req.namecheck,
         "shared_context": shared_meta,
     }
     _write_record(run_dir, record)          # visible to `ccx show` at once (background runs, crashes)
@@ -682,7 +696,8 @@ def run(req: Request, p: Paths) -> dict:
             # (needed once tradeoff = save picks cheap models first, 2026-10-25)
             if want_review:                    # reviewed while the check runs; dropped if the check fails
                 bg_review = _start_review(req, p, cfg, record, cwd, run_dir, oc.result)
-            chk = run_check(req.check, cwd, int(cfg["defaults"].get("check_timeout_sec", 900)))
+            chk = (_namecheck(req, p, cfg, record, cwd)         # mode fail + a hit: the command is not run
+                   or run_check(req.check, cwd, int(cfg["defaults"].get("check_timeout_sec", 900))))
             early_check = (len(record["attempts"]), chk)
             if not chk["passed"] and not chk.get("broken"):   # a broken check is no reason to climb
                 if bg_review is not None:
@@ -721,7 +736,10 @@ def run(req: Request, p: Paths) -> dict:
     if bg_review is not None and not (want_review and early_check and early_check[0] == len(record["attempts"])):
         _finish_review(bg_review, record, p, keep=False)         # not this attempt's (cannot happen; be safe)
         bg_review = None
-    if req.check and oc.ok and status in ("done", "partial"):
+    nc_fail = _namecheck(req, p, cfg, record, cwd)      # always: an earlier rung's hits are stale now
+    if nc_fail and oc.ok and status in ("done", "partial"):
+        record["check"], record["kind"], check_passed = nc_fail, "check_failed", False
+    elif req.check and oc.ok and status in ("done", "partial"):
         reuse = early_check and early_check[0] == len(record["attempts"])    # already run on this very attempt
         if not reuse and want_review and bg_review is None:
             # the review runs while ccx runs the check (it needs only the command, not its result); it counts
@@ -801,7 +819,7 @@ def run(req: Request, p: Paths) -> dict:
                           "Change only what the task needs; do not add checks or hardening it did not ask for.",
                           resume_run=run_id, caller=req.caller, cwd=req.cwd, review="on", risk=req.risk,
                           review_round=req.review_round + 1, check=req.check, fallback=False, task=req.task,
-                          step=req.step, label=req.label), p)
+                          step=req.step, label=req.label, namecheck=req.namecheck), p)
         fix["review_of"], fix["first_review"] = run_id, record["review"]
         _write_record(p.runs / fix["run_id"], fix)
         return fix
@@ -839,7 +857,10 @@ def compact(record: dict) -> dict:
         out["kind"] = record["kind"]
         if record["kind"] == "over_budget":
             out["hint"] = (record.get("error") or "stopped over the sub-agent spending cap") +                 f"; what it did so far: `ccx show {record['run_id']} --full`"
-        if record["kind"] == "check_failed":
+        if record["kind"] == "check_failed" and record["check"].get("reason") == "namecheck":
+            out["hint"] = (f"the changed code uses names no scope defines (see namecheck; `{record['check']['cmd']}` "
+                           f"re-runs it); fix them: ccx resume {record['run_id']} \"fix the undefined names\"")
+        elif record["kind"] == "check_failed":
             out["hint"] = (f"the sub-agent reported done, but the check failed (exit {record['check']['exit']}); "
                            f"see `ccx show {record['run_id']} --full`, or continue: ccx resume {record['run_id']} "
                            f"\"the check fails: fix it\"")
@@ -874,6 +895,9 @@ def compact(record: dict) -> dict:
         out["check"] = {"cmd": c["cmd"], "passed": c["passed"], "exit": c["exit"],
                         **({"weak": c["weak"], "note": c["note"]} if c.get("weak") else {}),
                         **({"status": "check_broken"} if c.get("broken") else {})}
+    if (record.get("namecheck") or {}).get("hits"):     # weak evidence for the lead; mode fail: also the check
+        from .namecheck import line
+        out["namecheck"] = [line(h) for h in record["namecheck"]["hits"][:5]]
     if record.get("edited_tests") and "edited_tests" not in out:
         out["edited_tests"] = record["edited_tests"]
     if record["cwd"] and "/.ccx-worktrees/" in record["cwd"].replace("\\", "/"):

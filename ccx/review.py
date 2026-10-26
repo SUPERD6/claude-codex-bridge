@@ -74,10 +74,13 @@ def changes(cwd: Path, snap: dict | None) -> tuple[list[str], str]:
     if not snap:
         return [], ""
     base = snap["base"]
-    names = [n for n in _git(cwd, "diff", "--name-only", base).splitlines() if n and not n.startswith(".ccx/")]
-    diff = _git(cwd, "diff", base, "--", ".", ":(exclude).ccx")
+    # paths as git has them from the repo root (like the snapshot's untracked list), unquoted: with core.quotepath
+    # on (git's default) a non-ASCII name came back as "sub/ä..." and matched no file
+    q = ("-c", "core.quotepath=off")
+    names = [n for n in _git(cwd, *q, "diff", "--name-only", base).splitlines() if n and not n.startswith(".ccx/")]
+    diff = _git(cwd, *q, "diff", base, "--", ".", ":(exclude).ccx")
     before = set(snap.get("untracked") or [])
-    for n in _git(cwd, "ls-files", "--others", "--exclude-standard").splitlines():
+    for n in _git(cwd, *q, "ls-files", "--others", "--exclude-standard", "--full-name").splitlines():
         if n and n not in before and not n.startswith(".ccx/"):
             names.append(n)
             try:
@@ -344,8 +347,9 @@ def reviewers(cfg: dict, worker: str, installed, p=None, cheapest: bool = False)
 
 
 def brief(run_id: str, task: str, summary: str, diff: str, max_chars: int, check: dict | None = None,
-          edited: list[str] | None = None) -> str:
-    """The reviewer's brief. `edited` (default: found in `diff`) names pre-existing test files the change edited."""
+          edited: list[str] | None = None, static: str = "") -> str:
+    """The reviewer's brief. `edited` (default: found in `diff`) names pre-existing test files the change edited;
+    `static`: what ccx's own static checks found (namecheck), as weak evidence under Checks."""
     edited = edited_tests(diff) if edited is None else edited
     ed = (f"\nExisting tests edited: {', '.join(edited[:8])} — check the task requires it; an existing assertion "
           f"changed to fit the new code without the task asking for it is a [must] (b)." if edited else "")
@@ -354,7 +358,7 @@ def brief(run_id: str, task: str, summary: str, diff: str, max_chars: int, check
            f"{'passed' if check.get('passed') else 'FAILED (exit %s)' % check.get('exit')}." if check
            else "No acceptance command was given; nobody ran the tests for you.")
     return BRIEF.format(mark=MARK, run_id=run_id, task=task.strip()[:2000], summary=(summary or "")[:800],
-                        diff=diff[:max_chars] or "(empty)", cut=cut, check=ran, edited=ed)
+                        diff=diff[:max_chars] or "(empty)", cut=cut, check=ran, edited=ed + static)
 
 
 _PREFIX = re.compile(r"^[\s*_`#>]*review\s*[:：]?\s*[*_`]*\s*(pass|issues)\b", re.I)
@@ -420,8 +424,15 @@ def review_run(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path, run_d
         if edited:
             record["review"]["edited_tests"] = edited
         return
+    from . import namecheck as nck
+    nc = record.get("namecheck")
+    if nc is None and nck.mode(req, cfg) != "off":      # a review started before the run's own namecheck
+        try:
+            nc = nck.scan(cwd, snap, actual, diff)
+        except Exception:  # noqa: BLE001 — weak evidence only; never stops the review
+            nc = None
     text = rv.brief(record["run_id"], task_for_review(p, req), res.get("summary", ""), diff,
-                    int(rc.get("max_diff_chars", 12000)), record.get("check"), edited)
+                    int(rc.get("max_diff_chars", 12000)), record.get("check"), edited, nck.brief_note(nc))
     usd, tried = 0.0, []
     for agent, model, effort in cands[:2]:
         if cancel is not None and cancel.is_set():

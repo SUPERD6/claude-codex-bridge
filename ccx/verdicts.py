@@ -66,6 +66,8 @@ def soft_verdicts(p: Paths, min_age_h: float = SOFT_AFTER_H, now: float | None =
         if record.get("kind") in ("check_failed", "check_broken", "review_issues", "review_failed", "needs_write",
                                  "split"):
             continue
+        if (record.get("namecheck") or {}).get("hits"):  # a possible NameError (warn mode): the lead looks first
+            continue
         check = record.get("check")
         rev = (record.get("review") or {}).get("verdict")
         checked = (check and check.get("passed")) or \

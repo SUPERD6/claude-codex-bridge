@@ -94,7 +94,9 @@ if mode == "auth":
     print(json.dumps({"type": "turn.failed", "error": {"message": "401 Unauthorized"}}))
     sys.exit(1)
 
-for spec in filter(None, os.environ.get("FAKE_WRITE", "").split(";")):   # "path=content;path2=content"
+# FAKE_WRITE_RESUMED: what a resumed session (an escalation in the same session) writes instead of FAKE_WRITE
+_writes = (os.environ.get("FAKE_WRITE_RESUMED") if resuming else None) or os.environ.get("FAKE_WRITE", "")
+for spec in filter(None, _writes.split(";")):   # "path=content;path2=content"
     path, _, content = spec.partition("=")
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(content)
