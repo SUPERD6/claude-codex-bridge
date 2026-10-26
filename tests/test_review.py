@@ -138,6 +138,37 @@ class TestReason(unittest.TestCase):
         self.assertEqual(review.verdict({"summary": "no idea", "open_questions": ["something"]})["verdict"], "unclear")
         self.assertEqual(review.verdict({"summary": "REVIEW: passing thoughts"})["verdict"], "unclear")
 
+    def test_brief_rubric_traces_the_normal_path(self):
+        b = review.brief("r1", "task", "did it", "+x", 100)
+        self.assertIn("fails on its normal path, even silently", b)
+        self.assertIn("a name used but not defined or imported in that scope", b)
+        self.assertIn("`except Exception: pass`", b)
+        self.assertIn("only works\nfrom the repo directory", b)
+        self.assertIn("trace the entry point the task names", b)
+        self.assertNotIn("Existing tests edited", b)
+
+    def test_edited_tests(self):
+        diff = ("diff --git a/tests/test_old.py b/tests/test_old.py\n--- a/tests/test_old.py\n+++ b/tests/test_old.py\n"
+                "@@ -1,2 +1,2 @@\n def test_x():\n-    assert f() == 1\n+    assert f() == 2\n"
+                "--- a/tests/test_more.py\n+++ b/tests/test_more.py\n@@ -3,0 +4,2 @@\n+def test_y():\n+    pass\n"
+                "--- /dev/null\n+++ b/tests/test_new.py\n@@ -0,0 +1 @@\n+def test_z(): pass\n"
+                "--- a/src/lib.py\n+++ b/src/lib.py\n@@ -1 +1 @@\n-x = 1\n+x = 2\n"
+                "--- a/test_gone.py\n+++ /dev/null\n@@ -1 +0,0 @@\n-def test_g(): pass\n")
+        self.assertEqual(review.edited_tests(diff), ["tests/test_old.py", "test_gone.py"])
+        self.assertEqual(review.edited_tests(""), [])
+        b = review.brief("r1", "task", "did it", diff, 100_000)
+        self.assertIn("Existing tests edited: tests/test_old.py, test_gone.py — check the task requires it", b)
+
+    def test_edited_tests_are_weak_evidence_past_the_cap(self):
+        from ccx.config import Paths
+        import tempfile
+        p = Paths(Path(tempfile.mkdtemp()))
+        rec = {"run_id": "r", "check": {"cmd": "python -m pytest", "passed": True}}
+        rc = {"weak_daily": 0}
+        self.assertEqual(review.weak_reason(p, rc, rec, edited=["tests/test_a.py"]),
+                         "existing tests edited: tests/test_a.py")
+        self.assertIsNone(review.weak_reason(p, {"weak": False}, rec, edited=["tests/test_a.py"]))
+
     def test_brief_says_what_ccx_ran(self):
         b = review.brief("r1", "task", "did it", "+x", 100, {"cmd": "make test", "passed": True, "exit": 0})
         self.assertIn("`make test` after the change: passed", b)
@@ -234,6 +265,25 @@ class TestReviewRun(Env):
         self.assertTrue(out["check"]["passed"], out)
         self.assertNotIn("review", out)
         self.assertEqual(self.reviews(), [])
+
+    def test_edited_existing_test_forces_a_review(self):
+        # round 5: the builder rewrote an existing test's assertion; the check then passed and nothing was reviewed
+        g = ["git", "-c", "user.name=t", "-c", "user.email=t@t"]
+        (self.work / "test_a.py").write_text("import a\nassert a.x == 1\n", encoding="utf-8")
+        subprocess.run([*g, "add", "test_a.py"], cwd=self.work, check=True)
+        subprocess.run([*g, "commit", "-qm", "test"], cwd=self.work, check=True)
+        env = {"FAKE_WRITE": f"{self.work / 'a.py'}=x = 2\n;{self.work / 'test_a.py'}=import a\nassert a.x == 2\n",
+               "FAKE_REVIEW": "pass"}
+        r = self.ccx("run", "--to", "codex", "--model", "gpt-6-luna", "--effort", "low", "--mode", "write",
+                     "--no-fallback", "--check", f'"{sys.executable}" test_a.py', "change x to 2 in a.py", env=env)
+        out = json.loads(r.stdout)
+        self.assertTrue(out["check"]["passed"], out)
+        self.assertEqual(out["review"]["reason"], "existing tests edited: test_a.py")
+        self.assertEqual((out["edited_tests"], out["review"]["edited_tests"]), (["test_a.py"], ["test_a.py"]))
+        from ccx.config import Paths
+        rec = json.loads((Paths(self.hub).runs / out["run_id"] / "run.json").read_text(encoding="utf-8"))
+        self.assertEqual((rec["review"]["edited_tests"], rec["edited_tests"]), (["test_a.py"], ["test_a.py"]))
+        self.assertIn("Existing tests edited: test_a.py", self.reviews()[0]["prompt"])
 
     def test_check_without_tests_is_reviewed_with_no_history(self):
         # seven-cores r2: `--review auto` never fired in 36 runs because weak evidence needed history; a fresh hub

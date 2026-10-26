@@ -65,8 +65,10 @@ sub-agent. The extra requests came from the habits below.
   says running. Never `ccx resume` a run that is still running. Don't pipe ccx output through `tail`/`head`: the
   result is one small JSON object, and a pipe on a long run hits your shell's timeout.
 - **Afterwards:** a passed `check` that runs the relevant tests, plus the result's `files_changed` / `diffstat`, is
-  enough. Run tests or read the full diff yourself only when the check failed, was absent or `weak`, or the
-  status is partial/blocked.
+  enough, unless the result has `needs_lead` or `edited_tests` (look at those first). Run tests or read the full
+  diff yourself only when the check failed, was absent or `weak`, or the status is partial/blocked.
+  `check_broken` = the check tested nothing: `ccx resume <run_id> --check "..."`. The task names an entry point
+  (a command, a CLI) and no test runs it as a real process: resume once asking for one.
 - **Leave `--review` at its default (auto)**; `--review on` / `--risk visible` only for risky or user-facing work.
 - **Never ask the sub-agent to commit** (Codex's sandbox blocks `.git` writes: wasted turns). You commit after
   accepting.
