@@ -109,7 +109,7 @@ HEAVY = (re.compile(r"scripts[/\\]+eval[/\\]+\w+\.py[\"']?\s+(run|rescore)\b", r
          re.compile(r"\bcodex(\.exe|\.cmd)?[\"']?(\s+-c\s+(\"[^\"]*\"|\S+))*\s+exec(\s|$)", re.I),
          re.compile(r"\bclaude(\.exe|\.cmd)?[\"']?\s(.*\s)?(-p|--print)(\s|$)", re.I))
 WORK_ENTRY = re.compile(r"^(\d+-[\w.-]+|h-\d+-[\w.-]+|x-[\w.-]+|r5iso-\w+|\.ccx-worktrees|canary|"
-                        r"[\w.-]+\.stream\.jsonl|preflight[\w.-]*\.json|\.ccx-eval-work)$")
+                        r"[\w.-]+\.stream\.jsonl|preflight[\w.-]*\.json|\.ccx-eval-work|ext-cache)$")
 # Shells and wrappers: the command they carry runs in a child of theirs, which is what busy() and naming() look at
 # (Git Bash on Windows also breaks the parent chain, so this run's own launching shell is not seen as its ancestor)
 SHELLS = re.compile(r"^(bash|sh|dash|zsh|fish|cmd|powershell|pwsh|timeout|conhost|wsl|env|nohup|start|mintty)"
@@ -222,6 +222,7 @@ class Unit:
     codex_home: Path | None = None        # the dedicated eval CODEX_HOME (None: the real one, recorded as such)
     dsh: str = "unit"                     # unit (fresh DSH_HOME per unit) | real
     agents: tuple = ()                    # agents the eval itself defines (--agents), allowed in the init event
+    hidden: tuple = ()                    # more folders its agents must not open (the other repositories' cache)
     real: dict = field(default_factory=real_paths)
 
     @property
@@ -281,6 +282,7 @@ def forbidden(u: Unit) -> list[Path]:
     if not _inside(u.work, r["root"]):
         out.append(r["root"])
     out += [p for p in r.get("root_worktrees") or [] if not _inside(u.work, p)]
+    out += [Path(p) for p in u.hidden]
     if u.dsh == "real":
         out = [p for p in out if p != r["dsh_home"]]
     uniq: list[Path] = []

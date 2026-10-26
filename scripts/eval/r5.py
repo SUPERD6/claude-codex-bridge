@@ -41,7 +41,11 @@ The work dir defaults to <temp>/<tag>, so two tags never share unit folders.
   python scripts/eval/r5.py export docs/research/data/2026-10-26-r5.json
 
 Hold-out (--taskset holdout, scripts/eval/tasks_holdout.py): 10 other past changes never used while tuning, for the
-final claims. Its results go to their own file, and every finished unit's repository, hub and lead stream leave the
+final claims, five of them from other open-source repositories (scripts/eval/ext_repo.py: each is fetched once per
+run into <work dir>/ext-cache, from its URL or from a local copy given with --ext-cache DIR; a unit gets the parent's
+tree as a fresh one-commit repository, the cache is denied to its agents, tests run with PYTHONPATH=src and the
+Python given with --ext-python, which must have the modules the repository's tests need). Its results go to their
+own file, and every finished unit's repository, hub and lead stream leave the
 work dir after scoring (the stream is kept under .ccx/eval/r5/streams/<tag>/), so a later round's agents cannot find
 an earlier round's finished answer next to them. r5 keeps its old behaviour.
 """
@@ -67,6 +71,7 @@ import r3  # noqa: E402
 import r4  # noqa: E402
 import preflight as PF  # noqa: E402
 from common import ROOT, append_jsonl, archive_hub, ccx_verify, git, read_jsonl  # noqa: E402
+import ext_repo  # noqa: E402
 import tasks_holdout  # noqa: E402
 import tasks_r5  # noqa: E402
 
@@ -102,6 +107,17 @@ CONFTEST = (ROOT / "tests" / "conftest.py").read_text(encoding="utf-8")
 LEAD_PROMPT = """You are the lead agent on this repository: relayline, the `ccx` command (Python, standard library only;
 see AGENTS.md). The full test suite takes about 7 minutes, so run the tests that matter for your change, e.g.
 `python -m pytest -q tests/test_<area>.py`. The person asked:
+
+{brief}
+
+{how}
+
+When the work is done and the relevant tests pass, end with one line: DONE: <what changed>."""
+# A task of another repository (tasks_holdout.REPOS): same shape, that repository's own description. It is not
+# installed; PYTHONPATH=src is set (relative, so it also works in a ccx worktree), so tests run from the root.
+LEAD_PROMPT_EXT = """You are the lead agent on this repository: {name}. It is not installed: PYTHONPATH=src is set, so
+from the repository root `python -m pytest -q tests/...` tests the code in src/. Run the tests that matter for your
+change. The person asked:
 
 {brief}
 
@@ -150,9 +166,34 @@ DIRECT = ["--to", "codex", "--model", "gpt-6-luna", "--effort", "low", "--review
           "--no-escalate", "--no-fallback"]
 
 
-def make_repo(task: dict, dest: Path) -> None:
-    """The repository at the commit's parent, today's conftest committed into it."""
+def ext_spec(task: dict) -> dict | None:
+    """The other repository a task belongs to (tasks_holdout.REPOS), or None for a task of this one."""
+    return tasks_holdout.REPOS[task["repo"]] if task.get("repo") else None
+
+
+def ext_cache(work: Path) -> Path:
+    """Where a run keeps its clones of the other repositories (one per repository per work dir)."""
+    return Path(work) / "ext-cache"
+
+
+_FETCH = threading.Lock()
+
+
+def ext_clone(task: dict, work: Path, source: str | Path | None = None) -> Path:
+    """The cached clone of a task's repository, fetched on first use (one fetch at a time) and its sha checked."""
+    with _FETCH:
+        repo = ext_repo.fetch(task["repo"], ext_spec(task), ext_cache(work), Path(source) if source else None)
+        ext_repo.pin(repo, task["commit"])
+    return repo
+
+
+def make_repo(task: dict, dest: Path, work: Path | None = None, source: str | Path | None = None) -> None:
+    """The repository at the commit's parent, today's conftest committed into it. A task of another repository:
+    the parent's tree alone in a fresh repository (ext_repo.make_parent_repo), nothing of this one added."""
     r2._rmtree(dest)
+    if ext_spec(task):
+        ext_repo.make_parent_repo(ext_clone(task, work or dest.parent, source), task["commit"], ext_spec(task), dest)
+        return
     dest.mkdir(parents=True)
     data = subprocess.run(["git", "archive", f"{task['commit']}^"], cwd=ROOT, capture_output=True, check=True).stdout
     tarfile.open(fileobj=io.BytesIO(data)).extractall(dest)
@@ -162,11 +203,25 @@ def make_repo(task: dict, dest: Path) -> None:
     git(dest, "commit", "-q", "-m", "start")
 
 
-def iso_env(d: Path) -> dict:
+def ext_python(a=None) -> str:
+    """The Python that runs another repository's tests (and that its agents find first on PATH)."""
+    return str(getattr(a, "ext_python", "") or sys.executable)
+
+
+def task_env(task: dict, env: dict, python: str | None = None) -> dict:
+    """A unit's environment for its task: for another repository, PYTHONPATH=src and its Python first on PATH."""
+    spec = ext_spec(task)
+    if not spec:
+        return env
+    py = python or sys.executable
+    return {**env, **ext_repo.run_env(spec), "PATH": str(Path(py).parent) + os.pathsep + env.get("PATH", "")}
+
+
+def iso_env(d: Path, python: str | None = None) -> dict:
     env = {k: v for k, v in PF.base_env().items() if not k.endswith(PF.ENV_KEEP_SUFFIX)
            and not k.startswith(("CCX_", "CLAUDE", "CODEX"))}
     env["PYTHONIOENCODING"] = "utf-8"
-    env["PATH"] = str(Path(sys.executable).parent) + os.pathsep + env.get("PATH", "")
+    env["PATH"] = str(Path(python or sys.executable).parent) + os.pathsep + env.get("PATH", "")
     env.update({"TMP": str(d / "tmp"), "TEMP": str(d / "tmp"), "TMPDIR": str(d / "tmp"), "GIT_CONFIG_NOSYSTEM": "1",
                 "GIT_CONFIG_GLOBAL": str(d / "gitconfig")})
     (d / "tmp").mkdir(parents=True, exist_ok=True)
@@ -179,17 +234,34 @@ def iso_env(d: Path) -> dict:
     return env
 
 
-def score(repo: Path, task: dict, work: Path, job: PF.Job | None = None) -> dict:
-    """The commit's own test files (overwriting whatever the agent left in them), in throwaway homes."""
-    for t in task["tests"]:
-        body = subprocess.run(["git", "show", f"{task['commit']}:{t}"], cwd=ROOT, capture_output=True, check=True).stdout
+def hidden(task: dict, work: Path, source: str | Path | None = None) -> dict[str, bytes]:
+    """The commit's own test files: from this checkout, or from the cached clone of the task's repository."""
+    if ext_spec(task):
+        return ext_repo.hidden_tests(ext_clone(task, work, source), task["commit"], task["tests"])
+    return {t: subprocess.run(["git", "show", f"{task['commit']}:{t}"], cwd=ROOT, capture_output=True,
+                              check=True).stdout for t in task["tests"]}
+
+
+def score(repo: Path, task: dict, work: Path, job: PF.Job | None = None, python: str | None = None,
+          source: str | Path | None = None) -> dict:
+    """The commit's own test files (overwriting whatever the agent left in them), in throwaway homes. Another
+    repository's: no conftest of ours, its install-time stubs put back if gone, PYTHONPATH=src, `python`."""
+    for t, body in hidden(task, work, source).items():
         (repo / t).parent.mkdir(parents=True, exist_ok=True)
         (repo / t).write_bytes(body)
-    (repo / "tests" / "conftest.py").write_text(CONFTEST, encoding="utf-8")
+    spec = ext_spec(task)
+    if spec:
+        ext_repo.write_stubs(repo, spec)
+    else:
+        (repo / "tests" / "conftest.py").write_text(CONFTEST, encoding="utf-8")
+    py = python or sys.executable
     iso = Path(tempfile.mkdtemp(prefix="r5iso-", dir=work))
     try:
-        out, _err, rc, _left = PF.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", *pytest_args(task)],
-                                      cwd=repo, env=iso_env(iso), timeout=900, job=job)
+        env = iso_env(iso, py)
+        if spec:
+            env.update(ext_repo.run_env(spec))
+        out, _err, rc, _left = PF.run([py, "-m", "pytest", "-q", "-p", "no:cacheprovider", *pytest_args(task)],
+                                      cwd=repo, env=env, timeout=900, job=job)
         if rc == -9:
             return {"ok": False, "pytest": "timeout"}
         tail = (out.strip().splitlines() or [""])[-1]
@@ -229,8 +301,11 @@ def lead_unit(u: dict, a, work: Path, repo: Path, hub: Path, iso: PF.Unit | None
     env = {**(env or PF.base_env()), "CCX_HUB": str(hub), "CCX_NO_QUOTA_PROBE": "1",
            "BASH_DEFAULT_TIMEOUT_MS": "900000", "BASH_MAX_TIMEOUT_MS": "1200000"}
     is_ccx, is_builtin = u["arm"] in CCX_ARMS, u["arm"] in BUILTIN_ARMS
+    env = task_env(task, env, ext_python(a))
     how = lead_how(u["arm"], u["label"])
-    prompt = LEAD_PROMPT.format(brief=task["brief"], how=how)
+    spec = ext_spec(task)
+    prompt = (LEAD_PROMPT_EXT.format(name=spec["name"], brief=task["brief"], how=how) if spec else
+              LEAD_PROMPT.format(brief=task["brief"], how=how))
     t0 = time.time()
     # ccx2 / builtin2 need the same lead flags as ccx / builtin (a session file; the Agent tool and worker); the
     # clean-room flags (no user settings, hooks, CLAUDE.md, auto-memory; deny rules) come from preflight
@@ -267,8 +342,9 @@ def direct_unit(u: dict, a, repo: Path, hub: Path, env: dict | None = None, job:
     argv = ["run", "--mode", "write", "--new", "--no-ab", "--force", "--label", u["label"], "--minutes", "60",
             *DIRECT, task["brief"]]
     t0 = time.time()
-    out, err, rc, _left = PF.run([sys.executable, str(ROOT / "ccx.py"), *argv], cwd=repo,
-                                 env={**(env or PF.base_env()), "CCX_HUB": str(hub)}, timeout=a.timeout, job=job)
+    env = task_env(task, {**(env or PF.base_env()), "CCX_HUB": str(hub)}, ext_python(a))
+    out, err, rc, _left = PF.run([sys.executable, str(ROOT / "ccx.py"), *argv], cwd=repo, env=env,
+                                 timeout=a.timeout, job=job)
     res, err = r2.S._last_json(out), ("timeout" if rc == -9 else err[-400:])
     cost = r2.hub_cost(hub)
     rec = r2.record(hub, res.get("run_id"))
@@ -283,7 +359,8 @@ def unit_of(u: dict, a, work: Path) -> PF.Unit:
     key = f"{u['round']}-{u['task']}-{u['arm']}"
     return PF.Unit(key=key, work=work, repo=work / key, hub=work / f"h-{key}", label=u["label"],
                    claude=a.claude_isolation, codex_home=Path(a.codex_home).expanduser() if a.codex_home else None,
-                   dsh=a.dsh_home, agents=tuple(r3.WORKER))
+                   dsh=a.dsh_home, agents=tuple(r3.WORKER),
+                   hidden=(ext_cache(work),) if ext_spec(by_id(u["task"])) else ())
 
 
 def unit_models(u: dict, row: dict) -> dict:
@@ -313,7 +390,11 @@ def run_unit(u: dict, a, work: Path) -> dict:
     before, job = PF.snapshot(), PF.Job()
     try:
         r2._rmtree(hub)
-        make_repo(task, repo)
+        # a task of another repository also needs where its clone is cached (and where it is cloned from)
+        xkw = {"work": work, "source": getattr(a, "ext_cache", None)} if ext_spec(task) else {}
+        make_repo(task, repo, **xkw)
+        if ext_spec(task):
+            row["ext"] = {"repo": task["repo"], "commit": task["commit"], "python": ext_python(a)}
         hinfo = r3.make_hub(hub)
         hinfo["memory_empty"] = PF.hub_memory_empty(hub)
         row["hub"] = hinfo
@@ -321,7 +402,7 @@ def run_unit(u: dict, a, work: Path) -> dict:
         row.update(direct_unit(u, a, repo, hub, env, job) if u["arm"] == "direct" else
                    lead_unit(u, a, work, repo, hub, iso, env, job))
         row.update(changed(repo))
-        sc = score(repo, task, work, job)
+        sc = score(repo, task, work, job, **({"python": ext_python(a), "source": xkw["source"]} if xkw else {}))
         row.update({**u, "ok": sc["ok"], "pytest": sc["pytest"], "hub": hinfo})
         for rid in row.get("ccx_run_ids") or []:
             ccx_verify(rid, bool(sc["ok"]), f"eval-r2 hidden acceptance: {sc['pytest']}", hub=hub, env=env)
@@ -364,6 +445,36 @@ def spent(f: Path) -> float:
     return round(sum(r.get("usd") or 0 for r in read_jsonl(f)), 4)
 
 
+def missing_modules(python: str, names: list[str]) -> list[str]:
+    """Which of these modules `python` cannot import (it imports them by name only, nothing of the repositories)."""
+    out = []
+    for n in names:
+        r = subprocess.run([python, "-I", "-c", f"import {n}"], capture_output=True, timeout=120)
+        if r.returncode:
+            out.append(n)
+    return out
+
+
+def prepare_external(todo: list[dict], a, work: Path) -> list[str]:
+    """Before the first unit: fetch every other repository the units need (once), check each pinned sha and that
+    the Python for their tests has the modules they need. Returns the problems (none: ready)."""
+    tasks = {u["task"]: by_id(u["task"]) for u in todo}
+    ext = [t for t in tasks.values() if ext_spec(t)]
+    probs = []
+    for t in ext:
+        try:
+            ext_clone(t, work, getattr(a, "ext_cache", None))
+        except Exception as e:  # noqa: BLE001 — reported, the run does not start
+            probs.append(f"{t['id']}: {type(e).__name__}: {e}"[:300])
+    needs = sorted({n for t in ext for n in ext_spec(t).get("needs") or ()})
+    if needs:
+        gone = missing_modules(ext_python(a), needs)
+        if gone:
+            probs.append(f"{ext_python(a)} cannot import {', '.join(gone)} (the other repositories' tests need "
+                         f"them): install them there or pass --ext-python")
+    return probs
+
+
 def cmd_run(a) -> int:
     out = Path(a.out) if a.out else results_file(a.taskset)
     ids = TASKSETS[a.taskset].IDS
@@ -400,6 +511,12 @@ def cmd_run(a) -> int:
     (work / "preflight.json").write_text(json.dumps(rep, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"[preflight] {rep['result']}: commit {rep['commit'][:12]} cli {rep['cli']} codex {rep['codex']['mode']} "
           f"claude {rep['claude_isolation']} jobs {a.jobs} canary {rep['canary']}", flush=True)
+    probs = prepare_external(todo, a, work)
+    for p in probs:
+        print(f"[external] {p}", flush=True)
+    if probs:
+        print("other repositories not ready: not starting", flush=True)
+        return 3
     a.preflight = rep
     need_codex = any(x in PF.CODEX_ARMS for x in arms)
     ours = [PF._norm(work), PF._norm(f"eval-r5:{a.tag}:")]
@@ -527,6 +644,10 @@ def parser() -> argparse.ArgumentParser:
     r.add_argument("--timeout", type=int, default=2400)
     r.add_argument("--dry-run", action="store_true")
     r.add_argument("--no-canary", action="store_true", help="skip the one tiny real lead that checks the isolation")
+    r.add_argument("--ext-cache", default="", help="a folder with local copies (clones) of the other repositories "
+                   "of the hold-out set, named after them, to clone from instead of their URLs")
+    r.add_argument("--ext-python", default="", help="the Python that runs the other repositories' tests (needs "
+                   "pytest and their test modules, e.g. freezegun; default: this one)")
     PF.add_options(r)
     r.set_defaults(fn=cmd_run)
     s = sub.add_parser("summary")

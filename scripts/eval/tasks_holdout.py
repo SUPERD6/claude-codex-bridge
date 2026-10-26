@@ -1,10 +1,11 @@
-"""Hold-out tasks for round 5 (backlog C1: overfitting): real changes from this repository's own history that were
-never used while ccx was tuned on scripts/eval/tasks_r5.py. Final claims about ccx come from these, not from r5.
+"""Hold-out tasks for round 5 (backlog C1: overfitting; backlog 7: another code base): real changes that were never
+used while ccx was tuned on scripts/eval/tasks_r5.py. Final claims about ccx come from these, not from r5.
 
-Same form and difficulty band as tasks_r5.py: the whole repository at the parent of a merged commit, a brief written
-from the person's point of view (what is wrong or missing, then the interface a fair task needs: names, flags,
-required strings, but none of the hidden test's inputs or expected values), and as the hidden acceptance test the
-commit's own test file. Chosen so that
+Ten tasks: five from this repository's own history and five from two other open-source Python libraries (humanize,
+MIT; itsdangerous, BSD-3). Same form as tasks_r5.py: the whole repository at the parent of a merged commit, a brief
+written from the person's point of view (what is wrong or missing, then the interface a fair task needs: names,
+flags, required strings, but none of the hidden test's inputs or expected values), and as the hidden acceptance test
+the commit's own test file. Chosen so that
 
 - no commit is an r5 task commit, and none touches the feature area of an r5 task (r5: memory for briefs and the run
   recap, the work queue, batch plans, Codex hook text, the project catalog, dsh archiving, quota stops, the ui
@@ -12,26 +13,55 @@ commit's own test file. Chosen so that
   function is a different one;
 - none is one of the loop's own fixes made while tuning on r5 (#122 and later);
 - the reference change is 5-91 changed non-test lines (`.py` / `.toml` outside tests/, docs not counted) in 1-5
-  files, like r5 (5-91 lines, median ~40);
-- the hidden test file fails at the parent and passes at the commit: `python scripts/eval/holdout_check.py`;
+  files, like r5 (5-91 lines, median ~40). The external fixes are small (8-21 lines), so the five tasks of this
+  repository are the larger ones (32-86): together 8-86 lines, median ~26;
+- the hidden test file fails at the parent and passes at the commit: `python scripts/eval/holdout_check.py`
+  (external tasks: checked the same way with the commit's tests on the parent tree, PYTHONPATH=src);
 - `deselect` (optional) names tests of that file that are unrelated to the task and fail at random under load
   (test_bg_run polls a background run for 10 s and reads its run.json while it is being replaced): scoring leaves
   them out, so a right answer is never marked wrong by them.
+
+External tasks carry `repo` (a key of REPOS) and the full 40-character sha; scripts/eval/ext_repo.py fetches each
+repository once per run and gives every unit the parent's tree in a fresh one-commit repository (no future history).
+Their tests need the modules in REPOS[...]["needs"] in the Python that runs them (r5.py --ext-python).
+
+Why ten and not all sixteen candidates: the confirmation run is 10 tasks x 5 arms x 3 rounds (~$19, ~5 h at two
+tasks at a time, the size the loop budgeted), the same unit count per round as r5, and half of it from another code
+base. The six candidates left out are kept in DROPPED with the reason; they are not scheduled.
 
 Use: `python scripts/eval/r5.py run --taskset holdout ...` (results go to their own file).
 """
 from __future__ import annotations
 
-T = []
+T: list[dict] = []
+DROPPED: list[dict] = []        # candidates checked like the others but not in the set (`dropped` says why)
+
+REPOS = {
+    "humanize": {"url": "https://github.com/python-humanize/humanize.git", "license": "MIT",
+                 "name": "humanize, a Python library that turns numbers, dates and times into human-readable text",
+                 "pythonpath": "src", "stubs": ["src/humanize/_version.py"],   # hatch-vcs writes it at install time
+                 "needs": ["pytest", "freezegun"]},
+    "itsdangerous": {"url": "https://github.com/pallets/itsdangerous.git", "license": "BSD-3-Clause",
+                     "name": "itsdangerous, a Python library that signs data so it can be sent to untrusted places "
+                             "and loaded back safely",
+                     "pythonpath": "src", "stubs": [], "needs": ["pytest", "freezegun"]},
+}
 
 
 BG_RUN = "tests/test_adapters.py::TestBackgroundAndSend::test_bg_run"
 
 
 def task(id: str, commit: str, tests: list[str], area: str, size: int, files: int, brief: str,
-         deselect: tuple[str, ...] = ()) -> None:
-    T.append({"id": id, "commit": commit, "tests": tests, "area": area, "size": size, "files": files,
-              "brief": brief.strip(), **({"deselect": list(deselect)} if deselect else {})})
+         deselect: tuple[str, ...] = (), repo: str | None = None, dropped: str | None = None) -> None:
+    t = {"id": id, "commit": commit, "tests": tests, "area": area, "size": size, "files": files,
+         "brief": brief.strip(), **({"deselect": list(deselect)} if deselect else {}),
+         **({"repo": repo} if repo else {}), **({"dropped": dropped} if dropped else {})}
+    (DROPPED if dropped else T).append(t)
+
+
+def external(t: dict) -> bool:
+    """A task of another repository (scripts/eval/ext_repo.py), not of this one."""
+    return bool(t.get("repo"))
 
 
 task("init-gitignore", "ee18c59", ["tests/test_ccx.py"], "project init", 13, 1, """
@@ -43,7 +73,8 @@ Wanted: before adding a line, ask git whether it already ignores what that line 
 `git check-ignore`), and add only the lines git does not cover yet. When nothing is missing, `.gitignore` stays
 exactly as it was. The `gitignore_added` list in `ccx project init`'s JSON output names only the lines that were
 really added. Outside a git repository (or when git cannot be run) it behaves as before.
-""")
+""",
+     dropped="the small end is now covered by the external tasks (8-21 lines)")
 
 task("leads-from-adapters", "b67572f", ["tests/test_leads.py"], "adapter registry", 18, 3, """
 Which tools can be the lead is written out by hand in each command: the `--as` choices of `ccx mem delta`,
@@ -55,7 +86,8 @@ Wanted: `ccx.agents.leads()` returns the names of the adapters whose `can_lead` 
 adapter registry each time it is called, so that a new lead only needs its adapter changed. All three commands take
 their `--as` choices from it, and an agent that cannot lead is rejected by the argument parser like any other
 invalid choice.
-""")
+""",
+     dropped="the small end is now covered by the external tasks (8-21 lines)")
 
 task("check-fail-escalates", "93c4256", ["tests/test_adapters.py"], "run-loop escalation", 30, 4, """
 With `ccx run --check CMD`, a cheap model that wrongly says it is done stops there: ccx runs the check, sees it
@@ -73,7 +105,8 @@ Wanted:
   further sub-agent call).
 - `save` becomes the default tradeoff: in `config/tiers.toml` and in the code fallbacks that still assume
   `balanced`.
-""", deselect=(BG_RUN,))
+""", deselect=(BG_RUN,),
+     dropped="mid band kept by the 32 and 37 line tasks; test_adapters.py is slow, needs a flaky test deselected")
 
 task("review-min-lines", "b37a345", ["tests/test_review.py"], "review trigger", 32, 3, """
 With `--review auto` (the default) the independent review runs only for `--risk visible/critical`, a sub-agent
@@ -105,7 +138,8 @@ what comes next, where the work stopped, open questions, key files, notes, rules
 接下来, 下一步, 待办, 停在, 未解决, 问题, 关键文件, 注意, 规则). Inside those sections, finished checklist items
 (`- [x]`) and their indented continuation lines are left out. The summary is kept to about 2500 characters and ends
 with the line "(summary; the full handoff is in .ccx/handoff.md)". The full text stays in `.ccx/handoff.md`.
-""")
+""",
+     dropped="mid band kept by review-min-lines / undo-not-verdict (32, 37 lines)")
 
 task("undo-not-verdict", "8353f65", ["tests/test_verdicts.py"], "undo and verdicts", 37, 4, """
 `ccx undo <run_id> --apply` puts back the files a write run changed, and it also records the run as wrong. But
@@ -182,7 +216,8 @@ Interface:
   still busy it sends nothing, prints `{"ok": false, "held": true, "thread": ..., "why": ..., "next": ...}` and
   exits with code 2.
 - `--force` sends at once.
-""", deselect=(BG_RUN,))
+""", deselect=(BG_RUN,),
+     dropped="same size as discuss-auto-tier (57/56); test_adapters.py is slow, needs a flaky test deselected")
 
 task("ledger-repair", "ce4195a", ["tests/test_ccx.py"], "accounting repair", 86, 2, """
 Codex usage recorded before a recent counting fix is over-counted. `codex exec resume` reports the whole session's
@@ -202,8 +237,79 @@ Wanted: `ccx repair [--apply]`.
   `ae_before`, `ae_after`.
 """)
 
+# ---------------------------------------------------------------- other repositories (scripts/eval/ext_repo.py)
+
+task("hz-intword-carry", "ca892b368a535a79cc5e2181d052245b94fd6652", ["tests/test_number.py"],
+     "humanize: intword rounding", 8, 1, """
+`humanize.intword()` writes a big number with a word for its unit, and a value that rounds up to a whole next unit is
+written as 1 of that next unit (with the default format, "1.0 <next unit>", never "1000.0 <unit>"). For very large
+numbers, from about the sextillions up, this no longer happens: a value that rounds up to the next unit comes out as
+"1000.0" (or "1000" with a "%.0f" format) of the smaller unit.
+
+Wanted: the round-up carry works for every named unit up to decillion, whatever format is passed. Numbers above a
+decillion and below a googol have no unit of their own; they stay written in decillions exactly as today.
+""", repo="humanize")
+
+task("hz-naturaldelta-nonfinite", "b48b37b187682ccc55b28ed1b7cfaa853dbca72f", ["tests/test_time.py"],
+     "humanize: naturaldelta input checks", 10, 1, """
+`humanize.naturaldelta()` given a float that is not a number (NaN) returns it unchanged as text, but given an
+infinite float (positive or negative) it raises OverflowError.
+
+Wanted: every non-finite float (NaN, infinity, minus infinity) is returned unchanged, as `str(value)`. A finite number
+of seconds that is too large for a `datetime.timedelta` still raises OverflowError, as the docstring promises.
+""", repo="humanize")
+
+task("hz-naturaldate-tz", "a47a89ea9111a5eaba138c391e8a564134a15c60", ["tests/test_time.py"],
+     "humanize: naturalday / naturaldate time zones", 19, 1, """
+`humanize.naturalday()` and `humanize.naturaldate()` compare the date of the value with today's date on the
+machine's local clock. For a timezone-aware datetime that is wrong near midnight: a moment that is "today" where the
+datetime's own time zone is can come out as "tomorrow" or "yesterday", because "today" was taken somewhere else.
+
+Wanted: when the value is a timezone-aware datetime, "today" is the current date in that value's own time zone, in
+both functions. Dates and naive datetimes behave as before. `naturaldate()` keeps its rule of adding the year when
+the date is more than about five months away, and what it finally shows comes from `naturalday()` as today.
+""", repo="humanize")
+
+task("hz-natural-list-iterables", "ffdf407fdfe1a5738159b989eb2df190ed780448", ["tests/test_lists.py"],
+     "humanize: natural_list input types", 20, 1, """
+`humanize.natural_list()` joins items into readable text ("a, b and c"), but it only really works for lists (and
+other sequences): a dictionary's keys view or a generator fails, although they are perfectly good collections of
+items.
+
+Wanted: `natural_list(items)` accepts any iterable, read only once (so a generator works), and gives the same text as
+it does for a list of the same items: nothing gives "", one item gives that item as text, two give "x and y", more
+give "x, y and z". Every item is turned into text with `str()` as now. The type hint and the docstring say Iterable.
+""", repo="humanize")
+
+task("its-timed-fallback-signers", "6c58e969a513646c8e37260417929770a4ab1b67",
+     ["tests/test_itsdangerous/test_timed.py"], "itsdangerous: timed serializer key rotation", 21, 1, """
+`itsdangerous.Serializer` takes `fallback_signers`, so that after a change of signer settings (another digest
+method, say) data signed with the old settings still loads: `loads()` tries the main signer and then each fallback.
+`TimedSerializer` accepts the same argument but its `loads()` ignores it: timed data signed with settings that are
+only in `fallback_signers` is rejected as a bad signature.
+
+Wanted: `TimedSerializer.loads()` tries the main signer and then the fallbacks, as `Serializer.loads()` does, and
+returns the payload (with the timestamp when `return_timestamp=True`) from the first one that accepts the data;
+`max_age` is checked as before. When none accepts it, the error from the last one tried is raised.
+""", repo="itsdangerous")
+
+task("its-future-timestamp", "c30678d19e37011890e2374cca04f7789e101793", ["tests/test_itsdangerous/test_timed.py"],
+     "itsdangerous: timestamp age", 7, 1, """
+`TimestampSigner.unsign(..., max_age=...)` accepts a signature whose timestamp lies in the future (a negative age,
+e.g. after the clock or the timestamp offset changed), so such a value looks valid however large it is.
+
+Wanted: with `max_age` given, a signature whose age is below zero raises `SignatureExpired` (with the payload and
+the date it was signed, like the too-old case), instead of being accepted.
+""", repo="itsdangerous",
+     dropped="smallest external fix (one condition, 7 lines) and the oldest commit (2019), the likeliest to be "
+             "remembered by a model; the other itsdangerous task keeps the second code base in the set")
+
 IDS = [t["id"] for t in T]
 
 
 def by_id(task_id: str) -> dict:
     return next(t for t in T if t["id"] == task_id)
+
+
+def dropped_by_id(task_id: str) -> dict:
+    return next(t for t in DROPPED if t["id"] == task_id)
