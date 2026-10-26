@@ -623,10 +623,12 @@ class TestSelfCheck(AdapterEnv):
         self.assertIn("check failed", bad["hint"])
 
 
-def test_codex_gets_the_windows_shell_note(tmp_path):
+def test_codex_gets_the_windows_shell_note(tmp_path, monkeypatch):
     """Round 5: Codex read a UTF-8 file with plain Get-Content (PowerShell 5.1), saw mojibake and gave up."""
     import os
+    from pathlib import Path
     from ccx.agents.codex import WINDOWS_SHELL, codex_invocation
+    monkeypatch.setenv("CCX_CODEX_BIN", str(Path(__file__).parent / "fakes" / "fake_codex.py"))   # CI has no codex
     new = codex_invocation(model="m", effort="low", perm=[], cwd=tmp_path, prompt="do x", run_dir=tmp_path)
     again = codex_invocation(model="m", effort="low", perm=[], cwd=tmp_path, prompt="more", run_dir=tmp_path,
                              resume_id="s1")
