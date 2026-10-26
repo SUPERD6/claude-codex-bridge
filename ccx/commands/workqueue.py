@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import json
 import os
-from concurrent.futures import ThreadPoolExecutor
+import sys
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
 from .. import lanes, queue as wq
@@ -155,7 +156,95 @@ def _one(it: dict, root: Path, caller: str, p, cfg, warm: str | None = None, got
         return {"id": it["id"], "error": str(e)}
 
 
+PRESSURE_KINDS = ("quota", "rate", "rate_limit", "auth")   # an attempt that hit these: start nothing new
+
+
+def _pressure(rec: dict | None) -> str | None:
+    """The quota/rate/auth kind any attempt of this run hit (a fallback to another agent included), else None."""
+    for x in (rec or {}).get("attempts") or []:
+        if x.get("kind") in PRESSURE_KINDS:
+            return x["kind"]
+    return (rec or {}).get("kind") if (rec or {}).get("kind") in PRESSURE_KINDS else None
+
+
+def _over_budget(root: Path) -> dict | None:
+    q = wq.load(root)
+    if q["budget_usd"] is not None and wq.spent(q) >= float(q["budget_usd"]):
+        return {"stopped": "budget reached", "spent_usd": wq.spent(q), "budget_usd": q["budget_usd"],
+                "ask": "raise it with `ccx q budget <usd>` if the rest is worth it"}
+    return None
+
+
+def _waves(a, root: Path, caller: str, p, cfg, width: int, n: int, done: list) -> dict | None:
+    """Warm lanes: ready items for the same agent and mode share at most n sessions, one after another."""
+    while True:
+        stop = _over_budget(root)
+        if stop:
+            return stop
+        batch = wq.ready(wq.load(root))
+        if not batch:
+            return None
+        def step(it, warm):
+            got: dict = {}
+            return _one(it, root, caller, p, cfg, warm=warm, got=got), got.get("rec")
+        done += lanes.run_lanes(lanes.split(batch, n, lambda it: (it.get("to"), it.get("mode"))), step,
+                                lanes.limits(cfg), width)
+        wq.close_parents(root)
+        if a.once:
+            return None
+
+
+def _refill(a, root: Path, caller: str, p, cfg, width: int, done: list) -> dict | None:
+    """At most `width` runs at once; whenever one finishes, the slot goes to the next ready item (submit +
+    wait-first-completed, not wave by wave). --once: only the items ready at the start. A run whose attempts hit
+    quota/rate/auth: nothing new starts (width 1), the runs in flight finish, then it stops."""
+    started: set[str] = set()           # an item is tried once per `q run` (one routing skipped stays todo)
+    stop: dict | None = None
+    first = True
+    with ThreadPoolExecutor(max_workers=max(1, width)) as ex:
+        live: dict = {}
+        while True:
+            if stop is None and (first or not a.once):
+                stop = _over_budget(root)
+                if stop is None:
+                    for it in wq.ready(wq.load(root)):
+                        if len(live) >= width:
+                            break
+                        if it["id"] in started:
+                            continue
+                        started.add(it["id"])
+                        got: dict = {}
+                        live[ex.submit(_one, it, root, caller, p, cfg, None, got)] = got
+            first = False
+            if not live:
+                return stop
+            fin, _ = wait(list(live), return_when=FIRST_COMPLETED)
+            for fu in fin:
+                got = live.pop(fu)
+                done.append(fu.result())
+                kind = _pressure(got.get("rec"))
+                if kind and stop is None:
+                    stop = {"stopped": "backpressure", "kind": kind, "run": (got.get("rec") or {}).get("run_id"),
+                            "width": 1, "ask": "a run hit a quota/rate/auth limit: nothing new was started; run "
+                                               "`ccx q run --max 1` when it has reset"}
+            wq.close_parents(root)
+
+
+def _background(a, root: Path) -> int:
+    """`ccx q run --bg`: the same command detached (hidden console on Windows), its output in the queue folder."""
+    from .common import detach
+    import time as _t
+    log = wq.qdir(root) / f"run-bg-{_t.strftime('%Y%m%d-%H%M%S')}.log"
+    detach(sys.argv[1:], log, {"CCX_Q_BG": "1"})
+    _out({"state": "started", "log": str(log),
+          "next": "ccx q ls (each item's run id appears there; `ccx show <run ids> --any --wait` hands back "
+                  "every one that has finished)"})
+    return 0
+
+
 def _run(a, root: Path) -> int:
+    if getattr(a, "bg", False) and not os.environ.get("CCX_Q_BG"):
+        return _background(a, root)
     p = paths()
     cfg = load_config(p)
     caller = _caller(a.caller)
@@ -181,29 +270,14 @@ def _run(a, root: Path) -> int:
                 run_id = last["run_id"] if last.get("session_id") else it.get("run")
                 wq.update(root, it["id"], status="todo", resume=bool(run_id), run=run_id, cost_usd=cost)
     width = int(a.max or cfg["defaults"].get("max_parallel", 3))
-    while True:
-        q = wq.load(root)
-        if q["budget_usd"] is not None and wq.spent(q) >= float(q["budget_usd"]):
-            _out({"stopped": "budget reached", "spent_usd": wq.spent(q), "budget_usd": q["budget_usd"],
-                  "results": done, "ask": "raise it with `ccx q budget <usd>` if the rest is worth it"})
-            return 2
-        n = lanes.width(getattr(a, "lanes", None), cfg)
-        batch = wq.ready(q) if n else wq.ready(q)[:width]
-        if not batch:
-            break
-        if n:
-            # warm lanes: ready items for the same agent and mode share at most n sessions, one after another
-            def step(it, warm):
-                got: dict = {}
-                return _one(it, root, caller, p, cfg, warm=warm, got=got), got.get("rec")
-            done += lanes.run_lanes(lanes.split(batch, n, lambda it: (it.get("to"), it.get("mode"))), step,
-                                    lanes.limits(cfg), width)
-        else:
-            with ThreadPoolExecutor(max_workers=width) as ex:
-                done += list(ex.map(lambda it: _one(it, root, caller, p, cfg), batch))
-        wq.close_parents(root)
-        if a.once:
-            break
+    n = lanes.width(getattr(a, "lanes", None), cfg)
+    if n:
+        stop = _waves(a, root, caller, p, cfg, width, n, done)
+    else:
+        stop = _refill(a, root, caller, p, cfg, width, done)
+    if stop:
+        _out({**stop, "results": done})
+        return 2
     q = wq.load(root)
     out = {"results": done, "open": [i for i in q["order"] if q["items"][i]["status"] not in ("done", "failed")],
            "spent_usd": wq.spent(q), "tree": wq.tree(q)}
@@ -246,6 +320,8 @@ def register(sub) -> None:
         r.add_argument("--lanes", type=int, metavar="N", help="warm lanes: ready items for the same agent share at "
                        "most N sub-sessions, one item after another (default: [lanes] default, 0 = off)")
         r.add_argument("--from", dest="caller")
+        r.add_argument("--bg", action="store_true", help="run detached; its output goes to a log in the queue "
+                       "folder; see progress with `ccx q ls`")
     for x in (ad, bu, dn):
         x.add_argument("--cwd")
     qp.add_argument("--cwd")
