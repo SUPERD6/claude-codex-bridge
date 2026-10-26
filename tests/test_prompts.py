@@ -29,3 +29,10 @@ def test_existing_tests_rule_reaches_first_follow_up_and_continue_prompts():
 
 def test_added_wording_stays_short():
     assert len(prompts.KEEP_TESTS) < 220 and len(prompts.WIRING) < 400
+
+
+def test_selfchecks_ask_for_targeted_runs_and_one_full_check_at_the_end():
+    cmd = prompts.SELFCHECK_CMD.format(check="pytest -q tests")
+    for text in (prompts.SELFCHECK, cmd):
+        assert "targeted" in text and "-x" in text and "-k NAME" in text
+    assert "run the full check once at the end" in cmd
