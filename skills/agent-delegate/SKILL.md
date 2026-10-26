@@ -58,7 +58,8 @@ sub-agent. The extra requests came from the habits below.
 - **Brief = the person's own words, verbatim** (above all interfaces, names, exact strings, numbers) + file paths
   you already know + the acceptance command. Never paraphrase an interface ("the first hint that matches"
   re-worded as "earliest position" came back wrong). Don't read the code base, README, STATUS or docs to write
-  it: the sub-agent reads them (and `.ccx/context.md`) on the cheaper model. Shape: `references/brief-template.md`.
+  it: the sub-agent reads them (and `.ccx/context.md`) on the cheaper model. Reuse an existing `.ccx/context.md`;
+  update it only when keeping that context is part of what you were asked to do. Shape: `references/brief-template.md`.
 - **Long or multi-file work:** `ccx run --bg ...` prints the run_id; then `ccx show <run_id> --wait`, again while it
   says running. Never `ccx resume` a run that is still running. Don't pipe ccx output through `tail`/`head`: the
   result is one small JSON object, and a pipe on a long run hits your shell's timeout.
@@ -84,7 +85,8 @@ ccx run ... --check "CMD"        # acceptance command: the sub-agent runs it, cc
 ccx run ... --risk visible       # user-facing / critical work: another vendor's cheap model reviews the diff
 ccx run ... --review on|off      # force or skip it; default auto (risk, 50+ code lines, unsure, claims vs diff,
                                  # weak evidence: no check, a check running no tests, tests not naming the
-                                 # changed files/functions, or a check that passed wrong work before)
+                                 # changed files/functions, or a check that passed wrong work before;
+                                 # these use the other vendor's cheapest rung, at most 20 a day: weak_daily)
 ccx run ... --worktree           # isolate edits on branch ccx/<run_id>
 ccx batch plan.json              # independent tasks in parallel (writers auto-isolated)
 ccx resume <run_id> "follow-up"  # same sub-session: no re-briefing, cache stays warm
@@ -115,7 +117,9 @@ A printed result with a `run_id` means that delegation ran: do not send the same
 - `verification: not-run` = unverified — say so.
 - A `review` field is the independent review: `pass` (its notes are optional reading) or `issues` with
   `file:line`. ccx runs one fix round itself (`show --wait` follows it); after that, `review_failed` /
-  `needs_lead` is your call. Still `kind: review_issues` (no fix round ran) → one `ccx resume <run_id>`.
+  `needs_lead` is your call. Judge `kind` only from `ccx show <run_id> --wait` (a plain `show` can see the first
+  record before the fix round starts; resuming then collides with it). `review_issues` there means no fix round
+  ran (no session to resume, or it failed to start): fix it yourself or dispatch it again.
 
 Then give your verdict:
 `ccx verify <run_id> --ok 1|0 [--reason unfinished|wrong|overreach|other] [--note "..."]` — this calibrates
@@ -151,8 +155,9 @@ automatic memory into the other.
 Hard to undo (a data format, a migration, a public interface, a dependency), touching safety or money, or the person
 said it matters: offer a discussion between models from other vendors the way section 0 offers a delegation — one
 line with the question and what it may cost (`ccx discuss --dry-run "question"`: who takes part, how many calls at
-most, estimated $), then wait. Only on a yes:
-`ccx discuss --confirmed "question" [--context-file notes.md] [--with codex,claude,gemini] [--rounds 1-3]` (`--bg` to keep working; follow it with `ccx discuss --show ID`).
+most, estimated $, which model each uses), then wait. Only on a yes:
+`ccx discuss --confirmed "question" [--context-file notes.md] [--with codex,claude,gemini] [--rounds 1-3]` (without
+`--confirmed` you get only the estimate, nothing runs; `--bg` to keep working; follow it with `ccx discuss --show ID`).
 One proposes, one finds faults, one judges. Read `result` (recommendation, consensus, disagreements, reasons); the
 person sees the turns in `ccx ui`. It advises; the decision stays with you and the person. Not for routine choices:
 every turn is a full model call.

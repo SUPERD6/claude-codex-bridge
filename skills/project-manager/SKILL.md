@@ -30,17 +30,16 @@ not tested):
 
 | Shape | When | Why |
 |---|---|---|
-| **One cheap model, reviewed when ccx's auto rule calls for it** (default) | almost always | as often right as the costlier ways of splitting the work, at about 7% of the cost of `ccx way` (review ~$0.006 a task) |
+| **One cheap model + another vendor's cheap review** (default) | almost always | as often right as the costlier ways of splitting the work, at about 7% of the cost of `ccx way` (review ~$0.006 a task) |
 | **Parallel** | only if the person wants it fast *and* the work is independent pieces | faster, never cheaper: each extra run costs ~93k start-up tokens; 10 runs used ~4.7× the tokens of 1. Say "faster, not cheaper" when you choose it |
 | **Draft, then reviewed draft** | large work (many files, several hours, unclear seams) | settle the split before paying for it |
 
 Default:
 ```
-ccx run --project <name> --minutes <n> --tradeoff save --check "CMD" "brief..."
+ccx run --project <name> --minutes <n> --tradeoff save --review on --check "CMD" "brief..."
 ```
-Review stays on auto: another vendor's cheap model reads the diff when the evidence is weak, the diff large or the
-risk visible (round 5, 2026-10-26: the lead arm on auto was right 19/20 and 20/20, confounded with its lean brief).
-`--review on` only for an L2 auto-merge (section 6) or visible risk. `--tradeoff save` keeps routing cheap; in that round
+`--review on` has another vendor's cheap model read every diff (docs/DECISIONS.md; unlike auto it has no daily cap,
+and an L2 auto-merge needs it). `--tradeoff save` keeps routing cheap; in that round
 routing still picked a mid-tier model for 15-30 minute tasks the cheapest model got right 97% of the time, so for a
 clearly specified piece you may name the cheap rung with `--model <m> --effort low`.
 
@@ -73,8 +72,10 @@ done.
   was **not** verified. No step-by-step story.
 
 Other tools: `ccx ui` (a live page of who works on what, what waits for the person), `ccx say` / `ccx board` /
-`ccx peek` (talk to or read the other open sessions here), `ccx intake` (tasks the person filed as issues in their
-private repository), `ccx stats` / `ccx report` (spend and savings).
+`ccx peek` (talk to or read the other open sessions here), `ccx intake pull` (takes tasks the person filed as issues in
+their private repository; `ccx intake ask` / `done` comment on those issues as the person, which is sending outside
+this machine: section 6),
+`ccx stats` / `ccx report` (spend and savings).
 
 ## 6. Autonomy level, and what always goes to the person
 

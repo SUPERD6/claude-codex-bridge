@@ -1,6 +1,6 @@
 ---
 name: task-checkpoint
-description: Make long multi-step tasks resumable after a quota cut, crash or closed window, and resume them. Use when starting long multi-step work you may need to resume, after such a stop, for an "unfinished task" notice, or "从断点继续/resume".
+description: Make long multi-step tasks resumable after a quota cut, crash or closed window, and resume them. Use for 20+ minute tasks, an "unfinished task" notice, or "从断点继续/resume".
 ---
 
 # Task checkpoint: never redo finished work
@@ -15,9 +15,11 @@ State: `<repo>/.ccx/tasks/<task>/` (auto-added to .gitignore).
 `cp status --quiet` lists unfinished tasks; nothing printed = nothing to resume.
 For a listed task, read **only** `cp brief <task>` (a few hundred tokens). Then:
 1. Skip steps marked `[x]` — they are done and verified.
-2. For the stopped step, prefer resuming its recorded session — it remembers its progress: a step ccx ran
-   (its note names a run_id) → `ccx resume <run_id>`; otherwise the CLI's own resume
-   (`codex exec resume <id>` / `claude --resume <id>`).
+2. For the stopped step, prefer resuming its recorded session — it remembers its progress. A step dispatched
+   with `ccx run --task <task> --step <n>` → `ccx task resume <task>`: it finds the run even after a crash or a
+   closed window, resumes its session, restarts a step killed before its session began, and after a quota stop
+   hands the step to the other agent with the brief and the diff (`--same` keeps the same session). Otherwise the
+   CLI's own resume (`codex exec resume <id>` / `claude --resume <id>`).
 3. If that session can't continue (quota still out, other agent), start the step fresh
    from the brief + `git diff <last snapshot>`; uncommitted work is still in the tree.
 4. `retry after` shown for a quota stop → wait, or hand off only if delegation is authorized.
