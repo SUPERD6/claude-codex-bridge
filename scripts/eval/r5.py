@@ -10,6 +10,8 @@ so doing it takes many requests. Arms (the lead is a fresh headless Claude Code,
   direct   no lead: `ccx run` straight to Codex gpt-6-luna low with another vendor's cheap review on
   ccx2     opt-in (--arms ccx2): ccx as the agent-delegate skill now says (verbatim brief, --bg + show --wait,
            default review, trust a passed check, no commit request); not in the default schedule
+  builtin2 opt-in (--arms builtin2): builtin's Agent-tool hand-off with ccx2's brief and acceptance wording, word
+           for word (the worker reports check / files_changed / diffstat / status); not in the default schedule
 
 Every unit: the repository at the task commit's parent, with today's tests/conftest.py committed into it (old
 commits' tests may predate per-test hubs, #73), a fresh throwaway hub (CCX_HUB, as round 3). The hidden test is the
@@ -18,6 +20,7 @@ commit's own test files, run in a throwaway HOME / CCX_HUB / CODEX_HOME / CLAUDE
   python scripts/eval/r5.py run --rounds 1 --tasks waiting-evals --budget 3      # the pilot
   python scripts/eval/r5.py run --rounds 2 --budget 40
   python scripts/eval/r5.py run --rounds 2 --arms ccx,ccx2 --tag r5b --budget 20  # old vs new lead guidance
+  python scripts/eval/r5.py run --rounds 2 --arms ccx2,builtin2 --tag r5d --budget 25  # same wording, ccx vs Agent
   python scripts/eval/r5.py summary
   python scripts/eval/r5.py export docs/research/data/2026-10-26-r5.json
 """
@@ -63,22 +66,36 @@ HOW_CCX = ("Do not edit files yourself: hand the implementation to a sub-agent t
            "  {ccx} resume <run_id> \"<what to fix>\"")
 # ccx2 (opt-in, `--arms ccx2`): the lead follows the agent-delegate skill's "Delegate cheaply" guidance written
 # after round 5 (verbatim brief, --bg + show --wait, default review, trust a passed check, no commit request)
+# The brief and acceptance guidance is shared word for word with builtin2, so the two differ only in how the work
+# is handed away (ccx vs the Agent tool). LEAN_ACCEPT's {send_back} is filled per arm.
+LEAN_BRIEF = ("The brief is the person's request above copied verbatim (do not re-word interfaces, names, strings or "
+              "numbers), plus file paths you already know and the acceptance command; do not read the code base "
+              "first to write it, and do not ask the sub-agent to commit.")
+LEAN_ACCEPT = ("When the result's check passed and its files_changed / diffstat fit the request, accept it without "
+               "re-running the tests or reading the full diff; only if the check failed or is missing, or the status "
+               "is partial or blocked, look yourself and send it back with\n"
+               "  {send_back}\n"
+               "After accepting, commit the work yourself.")
 HOW_CCX2 = ("Do not edit files yourself: hand the implementation to a sub-agent through ccx. Run\n"
             "  {ccx} run --bg --tradeoff save --context auto --mode write --new --no-ab --label {label} "
             "--check \"<a pytest command for the relevant test files>\" \"<brief>\"\n"
             "then wait for it with\n"
             "  {ccx} show <run_id> --wait\n"
             "and call that again while it says the run is still running (never resume a running run; do not pipe ccx "
-            "output through tail or head). The brief is the person's request above copied verbatim (do not re-word "
-            "interfaces, names, strings or numbers), plus file paths you already know and the acceptance command; do "
-            "not read the code base first to write it, and do not ask the sub-agent to commit. When the result's "
-            "check passed and its files_changed / diffstat fit the request, accept it without re-running the tests "
-            "or reading the full diff; only if the check failed or is missing, or the status is partial or blocked, "
-            "look yourself and send it back with\n"
-            "  {ccx} resume <run_id> \"<what to fix>\"\n"
-            "After accepting, commit the work yourself.")
+            "output through tail or head). " + LEAN_BRIEF + " "
+            + LEAN_ACCEPT.replace("{send_back}", "{ccx} resume <run_id> \"<what to fix>\""))
+# builtin2 (opt-in, `--arms builtin2`): builtin's Agent-tool hand-off with ccx2's lean brief and acceptance, so a
+# ccx2 vs builtin win is not just the instruction. The worker runs the acceptance command itself and reports what a
+# ccx result carries (check, files_changed, diffstat, status).
+HOW_BUILTIN2 = ("Do not edit files yourself: hand the implementation to your sub-agent. Call the Agent tool with "
+                "subagent_type `worker` and the brief, and tell the worker to run the acceptance command (a pytest "
+                "command for the relevant test files) when it is done and to report its status (done, partial or "
+                "blocked), that command's result line (the check), the files it changed (files_changed) and "
+                "`git diff --shortstat` (diffstat). " + LEAN_BRIEF + " "
+                + LEAN_ACCEPT.replace("{send_back}", "another Agent call to the worker, saying what to fix"))
 CCX_ARMS = ("ccx", "ccx2")
-OPT_IN_ARMS = ("ccx2",)        # not in ARMS: the default schedule (and its done-keys for old tags) stays the same
+BUILTIN_ARMS = ("builtin", "builtin2")
+OPT_IN_ARMS = ("ccx2", "builtin2")   # not in ARMS: the default schedule (and its done-keys for old tags) stays the same
 DIRECT = ["--to", "codex", "--model", "gpt-6-luna", "--effort", "low", "--review", "on", "--context", "off",
           "--no-escalate", "--no-fallback"]
 
@@ -141,20 +158,27 @@ def lead_how(arm: str, label: str) -> str:
         return HOW_CCX.format(ccx=r3.CCX_CMD, label=label)
     if arm == "ccx2":
         return HOW_CCX2.format(ccx=r3.CCX_CMD, label=label)
+    if arm == "builtin2":
+        return HOW_BUILTIN2
     return r3.HOW[arm]
+
+
+def lead_flags_arm(arm: str) -> str:
+    """The round-3 arm whose lead command line (tools, agents, session file) this arm uses."""
+    return "ccx" if arm in CCX_ARMS else "builtin" if arm in BUILTIN_ARMS else arm
 
 
 def lead_unit(u: dict, a, work: Path, repo: Path, hub: Path) -> dict:
     task = by_id(u["task"])
     env = {**lead_env(), "CCX_HUB": str(hub), "CCX_NO_QUOTA_PROBE": "1", "BASH_DEFAULT_TIMEOUT_MS": "900000",
            "BASH_MAX_TIMEOUT_MS": "1200000"}
-    is_ccx = u["arm"] in CCX_ARMS
+    is_ccx, is_builtin = u["arm"] in CCX_ARMS, u["arm"] in BUILTIN_ARMS
     how = lead_how(u["arm"], u["label"])
     prompt = LEAD_PROMPT.format(brief=task["brief"], how=how)
     t0 = time.time()
     try:
-        # ccx2 needs the same lead flags as ccx (a session file for --context auto)
-        r = subprocess.run(r3.lead_argv("ccx" if is_ccx else u["arm"], a.lead_budget), input=prompt, cwd=repo, capture_output=True,
+        # ccx2 / builtin2 need the same lead flags as ccx / builtin (a session file; the Agent tool and worker)
+        r = subprocess.run(r3.lead_argv(lead_flags_arm(u["arm"]), a.lead_budget), input=prompt, cwd=repo, capture_output=True,
                            text=True, encoding="utf-8", errors="replace", env=env, timeout=a.timeout)
         out, rc = r.stdout, r.returncode
     except subprocess.TimeoutExpired as e:
@@ -171,13 +195,13 @@ def lead_unit(u: dict, a, work: Path, repo: Path, hub: Path) -> dict:
     row = {"rc": rc, "wall_s": wall, "subtype": fin.get("subtype"), "lead_usd": round(lead_usd, 6),
            "by_model_usd": by_model, "ccx_usd": cost["usd"], "ccx_review_usd": cost["review_usd"],
            "ccx_agents": cost["agents"], "ccx_run_ids": cost["run_ids"], "usd": round(lead_usd + cost["usd"], 6), **lm}
-    row["sub_usd"] = round(sum(v for m, v in by_model.items() if r3.WORKER_MODEL in m), 6) if u["arm"] == "builtin" \
+    row["sub_usd"] = round(sum(v for m, v in by_model.items() if r3.WORKER_MODEL in m), 6) if is_builtin \
         else cost["usd"]
     row["lead_only_usd"] = round(row["usd"] - row["sub_usd"], 6)
     ccx_runs = len([x for x in cost["run_ids"] if not str(x).startswith("review")])
-    row["delegated"] = bool(lm["agent_calls"]) if u["arm"] == "builtin" else bool(cost["run_ids"]) \
+    row["delegated"] = bool(lm["agent_calls"]) if is_builtin else bool(cost["run_ids"]) \
         if is_ccx else None
-    row["rework"] = max(0, lm["agent_calls"] - 1) if u["arm"] == "builtin" else \
+    row["rework"] = max(0, lm["agent_calls"] - 1) if is_builtin else \
         (lm["ccx_resumes"] + max(0, lm["ccx_runs"] - 1)) if is_ccx else 0
     row["ccx_ledger_rows"] = ccx_runs
     if is_ccx:
