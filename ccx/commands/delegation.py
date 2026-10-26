@@ -145,6 +145,7 @@ def cmd_run(a) -> int:
                   fallback=not a.no_fallback, task=a.task, step=a.step, mcp=True if a.mcp else None,
                   lead_session=lead, resume_run=prev, continued=bool(prev), fork_lead=fork,
                   allow_subagents=not a.no_subagents, check=a.check, review=a.review, risk=a.risk,
+                  namecheck=getattr(a, "namecheck", None),
                   subagents="off" if a.no_subagents else subagents_spec(a.subagents), budget_usd=a.budget,
                   parallel=True if a.parallel else None, share_context=a.context, **kw)
     rec = run(req, p)
@@ -358,7 +359,8 @@ def cmd_resume(a) -> int:
     sweep(p)                            # closes it as interrupted first if its ccx process died mid-run
     req = Request(to="codex", brief=_brief(a), tier=a.tier, resume_run=a.run_id,
                   caller=_caller(a.caller), escalate=False if a.no_escalate else None,
-                  model=a.model, effort=a.effort, budget_usd=a.budget, review=a.review, check=a.check)
+                  model=a.model, effort=a.effort, budget_usd=a.budget, review=a.review, check=a.check,
+                  namecheck=getattr(a, "namecheck", None))
     if a.check:                         # replaces the stored check (one that named a missing file, say)
         prev = ledger.load_run(p, a.run_id)
         req.check = _check_names_real_tests(a.check, Path(prev.get("cwd") or os.getcwd()))
@@ -616,6 +618,9 @@ def register(sub) -> None:
     r.add_argument("--review", choices=["auto", "on", "off"], default="auto", help="independent review of the diff "
                    "by another vendor's cheap model: auto = only when --risk is visible/critical, the sub-agent is "
                    "unsure, or its claimed files don't match the diff (default); on = every write run; off")
+    r.add_argument("--namecheck", choices=["warn", "fail", "off"], help="static check for names no scope "
+                   "defines in the functions the run changed: warn = shown to you and the reviewer (default, "
+                   "[defaults] namecheck); fail = a hit fails the work like a failed --check; off")
     r.add_argument("--no-escalate", action="store_true")
     r.add_argument("--no-fallback", action="store_true", help="on quota/rate limit, stop instead of "
                    "retrying on the other agent")
@@ -689,6 +694,9 @@ def register(sub) -> None:
                     "follow-up changed, as for ccx run (default auto)")
     rs.add_argument("--check", metavar="CMD", help="replace the run's acceptance command from here on (e.g. one "
                     "that named a missing file or ran no tests)")
+    rs.add_argument("--namecheck", choices=["warn", "fail", "off"], help="static check for names no scope "
+                    "defines in the functions the run changed: warn = shown to you and the reviewer (default, "
+                    "[defaults] namecheck); fail = a hit fails the work like a failed --check; off")
     rs.set_defaults(fn=cmd_resume)
     sp = sub.add_parser("stop", help="stop a running delegation (its whole process tree); `ccx resume` continues it")
     sp.add_argument("run_id")

@@ -18,6 +18,10 @@ tradeoff = "save"         # 省钱 save | 平衡 balanced | 快 fast，或 0..1 
 # save：小活先用便宜模型，没做成（含 ccx 重跑 --check 没过）就自动升一档。2026-10-25 起默认；之前是 balanced，
 # 七核心 A/B（PR #30）里它在 5 分钟的小活上选 sonnet medium，比 luna low 贵约 10 倍，luna low 那时 55/63 做对。
 ab_self_rate = 0.1        # 约 10% 的可派任务让主智能体自己做，用来实测“到底省了多少”（0 = 关）
+namecheck = "warn"        # 写入运行后，静态查改动过的函数里有没有未定义的名字（ccx/namecheck.py，标准库，毫秒级）：
+# warn = 命中写进记录、给主智能体的结果和评审简报，作为弱证据，不判失败（默认）；fail = 命中算验收失败（check_failed）；
+# off = 不查。也可 ccx run --namecheck。默认 warn 是因为误报率只在本仓库、标准库和本机 site-packages 上测过，
+# 换成 fail 要等 r5 前后对比的数据。
 
 [lead]                    # 主智能体平时用的模型，只用来估算“如果自己做要花多少”
 claude = "opus"
