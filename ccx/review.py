@@ -34,7 +34,7 @@ BRIEF = """{mark} of run {run_id}] Review a change another agent made. Do not ed
 ```diff
 {diff}
 ```
-
+{context}
 ## Checks
 {check}{edited}
 
@@ -223,6 +223,11 @@ def changed_symbols(text: str, lines: list[int]) -> list[str]:
 
 def _test_texts(cwd: Path, cmd: str) -> list[str]:
     """The tests the acceptance command runs: the test paths it names, else every test file in the tree."""
+    return [text for _f, text in _test_files(cwd, cmd)]
+
+
+def _test_files(cwd: Path, cmd: str) -> list[tuple[str, str]]:
+    """(path, text) of the tests the acceptance command runs (see _test_texts)."""
     files = [f for f in (_git(cwd, "ls-files").splitlines() + _git(cwd, "ls-files", "--others", "--exclude-standard")
                          .splitlines()) if f and not f.startswith(".ccx/")]
     named = [t.strip("'\"") for t in re.split(r"\s+", cmd) if t.strip("'\"") and (cwd / t.strip("'\"")).exists()
@@ -234,7 +239,7 @@ def _test_texts(cwd: Path, cmd: str) -> list[str]:
     for f in files:
         if is_test_file(f) and f.lower().endswith(CODE_SUFFIXES):
             try:
-                texts.append((cwd / f).read_text(encoding="utf-8", errors="replace")[:200_000])
+                texts.append((f, (cwd / f).read_text(encoding="utf-8", errors="replace")[:200_000]))
             except OSError:
                 pass
         if len(texts) >= 300:
@@ -273,6 +278,166 @@ def check_gap(cmd: str, cwd: Path, actual: list[str], diff: str) -> str | None:
     if gaps:
         return "the tests it runs don't touch " + "; ".join(gaps[:3])
     return None
+
+
+# Code around the change (r5 design, PR A; opt-in, [review] context = true): the Haiku reviewer makes 6-18
+# sequential tool turns to read what the diff leaves out. With the changed functions, the definitions they call
+# and the tests naming them in the brief, a replay of 10 recorded round-5 reviews, ~43 runs per variant
+# (scripts/eval/review_replay.py, claude haiku low, 2026-10-26), took about half the time and output tokens
+# (median 15 s vs 23 s with the read-only Finish text alone, 30 s with the old prompt) but found fewer of the
+# known real bugs (11 of 28 tries, vs 19 and 16: the reviewer stopped reading after ~2 tool uses), so it is off.
+CONTEXT_HEAD = ("\n## Code around the change\nAs the files are now: the changed functions in full, the definitions "
+                "of names they call (in the same file, or imported from this repository), and tests that name "
+                "them{cut}. It is where to start, not the whole review: still trace the entry point the task names "
+                "and check each requirement. Whatever else the change relies on (the keys a dict really has, what a "
+                "caller passes, where a value comes from), open it; open all you need at once (several reads in one "
+                "turn), not one file per turn.\n")
+_CALL = re.compile(r"\b([A-Za-z_]\w*)\s*\(")
+_BIG_SPAN, _CALLEE_LINES, _TEST_LINES, _MAX_TESTS = 150, 80, 60, 6
+
+
+def _imports(cwd: Path, f: str, text: str) -> dict[str, str]:
+    """{name: repo file it is imported from} for a Python file's `from x import name` lines (local imports inside
+    functions included) whose module is a file in this tree."""
+    import ast
+    try:
+        tree = ast.parse(text)
+    except (SyntaxError, ValueError, RecursionError, MemoryError):
+        return {}
+    out: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        base = Path(f).parent
+        for _ in range(max(0, node.level - 1)):
+            base = base.parent
+        parts = node.module.split(".") if node.module else []
+        mod = (base if node.level else Path()).joinpath(*parts)
+        cands = [c for c in ((mod.with_suffix(".py") if parts else None), mod / "__init__.py")
+                 if c is not None and (cwd / c).is_file()]
+        for a in node.names:
+            sub = mod / (a.name + ".py")          # `from pkg import store`: the name is the submodule pkg/store.py
+            if (cwd / sub).is_file():
+                out.setdefault(a.asname or a.name, sub.as_posix())
+            elif cands:
+                out.setdefault(a.asname or a.name, cands[0].as_posix())
+    return out
+
+
+def _spans(src: list[str]) -> list[tuple[str, int, int]]:
+    """(name, first, last line index) of each def / class / function in a file, its end found by indentation."""
+    out = []
+    for i, s in enumerate(src):
+        m = _DEF.match(s)
+        if not m:
+            continue
+        d, end = len(m.group(1)), i
+        for j in range(i + 1, len(src)):
+            t = src[j].lstrip()
+            if not t:
+                continue
+            if len(src[j]) - len(t) <= d:
+                if t[:1] in ")]":                 # the close of a multi-line signature
+                    end = j
+                    continue
+                if t[:1] == "}":                  # a brace language's closing line belongs to the block
+                    end = j
+                break
+            end = j
+        out.append((m.group(2), i, end))
+    return out
+
+
+def _innermost(spans: list[tuple[str, int, int]], i: int) -> tuple[str, int, int] | None:
+    best = None
+    for sp in spans:
+        if sp[1] <= i <= sp[2] and (best is None or sp[1] >= best[1]):
+            best = sp
+    return best
+
+
+def code_context(cwd: Path | None, diff: str, budget: int, check_cmd: str = "") -> str:
+    """The '## Code around the change' block for a review brief, at most `budget` characters ('' when nothing fits):
+    each changed function in full (a window around the change when it is longer than 150 lines; skipped when the
+    diff already shows all of it as new), then the same-file definitions of the names those functions call, then
+    those imported from another file of the tree (Python `from x import name`), then test functions (of the tests the acceptance command runs) that name a changed function."""
+    if cwd is None or budget < 300:
+        return ""
+    per, new_files, old = _per_file(diff), set(), None
+    for ln in diff.splitlines():
+        if ln.startswith("--- "):
+            old = ln[4:].strip()
+        elif ln.startswith("+++ ") and old == "/dev/null":
+            new_files.add(ln[4:].strip()[2:] if ln[4:].strip().startswith("b/") else ln[4:].strip())
+    items: list[tuple[int, str, str, int, int, list[str]]] = []        # (priority, file, name, first, last, src)
+    names: list[str] = []
+    for f, lines in per.items():
+        if not lines or f in new_files or is_test_file(f) or not f.lower().endswith(CODE_SUFFIXES):
+            continue
+        try:
+            src = (cwd / f).read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            continue
+        spans, touched = _spans(src), set(n - 1 for n in lines)
+        changed: list[tuple[str, int, int]] = []
+        for i in sorted(touched):
+            sp = _innermost(spans, min(i, len(src) - 1))
+            if sp and sp not in changed:
+                changed.append(sp)
+        for name, a, b in changed:
+            names.append(name)
+            if all(k in touched for k in range(a, b + 1)):
+                continue                                  # wholly new: the diff shows it already
+            near = [k for k in touched if a <= k <= b]
+            if b - a > _BIG_SPAN and near:
+                a, b = max(a, min(near) - 15), min(b, max(near) + 15)
+            items.append((0, f, name, a, b, src))
+        called: list[str] = []
+        for _n, a, b in changed:
+            for c in _CALL.findall("\n".join(src[a:b + 1])):
+                if c not in called:
+                    called.append(c)
+        imported = _imports(cwd, f, "\n".join(src)) if f.lower().endswith(".py") else {}
+        for c in called:
+            sp = next((s for s in spans if s[0] == c), None)
+            if sp and not any(x[1] <= sp[1] <= x[2] for x in changed):
+                items.append((1, f, c, sp[1], min(sp[2], sp[1] + _CALLEE_LINES), src))
+            elif not sp and c in imported:
+                try:
+                    osrc = (cwd / imported[c]).read_text(encoding="utf-8", errors="replace").splitlines()
+                except OSError:
+                    continue
+                sp = next((s for s in _spans(osrc) if s[0] == c), None)
+                if sp:
+                    items.append((2, imported[c], c, sp[1], min(sp[2], sp[1] + _CALLEE_LINES), osrc))
+    if names:
+        pat = re.compile(r"\b(" + "|".join(sorted({re.escape(n) for n in names})) + r")\b")
+        found = 0
+        for tf, text in _test_files(cwd, check_cmd):
+            if found >= _MAX_TESTS or tf in new_files or not pat.search(text):
+                continue
+            tsrc = text.splitlines()
+            for name, a, b in _spans(tsrc):
+                if found < _MAX_TESTS and name.startswith("test") and pat.search("\n".join(tsrc[a:b + 1])):
+                    items.append((3, tf, name, a, min(b, a + _TEST_LINES), tsrc))
+                    found += 1
+    head = CONTEXT_HEAD.format(cut="")
+    out, used, left_out = [], len(head) + 60, False
+    shown: set[tuple[str, int]] = set()
+    for _p, f, name, a, b, src in sorted(items, key=lambda x: x[0]):
+        if (f, a) in shown:                               # called from two changed functions, or two files
+            continue
+        shown.add((f, a))
+        block = f"### {f}:{a + 1}-{b + 1} ({name})\n```\n" + "\n".join(src[a:b + 1]) + "\n```\n"
+        if used + len(block) > budget:
+            left_out = True
+            continue
+        out.append(block)
+        used += len(block)
+    if not out:
+        return ""
+    return CONTEXT_HEAD.format(cut="; some left out to fit, open the files for the rest" if left_out else "") + \
+        "".join(out)
 
 
 def weak_reason(p: Paths, rc: dict, record: dict, now: float | None = None, cwd: Path | None = None,
@@ -347,9 +512,10 @@ def reviewers(cfg: dict, worker: str, installed, p=None, cheapest: bool = False)
 
 
 def brief(run_id: str, task: str, summary: str, diff: str, max_chars: int, check: dict | None = None,
-          edited: list[str] | None = None, static: str = "") -> str:
+          edited: list[str] | None = None, static: str = "", cwd: Path | None = None) -> str:
     """The reviewer's brief. `edited` (default: found in `diff`) names pre-existing test files the change edited;
-    `static`: what ccx's own static checks found (namecheck), as weak evidence under Checks."""
+    `static`: what ccx's own static checks found (namecheck), as weak evidence under Checks.
+    `cwd` (the reviewed tree): add the code around the change, in what is left of `max_chars` after the diff."""
     edited = edited_tests(diff) if edited is None else edited
     ed = (f"\nExisting tests edited: {', '.join(edited[:8])} — check the task requires it; an existing assertion "
           f"changed to fit the new code without the task asking for it is a [must] (b)." if edited else "")
@@ -357,8 +523,15 @@ def brief(run_id: str, task: str, summary: str, diff: str, max_chars: int, check
     ran = (f"ccx ran the acceptance command `{check['cmd']}` after the change: "
            f"{'passed' if check.get('passed') else 'FAILED (exit %s)' % check.get('exit')}." if check
            else "No acceptance command was given; nobody ran the tests for you.")
+    shown = diff[:max_chars]
+    context = ""
+    if cwd:
+        try:                                  # an opt-in extra: a file it cannot parse must not stop the review
+            context = code_context(cwd, diff, max_chars - len(shown), (check or {}).get("cmd") or "")
+        except (OSError, ValueError, RecursionError, re.error):
+            context = ""
     return BRIEF.format(mark=MARK, run_id=run_id, task=task.strip()[:2000], summary=(summary or "")[:800],
-                        diff=diff[:max_chars] or "(empty)", cut=cut, check=ran, edited=ed + static)
+                        diff=shown or "(empty)", cut=cut, check=ran, edited=ed + static, context=context)
 
 
 _PREFIX = re.compile(r"^[\s*_`#>]*review\s*[:：]?\s*[*_`]*\s*(pass|issues)\b", re.I)
@@ -432,7 +605,8 @@ def review_run(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path, run_d
         except Exception:  # noqa: BLE001 — weak evidence only; never stops the review
             nc = None
     text = rv.brief(record["run_id"], task_for_review(p, req), res.get("summary", ""), diff,
-                    int(rc.get("max_diff_chars", 12000)), record.get("check"), edited, nck.brief_note(nc))
+                    int(rc.get("max_diff_chars", 12000)), record.get("check"), edited, nck.brief_note(nc),
+                    cwd=cwd if rc.get("context", False) else None)
     usd, tried = 0.0, []
     for agent, model, effort in cands[:2]:
         if cancel is not None and cancel.is_set():
