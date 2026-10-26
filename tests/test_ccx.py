@@ -283,6 +283,31 @@ class TestDelegation(Env):
         self.assertEqual((rec["label"], rec["check_cmd"], rec["risk"]), ("q:abc", "python -c pass", "visible"))
         self.assertTrue(res["check"]["passed"], res)
 
+    def test_resume_refuses_while_its_session_is_busy(self):
+        # round 5: the lead's Bash call timed out during ccx's fix round, it resumed the same session meanwhile and
+        # Codex refused ("thread already has an active writer"); ccx now says to wait instead of starting a run
+        import subprocess
+        out = json.loads(self.ccx("run", "--from", "claude", "--tier", "T2", "--review", "off", "implement thing").stdout)
+        runs = self.hub / "ccx" / "runs"
+        first = json.loads((runs / out["run_id"] / "run.json").read_text(encoding="utf-8"))
+        alive = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+        try:
+            d = runs / "29991231-235959-fix1"                  # a fix round of it, still checking
+            d.mkdir()
+            (d / "run.json").write_text(json.dumps({"run_id": d.name, "state": "running", "ccx_pid": alive.pid,
+                                                    "session_id": first["session_id"],
+                                                    "resumed_from": out["run_id"]}), encoding="utf-8")
+            n = len(self.calls())
+            r = self.ccx("resume", out["run_id"], "also add a docstring")
+            self.assertEqual(r.returncode, 3, r.stdout + r.stderr)
+            self.assertIn(f"ccx show {d.name}", json.loads(r.stdout)["error"])
+            self.assertEqual(len(self.calls()), n)                   # nothing started
+        finally:
+            alive.kill()
+            alive.wait()
+        r = self.ccx("resume", out["run_id"], "also add a docstring")   # its process is gone: resume as usual
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+
     def test_depth_guard(self):
         r = self.ccx("run", "--from", "codex", "--tier", "T2", "x y z w", env={"CCX_DEPTH": "1"})
         self.assertEqual(r.returncode, 3)

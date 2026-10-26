@@ -80,6 +80,28 @@ class Request:
     share_context: str | None = None  # auto | on | off: the lead's recent work, from its session file (context_share)
 
 
+def _busy(p: Paths, prev: dict, scan: int = 300) -> str | None:
+    """A run still alive in prev's session (prev itself, or a fix round / resume of it). Round 5: a lead's Bash call
+    timed out during ccx's review fix round, the lead resumed the same session meanwhile, and Codex refused."""
+    from .runners import pid_alive
+    sid, rid = prev.get("session_id"), prev.get("run_id")
+    try:
+        dirs = sorted((d for d in p.runs.iterdir() if d.is_dir()), reverse=True)[:scan]
+    except OSError:
+        return None
+    for d in dirs:
+        try:
+            rec = ledger.read_record(d / "run.json") or {}
+        except (OSError, ValueError):            # no record yet, or one being replaced
+            continue
+        if rec.get("state") != "running" or rec.get("ccx_pid") == os.getpid():
+            continue
+        same = d.name == rid or (sid and rec.get("session_id") == sid) or rec.get("resumed_from") == rid
+        if same and pid_alive(rec.get("ccx_pid")):
+            return rec.get("run_id") or d.name
+    return None
+
+
 def depth_guard(cfg: dict) -> None:
     depth = int(os.environ.get("CCX_DEPTH", "0") or 0)
     if depth >= int(cfg["defaults"].get("max_depth", 1)):
@@ -264,6 +286,12 @@ def run(req: Request, p: Paths) -> dict:
     timeout = int(cfg["defaults"].get("timeout_sec", 1800))
 
     prev = ledger.load_run(p, req.resume_run) if req.resume_run else None
+    busy = _busy(p, prev) if prev else None
+    if busy:
+        raise RuntimeError(
+            f"run {busy} is still working in that session (its check, review or fix round included): wait for it "
+            f"with `ccx show {busy}`, or stop it with `ccx stop {busy}`, then resume. Starting another run in the "
+            "same session now would fail (Codex: 'thread already has an active writer').")
     if prev and prev.get("session_id"):
         try:                               # archived after its run (or by hand): put it back before continuing it
             from . import archive
