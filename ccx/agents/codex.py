@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import tomllib
 from pathlib import Path
 
@@ -41,7 +42,18 @@ def codex_invocation(*, model: str, effort: str, perm: list[str], cwd: Path, pro
         argv = [*bin_argv("codex"), "exec", "resume", resume_id, *common, "-"]
     else:
         argv = [*bin_argv("codex"), "exec", *common, "-C", str(cwd), "-"]
+        if os.name == "nt":
+            prompt = WINDOWS_SHELL + prompt
     return Invocation(argv, prompt, cwd, last)
+
+
+# Codex runs its commands in Windows PowerShell 5.1 (checked on codex-cli 0.164). Round 5: `Get-Content` without
+# -Encoding read a UTF-8 file as the ANSI code page, its Chinese turned to mojibake, the patch context never matched,
+# a bash heredoc then failed in PowerShell, and the run gave up after 42 s.
+WINDOWS_SHELL = ("[ccx note: Windows] Your shell is Windows PowerShell 5.1. Files are UTF-8: read them with "
+                 "`Get-Content -Encoding UTF8 <file>` (plain Get-Content shows non-ASCII text garbled although the file "
+                 "is fine) or with Python. Bash syntax such as heredocs (<<'EOF') does not work here: write a .py file "
+                 "or use `python -c` instead.\n\n")
 
 
 def parse_codex(stdout: str, stderr: str, rc: int, last_file: Path | None) -> Outcome:
