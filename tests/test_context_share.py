@@ -75,6 +75,16 @@ class TestRead(AdapterEnv):
         self.assertNotIn(SECRET, text)
         self.assertLessEqual(len(cs.summary(evs * 40, "claude", SID, self.work, "t", max_chars=1500)), 1500)
 
+    def test_newest_ask_kept_nearly_whole(self):
+        # round 5: a 1.6k-character spec was cut at 500, so the sub-agent never saw the interface its lead misread
+        spec = "Wanted: " + "x" * 1500 + " INTERFACE: the first quota hint that matches the text."
+        evs = [{"ts": 1.0, "who": "person", "kind": "ask", "text": "old ask " + "y" * 900},
+               {"ts": 2.0, "who": "person", "kind": "ask", "text": spec}]
+        text = cs.summary(evs, "claude", SID, self.work, "t")
+        self.assertIn("the first quota hint that matches the text.", text)
+        self.assertNotIn("y" * 600, text)                                 # an older ask stays short
+        self.assertLessEqual(len(cs.summary(evs * 20, "claude", SID, self.work, "t", max_chars=1500)), 1500)
+
     def test_codex_and_dsh_events(self):
         evs = cs.events_codex(_w(self.work / "r.jsonl", codex_session(str(self.work))))
         self.assertEqual([e["text"] for e in evs if e["kind"] == "file"], ["src/parse.py"])

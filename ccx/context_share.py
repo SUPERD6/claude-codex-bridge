@@ -32,6 +32,7 @@ from pathlib import Path
 from .transcript import _plan_update, _user_text, redact
 
 MAX_CHARS = 5000                 # ~1.2k tokens for a delegated task
+NEWEST_ASK = 3000                # the person's latest request, kept nearly whole
 TURN_CHARS = 400                 # one hook turn: a line or two per other tool
 RECENT_SEC = 2 * 3600            # "open" session: written to in the last two hours
 FIRST_LOOK_SEC = 30 * 60         # a reader's first look shows the last half hour, not the whole history
@@ -320,8 +321,11 @@ def summary(evs: list[dict], agent: str, sid: str, root: Path, what: str, max_ch
     src = f"{agent} session {sid[:8]}"
     parts = [HEADER.format(what=what)]
     if ask:
+        # the newest ask nearly whole: round 5 cut a 1.6k-character spec at 500, so the sub-agent never saw the
+        # interface its lead had misread; older asks stay short
         parts.append("The person asked (newest last):\n" + "\n".join(
-            f"- [{_when(e['ts'])} person, {src}] {_short(e['text'], 500)}" for e in ask))
+            f"- [{_when(e['ts'])} person, {src}] {_short(e['text'], NEWEST_ASK if i == len(ask) - 1 else 500)}"
+            for i, e in enumerate(ask)))
     if dec:
         parts.append("Settled in that conversation (sentences that decide something):\n" + "\n".join(
             f"- [{_when(e['ts'])} {e['who']}] {_short(e['text'], 300)}" for e in dec))
