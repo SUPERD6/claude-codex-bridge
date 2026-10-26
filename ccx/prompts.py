@@ -33,8 +33,9 @@ SELFCHECK = ("Before you finish, check your own work: run the relevant tests or 
              "say what changed and why; put anything you are unsure of, or that the lead must decide, in open_questions.")
 
 
-SELFCHECK_CMD = ("The acceptance check is `{check}`; ccx runs it again afterwards. While you work, iterate with targeted "
-                 "runs (one file, -x, -k NAME) and run the full check once at the end, fixing what it shows. "
+SELFCHECK_CMD = ("The acceptance check is `{check}`; ccx runs it again afterwards, outside your sandbox, and "
+                 "that result counts. While you work, run only the targeted test(s) touching your change (-x, -k NAME "
+                 "or one test id), not the whole check; run the full check at most once, at the end. "
                  + WIRING +"List the check in commands_run and its outcome in verification. In summary say what changed and why; put "
                  "anything you are unsure of, or that the lead must decide, in open_questions.")
 

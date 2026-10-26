@@ -35,4 +35,13 @@ def test_selfchecks_ask_for_targeted_runs_and_one_full_check_at_the_end():
     cmd = prompts.SELFCHECK_CMD.format(check="pytest -q tests")
     for text in (prompts.SELFCHECK, cmd):
         assert "targeted" in text and "-x" in text and "-k NAME" in text
-    assert "run the full check once at the end" in cmd
+    assert "run the full check at most once, at the end" in cmd
+    assert "not the whole check" in cmd and "outside your sandbox" in cmd and "one test id" in cmd
+
+
+def test_review_fix_round_asks_for_targeted_tests_not_the_whole_check():
+    import inspect
+    from ccx import delegate
+    src = inspect.getsource(delegate)
+    assert "run the checks again" not in src
+    assert "re-run only the tests touching" in src and "not the whole check, ccx runs that itself" in src
