@@ -37,6 +37,24 @@ class TestCheckHelpers(unittest.TestCase):
         self.assertIn("tests/test_memory_e7.py", miss[0]["close"])
         self.assertEqual(missing_test_paths("python -m pytest -q tests/test_*.py", d), [])
 
+    def test_check_with_one_close_match_is_fixed_else_lists_existing_files(self):
+        import contextlib, io
+        from ccx.commands.delegation import _check_names_real_tests
+        d = _tree()
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            out = _check_names_real_tests("python -m pytest -q tests/test_bord.py::test_x -x", d)
+        self.assertEqual(out, "python -m pytest -q tests/test_board.py::test_x -x")
+        self.assertIn("using tests/test_board.py", err.getvalue())
+        self.assertEqual(len(err.getvalue().splitlines()), 1)
+        with self.assertRaises(ValueError) as e:                     # close, but a guessed suffix: stop
+            _check_names_real_tests("python -m pytest -q tests/test_memory.py", d)
+        self.assertIn("Existing test files: tests/test_board.py, tests/test_empty.py", str(e.exception))
+        with self.assertRaises(ValueError) as e:
+            _check_names_real_tests("python -m pytest -q tests/x.py", d)
+        self.assertIn("tests/x.py", str(e.exception))
+        self.assertIn("tests/test_memory_rank.py", str(e.exception))
+
     def test_pytest_usage_error_and_no_tests_are_broken_not_failed(self):
         d = _tree()
         for target, code in (("tests/test_nope.py", 4), ("tests/test_empty.py", 5)):

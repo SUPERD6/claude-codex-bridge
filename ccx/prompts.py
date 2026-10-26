@@ -28,13 +28,14 @@ Final message = the JSON result (schema enforced). summary <= 120 words, facts o
 """
 
 
-SELFCHECK = ("Before you finish, check your own work: run the relevant tests or commands that exist, and re-read your "
-             "changes against the task. " + WIRING + "List what you ran in commands_run and the outcome in verification. In summary "
+SELFCHECK = ("Before you finish, check your own work: run the relevant tests or commands that exist (iterate with "
+             "targeted runs: one file, -x, -k NAME; run the full set once at the end), and re-read your changes against the task. " + WIRING + "List what you ran in commands_run and the outcome in verification. In summary "
              "say what changed and why; put anything you are unsure of, or that the lead must decide, in open_questions.")
 
 
-SELFCHECK_CMD = ("Before you finish, run this check and fix what it shows: `{check}` — ccx runs it again afterwards. "
-                 + WIRING + "List the check in commands_run and its outcome in verification. In summary say what changed and why; put "
+SELFCHECK_CMD = ("The acceptance check is `{check}`; ccx runs it again afterwards. While you work, iterate with targeted "
+                 "runs (one file, -x, -k NAME) and run the full check once at the end, fixing what it shows. "
+                 + WIRING +"List the check in commands_run and its outcome in verification. In summary say what changed and why; put "
                  "anything you are unsure of, or that the lead must decide, in open_questions.")
 
 

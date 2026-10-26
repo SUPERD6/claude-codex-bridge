@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 import uuid
@@ -55,13 +56,24 @@ def _background(argv: list[str], p) -> dict:
             "next": f"ccx show {run_id} --wait"}     # blocks until done, under a 10-minute tool-call limit
 
 
-def _check_names_real_tests(check: str | None, cwd: Path) -> None:
-    """Stop before any sub-agent is paid when --check names test files that are not there (pytest exit 4 later)."""
+def _check_names_real_tests(check: str | None, cwd: Path) -> str | None:
+    """Stop before any sub-agent is paid when --check names test files that are not there (pytest exit 4 later).
+    A missing file with exactly one near-identical match (a typo) is swapped for it (with a one-line notice on stderr); otherwise
+    the error lists the test files that do exist, so the lead can fix the check in one retry."""
     miss = missing_test_paths(check or "", cwd)
-    if miss:
-        raise ValueError("--check names test files that do not exist in " + str(cwd) + ": " + "; ".join(
-            m["path"] + (" (close: " + ", ".join(m["close"]) + ")" if m["close"] else " (no close match)")
-            for m in miss))
+    if not miss:
+        return check
+    if all(len(m["sure"]) == 1 for m in miss):
+        for m in miss:
+            check = re.sub(r"(?<![\w./\\-])" + re.escape(m["path"]) + r"(?![\w./\\-])", m["sure"][0], check)
+            print(f"ccx: --check names {m['path']}, which does not exist; using {m['sure'][0]}", file=sys.stderr)
+        return check
+    tests = cwd / "tests"
+    known = sorted(q.relative_to(cwd).as_posix() for q in tests.rglob("test*.py")) if tests.is_dir() else []
+    shown = ", ".join(known[:40]) + (f", ... (+{len(known) - 40} more)" if len(known) > 40 else "")
+    raise ValueError("--check names test files that do not exist in " + str(cwd) + ": " + "; ".join(
+        m["path"] + (" (close: " + ", ".join(m["close"]) + ")" if m["close"] else " (no close match)")
+        for m in miss) + ". Existing test files: " + (shown or "none"))
 
 
 def cmd_run(a) -> int:
@@ -79,7 +91,7 @@ def cmd_run(a) -> int:
         from .. import autonomy
         auto = autonomy.level_for(proj["name"] if proj else None, p, cfg, flag=a.autonomy)
     if a.check:
-        _check_names_real_tests(a.check, Path(a.cwd or os.getcwd()))
+        a.check = _check_names_real_tests(a.check, Path(a.cwd or os.getcwd()))
     if a.bg and not a.brief and not a.brief_file:
         raise ValueError("--bg needs the task as text or --brief-file (stdin is not passed on)")
     if a.bg and not auto:
@@ -347,7 +359,7 @@ def cmd_resume(a) -> int:
                   model=a.model, effort=a.effort, budget_usd=a.budget, review=a.review, check=a.check)
     if a.check:                         # replaces the stored check (one that named a missing file, say)
         prev = ledger.load_run(p, a.run_id)
-        _check_names_real_tests(a.check, Path(prev.get("cwd") or os.getcwd()))
+        req.check = _check_names_real_tests(a.check, Path(prev.get("cwd") or os.getcwd()))
     rec = run(req, p)
     res = compact(rec)
     res["recap"] = recap(rec, res)
