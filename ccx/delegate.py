@@ -744,3 +744,14 @@ def compact(record: dict) -> dict:
     if record.get("auth_problem"):
         out["hint"] = f"{record['to']} looks logged out: run `{record['to']} login` on this machine."
     return out
+
+
+def recap(record: dict, res: dict) -> str:
+    """One line for the end of `ccx run`'s output (its last key), so a lead that pipes it through `tail` still has
+    the run_id: status, check, review, API-equivalent cost and what to run next."""
+    c = res.get("check")
+    check = "none" if not c else ("passed" if c.get("passed") else f"failed (exit {c.get('exit')})")
+    review = (res.get("review") or {}).get("verdict") or "none"
+    usd = sum(a.get("ae_usd") or 0 for a in record.get("attempts") or []) + ((res.get("review") or {}).get("usd") or 0)
+    return (f"ccx run {record['run_id']}: status={res.get('status')} ok={str(bool(record.get('ok'))).lower()} "
+            f"check={check} review={review} cost=~${usd:.4f}; next: ccx show {record['run_id']}")

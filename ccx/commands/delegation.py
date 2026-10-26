@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .. import lanes, learn, ledger, router, usage
 from ..config import AGENTS, DELEGATE_AGENTS, PROVIDER_AGENTS, TIER_ORDER, load_config, paths
-from ..delegate import Request, compact, run, verify
+from ..delegate import Request, compact, recap, run, verify
 from ..runners import find_bin
 from .common import (_brief, _caller, _out, _routing_args, _spec_from_args, _target, find_continuable,
     apply_mode, find_seat, installed_agents, lead_session_id, parse_quota, provider_agents, resolve)
@@ -137,6 +137,7 @@ def cmd_run(a) -> int:
     if route.get("b") is None:
         # an explicit pick with no size: its verdict reaches the ledger but not routing (seven-cores A/B, PR #30)
         res["route"]["learns"] = "no: give --minutes (or the rubric flags) so this run's verdict can teach routing"
+    res["recap"] = recap(rec, res)              # last key: survives `| tail`
     _out(res)
     return 0 if rec["ok"] else 2
 
@@ -332,7 +333,9 @@ def cmd_resume(a) -> int:
                   caller=_caller(a.caller), escalate=False if a.no_escalate else None,
                   model=a.model, effort=a.effort, budget_usd=a.budget, review=a.review)
     rec = run(req, p)
-    _out(compact(rec))
+    res = compact(rec)
+    res["recap"] = recap(rec, res)
+    _out(res)
     return 0 if rec["ok"] else 2
 
 
