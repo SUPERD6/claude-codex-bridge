@@ -9,9 +9,7 @@ description: Execute an authorized cross-agent delegation through ccx and verify
 if it is not on PATH, resolve this skill directory to the bridge checkout and run
 `python -X utf8 <checkout>/ccx.py`. Sub-agents never delegate again.
 
-**Keep your own side cheap.** Delegating needs this skill and the brief, nothing else: don't open the
-project's README, STATUS, handoff or docs just to delegate. The brief names files; the sub-agent reads them
-(and `.ccx/context.md`) itself. Only if you can't find the ccx command, run `ccx -h` / `ccx run -h`.
+**Keep your own side cheap** (section 2). Only if you can't find the ccx command, run `ccx -h` / `ccx run -h`.
 Your own context is the biggest cost: every turn re-reads the whole conversation. Send big reads (many files, long
 logs, research) out read-only and take back the conclusion; when the conversation is long and the next piece is
 new work, hand over to a fresh one (section 5). Run long-output commands as `ccx sum -- <command>` (tests, logs,
@@ -55,12 +53,23 @@ parallel execution requires authorization as well as independent work.
 Choosing between doing it yourself, your own built-in sub-agent and ccx, and when DeepSeek fits:
 `references/three-way.md`.
 
-## 2. Brief (≤ 200 words)
+## 2. Delegate cheaply
 
-Goal · files/dirs to look at · constraints · how to verify · what "done" means.
-Point to existing source files rather than copying background. Reuse `.ccx/context.md` if
-present; update it only when context maintenance is part of the authorized task.
-Template: `references/brief-template.md`.
+Round 5 (2026-10-26, large tasks): a lead using ccx sent a median 8 requests, against 6 with its built-in
+sub-agent. The extra requests came from the habits below.
+- **Brief = the person's own words, verbatim** (above all interfaces, names, exact strings, numbers) + file paths
+  you already know + the acceptance command. Never paraphrase an interface ("the first hint that matches"
+  re-worded as "earliest position" came back wrong). Don't read the code base, README, STATUS or docs to write
+  it: the sub-agent reads them (and `.ccx/context.md`) on the cheaper model. Shape: `references/brief-template.md`.
+- **Long or multi-file work:** `ccx run --bg ...` prints the run_id; then `ccx show <run_id> --wait`, again while it
+  says running. Never `ccx resume` a run that is still running. Don't pipe ccx output through `tail`/`head`: the
+  result is one small JSON object, and a pipe on a long run hits your shell's timeout.
+- **Afterwards:** a passed `check` that runs the relevant tests, plus the result's `files_changed` / `diffstat`, is
+  enough. Run tests or read the full diff yourself only when the check failed, was absent or `weak`, or the
+  status is partial/blocked.
+- **Leave `--review` at its default (auto)**; `--review on` / `--risk visible` only for risky or user-facing work.
+- **Never ask the sub-agent to commit** (Codex's sandbox blocks `.git` writes: wasted turns). You commit after
+  accepting.
 
 **A project named, no path given** ("the desk pet", "that harness PR"): `ccx where "<their words>"` first (code only, free). One `pick` → use it; several candidates → ask which. Delegate into it with `ccx run --project <name>`: the run goes to that folder and the brief starts with its rule files. If the project's rules speak of approval, ccx stops and quotes them (`approval_rules`); you decide from them, or ask the person, and only then run again with `--rules-ok`.
 
@@ -71,11 +80,12 @@ ccx run --from <you> --files 3 --coupling cross --clarity goal "brief..."  # rou
 ccx run --from <you> --model <m> --effort <e> --minutes <n> "brief..."   # explicit pick; --minutes = how long a
 #   skilled engineer would need. Without it (or the rubric flags) the run has no difficulty and its verdict can't
 #   teach routing: in the seven-cores A/B dozens of luna-low runs taught it nothing (2026-10-24)
+ccx run --bg ...; ccx show <run_id> --wait   # long work: detached, then wait (again while running)
 ccx run ... --task <id> --step <n>   # session id saved into task-checkpoint at once
 ccx run ... --mode read          # analysis only (without --mode, ccx infers read/write from the brief; follow it)
 ccx run ... --check "CMD"        # acceptance command: the sub-agent runs it, ccx runs it again (failure = failure)
 ccx run ... --risk visible       # user-facing / critical work: another vendor's cheap model reviews the diff
-ccx run ... --review on|off      # force or skip that review (auto: risk, 50+ code lines, unsure, claims vs diff,
+ccx run ... --review on|off      # force or skip it; default auto (risk, 50+ code lines, unsure, claims vs diff,
                                  # weak evidence: no check, a check running no tests, tests not naming the
                                  # changed files/functions, or a check that passed wrong work before)
 ccx run ... --worktree           # isolate edits on branch ccx/<run_id>
@@ -84,7 +94,7 @@ ccx resume <run_id> "follow-up"  # same sub-session: no re-briefing, cache stays
 # the next `ccx run` from this conversation (same folder + agent, < 1 h) continues the sub-session by itself;
 # --new for a fresh one; --fork (Claude -> Claude) starts from a copy of your whole conversation
 ```
-Result JSON: status, summary, files_changed, verification, open_questions, next_step, tokens.
+Result JSON: status, summary, files_changed, diffstat, check, verification, open_questions, next_step, tokens.
 A quota/rate-limit stop retries once on the other agent (`--no-fallback` to stop instead);
 a timeout or crash keeps the session id — `ccx resume <run_id>` continues where it stopped.
 
@@ -98,13 +108,8 @@ their first-time-right rate for that kind of work (`ccx way --stats`).
 
 A printed result with a `run_id` means that delegation ran: do not send the same brief again (a real Codex lead
 did, after a run that had already passed, in the seven-cores check of 2026-10-24); to add to it, `ccx resume <run_id>`.
-The summary is a claim. Inspect the changed files or returned evidence. Reuse valid checks
-for the same artifact; run affected checks when missing, stale or contradicted.
-**When the result's `check` shows ccx ran your `--check` command and it passed, do not run it again yourself**:
-read `check` and the diff. Each extra lead turn re-reads your whole conversation; in the H11 trial (2026-10-24) a lead
-that re-ran the check saved nothing by delegating, one that trusted it saved a turn per task. Re-run only what the
-check does not cover. If `check` carries `weak`, that command has passed wrong work here before: read the change
-against the task, not only the check.
+The summary is a claim; a passed `check` is evidence you don't re-run (section 2; in H11, 2026-10-24, a lead that
+re-ran it saved nothing by delegating). `weak` in `check` = that command has passed wrong work here before.
 `verification: not-run` = unverified — say so. A `review` field is that independent review: `pass` (its notes
 are optional reading) or `issues` with `file:line`; after one fix round, `kind: review_failed` is yours to decide.
 Then give your verdict:
