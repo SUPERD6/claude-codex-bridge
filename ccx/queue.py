@@ -40,22 +40,38 @@ def _lock(root: Path, timeout: float = 10.0):
         try:
             fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             break
-        except FileExistsError:
-            if time.time() - t0 > timeout:      # a crashed writer left it: take it over
+        except (FileExistsError, PermissionError) as e:
+            # Windows: a lock file the last holder just unlinked stays "delete pending" for a moment, and creating it
+            # then is denied (PermissionError), not FileExistsError: the lock is busy, so wait as for a held one.
+            # Denied for far longer than any holder keeps it is a real permission problem: say so, don't spin
+            waited = time.time() - t0
+            if isinstance(e, PermissionError) and waited > 2 * timeout:
+                raise
+            if waited > timeout:                # a crashed writer left it: take it over
                 try:
                     lock.unlink()
-                except FileNotFoundError:
+                except (FileNotFoundError, PermissionError):
                     pass
-                continue
             time.sleep(0.05)
     try:
         yield
     finally:
         os.close(fd)
+        _unlink(lock)
+
+
+def _unlink(lock: Path, tries: int = 20) -> None:
+    """Release the lock file. On Windows the unlink can be denied for a moment (another writer's create racing with
+    it, a virus scanner holding it open): retry briefly. Left behind, the next writer takes it over after its
+    timeout, so a release never fails the write it guarded."""
+    for _ in range(tries):
         try:
             lock.unlink()
+            return
         except FileNotFoundError:
-            pass
+            return
+        except PermissionError:
+            time.sleep(0.01)
 
 
 def _append(root: Path, ev: dict) -> None:

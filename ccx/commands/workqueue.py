@@ -160,7 +160,7 @@ def _one(it: dict, root: Path, caller: str, p, cfg, warm: str | None = None, got
         kw, route = resolve(spec, caller, p, cfg)
         if kw is None:
             wq.update(root, it["id"], status="todo", summary=route.get("advice"))
-            return {"id": it["id"], "skipped": route.get("advice")}
+            return {"id": it["id"], "status": "todo", "skipped": route.get("advice")}
         wq.update(root, it["id"], status="doing", agent=kw["to"])
         resume = it.get("run") if it.get("resume") else None
         left = (max(0.0, float(it["budget_usd"]) - float(it.get("cost_usd") or 0))   # F11: the cap is what it has left
@@ -202,8 +202,13 @@ def _one(it: dict, root: Path, caller: str, p, cfg, warm: str | None = None, got
             out["restored"] = restored(resume, rec)
         return out
     except Exception as e:  # noqa: BLE001
-        wq.update(root, it["id"], status="failed", summary=f"{type(e).__name__}: {e}"[:300])
-        return {"id": it["id"], "error": str(e)}
+        why = f"{type(e).__name__}: {e}"[:300]
+        row = {"id": it["id"], "status": "failed", "error": why}
+        try:
+            wq.update(root, it["id"], status="failed", summary=why)
+        except Exception as e2:  # noqa: BLE001   writing the failure back failed too: still report, never raise
+            row["not_recorded"] = f"{type(e2).__name__}: {e2}"[:300]
+        return row
 
 
 def _in_git(root: Path) -> bool:

@@ -131,4 +131,6 @@ class TestQueueLanes(AdapterEnv):
             self.q("add", f"x{i}", "--brief", f"look at x{i}", "--minutes", "5", "--to", "codex", "--mode", "read")
         res = self.q("run")["results"]
         self.assertTrue(all("warm" not in r for r in res))
+        for r in res:                                  # a failed row says why (it once flaked on Windows CI)
+            self.assertIn("run", r, json.dumps(r))
         self.assertEqual(len({self.rec(r["run"])["session_id"] for r in res}), 2)
