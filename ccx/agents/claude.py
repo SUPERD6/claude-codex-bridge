@@ -46,8 +46,12 @@ def claude_invocation(*, model: str, effort: str, perm: list[str], cwd: Path, pr
             "--effort", effort, "--json-schema", schema, *perm]
     if lean and "--strict-mcp-config" not in argv:
         argv += ["--strict-mcp-config"]
-    if lean and "--disable-slash-commands" not in argv:
+    # opt-in (an evaluation's clean room): no skills or slash commands and no MCP servers, whatever the effort
+    no_skills = os.environ.get("CCX_CLAUDE_NO_SKILLS") == "1"
+    if (lean or no_skills) and "--disable-slash-commands" not in argv:
         argv += ["--disable-slash-commands"]
+    if no_skills and "--strict-mcp-config" not in argv:
+        argv += ["--strict-mcp-config"]
     sources = os.environ.get("CCX_CLAUDE_SETTING_SOURCES", "").strip()
     if sources and "--setting-sources" not in argv:
         # opt-in (an evaluation's clean room): which settings layers load, e.g. "project,local" leaves out the

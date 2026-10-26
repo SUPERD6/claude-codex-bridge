@@ -250,40 +250,62 @@ def unit_of(u: dict, a, work: Path) -> PF.Unit:
     key = f"{u['round']}-{u['task']}-{u['arm']}"
     return PF.Unit(key=key, work=work, repo=work / key, hub=work / f"h-{key}", label=u["label"],
                    claude=a.claude_isolation, codex_home=Path(a.codex_home).expanduser() if a.codex_home else None,
-                   dsh=a.dsh_home)
+                   dsh=a.dsh_home, agents=tuple(r3.WORKER))
+
+
+def unit_models(u: dict, row: dict) -> dict:
+    """The models this unit was meant to use, and the ones its streams and ledger show it did use."""
+    out = {"lead": r3.LEAD_MODEL, "lead_effort": r3.LEAD_EFFORT, "builtin_worker": r3.WORKER_MODEL}
+    if u["arm"] == "direct":
+        out = {"direct": " ".join(DIRECT)}
+    seen = ((row.get("audit") or {}).get("init") or {}).get("model")
+    if seen:
+        out["lead_seen"] = seen
+    if row.get("by_model_usd"):
+        out["billed"] = sorted(row["by_model_usd"])
+    return out
 
 
 def run_unit(u: dict, a, work: Path) -> dict:
+    """One unit in its clean room. Whatever happens inside, its leftovers are cleaned and recorded and the row
+    carries the fingerprint (an error is a field of the row, not a lost row)."""
     task = by_id(u["task"])
     iso = unit_of(u, a, work)
     repo, hub = iso.repo, iso.hub
-    r2._rmtree(hub)
-    make_repo(task, repo)
-    hinfo = r3.make_hub(hub)
-    hinfo["memory_empty"] = PF.hub_memory_empty(hub)
-    env = PF.prepare(iso)
     rep = getattr(a, "preflight", None)
-    before, job, job_pids = PF.snapshot(), PF.Job(), []
+    stream = work / f"{iso.key}.stream.jsonl"
+    stream.unlink(missing_ok=True)              # an earlier, unfinished try of this unit must not be audited
+    row: dict = {**u}
+    env = None
+    before, job = PF.snapshot(), PF.Job()
     try:
-        row = direct_unit(u, a, repo, hub, env, job) if u["arm"] == "direct" else \
-            lead_unit(u, a, work, repo, hub, iso, env, job)
+        r2._rmtree(hub)
+        make_repo(task, repo)
+        hinfo = r3.make_hub(hub)
+        hinfo["memory_empty"] = PF.hub_memory_empty(hub)
+        row["hub"] = hinfo
+        env = PF.prepare(iso)
+        row.update(direct_unit(u, a, repo, hub, env, job) if u["arm"] == "direct" else
+                   lead_unit(u, a, work, repo, hub, iso, env, job))
         row.update(changed(repo))
         sc = score(repo, task, work, job)
         row.update({**u, "ok": sc["ok"], "pytest": sc["pytest"], "hub": hinfo})
         for rid in row.get("ccx_run_ids") or []:
             ccx_verify(rid, bool(sc["ok"]), f"eval-r2 hidden acceptance: {sc['pytest']}", hub=hub, env=env)
         row["archived_sessions"] = archive_hub(hub, env=env)
-        stream = work / f"{iso.key}.stream.jsonl"
-        row["audit"] = PF.audit(iso, stream.read_text(encoding="utf-8") if stream.exists() else "")
-        job_pids = job.pids()
+    except Exception as e:  # noqa: BLE001 — recorded in the row; the clean-up below still runs
+        row.update({"ok": False, "error": f"{type(e).__name__}: {e}"[:400]})
+        row.setdefault("usd", 0.0)
+        row.setdefault("wall_s", 0)
     finally:
-        job.close()
-        leftovers = PF.after_unit(iso, before, job_pids)
-    row["leftovers"] = leftovers
+        try:
+            row["audit"] = PF.audit(iso, stream.read_text(encoding="utf-8") if stream.exists() else "")
+        except Exception as e:  # noqa: BLE001
+            row["audit"] = {"clean": False, "problems": [f"audit failed: {type(e).__name__}: {e}"[:200]],
+                            "session_ids": []}
+        row["leftovers"] = PF.after_unit(iso, before, job, row["audit"].get("session_ids") or [])
     if rep:
-        row["fingerprint"] = PF.fingerprint(rep, iso, env)
-    row["env_clean"] = bool(row["audit"]["clean"] and not leftovers["unkilled"] and hinfo["memory_empty"]
-                            and (not rep or rep["result"] == "pass"))
+        row["fingerprint"] = PF.fingerprint(rep, iso, env, unit_models(u, row))
     return row
 
 
@@ -322,7 +344,7 @@ def cmd_run(a) -> int:
         for u in todo:
             print(f"[dry] {u['label']}")
         return 0
-    rep = PF.run_checks(PF.options_from(a, arms, work, canary_on=not a.no_canary))
+    rep = PF.run_checks(PF.options_from(a, arms, work, canary_on=not a.no_canary, start=True))
     for p in rep["problems"]:
         print(f"[preflight] {p}", flush=True)
     if not rep["ok"] and not a.force_unclean:
@@ -336,6 +358,7 @@ def cmd_run(a) -> int:
     a.preflight = rep
     need_codex = any(x in PF.CODEX_ARMS for x in arms)
     ours = [PF._norm(work), PF._norm(f"eval-r5:{a.tag}:")]
+    watch = PF.Watch(ours).start()
     lock, stop = threading.Lock(), threading.Event()
 
     def one(u):
@@ -352,37 +375,49 @@ def cmd_run(a) -> int:
             row = {**u, "ok": False, "error": f"{type(e).__name__}: {e}"[:400], "usd": 0.0, "wall_s": 0}
         row["ts"] = time.time()
         if "fingerprint" not in row:
-            row["fingerprint"] = {"preflight": rep["result"], "force_unclean": a.force_unclean}
-        between = PF.between_units(rep, need_codex, ours)
+            row["fingerprint"] = PF.fingerprint(rep, None, None)
+        between = PF.between_units(rep, need_codex, ours, watch.take())
         if between:
             row["between_units"] = between
-            if not a.force_unclean:
-                print(f"stopping: {'; '.join(between)[:400]}", flush=True)
-                stop.set()
+        row["env_clean"] = PF.env_clean(row, rep)
+        why = list(between)
+        if (row.get("leftovers") or {}).get("unkilled"):
+            why.append(f"processes that could not be killed: {row['leftovers']['unkilled']}")
+        if why and not a.force_unclean:
+            print(f"stopping: {'; '.join(why)[:400]}", flush=True)
+            stop.set()
         with lock:
             append_jsonl(out, row)
             print(f"r{u['round']} {u['task']:18} {u['arm']:8} ok={row.get('ok')} ${row.get('usd', 0):.4f} "
                   f"(lead ${row.get('lead_only_usd', 0) or 0:.4f}) req={row.get('lead_requests')} "
                   f"lead_tok={row.get('lead_tokens')} {row.get('wall_s')}s deleg={row.get('delegated')} "
-                  f"files={row.get('files_changed')} total=${spent(out) + a.extra_spent:.3f}", flush=True)
+                  f"files={row.get('files_changed')} clean={row['env_clean']} total=${spent(out) + a.extra_spent:.3f}",
+                  flush=True)
 
     # units of one task run one after another (arms in their shuffled order); --jobs tasks at a time
     groups: dict[tuple, list[dict]] = {}
     for u in todo:
         groups.setdefault((u["round"], u["task"]), []).append(u)
-    with ThreadPoolExecutor(max_workers=a.jobs) as ex:
-        list(ex.map(lambda us: [one(u) for u in us], groups.values()))
+    try:
+        with ThreadPoolExecutor(max_workers=a.jobs) as ex:
+            list(ex.map(lambda us: [one(u) for u in us], groups.values()))
+    finally:
+        watch.close()
     # the person's own state, by size and count only: the hub ledger must not have grown, no Claude session folder
     # named after this work dir may be left in the real ~/.claude
     rep["real_state_after"] = post = PF.real_state(PF.real_paths(), work)
+    rep["postflight"] = "same" if post == rep["real_state"] else "changed"
     (work / "preflight.json").write_text(json.dumps(rep, ensure_ascii=False, indent=1), encoding="utf-8")
     if post != rep["real_state"]:
         print(f"[postflight] the person's own state changed: {rep['real_state']} -> {post}", flush=True)
+        return 4
     return 2 if stop.is_set() else 0
 
 
 def summarize(rows: list[dict]) -> dict:
     unclean = sum(r.get("env_clean") is False for r in rows if "error" not in r)
+    unknown = sum("env_clean" not in r for r in rows if "error" not in r)    # rows from before the clean room
+    tags = sorted({str(r.get("tag")) for r in rows})
     rows = [r for r in rows if "error" not in r]
     out = {}
     for arm in (*ARMS, *OPT_IN_ARMS):
@@ -395,12 +430,18 @@ def summarize(rows: list[dict]) -> dict:
                     "cps": round(sum(r.get("usd") or 0 for r in rs) / ok, 4) if ok else None,
                     "lead_only_usd_med": med("lead_only_usd"), "lead_tokens_med": med("lead_tokens"),
                     "lead_requests_med": med("lead_requests"), "wall_med": med("wall_s")}
-    return {"arms": out, "unclean_rows": unclean, "long_style": r4.summarize_long([{**r, "arm": r["arm"]} for r in rows
+    return {"arms": out, "unclean_rows": unclean, "env_unknown_rows": unknown, "tags": tags,
+            "long_style": r4.summarize_long([{**r, "arm": r["arm"]} for r in rows
                                                           if r["arm"] in r4.LONG_ARMS])["paired"]}
 
 
+def tagged(rows: list[dict], tag: str | None) -> list[dict]:
+    """Rows of one tag (round), so rounds run under different conditions are never counted together."""
+    return [r for r in rows if not tag or r.get("tag") == tag]
+
+
 def cmd_summary(a) -> int:
-    print(json.dumps(summarize(read_jsonl(OUT / "results.jsonl")), ensure_ascii=False, indent=1))
+    print(json.dumps(summarize(tagged(read_jsonl(OUT / "results.jsonl"), a.tag)), ensure_ascii=False, indent=1))
     return 0
 
 
@@ -410,8 +451,12 @@ def cmd_export(a) -> int:
             "lead_output_tokens", "lead_tools", "lead_edits", "agent_calls", "ccx_runs", "ccx_resumes", "rework",
             "delegated", "context_attached", "files_changed", "diffstat", "model", "status", "verdicts", "error",
             "env_clean", "fingerprint")
-    rows = read_jsonl(OUT / "results.jsonl")
-    data = {"summary": summarize(rows), "rows": [r3.scrub({k: r[k] for k in keep if k in r}) for r in rows]}
+    rows = tagged(read_jsonl(OUT / "results.jsonl"), a.tag)
+    data = {"summary": summarize(rows),
+            "rows": [r3.scrub({**{k: r[k] for k in keep if k in r},
+                               **({"audit": {"problems": r["audit"].get("problems"),
+                                             "n_path_hits": r["audit"].get("n_path_hits")}} if r.get("audit") else {})})
+                     for r in rows]}
     Path(a.dest).write_text(json.dumps(data, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     print(f"wrote {a.dest}: {len(rows)} rows")
     return 0
@@ -438,9 +483,11 @@ def parser() -> argparse.ArgumentParser:
     PF.add_options(r)
     r.set_defaults(fn=cmd_run)
     s = sub.add_parser("summary")
+    s.add_argument("--tag", default=None, help="only this round's rows (default: all; the tags are listed)")
     s.set_defaults(fn=cmd_summary)
     e = sub.add_parser("export")
     e.add_argument("dest")
+    e.add_argument("--tag", default=None)
     e.set_defaults(fn=cmd_export)
     return ap
 

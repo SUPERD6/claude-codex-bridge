@@ -319,6 +319,12 @@ def _child_env(to: str, run_id: str, extra: dict | None = None, provider: bool =
         # Claude sub-agent started with it is bare too, ignores the person's login and fails "Not logged in"
         # (real run, Claude Code 2.1.309, 2026-10-25)
         env.pop("CLAUDE_CODE_SIMPLE", None)
+    agent_home = env.get("CCX_AGENT_HOME", "").strip()
+    if agent_home and to in ("codex", "dsh"):
+        # opt-in (an evaluation's clean room): a home of their own, so Codex does not load the person's
+        # ~/.agents/skills (codex-cli 0.164.0 reads user skills from $HOME/.agents/skills; its login stays in
+        # CODEX_HOME, dsh's in DSH_HOME)
+        env["HOME"] = env["USERPROFILE"] = agent_home
     env["CCX_DEPTH"] = str(int(env.get("CCX_DEPTH", "0") or 0) + 1)
     env["CCX_ROLE"] = "subagent"
     env["CCX_PARENT_RUN"] = run_id

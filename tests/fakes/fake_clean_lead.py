@@ -45,20 +45,28 @@ if extra:
 deny = (settings.get("permissions") or {}).get("deny") or []
 
 
+def posix_form(p: str) -> str:
+    """Claude Code's permissions docs: "On Windows, paths are normalized to POSIX form before matching.
+    C:\\Users\\alice becomes /c/Users/alice"."""
+    p = p.replace("\\", "/")
+    m = re.match(r"^([A-Za-z]):(.*)$", p)
+    return f"/{m.group(1).lower()}{m.group(2)}" if m else p
+
+
 def denied(p: Path) -> bool:
-    pp = p.resolve().as_posix()
+    pp = posix_form(p.resolve().as_posix())
     for rule in deny:
         m = re.fullmatch(r"Read\((.*)\)", rule)
         if not m:
             continue
         pat = m.group(1)
         if pat.startswith("~/"):
-            pat = home.as_posix() + pat[1:]
+            pat = posix_form(home.as_posix()) + pat[1:]
         elif pat.startswith("//"):
-            pat = pat[2:]
-            if not re.match(r"^[A-Za-z]:", pat):
-                pat = "/" + pat
-        if fnmatch.fnmatch(pp.lower(), pat.lower()) or fnmatch.fnmatch(pp.lower(), pat.lower().rstrip("/*")):
+            pat = pat[1:]                  # //c/Users/... -> /c/Users/...; a //C:/... rule never matches
+        else:
+            continue
+        if fnmatch.fnmatchcase(pp, pat) or fnmatch.fnmatchcase(pp, pat.rstrip("/*")):
             return True
     return False
 
@@ -93,10 +101,11 @@ if project.exists():
     m = re.search(r"add the word (\S+?)\.", body)
     word = m.group(1) if m else ""
 
-memory_paths = {}
+# the real CLI lists the auto-memory folder of the working directory in its init event (every round-5 stream did);
+# assume the worst, that it still does with auto-memory off
+mem = cfg / "projects" / re.sub(r"[^A-Za-z0-9]", "-", str(Path.cwd())) / "memory"
+memory_paths = {"auto": str(mem) + os.sep}
 if os.environ.get("CLAUDE_CODE_DISABLE_AUTO_MEMORY") != "1" and settings.get("autoMemoryEnabled", True):
-    mem = cfg / "projects" / re.sub(r"[^A-Za-z0-9]", "-", str(Path.cwd())) / "memory"
-    memory_paths["auto"] = str(mem) + os.sep
     read(mem / "MEMORY.md", tool=False)
 
 hub = os.environ.get("CCX_HUB")
@@ -114,9 +123,10 @@ for x in filter(None, os.environ.get("FAKE_READ", "").split(os.pathsep)):
 
 sid = str(uuid.uuid4())
 init = {"type": "system", "subtype": "init", "session_id": sid, "model": "fake", "mcp_servers": [], "skills": [],
-        "plugins": [{"name": "agents-md@builtin", "source": "builtin"}], "claude_code_version": "2.1.309"}
-if memory_paths:
-    init["memory_paths"] = memory_paths
+        "plugins": [{"name": "cc-plugin-agents-md", "path": "builtin", "source": "cc-plugin-agents-md@builtin"}],
+        "agents": ["claude", "Explore", "general-purpose", "Plan", "statusline-setup"], "slash_commands": [],
+        "output_style": "default", "claude_code_version": "2.1.309"}
+init["memory_paths"] = memory_paths
 answer = ("OTHER: " + ", ".join(seen)) if seen else f"PROJECT-ONLY {word}".strip()
 for ev in [*events, init,
            {"type": "assistant", "message": {"id": "m1", "content": [{"type": "text", "text": answer}],
