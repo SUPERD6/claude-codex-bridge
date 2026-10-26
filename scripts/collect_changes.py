@@ -59,6 +59,9 @@ def main(argv=None):
     ap.add_argument("--check", action="store_true", help="only check the notes' format")
     ap.add_argument("--apply", action="store_true", help="write CHANGELOG.md and delete the folded notes")
     a = ap.parse_args(argv)
+    # A GBK (or other legacy) console cannot print every character of the preview; never crash on it.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(errors="replace")
     files = notes(a.root / "changes")
     problems = [p for f in files for p in check(f)]
     if problems:
