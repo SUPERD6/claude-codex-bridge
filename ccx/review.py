@@ -36,7 +36,7 @@ BRIEF = """{mark} of run {run_id}] Review a change another agent made. Do not ed
 ```
 
 ## Checks
-{check}
+{check}{edited}
 
 ## Answer
 You cannot run commands; judge from the diff and the files. Do not report that tests were not run.
@@ -44,8 +44,11 @@ First go through the task above requirement by requirement (each return value, c
 check the code meets it; the acceptance tests may cover only some of them.
 `[must] file:line — "task words" — what is wrong` is only for: (a) a requirement stated in the task that the change
 does not meet or gets wrong, quoting the task sentence it rests on; (b) a bug that breaks existing behaviour or
-existing tests, or crashes on inputs the task itself names (say which); (c) a real safety problem the change adds
-(code execution, secrets, data loss). A [must] without such a basis is treated as a note. Everything else is
+existing tests, or crashes on inputs the task itself names (say which); (c) a way the task's stated behaviour
+fails on its normal path, even silently: a name used but not defined or imported in that scope, an exception
+swallowed on the new path (`except Exception: pass`, output sent to devnull), a subprocess or import that only works
+from the repo directory; trace the entry point the task names (command, function) down to the new code; (d) a real
+safety problem the change adds (code execution, secrets, data loss). A [must] without such a basis is treated as a note. Everything else is
 `[note] ...`, at most 3: hardening, extra validation, edge cases or robustness the task did not ask for, style,
 missing extra tests. Start summary with exactly `REVIEW: pass` (no [must]) or `REVIEW: issues` (at least one
 [must]); put the items in open_questions, [must] first. Status done."""
@@ -170,6 +173,23 @@ def _per_file(diff: str) -> dict[str, list[int]]:
     return out
 
 
+def edited_tests(diff: str) -> list[str]:
+    """Test files that existed before the run and lost or changed lines (a diff line starting with `-`), deleted
+    ones included; new test files and pure additions to old ones are fine. Round 5: a builder rewrote an existing
+    regression test's assertion to fit its misreading of the task, and the passing check then proved nothing."""
+    out: list[str] = []
+    old = None
+    for ln in diff.splitlines():
+        if ln.startswith("--- "):
+            old = ln[4:].strip()
+            old = None if old == "/dev/null" else old[2:] if old.startswith("a/") else old
+        elif ln.startswith("+++ "):
+            continue
+        elif old and ln.startswith("-") and is_test_file(old) and old not in out:
+            out.append(old)
+    return out
+
+
 def changed_symbols(text: str, lines: list[int]) -> list[str]:
     """Public functions / classes that contain (or are) the changed lines: the nearest less-indented def above."""
     src = text.splitlines()
@@ -253,18 +273,21 @@ def check_gap(cmd: str, cwd: Path, actual: list[str], diff: str) -> str | None:
 
 
 def weak_reason(p: Paths, rc: dict, record: dict, now: float | None = None, cwd: Path | None = None,
-                actual: list[str] | None = None, diff: str = "") -> str | None:
+                actual: list[str] | None = None, diff: str = "", edited: list[str] | None = None) -> str | None:
     """H13: in `auto`, also review a write run when the evidence that the work is right is weak, up to `weak_daily`
     a day (`weak = false` in [review] switches this off). Weak, judged from this run alone (no history needed):
     no acceptance command; or it runs no tests; or its tests never name a changed file / public function. Also weak:
     this command let wrong work through before (J7, needs history). A passed command whose tests reach the change is
-    strong and not reviewed. Each such review is logged, which is how the cap is counted."""
+    strong and not reviewed. Edited pre-existing tests (`edited`) make any check weak, and are reviewed even past the
+    daily cap. Each such review is logged, which is how the cap is counted."""
     import time
     from . import ledger
     if not rc.get("weak", True):
         return None
     check = record.get("check") or {}
-    if check.get("weak"):
+    if edited:
+        why = "existing tests edited: " + ", ".join(edited[:3])
+    elif check.get("weak"):
         why = "weak check: this acceptance command let wrong work through before"
     elif not check:
         res = record.get("result") or {}
@@ -278,7 +301,7 @@ def weak_reason(p: Paths, rc: dict, record: dict, now: float | None = None, cwd:
     t = time.localtime(now)
     midnight = time.mktime((t.tm_year, t.tm_mon, t.tm_mday, 0, 0, 0, 0, 0, -1))
     today = sum(1 for r in ledger.rows(p) if r.get("type") == "weak_review" and (r.get("ts") or 0) >= midnight)
-    if today >= int(rc.get("weak_daily", 20)):
+    if today >= int(rc.get("weak_daily", 20)) and not edited:
         return None
     ledger.append_event(p, {"type": "weak_review", "run_id": record.get("run_id"), "why": why, "ts": now})
     return why
@@ -320,13 +343,18 @@ def reviewers(cfg: dict, worker: str, installed, p=None, cheapest: bool = False)
     return out
 
 
-def brief(run_id: str, task: str, summary: str, diff: str, max_chars: int, check: dict | None = None) -> str:
+def brief(run_id: str, task: str, summary: str, diff: str, max_chars: int, check: dict | None = None,
+          edited: list[str] | None = None) -> str:
+    """The reviewer's brief. `edited` (default: found in `diff`) names pre-existing test files the change edited."""
+    edited = edited_tests(diff) if edited is None else edited
+    ed = (f"\nExisting tests edited: {', '.join(edited[:8])} — check the task requires it; an existing assertion "
+          f"changed to fit the new code without the task asking for it is a [must] (b)." if edited else "")
     cut = f"; cut to {max_chars} characters, open the files for the rest" if len(diff) > max_chars else ""
     ran = (f"ccx ran the acceptance command `{check['cmd']}` after the change: "
            f"{'passed' if check.get('passed') else 'FAILED (exit %s)' % check.get('exit')}." if check
            else "No acceptance command was given; nobody ran the tests for you.")
     return BRIEF.format(mark=MARK, run_id=run_id, task=task.strip()[:2000], summary=(summary or "")[:800],
-                        diff=diff[:max_chars] or "(empty)", cut=cut, check=ran)
+                        diff=diff[:max_chars] or "(empty)", cut=cut, check=ran, edited=ed)
 
 
 _PREFIX = re.compile(r"^[\s*_`#>]*review\s*[:：]?\s*[*_`]*\s*(pass|issues)\b", re.I)
@@ -360,7 +388,8 @@ def verdict(result: dict | None) -> dict:
 
 
 def review_run(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path, run_dir: Path) -> None:
-    """F1: maybe have another vendor's cheap model review this write run's diff; sets record["review"]."""
+    """F1: maybe have another vendor's cheap model review this write run's diff; sets record["review"]. When the
+    change edited pre-existing tests, record["review"]["edited_tests"] lists them (also if no review could run)."""
     from .delegate import Request, run
     from .runners import find_bin
     import sys
@@ -372,11 +401,12 @@ def review_run(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path, run_d
     snap = json.loads(undo.read_text(encoding="utf-8")) if undo.exists() else None
     actual, diff = rv.changes(cwd, snap)
     res = record.get("result") or {}
+    edited = rv.edited_tests(diff)
     why = rv.reason(mode, req.risk, res, res.get("files_changed") or [], actual, rv.code_lines(diff),
                     int(rc.get("min_lines", 50)))
     weak = False
     if not why and mode == "auto" and actual:
-        why = rv.weak_reason(p, rc, record, cwd=cwd, actual=actual, diff=diff)
+        why = rv.weak_reason(p, rc, record, cwd=cwd, actual=actual, diff=diff, edited=edited)
         weak = bool(why)
     if not why:
         return
@@ -384,9 +414,11 @@ def review_run(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path, run_d
     cands = rv.reviewers(cfg, req.provider or req.to, find_bin, None if weak else p, cheapest=weak)
     if not cands:
         record["review"] = {"verdict": "not-run", "reason": why, "error": "no reviewer from another vendor installed"}
+        if edited:
+            record["review"]["edited_tests"] = edited
         return
     text = rv.brief(record["run_id"], task_for_review(p, req), res.get("summary", ""), diff,
-                    int(rc.get("max_diff_chars", 12000)), record.get("check"))
+                    int(rc.get("max_diff_chars", 12000)), record.get("check"), edited)
     usd, tried = 0.0, []
     for agent, model, effort in cands[:2]:
         rev = run(Request(to=agent, model=model, effort=effort, tier="auto", mode="read", cwd=cwd, brief=text,
@@ -401,6 +433,8 @@ def review_run(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path, run_d
     record["review"] = {**v, "reason": why, "by": tried[-1], "run_id": rev["run_id"], "usd": round(usd, 4)}
     if len(tried) > 1:
         record["review"]["tried"] = tried
+    if edited:
+        record["review"]["edited_tests"] = edited
     if v["verdict"] == "issues":
         record["kind"] = ("review_issues" if req.review_round < fix_rounds(rc) else "review_failed")
 
