@@ -71,6 +71,14 @@
 - L5 fixed memory test (`scripts/eval/l5_memory.py`): one side writes a note, the other side's new session uses it;
   memory on 15/24 vs off 2/24 (McNemar p = 0.0002); one note never picked by `memory.for_brief` (trailing punctuation,
   stop words).
+- Fix: a sub-agent's brief picks shared notes by words without the dots and dashes at their ends (`JSON.` is `json`)
+  and without common English and Chinese words (`the`, `with`, `我们`, `这个`). The L5 `mem-json` note, missed 4 of 4
+  runs, is now picked; over the 6 L5 cases unrelated notes picked fell from 12 to 1 (`tests/test_brief_words.py`).
+  Same number of notes as before.
+- `ccx run` and `ccx resume` end their JSON with a `recap` key, one line with run_id, status, check, review, cost
+  and `next: ccx show <id>`, so a lead piping the output through `tail` still has the run_id. Other keys unchanged.
+- `scripts/collect_changes.py` no longer crashes printing its preview on a GBK (or other legacy) console; unprintable
+  characters become `?` in the preview only, the file it writes is unchanged UTF-8.
 
 ## 0.5.0 — 2026-10-25 (save, check, split, share, control: cheaper defaults, review that checks the task, project catalog, shared work context, the board, stop and archive)
 - Highlights: everything since 0.4.0 (PRs up to #104), grouped by theme below; 523 tests. Measured on real CLIs:
