@@ -1,6 +1,6 @@
 # Status
 
-English · [中文](STATUS.zh.md) · updated 2026-10-26 · version 0.5.0 (+#105–#116 for 0.5.1) · 608 tests
+English · [中文](STATUS.zh.md) · updated 2026-10-26 · version 0.5.0 (+#105–#116 for 0.5.1) · 661 tests
 
 One page on purpose: whatever an agent reads at start-up it re-reads on every later turn. Older pages, the full
 confidence table, acceptance checks and the done list are in [STATUS-archive.md](STATUS-archive.md); what changed
@@ -30,6 +30,7 @@ say, each from a raw record:
 | Cheap models on the raw request (round 4) | no lead, 15 tasks × 2: deepseek-flash 30/30, haiku 30/30, luna 26/30, sonnet 30/30 at ~10× the spend; review rescued luna's 4 failures (4 : 0, p = 0.125) | [round 4](research/2026-10-26-r4.md) |
 | Long lead session (round 4) | ~110k tokens of history, 5 tasks: all 5/5; cost per success self $0.567, ccx $0.595, built-in $0.613; the lead makes 4–7 requests either way, each re-reading the history, so delegating small tasks does not save | same |
 | Large tasks, real changes (round 5) | 10 tasks × 2: self 19/20 $0.211 per success, built-in 19/20 $0.155, ccx 17/20 $0.248, a cheap model alone 16/20 $0.054; ccx −176k lead tokens vs self (p = 0.002) but the same total, built-in $0.044 cheaper than ccx (p = 0.021); ccx's review raised issues in 10 units without raising correctness | [round 5](research/2026-10-26-r5.md) |
+| Round 5 follow-up (#126–#129) | ccx as the skill now teaches it: 19/20 then 20/20 at $0.131 / $0.116 per success, beside builtin 17/20 at $0.202: the cheapest way to delegate with a lead and faster than builtin, still ~2.7× self's wall time; the lean lead recipe alone cut cost but also correctness (builtin2 17/20) | same, §7 |
 | Memory search (L1 BM25) / suggested notes | relevant in top 3: 7 → 11 of 13; suggestion rules 13/30 → 22/30 (no longer held out), real hub 3/8 → 8/8 | #112, #113 |
 
 So the default shape is **one cheap model plus another vendor's cheap review**; split or parallel only when speed
@@ -46,8 +47,8 @@ sub-agent tokens); brief word splitting fixed and a `recap` line at the end of `
 2. **After the trial (2026-11-01)**: read the H11 results; decide on `memory.by_kind` / `memory.start_scene`, cheap
    rung first for clear small tasks, review on for writes, a one-line result for the lead; J0 re-measure (no
    real runs 11/1–11/7).
-3. **After round 5**: re-run the ccx and direct arms with #123/#124 (~$5); after the trial, the review raises `[must]`
-   only for the spec's stated requirements, and agent-delegate teaches `--bg` for large tasks. K7 waits for the
+3. **After round 5**: measure #130 (targeted tests, review beside the check) on ccx2's wall time (now 251–267 s vs
+   self ~94 s); after the trial, the review `[must]` scope and `--bg` for large tasks become defaults. K7 waits for the
    desktop-pet project.
 
 ## How sure we are (short)
