@@ -90,6 +90,8 @@ ccx batch plan.json                 # 互不依赖的任务并行；多个写任
 ccx route --files 3 --coupling cross ... [--lead claude:opus:high --ctx-files 日志.txt]  # 只看推荐；加 --lead 还会比较自己做 vs 派出去
 ccx plan size --minutes 240 --rung codex:gpt-6.1-sol:medium   # 大任务拆几块（task-split）
 ccx show <run_id> [--full]          # 默认只显示压缩结果
+ccx show <run_id> --wait [秒数]     # 等它（连同审查后的修改轮）跑完，默认 540 秒；跑完给出和 ccx run 一样的结果，
+                                    # 没跑完返回 status=running，再调一次即可
 ccx stats [--summary]               # 按 agent×级别统计；--summary 给出花费、省了多少、缓存占比
 ccx report [--days 30] [--publish]  # 看板网页（离线单文件）；--publish 提交到你的私有用量仓库
 ccx ui [--project 文件夹] [--no-open] [--export 文件]   # 本机实时页面（127.0.0.1，不调用模型；只写“建议记下的事”的同意/拒绝）
@@ -101,7 +103,7 @@ ccx run "任务" --to deepseek      # 通过 Claude Code 用 DeepSeek flash（�
 ccx run "任务" --provider deepseek-codex   # 同一个模型经 Codex（用 -c 设 model provider，密钥从环境变量读）
 ccx run "任务" --to dsh --tier T2          # DeepSeek 自己的智能体 DeepSeek Harness（无头模式）
 ccx run "任务" --provider glm              # 较新的 API 经 Claude Code：kimi、glm、qwen、openrouter（要有密钥）
-ccx run "任务" ... --bg             # 后台跑，马上返回 run_id；用 ccx show 查看
+ccx run "任务" ... --bg             # 后台跑，马上返回 run_id；用 ccx show <run_id> --wait 等结果
 ccx send --list | --thread <id> "消息"   # 发消息给正在运行的 Codex 桌面/交互会话（只有 Codex：Claude Code 的终端
                                         # 和桌面会话都没有接收外部消息的入口；Claude 子智能体用 ccx resume <run_id> 追问）
 ccx say --to codex|claude|deepseek|all "消息"   # 对话板：本项目开着的会话下一轮就能看到
