@@ -712,6 +712,31 @@ def cmd_run(a) -> int:
     return 2 if stop.is_set() else 0
 
 
+def wall_stats(rs: list[dict]) -> dict:
+    """Right, spend and wall of some rows: median (as wall_med elsewhere: the upper middle), mean and p75 (nearest
+    rank). The median alone hid the slow tail that the per-task routing analysis needed."""
+    w = sorted(r.get("wall_s") or 0 for r in rs)
+    ok = sum(bool(r.get("ok")) for r in rs)
+    usd = sum(r.get("usd") or 0 for r in rs)
+    return {"n": len(rs), "ok": ok, "usd": round(usd, 4), "cps": round(usd / ok, 4) if ok else None,
+            "wall_med": w[len(w) // 2] if w else None, "wall_mean": round(sum(w) / len(w), 1) if w else None,
+            "wall_p75": w[-(-3 * len(w) // 4) - 1] if w else None}
+
+
+def by_tag(rows: list[dict]) -> dict:
+    """Per tag, per arm: wall_stats of its rows and of each round on its own, so different rounds (and the rounds
+    of one tag) are never pooled without the split showing."""
+    out: dict = {}
+    for tag in sorted({str(r.get("tag")) for r in rows}):
+        tr = [r for r in rows if str(r.get("tag")) == tag]
+        for arm in sorted({r["arm"] for r in tr}):
+            ar = [r for r in tr if r["arm"] == arm]
+            rounds = {str(rd): wall_stats([r for r in ar if r.get("round") == rd])
+                      for rd in sorted({r.get("round") for r in ar}, key=lambda x: (x is None, str(x)))}
+            out.setdefault(tag, {})[arm] = {**wall_stats(ar), "rounds": rounds}
+    return out
+
+
 def summarize(rows: list[dict]) -> dict:
     unclean = sum(r.get("env_clean") is False for r in rows if "error" not in r)
     unknown = sum("env_clean" not in r for r in rows if "error" not in r)    # rows from before the clean room
@@ -727,8 +752,9 @@ def summarize(rows: list[dict]) -> dict:
         out[arm] = {"ok": ok, "n": len(rs), "usd": round(sum(r.get("usd") or 0 for r in rs), 4),
                     "cps": round(sum(r.get("usd") or 0 for r in rs) / ok, 4) if ok else None,
                     "lead_only_usd_med": med("lead_only_usd"), "lead_tokens_med": med("lead_tokens"),
-                    "lead_requests_med": med("lead_requests"), "wall_med": med("wall_s")}
-    res = {"arms": out, "unclean_rows": unclean, "env_unknown_rows": unknown, "tags": tags,
+                    "lead_requests_med": med("lead_requests"), "wall_med": med("wall_s"),
+                    **{k: v for k, v in wall_stats(rs).items() if k in ("wall_mean", "wall_p75")}}
+    res = {"arms": out, "by_tag": by_tag(rows), "unclean_rows": unclean, "env_unknown_rows": unknown, "tags": tags,
            "long_style": r4.summarize_long([{**r, "arm": r["arm"]} for r in rows
                                                          if r["arm"] in r4.LONG_ARMS])["paired"]}
     if any(r.get("ext") for r in rows):
