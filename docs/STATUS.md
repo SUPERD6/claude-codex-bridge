@@ -1,6 +1,6 @@
 # Status
 
-English · [中文](STATUS.zh.md) · updated 2026-10-25 · version 0.5.0 · 523 tests
+English · [中文](STATUS.zh.md) · updated 2026-10-26 · version 0.5.0 (+#105–#115 for 0.5.1) · 603 tests
 
 One page on purpose: whatever an agent reads at start-up it re-reads on every later turn. Older pages, the full
 confidence table, acceptance checks and the done list are in [STATUS-archive.md](STATUS-archive.md); what changed
@@ -24,19 +24,27 @@ say, each from a raw record:
 | Delegating (round 1) | the lead's tokens −32 % but total spend the same (ratio 1.02) | [seven-cores A/B](research/2026-10-24-seven-cores-ab.md) §2.2 |
 | Routing (rounds 1–2) | no gain in round 1 (21/21 the fixed model); round 2 as right as fixed sonnet, its saving came from the test hub not knowing the quota | round 1 §2.3, round 2 4-D |
 | More accurate with use | no evidence yet (everything was right, so nothing to learn from) | round 2 §6 |
+| ccx vs Claude Code's own sub-agent (round 3) | harder, vaguer tasks, sonnet lead: all three arms 20/20 (ceiling again); cost per success self $0.045, built-in $0.069, ccx $0.071; ccx −25 % lead tokens vs built-in (p = 0.021) but same total (1.02) and 26 s slower; fresh short lead sessions only | [round 3](research/2026-10-25-r3.md) |
+| Memory fixed cases (L5) | note used 15/24 with memory vs 2/24 without (p = 0.0002); one note never reached the brief (word splitting keeps punctuation, fix pending) | same |
+| Warm lanes (`--lanes`, off) | vs 10 parallel runs ~40 % cheaper but 2–3× slower; vs one run doing all 10 pieces 4–5× dearer: fewer runs is what saves | [warm lanes](research/2026-10-25-warm-lanes.md) |
+| Memory search (L1 BM25) / suggested notes | relevant in top 3: 7 → 11 of 13; suggestion rules 13/30 → 22/30 (no longer held out), real hub 3/8 → 8/8 | #112, #113 |
 
 So the default shape is **one cheap model plus another vendor's cheap review**; split or parallel only when speed
-is wanted (the `project-manager` skill, #102). Running: the H11 week-long `ccx trial` (ends 2026-10-31).
-Since the 0.5.0 tag: `q resume` continues the killed run's session instead of redoing it (#105); real-machine checks
-of worktrees, `ccx batch`, `--fork` and `ccx say --now` done on 2026-10-25 (about $0.06).
+is wanted (the `project-manager` skill, #102). Running: the H11 week-long `ccx trial` (ends 2026-11-01). Since the
+0.5.0 tag: `q resume` continues the killed run's session (#105); coordinator K4 autonomy levels (`ccx autonomy`,
+default L1, #109), K5 work sent in from a private GitHub issue (`ccx intake`, #110), K6 the cross-project board with
+confirmed buttons (#111); memory L1–L3 (#112, new switches off until the trial ends), L4 hook timeout, L6 cold start,
+L7 `ccx skills stats` (#113); warm lanes (#114, off); round 3 (#115; L8 not worth doing: finding files is 1.9 % of
+sub-agent tokens).
 
 ## Next three
 
-1. **Going public** (ask the person first): demo GIF, a public benchmark from the round-1/2 tasks, then the launch.
-2. **Coordinator K4–K6**: autonomy levels, work sent in from outside (phone, a private GitHub issue), the
-   coordinator board. K7 (an avatar from a separate desktop-pet project) waits for that project.
-3. **Measure what is still unproven**: the new `--review auto` trigger rate, and whether routing learns from the
-   person's own work (H11 trial results after 2026-10-31).
+1. **Going public** (ask the person first): demo GIF, a public benchmark from the round-1/2/3 tasks, then the launch.
+2. **After the trial (2026-11-01)**: read the H11 results; decide on `memory.by_kind` / `memory.start_scene`, cheap
+   rung first for clear small tasks, review on for writes, a one-line result for the lead; J0 re-measure (no
+   real runs 11/1–11/7).
+3. **Find where cheap models fail**: two rounds hit the ceiling, so "ccx is stronger" is still unproven; long lead
+   sessions (where −25 % lead tokens should matter) were not measured. K7 waits for the desktop-pet project.
 
 ## How sure we are (short)
 
@@ -53,4 +61,5 @@ of worktrees, `ccx batch`, `--fork` and `ccx say --now` done on 2026-10-25 (abou
 - **not verified**: `ccx say --now` in the Codex desktop app's own window; the Codex rule from
   `ccx doctor --codex-rule`; the dsh app's own later writes after a queued archive; the Codex plugin from a GitHub address; own sub-agent limits
   live (F11 did not fire: no agent started sub-agents even when told to); the new `--review auto` trigger rate;
-  suggested-note rules (13/30 on a held-out set); routing beyond the evaluation tasks.
+  a hook timeout in a real session; `ccx intake` against real GitHub; L2 auto-merge end to end; routing beyond the
+  evaluation tasks.
