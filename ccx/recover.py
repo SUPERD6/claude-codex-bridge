@@ -9,7 +9,6 @@ usage, so `ccx stats` counts it and `ccx resume` continues it.
 from __future__ import annotations
 
 import json
-import re
 import socket
 import time
 from pathlib import Path
@@ -92,8 +91,9 @@ def partial_usage(cli: str, sid: str | None, stdout: str = "", cwd: Path | None 
     if cli == "claude":
         u = _claude_usage(stdout.splitlines())
         if not any(u.values()) and sid and cwd:
-            slug = re.sub(r"[^A-Za-z0-9]", "-", str(Path(cwd).resolve()))
-            f = claude_home() / "projects" / slug / f"{sid}.jsonl"
+            from .transcript import claude_project_dirs
+            f = next((d / f"{sid}.jsonl" for d in claude_project_dirs(Path(cwd), claude_home())
+                      if (d / f"{sid}.jsonl").exists()), Path(cwd) / f"{sid}.jsonl")
             try:
                 u = _claude_usage(f.read_text(encoding="utf-8", errors="replace").splitlines())
             except OSError:

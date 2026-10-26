@@ -14,6 +14,7 @@ Neither format always carries a plan; the git state is the ground truth and is a
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import time
@@ -177,6 +178,44 @@ def _codex_sessions(home: Path) -> list[Path]:
         if (home / "sessions").exists() else []
 
 
+CLAUDE_SLUG_MAX = 200     # Claude Code cuts a longer folder name to 200 characters plus "-<hash>" (seen on 2.1.309)
+
+
+def long_path(p: Path, below: int = 0) -> Path:
+    r"""Windows: a file `below` characters under p that passes the 260-character limit only opens with the \\?\
+    prefix; shorter paths are left as they are."""
+    s = str(p)
+    if os.name != "nt" or s.startswith("\\\\") or len(str(p.resolve())) + below < 250:
+        return p
+    return Path("\\\\?\\" + str(p.resolve()))
+
+
+def claude_project_dirs(root: Path, home: Path | None = None) -> list[Path]:
+    """The folders Claude Code keeps root's sessions in: <projects>/<root, every non-alphanumeric a '-'>; a name
+    longer than 200 characters is cut to 200 plus "-<hash>", so those are found by the first 200 (two projects that
+    share them both match)."""
+    from .config import claude_home
+    slug = re.sub(r"[^A-Za-z0-9]", "-", str(Path(root).resolve()))
+    base = long_path((home or claude_home()) / "projects", min(len(slug), CLAUDE_SLUG_MAX + 8) + 50)
+    if len(slug) <= CLAUDE_SLUG_MAX:
+        return [base / slug] if (base / slug).exists() else []
+    head = slug[:CLAUDE_SLUG_MAX] + "-"
+    try:
+        return [d for d in base.iterdir() if d.is_dir() and (d.name == slug or d.name.startswith(head))]
+    except OSError:
+        return []
+
+
+def claude_session_file(session: str, home: Path | None = None) -> Path | None:
+    """A Claude session's file by its id, in whichever project folder it is."""
+    from .config import claude_home
+    base = (home or claude_home()) / "projects"
+    hits = list(base.glob(f"*/{session}.jsonl"))
+    if not hits and long_path(base, 260) != base:      # a session in a long-named folder: only seen with the prefix
+        hits = list(long_path(base, 260).glob(f"*/{session}.jsonl"))
+    return hits[0] if hits else None
+
+
 def _resolved(cwd) -> str:
     """A recorded folder as `here` is written: Windows may record a short 8.3 name (C:\\Users\\RUNNER~1\\...)."""
     if not cwd:
@@ -208,10 +247,8 @@ def find_session(agent: str, root: Path, exclude: set[str], session: str | None 
                            and sid not in exclude):
                 return f
         return None
-    slug = re.sub(r"[^A-Za-z0-9]", "-", str(root.resolve()))
-    base = (claude_home or ch()) / "projects"
-    cands = sorted((base / slug).glob("*.jsonl"), key=lambda f: f.stat().st_mtime, reverse=True) \
-        if (base / slug).exists() else []
+    cands = sorted((f for d in claude_project_dirs(root, claude_home or ch()) for f in d.glob("*.jsonl")),
+                   key=lambda f: f.stat().st_mtime, reverse=True)
     for f in cands:
         if (session and f.stem == session) or (not session and f.stem not in exclude):
             return f

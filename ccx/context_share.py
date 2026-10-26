@@ -246,8 +246,7 @@ def find(agent: str, root: Path, session: str | None = None, exclude: set[str] |
     agent = {"dsh": "deepseek"}.get(agent, agent)
     exclude = set(exclude or ())
     if agent == "claude" and session:              # by id: wherever its folder is (a worktree, a subfolder)
-        hits = list((claude_home() / "projects").glob(f"*/{session}.jsonl"))
-        return hits[0] if hits else None
+        return transcript.claude_session_file(session, claude_home())
     if agent in ("claude", "codex"):
         return transcript.find_session(agent, root, exclude, session)
     if agent == "deepseek":
