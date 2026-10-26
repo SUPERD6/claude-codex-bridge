@@ -318,14 +318,17 @@ def lead_metrics(stdout: str) -> dict:
             if isinstance(c, dict) and c.get("type") == "tool_use":
                 tools[c["name"]] = tools.get(c["name"], 0) + 1
                 if c["name"] == "Bash":
-                    bash.append(str((c.get("input") or {}).get("command", ""))[:400])
+                    bash.append(str((c.get("input") or {}).get("command", "")))
                 if c["name"] in ("Agent", "Task"):
                     agent_calls += 1
     ctx = [sum(int(u.get(k, 0) or 0) for k in ("input_tokens", "cache_read_input_tokens", "cache_creation_input_tokens"))
            for u in msgs.values()]
     out = sum(int(u.get("output_tokens", 0) or 0) for u in msgs.values())
-    ccx_runs = sum(bool(re.search(r"ccx\.py\"?\s+run\b", b)) for b in bash)
-    ccx_resumes = sum(bool(re.search(r"ccx\.py\"?\s+resume\b", b)) for b in bash)
+    # counted on the whole command: a lead that builds a long brief first (BRIEF=$(cat <<EOF ...)) puts `ccx.py run`
+    # past the 400 characters kept below (round 4 missed one delegation that way)
+    ccx_runs = sum(len(re.findall(r"ccx\.py\"?\s+run\b", b)) for b in bash)
+    ccx_resumes = sum(len(re.findall(r"ccx\.py\"?\s+resume\b", b)) for b in bash)
+    bash = [b[:400] for b in bash]
     return {"lead_requests": len(msgs), "lead_context_tokens": sum(ctx), "lead_output_tokens": out,
             "lead_tokens": sum(ctx) + out, "lead_tools": tools, "lead_edits": tools.get("Edit", 0) + tools.get("Write", 0),
             "agent_calls": agent_calls, "ccx_runs": ccx_runs, "ccx_resumes": ccx_resumes, "bash": bash}

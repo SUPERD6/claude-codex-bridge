@@ -284,6 +284,11 @@ def run(req: Request, p: Paths) -> dict:
         req.route = req.route or prev.get("route")
         req.task, req.step = req.task or prev.get("task"), req.step or prev.get("step")
         req.provider = req.provider or prev.get("provider")
+        # the same task: a lead's `ccx resume` keeps its label (the queue finds a piece's runs by `q:<id>`), its
+        # acceptance command (a fix nobody checks is no evidence) and its risk, as ccx's own review fix round does
+        req.label = req.label or prev.get("label") or ""
+        req.check = req.check or prev.get("check_cmd")
+        req.risk = req.risk or prev.get("risk")
         last = (prev.get("attempts") or [{}])[-1]
         if not req.model and last.get("model"):
             req.model, req.effort = last["model"], last.get("effort")

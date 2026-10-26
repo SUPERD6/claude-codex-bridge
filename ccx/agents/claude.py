@@ -11,9 +11,19 @@ from ..config import RESULT_SCHEMA, claude_home
 from ..runners import AUTH_HINTS, Invocation, Outcome, _json_from_text, bin_argv, classify, usage_dict
 from .base import Adapter
 
+def claude_schema() -> dict:
+    """The result schema with only status and summary required. Claude Code rejects a structured output that misses a
+    required key and the model sends it again: in rounds 4-5, 10 of 181 Claude runs re-sent it 51 times in all, mostly
+    for `open_questions` (haiku dropped it four times running). ccx reads the other keys with defaults; Codex keeps the
+    strict schema, which its --output-schema needs."""
+    s = json.loads(RESULT_SCHEMA.read_text(encoding="utf-8"))
+    s["required"] = [k for k in s.get("required", []) if k in ("status", "summary")]
+    return s
+
+
 def claude_invocation(*, model: str, effort: str, perm: list[str], cwd: Path, prompt: str,
                       run_dir: Path, resume_id: str | None = None, lean: bool = False) -> Invocation:
-    schema = json.dumps(json.loads(RESULT_SCHEMA.read_text(encoding="utf-8")))
+    schema = json.dumps(claude_schema())
     # stream-json (+ --verbose, required with -p): the session id arrives in the first event, so a crash
     # mid-run still leaves a resumable session on record
     argv = [*bin_argv("claude"), "-p", "--output-format", "stream-json", "--verbose", "--model", model,
