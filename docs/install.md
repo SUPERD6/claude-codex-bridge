@@ -115,6 +115,9 @@ ccx archive [--apply] | --restore <run>   # archive finished sub-sessions (autom
 ccx batch plan.json                   # independent tasks in parallel; parallel writers get separate worktrees
 ccx q add "title" --brief "..." [--dep q1] [--check CMD] [--minutes 30] [--budget 1]   # the project's work queue
 ccx q run | resume | tree | done q3 --ok 1   # run every ready piece in parallel; a piece too big splits itself
+ccx q add --plan plan.json            # a whole plan: {"tasks": ...} or task-split's {"pieces": ...} (depends_on, files)
+ccx q run --gate                      # dependents start only after `ccx q done <id> --ok 1` (default off); parallel
+                                      # writers get worktrees, and what waits on one waits for your merge + verdict
 ccx route --files 3 --coupling cross ... [--lead claude:opus:high --ctx-files log.txt]  # recommendation; + self vs delegate
 ccx plan size --minutes 240 --rung codex:gpt-6.1-sol:medium # how many pieces for a big task (task-split)
 ccx show <run_id> [--full]            # compact result by default

@@ -9,6 +9,7 @@ from pathlib import Path
 from .. import lanes, queue as wq
 from ..config import load_config, paths
 from ..delegate import Request, compact, run, verify
+from ..modes import resolve_mode
 from .common import _caller, _out, apply_mode, resolve
 
 
@@ -24,13 +25,7 @@ def cmd_q(a) -> int:
     root = _root(a)
     if a.q_cmd == "add":
         if a.plan:
-            ids: dict[str, str] = {}
-            for t in json.loads(Path(a.plan).read_text(encoding="utf-8"))["tasks"]:
-                it = wq.add(root, t.get("title") or t["brief"][:60], t["brief"],
-                            deps=[ids[d] for d in t.get("deps", []) if d in ids], check=t.get("check"),
-                            minutes=t.get("minutes"), mode=t.get("mode"), kind=t.get("kind"), to=t.get("to"))
-                ids[t.get("id") or it["id"]] = it["id"]
-            _out({"added": list(ids.values())})
+            _out(wq.add_plan(root, json.loads(Path(a.plan).read_text(encoding="utf-8"))))
             return 0
         it = wq.add(root, a.title, a.brief or a.title, deps=a.dep or [], parent=a.parent, check=a.check,
                     minutes=a.minutes, mode=a.mode, kind=a.kind, to=a.to, budget_usd=a.budget)
@@ -38,6 +33,7 @@ def cmd_q(a) -> int:
     elif a.q_cmd in ("ls", "tree"):
         from ..recover import sweep
         sweep(paths())                  # as `ccx stats` does: a run whose ccx was killed shows as interrupted
+        wq.propagate(root)              # a failed dependency shows on what waits for it
         q = wq.load(root)
         if a.q_cmd == "tree":
             print("\n".join(wq.tree(q)) or "(queue empty)")
@@ -53,7 +49,10 @@ def cmd_q(a) -> int:
         if it.get("run"):
             verify(paths(), it["run"], bool(a.ok), a.note or "")
         wq.update(root, a.id, status="done" if a.ok else "failed", verdict=bool(a.ok))
-        _out({"id": a.id, "closed_parents": wq.close_parents(root)})
+        out = {"id": a.id, "closed_parents": wq.close_parents(root)}
+        moved = wq.propagate(root)
+        out.update({k: v for k, v in moved.items() if v})
+        _out(out)
     elif a.q_cmd in ("run", "resume"):
         return _run(a, root)
     return 0
@@ -82,11 +81,17 @@ def item_runs(p, root: Path, it: dict) -> list[dict]:
             continue
         try:
             rec = ledger.read_record(d / "run.json")
-            if rec.get("label") == f"q:{it['id']}" and Path(rec.get("cwd") or "").resolve() == root.resolve():
+            if rec.get("label") == f"q:{it['id']}" and _here(Path(rec.get("cwd") or ""), root):
                 out.append(rec)
         except (OSError, ValueError):
             continue
     return out
+
+
+def _here(cwd: Path, root: Path) -> bool:
+    """A run in this project: in its folder, or in a ccx worktree of it (workspace.make_worktree's layout)."""
+    cwd, root = cwd.resolve(), root.resolve()
+    return cwd == root or cwd.parent == root.parent / ".ccx-worktrees" / root.name
 
 
 def restored(old_run: str, rec: dict) -> str:
@@ -99,9 +104,11 @@ def restored(old_run: str, rec: dict) -> str:
     return "resumed" if rec.get("continued") or rec.get("resumed_from") == old_run else "fresh"
 
 
-def _one(it: dict, root: Path, caller: str, p, cfg, warm: str | None = None, got: dict | None = None) -> dict:
+def _one(it: dict, root: Path, caller: str, p, cfg, warm: str | None = None, got: dict | None = None,
+         worktree: bool = False) -> dict:
     """Route and run one queue item; write its outcome back. Never raises (a thread must report).
-    warm: a lane's last run (ccx/lanes.py), whose session takes this item as a new task; got["rec"]: its record."""
+    warm: a lane's last run (ccx/lanes.py), whose session takes this item as a new task; got["rec"]: its record.
+    worktree: a write item that runs beside other writers works in its own git worktree (as `ccx batch`)."""
     try:
         if it.get("budget_usd") is not None and float(it.get("cost_usd") or 0) >= float(it["budget_usd"]):
             wq.update(root, it["id"], status="blocked", summary="its budget is used up")
@@ -124,7 +131,7 @@ def _one(it: dict, root: Path, caller: str, p, cfg, warm: str | None = None, got
         rec = run(Request(brief=brief, mode=spec["mode"], mode_source=spec["mode_source"],
                           mode_why=spec["mode_why"], cwd=root, caller=caller, label=f"q:{it['id']}",
                           check=it.get("check"), resume_run=resume or warm, continued=bool(warm and not resume),
-                          budget_usd=left, **kw), p)
+                          budget_usd=left, worktree=worktree, **kw), p)
         if got is not None:
             got["rec"] = rec
         res = compact(rec)
@@ -132,6 +139,15 @@ def _one(it: dict, root: Path, caller: str, p, cfg, warm: str | None = None, got
         cost = _cost(rec)
         fields = {"run": rec["run_id"], "agent": rec["to"], "summary": (res.get("summary") or "")[:300],
                   "cost_usd": round(float(it.get("cost_usd") or 0) + cost, 6), "resume": False}
+        sha = None
+        if res.get("worktree"):
+            # its work is not in the project folder: one commit there, and whatever waits on it waits for the
+            # lead to merge that branch and accept the item (`ccx q done <id> --ok 1`; queue.accepted)
+            from ..lanes import commit_block
+            from ..workspace import _git
+            sha = commit_block(rec)
+            _, branch = _git(Path(res["worktree"]), "rev-parse", "--abbrev-ref", "HEAD")
+            fields.update(worktree=res["worktree"], branch=branch or None)
         pieces = wq.parse_split(rec.get("result")) if status == "blocked" else None
         if pieces and it.get("depth", 0) < wq.MAX_DEPTH:
             wq.update(root, it["id"], **fields)
@@ -147,12 +163,32 @@ def _one(it: dict, root: Path, caller: str, p, cfg, warm: str | None = None, got
             fields["status"] = "done"
         wq.update(root, it["id"], **fields)
         out = {"id": it["id"], "status": fields["status"], "run": rec["run_id"]}
+        if fields.get("worktree"):
+            out.update(worktree=fields["worktree"], branch=fields.get("branch"))
+            if sha:
+                out["commit"] = sha
         if resume:
             out["restored"] = restored(resume, rec)
         return out
     except Exception as e:  # noqa: BLE001
         wq.update(root, it["id"], status="failed", summary=f"{type(e).__name__}: {e}"[:300])
         return {"id": it["id"], "error": str(e)}
+
+
+def _in_git(root: Path) -> bool:
+    import subprocess
+    return subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], cwd=root, capture_output=True,
+                          stdin=subprocess.DEVNULL).returncode == 0
+
+
+def _side_by_side(ready: list[dict]) -> list[dict]:
+    """The ready items that may run in one round: one that names a file (task-split `files`) an earlier one also
+    names waits for the next round. Items without `files` are never held back (as before)."""
+    out: list[dict] = []
+    for it in ready:
+        if not any(wq.overlaps(it, o) for o in out):
+            out.append(it)
+    return out
 
 
 def _run(a, root: Path) -> int:
@@ -181,32 +217,54 @@ def _run(a, root: Path) -> int:
                 run_id = last["run_id"] if last.get("session_id") else it.get("run")
                 wq.update(root, it["id"], status="todo", resume=bool(run_id), run=run_id, cost_usd=cost)
     width = int(a.max or cfg["defaults"].get("max_parallel", 3))
+    gate = bool(getattr(a, "gate", False))
+    git = None
     while True:
+        wq.propagate(root)             # a failed dependency: what waits for it is dep_blocked, not left todo forever
         q = wq.load(root)
         if q["budget_usd"] is not None and wq.spent(q) >= float(q["budget_usd"]):
             _out({"stopped": "budget reached", "spent_usd": wq.spent(q), "budget_usd": q["budget_usd"],
                   "results": done, "ask": "raise it with `ccx q budget <usd>` if the rest is worth it"})
             return 2
         n = lanes.width(getattr(a, "lanes", None), cfg)
-        batch = wq.ready(q) if n else wq.ready(q)[:width]
+        batch = _side_by_side(wq.ready(q, gate))
+        batch = batch if n else batch[:width]
         if not batch:
             break
+        writers = [it["id"] for it in batch if resolve_mode(it.get("mode"), it.get("brief", ""))["mode"] == "write"]
+        if len(writers) > 1 and git is None:
+            git = _in_git(root)
+        # parallel writers in one repo must not trample each other: each gets a worktree, as in `ccx batch`
+        # (outside git there is no worktree: they share the folder; task-split's `files` keep them apart)
+        tree = {i: len(writers) > 1 and bool(git) for i in writers}
         if n:
             # warm lanes: ready items for the same agent and mode share at most n sessions, one after another
             def step(it, warm):
                 got: dict = {}
-                return _one(it, root, caller, p, cfg, warm=warm, got=got), got.get("rec")
+                return (_one(it, root, caller, p, cfg, warm=warm, got=got, worktree=tree.get(it["id"], False)),
+                        got.get("rec"))
             done += lanes.run_lanes(lanes.split(batch, n, lambda it: (it.get("to"), it.get("mode"))), step,
                                     lanes.limits(cfg), width)
         else:
             with ThreadPoolExecutor(max_workers=width) as ex:
-                done += list(ex.map(lambda it: _one(it, root, caller, p, cfg), batch))
+                done += list(ex.map(lambda it: _one(it, root, caller, p, cfg, worktree=tree.get(it["id"], False)),
+                                    batch))
         wq.close_parents(root)
         if a.once:
             break
+    wq.propagate(root)
     q = wq.load(root)
     out = {"results": done, "open": [i for i in q["order"] if q["items"][i]["status"] not in ("done", "failed")],
            "spent_usd": wq.spent(q), "tree": wq.tree(q)}
+    stuck = [i for i in q["order"] if q["items"][i]["status"] == "dep_blocked"]
+    if stuck:
+        # their dependency failed: settle it (fix it, then `ccx q done <id> --ok 1`) and run again, or drop them
+        out["dep_blocked"] = {i: q["items"][i].get("blocked_by") or [] for i in stuck}
+    wait = wq.waiting(q, gate)
+    if wait:
+        out["waiting"] = wait
+        out["next"] = ("they wait for your verdict on what they depend on: check it (merge its worktree branch "
+                       "first, if it has one), then `ccx q done <id> --ok 1` and `ccx q run` again")
     back = {r["id"]: r["restored"] for r in done if r.get("restored")}
     if back:
         # resumed = same session; fresh = started again; decide = needs you; finished = it had finished already
@@ -229,7 +287,9 @@ def register(sub) -> None:
     ad.add_argument("--kind", choices=["code", "read", "research", "write"])
     ad.add_argument("--to")
     ad.add_argument("--budget", type=float, help="this item's budget (API-equivalent USD); split parts share it")
-    ad.add_argument("--plan", help="tasks JSON: [{id, title?, brief, deps?, check?, minutes?, mode?, kind?, to?}]")
+    ad.add_argument("--plan", help="plan JSON: {\"tasks\": [{id, title?, brief, deps?, check?, minutes?, mode?, kind?, "
+                    "to?, files?}]} or task-split's {\"pieces\": [{id, title, depends_on?, files?}]}; a dependency may "
+                    "name a later piece; an unknown id is an error")
     for name, hlp in (("ls", "items as JSON"), ("tree", "items as a tree")):
         qs.add_parser(name, help=hlp)
     bu = qs.add_parser("budget", help="stop `q run` when the queue has spent this much (API-equivalent USD)")
@@ -245,6 +305,8 @@ def register(sub) -> None:
         r.add_argument("--once", action="store_true", help="one round only")
         r.add_argument("--lanes", type=int, metavar="N", help="warm lanes: ready items for the same agent share at "
                        "most N sub-sessions, one item after another (default: [lanes] default, 0 = off)")
+        r.add_argument("--gate", action="store_true", help="an item's dependents start only after your verdict "
+                       "on it (`ccx q done <id> --ok 1`), not as soon as its run reports done (default: off)")
         r.add_argument("--from", dest="caller")
     for x in (ad, bu, dn):
         x.add_argument("--cwd")

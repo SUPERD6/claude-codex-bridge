@@ -78,6 +78,26 @@ def _check_names_real_tests(check: str | None, cwd: Path) -> str | None:
         for m in miss) + ". Existing test files: " + (shown or "none"))
 
 
+def _bg_not_delegated(p, a, route: dict, caller: str) -> None:
+    """The detached half of `ccx run --bg` whose routing says "do it yourself": no sub-agent starts, so nothing
+    would ever write the run.json `ccx show <id> --wait` polls, and the lead waited out its whole timeout. Write a
+    finished record instead (ok false, kind not_delegated, the advice as its summary). Only for that detached
+    process: its id came in CCX_RUN_ID and _background made its folder; a foreground refusal is unchanged."""
+    rid = os.environ.get("CCX_RUN_ID")
+    if not rid or not (p.runs / rid / "bg.log").exists() or (p.runs / rid / "run.json").exists():
+        return
+    advice = route.get("advice") or "routing advised against delegating this task"
+    rec = {"run_id": rid, "ts": time.time(), "state": "finished", "ok": False, "kind": "not_delegated",
+           "to": route.get("to") or "-", "tier": route.get("tier") or "-",
+           "mode": (route.get("mode") or {}).get("mode"), "caller": caller,
+           "cwd": str(Path(a.cwd or os.getcwd()).resolve()), "label": getattr(a, "label", None) or "",
+           "attempts": [], "route": route, "error": advice,
+           "ephemeral": True,                       # no session, no spend: not a piece of work in stats or the ui
+           "result": {"status": "not_delegated", "summary": advice,
+                      "next_step": "do it yourself, or run it again with --force to delegate anyway"}}
+    ledger.write_record(p.runs / rid, rec)
+
+
 def cmd_run(a) -> int:
     p = paths()
     cfg = load_config(p)
@@ -110,6 +130,7 @@ def cmd_run(a) -> int:
         proposals.answer(p, a.proposal, True)
         route["proposal"] = a.proposal
     if kw is None:
+        _bg_not_delegated(p, a, route, caller)
         _out({"delegated": False, "advice": route.get("advice"), "route": route,
               "hint": "add --force to delegate anyway"})
         return 0
