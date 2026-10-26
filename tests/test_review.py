@@ -238,6 +238,57 @@ class TestCheckGap(unittest.TestCase):
         self.assertEqual(review.changed_symbols(src, [11, 12, 13]), ["h"])     # Y = 2 is module level
         self.assertEqual(review.changed_symbols(src, [1]), ["A"])
 
+    def test_code_context(self):
+        # r5 design PR A: the changed function in full, the same-file definition it calls, the tests naming it
+        removed = STORE.replace("        return n\n", "        if n > self.get(k):\n            raise ValueError(n)\n"
+                                                    "        return n\n")
+        test = ("from inv.store import Store\n\n\ndef test_other():\n    assert 1\n\n\n"
+                "def test_remove():\n    assert Store().remove('a', 1) == 1\n")
+        d, actual, diff = self.change({"inv/store.py": removed})
+        (d / "tests" / "test_inv.py").write_text(test, encoding="utf-8")
+        ctx = review.code_context(d, diff, 10_000, "python -m pytest -q")
+        self.assertIn("## Code around the change", ctx)
+        self.assertIn("several reads in one turn", ctx)
+        self.assertIn("### inv/store.py:5-8 (remove)\n```\n    def remove(self, k, n):", ctx)
+        self.assertIn("### inv/store.py:2-3 (get)", ctx)                  # a same-file name it calls
+        self.assertIn("### tests/test_inv.py:8-9 (test_remove)", ctx)
+        self.assertNotIn("test_other", ctx)
+        self.assertNotIn("left out", ctx)
+        # the budget is what the diff leaves: too little -> the block shrinks or goes, never past the budget
+        small = review.code_context(d, diff, 700, "python -m pytest -q")
+        self.assertLessEqual(len(small), 700)
+        self.assertIn("left out to fit", small)
+        self.assertEqual(review.code_context(d, diff, 100, ""), "")
+        self.assertEqual(review.code_context(None, diff, 10_000, ""), "")
+        b = review.brief("r1", "task", "did it", diff, 12_000, {"cmd": "python -m pytest -q", "passed": True}, cwd=d)
+        self.assertIn("### inv/store.py:5-8 (remove)", b)
+        self.assertLess(b.index("```diff"), b.index("## Code around the change"), b)
+        self.assertLess(b.index("## Code around the change"), b.index("## Checks"))
+        self.assertNotIn("Code around the change", review.brief("r1", "task", "did it", diff, 12_000))
+        self.assertNotIn("Code around the change", review.brief("r1", "task", "did it", diff, len(diff) + 50,
+                                                                 cwd=d))
+
+    def test_code_context_skips_new_code_the_diff_shows(self):
+        d, actual, diff = self.change({"inv/report.py": "def summary(s):\n    return {}\n\n\ndef low(s):\n"
+                                                         "    return summary(s)\n"})
+        ctx = review.code_context(d, diff, 10_000)
+        self.assertNotIn("(low)", ctx)                                     # wholly new: already in the diff
+        self.assertIn("(summary)", ctx)                                    # but what it calls is shown
+
+    def test_code_context_follows_imports_into_the_tree(self):
+        d, actual, diff = self.change({"inv/report.py": "from .store import Store\nfrom os import getcwd\n\n\n"
+                                                         "def summary(s):\n    getcwd()\n    return Store().get(s)\n"})
+        ctx = review.code_context(d, diff, 10_000)
+        self.assertIn("### inv/store.py:1-6 (Store)", ctx)                # imported from this repository
+        self.assertNotIn("getcwd", ctx.split("```", 1)[0] + "".join(ctx.split("### ")[2:]))   # stdlib: not shown
+        self.assertEqual(review._imports(d, "inv/report.py", "from . import store\nfrom .store import Store as S\n"
+                                                            "def f():\n    from inv.report import summary\n"),
+                         {"store": "inv/__init__.py", "S": "inv/store.py", "summary": "inv/report.py"})
+
+    def test_spans(self):
+        src = ["def f(", "    a,", "):", "    return a", "", "x = 1", "function g() {", "  return 1;", "}", "y()"]
+        self.assertEqual(review._spans(src), [("f", 0, 3), ("g", 6, 8)])
+
 
 class TestReviewRun(Env):
     def setUp(self):
@@ -298,6 +349,37 @@ class TestReviewRun(Env):
                      "--no-fallback", "look at a.py", env={"FAKE_REVIEW": "pass"})
         self.assertNotIn("review", json.loads(r.stdout))
         self.assertEqual(self.reviews(), [])
+
+    def test_reviewer_is_not_told_to_run_tests(self):
+        # r5 design PR A: the review prompt carried the builder's "run the tests" Finish text and "your shell tool
+        # works", against the brief's "You cannot run commands"; the builder keeps its self-check
+        from ccx import prompts
+        self.go("--check", "exit 0")
+        rev = self.reviews()[0]["prompt"]
+        self.assertIn(prompts.REVIEW_FINISH, rev)
+        self.assertIn("Permission: " + prompts.REVIEW_PERMISSION, rev)
+        for builder_text in ("The acceptance check is", "run the relevant tests", "your shell tool works"):
+            self.assertNotIn(builder_text, rev)
+        self.assertIn("cannot run commands", rev)
+        build = [c["prompt"] for c in self.calls() if c["agent"] == "codex"][0]
+        self.assertIn("The acceptance check is `exit 0`", build)
+        self.assertNotIn(prompts.REVIEW_FINISH, build)
+
+    def test_code_context_is_opt_in(self):
+        # off by default (the replay found fewer real bugs with it); [review] context = true adds it
+        g = ["git", "-c", "user.name=t", "-c", "user.email=t@t"]
+        (self.work / "a.py").write_text("def f():\n    y = 0\n    return 1\n", encoding="utf-8")
+        subprocess.run([*g, "commit", "-qam", "f"], cwd=self.work, check=True)
+        env = {"FAKE_WRITE": f"{self.work / 'a.py'}=def f():\n    y = 0\n    return 2\n", "FAKE_REVIEW": "pass"}
+        argv = ("run", "--to", "codex", "--model", "gpt-6-luna", "--effort", "low", "--mode", "write", "--no-fallback",
+                "--check", "exit 0", "make f return 2")
+        self.ccx(*argv, env=env)
+        self.assertNotIn("## Code around the change", self.reviews()[-1]["prompt"])
+        from ccx.config import Paths
+        Paths(self.hub).user_tiers.write_text("[review]\ncontext = true\n", encoding="utf-8")
+        subprocess.run(["git", "checkout", "a.py"], cwd=self.work, check=True)
+        self.ccx(*argv, env=env)
+        self.assertIn("### a.py:1-3 (f)", self.reviews()[-1]["prompt"])
 
     def test_weak_evidence_gets_one_cheap_review(self):
         # H13: no acceptance command, only the sub-agent's own check -> one review by the cheapest other-vendor rung

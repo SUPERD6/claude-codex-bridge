@@ -40,6 +40,17 @@ SELFCHECK_CMD = ("The acceptance check is `{check}`; ccx runs it again afterward
                  "anything you are unsure of, or that the lead must decide, in open_questions.")
 
 
+# ccx's independent reviewer (review.py, caller "ccx-review") runs nothing: its brief says "You cannot run commands",
+# and the builder's "run the tests" Finish text plus "your shell tool works" contradicted it (r5 design, PR A)
+REVIEW_CALLER = "ccx-review"
+REVIEW_PERMISSION = ("read-only review: read and search files (git diff / git log are fine), but run no tests or "
+                     "other commands and modify nothing")
+REVIEW_FINISH = ("Do not run tests or other commands: ccx already ran the acceptance check (see Checks). Judge from "
+                 "the task, the diff and the code shown; when you need more, open all the files you need at once "
+                 "(several reads in one turn), not one per turn. Leave commands_run empty and set verification to "
+                 "'not-run (read-only review)'.")
+
+
 FOLLOWUP = """[ccx follow-up {run_id}] Same task, continue in this session.
 {brief}
 Rules still apply; """ + KEEP_TESTS + """
