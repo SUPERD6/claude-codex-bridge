@@ -1,0 +1,4366 @@
+{
+ "summary": {
+  "calib": {
+   "by_arm": {
+    "flash": {
+     "ok": 30,
+     "n": 30,
+     "usd": 0.1519
+    },
+    "haiku": {
+     "ok": 30,
+     "n": 30,
+     "usd": 0.1521
+    },
+    "luna": {
+     "ok": 26,
+     "n": 30,
+     "usd": 0.0837
+    },
+    "luna_rev": {
+     "ok": 30,
+     "n": 30,
+     "usd": 0.2515
+    },
+    "sonnet": {
+     "ok": 30,
+     "n": 30,
+     "usd": 1.4427
+    }
+   },
+   "by_task": {
+    "bank": {
+     "flash": "2/2",
+     "haiku": "2/2",
+     "luna": "2/2",
+     "luna_rev": "2/2",
+     "sonnet": "2/2"
+    },
+    "board": {
+     "flash": "2/2",
+     "haiku": "2/2",
+     "luna": "2/2",
+     "luna_rev": "2/2",
+     "sonnet": "2/2"
+    },
+    "cli-stats": {
+     "flash": "2/2",
+     "haiku": "2/2",
+     "luna": "2/2",
+     "luna_rev": "2/2",
+     "sonnet": "2/2"
+    },
+    "coupon": {
+     "flash": "2/2",
+     "haiku": "2/2",
+     "luna": "2/2",
+     "luna_rev": "2/2",
+     "sonnet": "2/2"
+    },
+    "courses": {
+     "flash": "2/2",
+     "haiku": "2/2",
+     "luna": "2/2",
+     "luna_rev": "2/2",
+     "sonnet": "2/2"
+    },
+    "csv-report": {
+     "flash": "2/2",
+     "haiku": "2/2",
+     "luna": "2/2",
+     "luna_rev": "2/2",
+     "sonnet": "2/2"
+    },
+    "debug-line": {
+     "flash": "2/2",
+     "haiku": "2/2",
+     "luna": "0/2",
+     "luna_rev": "2/2",
+     "sonnet": "2/2"
+    },
+    "display-name": {
+     "flash": "2/2",
+     "haiku": "2/2",
+     "luna": "2/2",
+     "luna_rev": "2/2",
+     "sonnet": "2/2"
+    },
+    "env-config": {
+     "flash": "2/2",
+     "haiku": "2/2",
+     "luna": "2/2",
+     "luna_rev": "2/2",
+     "sonnet": "2/2"
+    },
+    "fleet": {
+     "flash": "2/2",
+     "haiku": "2/2",
+     "luna": "2/2",
+     "luna_rev": "2/2",
+     "sonnet": "2/2"
+    },
+    "inventory": {
+     "flash": "2/2",
+     "haiku": "2/2",
+     "luna": "0/2",
+     "luna_rev": "2/2",
+     "sonnet": "2/2"
+    },
+    "rename-slug": {
+     "flash": "2/2",
+     "haiku": "2/2",
+     "luna": "2/2",
+     "luna_rev": "2/2",
+     "sonnet": "2/2"
+    },
+    "rename-user": {
+     "flash": "2/2",
+     "haiku": "2/2",
+     "luna": "2/2",
+     "luna_rev": "2/2",
+     "sonnet": "2/2"
+    },
+    "retry-json": {
+     "flash": "2/2",
+     "haiku": "2/2",
+     "luna": "2/2",
+     "luna_rev": "2/2",
+     "sonnet": "2/2"
+    },
+    "search-api": {
+     "flash": "2/2",
+     "haiku": "2/2",
+     "luna": "2/2",
+     "luna_rev": "2/2",
+     "sonnet": "2/2"
+    }
+   },
+   "luna_to_luna_rev_discordant": [
+    4,
+    0
+   ],
+   "mcnemar_p": 0.125,
+   "errors": 0
+  },
+  "long": {
+   "arms": {
+    "self": {
+     "ok": 5,
+     "n": 5,
+     "usd": 2.8351,
+     "cps": 0.567,
+     "lead_only_usd_med": 0.561157,
+     "lead_tokens_med": 575086,
+     "wall_med": 18.7,
+     "delegated": 0
+    },
+    "builtin": {
+     "ok": 5,
+     "n": 5,
+     "usd": 3.0628,
+     "cps": 0.6126,
+     "lead_only_usd_med": 0.612348,
+     "lead_tokens_med": 708199,
+     "wall_med": 44.2,
+     "delegated": 5
+    },
+    "ccx": {
+     "ok": 5,
+     "n": 5,
+     "usd": 2.9736,
+     "cps": 0.5947,
+     "lead_only_usd_med": 0.581232,
+     "lead_tokens_med": 579926,
+     "wall_med": 75.4,
+     "delegated": 4
+    }
+   },
+   "paired": {
+    "self->ccx": {
+     "usd": {
+      "median": 0.03319,
+      "ci": [
+       -0.027986999999999984,
+       0.071855
+      ],
+      "sign_p": 0.375
+     },
+     "lead_tokens": {
+      "median": 5890.0,
+      "ci": [
+       -231277.0,
+       243498.0
+      ],
+      "sign_p": 0.375
+     },
+     "wall_s": {
+      "median": 56.7,
+      "ci": [
+       37.50000000000001,
+       99.2
+      ],
+      "sign_p": 0.0625
+     }
+    },
+    "builtin->ccx": {
+     "usd": {
+      "median": -0.02458,
+      "ci": [
+       -0.04628399999999999,
+       0.0363
+      ],
+      "sign_p": 0.375
+     },
+     "lead_tokens": {
+      "median": -127441.0,
+      "ci": [
+       -128588.0,
+       230708.0
+      ],
+      "sign_p": 0.375
+     },
+     "wall_s": {
+      "median": 31.2,
+      "ci": [
+       24.9,
+       85.3
+      ],
+      "sign_p": 0.0625
+     }
+    },
+    "self->builtin": {
+     "usd": {
+      "median": 0.04773,
+      "ci": [
+       0.018297000000000008,
+       0.06952499999999995
+      ],
+      "sign_p": 0.0625
+     },
+     "lead_tokens": {
+      "median": 131590.0,
+      "ci": [
+       -103004.0,
+       249059.0
+      ],
+      "sign_p": 0.375
+     },
+     "wall_s": {
+      "median": 25.5,
+      "ci": [
+       7.200000000000003,
+       36.900000000000006
+      ],
+      "sign_p": 0.0625
+     }
+    }
+   }
+  },
+  "seed": {
+   "usd": 0.460169,
+   "context_max": 109079,
+   "requests": 3,
+   "rc": 0,
+   "wall_s": 31.7,
+   "notes": 17,
+   "notes_chars": 213451
+  }
+ },
+ "rows": [
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "coupon",
+   "arm": "sonnet",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 15.4,
+   "usd": 0.049482,
+   "tokens": 49354
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "coupon",
+   "arm": "haiku",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 23.2,
+   "usd": 0.006243,
+   "review_usd": 0,
+   "tokens": 100123,
+   "agents": [
+    "claude"
+   ],
+   "model": "haiku/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "coupon",
+   "arm": "luna",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 28.1,
+   "usd": 0.004309,
+   "review_usd": 0,
+   "tokens": 165462,
+   "agents": [
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "coupon",
+   "arm": "flash",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 34.5,
+   "usd": 0.007642,
+   "review_usd": 0,
+   "tokens": 98588,
+   "agents": [
+    "dsh"
+   ],
+   "model": "deepseek-flash/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "coupon",
+   "arm": "luna_rev",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 49.1,
+   "usd": 0.009911,
+   "review_usd": 0.006235,
+   "tokens": 188317,
+   "agents": [
+    "claude",
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": [
+    "pass"
+   ]
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "cli-stats",
+   "arm": "luna",
+   "ok": true,
+   "pytest": "2 passed in 0.03s",
+   "rc": 0,
+   "wall_s": 26.4,
+   "usd": 0.004164,
+   "review_usd": 0,
+   "tokens": 158826,
+   "agents": [
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "cli-stats",
+   "arm": "flash",
+   "ok": true,
+   "pytest": "2 passed in 0.02s",
+   "rc": 0,
+   "wall_s": 27.0,
+   "usd": 0.006256,
+   "review_usd": 0,
+   "tokens": 101544,
+   "agents": [
+    "dsh"
+   ],
+   "model": "deepseek-flash/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "cli-stats",
+   "arm": "haiku",
+   "ok": true,
+   "pytest": "2 passed in 0.02s",
+   "rc": 0,
+   "wall_s": 32.9,
+   "usd": 0.007054,
+   "review_usd": 0,
+   "tokens": 186138,
+   "agents": [
+    "claude"
+   ],
+   "model": "haiku/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "cli-stats",
+   "arm": "luna_rev",
+   "ok": true,
+   "pytest": "2 passed in 0.02s",
+   "rc": 0,
+   "wall_s": 41.4,
+   "usd": 0.009685,
+   "review_usd": 0.00505,
+   "tokens": 157223,
+   "agents": [
+    "claude",
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": [
+    "pass"
+   ]
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "cli-stats",
+   "arm": "sonnet",
+   "ok": true,
+   "pytest": "2 passed in 0.02s",
+   "rc": 0,
+   "wall_s": 15.5,
+   "usd": 0.052462,
+   "tokens": 63864
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "inventory",
+   "arm": "haiku",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 17.6,
+   "usd": 0.003669,
+   "review_usd": 0,
+   "tokens": 81211,
+   "agents": [
+    "claude"
+   ],
+   "model": "haiku/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "inventory",
+   "arm": "luna",
+   "ok": false,
+   "pytest": "1 failed, 1 passed in 0.12s",
+   "rc": 0,
+   "wall_s": 19.2,
+   "usd": 0.002312,
+   "review_usd": 0,
+   "tokens": 113905,
+   "agents": [
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "inventory",
+   "arm": "flash",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 15.8,
+   "usd": 0.003668,
+   "review_usd": 0,
+   "tokens": 58324,
+   "agents": [
+    "dsh"
+   ],
+   "model": "deepseek-flash/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "inventory",
+   "arm": "sonnet",
+   "ok": true,
+   "pytest": "4 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 17.4,
+   "usd": 0.05817,
+   "tokens": 63367
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "board",
+   "arm": "sonnet",
+   "ok": true,
+   "pytest": "4 passed in 0.02s",
+   "rc": 0,
+   "wall_s": 13.4,
+   "usd": 0.045141,
+   "tokens": 48485
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "board",
+   "arm": "haiku",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 22.6,
+   "usd": 0.004789,
+   "review_usd": 0,
+   "tokens": 116079,
+   "agents": [
+    "claude"
+   ],
+   "model": "haiku/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "board",
+   "arm": "luna",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 21.1,
+   "usd": 0.004171,
+   "review_usd": 0,
+   "tokens": 114983,
+   "agents": [
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "board",
+   "arm": "flash",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 20.6,
+   "usd": 0.004434,
+   "review_usd": 0,
+   "tokens": 71020,
+   "agents": [
+    "dsh"
+   ],
+   "model": "deepseek-flash/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "board",
+   "arm": "luna_rev",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 36.8,
+   "usd": 0.006915,
+   "review_usd": 0.003678,
+   "tokens": 155790,
+   "agents": [
+    "claude",
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": [
+    "pass"
+   ]
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "search-api",
+   "arm": "sonnet",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 13.7,
+   "usd": 0.048881,
+   "tokens": 62240
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "inventory",
+   "arm": "luna_rev",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 72.0,
+   "usd": 0.012446,
+   "review_usd": 0.007606,
+   "tokens": 296864,
+   "agents": [
+    "claude",
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": true,
+   "verdicts": [
+    "issues",
+    "pass"
+   ]
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "search-api",
+   "arm": "haiku",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 14.6,
+   "usd": 0.003457,
+   "review_usd": 0,
+   "tokens": 64996,
+   "agents": [
+    "claude"
+   ],
+   "model": "haiku/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "search-api",
+   "arm": "flash",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 18.2,
+   "usd": 0.004279,
+   "review_usd": 0,
+   "tokens": 83836,
+   "agents": [
+    "dsh"
+   ],
+   "model": "deepseek-flash/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "search-api",
+   "arm": "luna",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 20.4,
+   "usd": 0.003562,
+   "review_usd": 0,
+   "tokens": 122316,
+   "agents": [
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "search-api",
+   "arm": "luna_rev",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 70.9,
+   "usd": 0.013883,
+   "review_usd": 0.008903,
+   "tokens": 337516,
+   "agents": [
+    "claude",
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": true,
+   "verdicts": [
+    "issues",
+    "pass"
+   ]
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "courses",
+   "arm": "luna",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 24.2,
+   "usd": 0.003204,
+   "review_usd": 0,
+   "tokens": 94920,
+   "agents": [
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "courses",
+   "arm": "sonnet",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 17.2,
+   "usd": 0.052794,
+   "tokens": 61778
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "courses",
+   "arm": "luna_rev",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 43.6,
+   "usd": 0.008417,
+   "review_usd": 0.00417,
+   "tokens": 176964,
+   "agents": [
+    "claude",
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": [
+    "pass"
+   ]
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "csv-report",
+   "arm": "haiku",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 18.2,
+   "usd": 0.003767,
+   "review_usd": 0,
+   "tokens": 79726,
+   "agents": [
+    "claude"
+   ],
+   "model": "haiku/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "courses",
+   "arm": "haiku",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 28.0,
+   "usd": 0.005776,
+   "review_usd": 0,
+   "tokens": 124195,
+   "agents": [
+    "claude"
+   ],
+   "model": "haiku/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "courses",
+   "arm": "flash",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 26.3,
+   "usd": 0.005778,
+   "review_usd": 0,
+   "tokens": 74742,
+   "agents": [
+    "dsh"
+   ],
+   "model": "deepseek-flash/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "csv-report",
+   "arm": "sonnet",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 14.8,
+   "usd": 0.045117,
+   "tokens": 61190
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "csv-report",
+   "arm": "luna",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 21.0,
+   "usd": 0.001986,
+   "review_usd": 0,
+   "tokens": 95032,
+   "agents": [
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "debug-line",
+   "arm": "haiku",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 16.1,
+   "usd": 0.003374,
+   "review_usd": 0,
+   "tokens": 63928,
+   "agents": [
+    "claude"
+   ],
+   "model": "haiku/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "csv-report",
+   "arm": "flash",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 29.7,
+   "usd": 0.006005,
+   "review_usd": 0,
+   "tokens": 102195,
+   "agents": [
+    "dsh"
+   ],
+   "model": "deepseek-flash/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "debug-line",
+   "arm": "luna",
+   "ok": false,
+   "pytest": "1 failed, 1 passed in 0.14s",
+   "rc": 0,
+   "wall_s": 20.7,
+   "usd": 0.002284,
+   "review_usd": 0,
+   "tokens": 113895,
+   "agents": [
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "csv-report",
+   "arm": "luna_rev",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 36.4,
+   "usd": 0.008727,
+   "review_usd": 0.003565,
+   "tokens": 161158,
+   "agents": [
+    "claude",
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": [
+    "pass"
+   ]
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "debug-line",
+   "arm": "sonnet",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 13.6,
+   "usd": 0.04258,
+   "tokens": 48174
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "debug-line",
+   "arm": "flash",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 17.0,
+   "usd": 0.003985,
+   "review_usd": 0,
+   "tokens": 59046,
+   "agents": [
+    "dsh"
+   ],
+   "model": "deepseek-flash/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "rename-user",
+   "arm": "haiku",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 19.5,
+   "usd": 0.003907,
+   "review_usd": 0,
+   "tokens": 65592,
+   "agents": [
+    "claude"
+   ],
+   "model": "haiku/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "rename-user",
+   "arm": "luna",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 21.2,
+   "usd": 0.003498,
+   "review_usd": 0,
+   "tokens": 115384,
+   "agents": [
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "rename-user",
+   "arm": "flash",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 20.0,
+   "usd": 0.004698,
+   "review_usd": 0,
+   "tokens": 84122,
+   "agents": [
+    "dsh"
+   ],
+   "model": "deepseek-flash/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "rename-user",
+   "arm": "sonnet",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 16.6,
+   "usd": 0.053052,
+   "tokens": 63379
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "rename-user",
+   "arm": "luna_rev",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 50.2,
+   "usd": 0.009007,
+   "review_usd": 0.006769,
+   "tokens": 222818,
+   "agents": [
+    "claude",
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": [
+    "pass"
+   ]
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "display-name",
+   "arm": "flash",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 20.6,
+   "usd": 0.00459,
+   "review_usd": 0,
+   "tokens": 72647,
+   "agents": [
+    "dsh"
+   ],
+   "model": "deepseek-flash/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "display-name",
+   "arm": "sonnet",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 11.4,
+   "usd": 0.039572,
+   "tokens": 47469
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "debug-line",
+   "arm": "luna_rev",
+   "ok": true,
+   "pytest": "3 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 75.3,
+   "usd": 0.012524,
+   "review_usd": 0.007838,
+   "tokens": 315776,
+   "agents": [
+    "claude",
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": true,
+   "verdicts": [
+    "issues",
+    "pass"
+   ]
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "fleet",
+   "arm": "sonnet",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 10.1,
+   "usd": 0.036238,
+   "tokens": 35485
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "display-name",
+   "arm": "haiku",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 18.3,
+   "usd": 0.004059,
+   "review_usd": 0,
+   "tokens": 97119,
+   "agents": [
+    "claude"
+   ],
+   "model": "haiku/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "display-name",
+   "arm": "luna_rev",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 39.6,
+   "usd": 0.007528,
+   "review_usd": 0.003805,
+   "tokens": 183729,
+   "agents": [
+    "claude",
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": [
+    "pass"
+   ]
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "display-name",
+   "arm": "luna",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 25.4,
+   "usd": 0.002884,
+   "review_usd": 0,
+   "tokens": 140286,
+   "agents": [
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "fleet",
+   "arm": "flash",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 18.2,
+   "usd": 0.003736,
+   "review_usd": 0,
+   "tokens": 69758,
+   "agents": [
+    "dsh"
+   ],
+   "model": "deepseek-flash/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "fleet",
+   "arm": "luna",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 18.6,
+   "usd": 0.002307,
+   "review_usd": 0,
+   "tokens": 101862,
+   "agents": [
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "fleet",
+   "arm": "haiku",
+   "ok": true,
+   "pytest": "7 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 35.9,
+   "usd": 0.007275,
+   "review_usd": 0,
+   "tokens": 181285,
+   "agents": [
+    "claude"
+   ],
+   "model": "haiku/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "retry-json",
+   "arm": "luna",
+   "ok": true,
+   "pytest": "2 passed in 0.02s",
+   "rc": 0,
+   "wall_s": 23.7,
+   "usd": 0.002748,
+   "review_usd": 0,
+   "tokens": 136584,
+   "agents": [
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "fleet",
+   "arm": "luna_rev",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 43.1,
+   "usd": 0.006061,
+   "review_usd": 0.003482,
+   "tokens": 182203,
+   "agents": [
+    "claude",
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": [
+    "pass"
+   ]
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "retry-json",
+   "arm": "flash",
+   "ok": true,
+   "pytest": "9 passed in 0.02s",
+   "rc": 0,
+   "wall_s": 32.8,
+   "usd": 0.007076,
+   "review_usd": 0,
+   "tokens": 151917,
+   "agents": [
+    "dsh"
+   ],
+   "model": "deepseek-flash/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "retry-json",
+   "arm": "haiku",
+   "ok": true,
+   "pytest": "6 passed in 0.02s",
+   "rc": 0,
+   "wall_s": 25.0,
+   "usd": 0.005509,
+   "review_usd": 0,
+   "tokens": 106545,
+   "agents": [
+    "claude"
+   ],
+   "model": "haiku/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "retry-json",
+   "arm": "sonnet",
+   "ok": true,
+   "pytest": "3 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 15.4,
+   "usd": 0.048431,
+   "tokens": 62805
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "bank",
+   "arm": "haiku",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 22.4,
+   "usd": 0.004515,
+   "review_usd": 0,
+   "tokens": 115288,
+   "agents": [
+    "claude"
+   ],
+   "model": "haiku/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "retry-json",
+   "arm": "luna_rev",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 48.5,
+   "usd": 0.00853,
+   "review_usd": 0.004645,
+   "tokens": 201062,
+   "agents": [
+    "claude",
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": [
+    "pass"
+   ]
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "bank",
+   "arm": "flash",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 17.0,
+   "usd": 0.004047,
+   "review_usd": 0,
+   "tokens": 59210,
+   "agents": [
+    "dsh"
+   ],
+   "model": "deepseek-flash/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "bank",
+   "arm": "sonnet",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 13.5,
+   "usd": 0.042103,
+   "tokens": 48364
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "bank",
+   "arm": "luna",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 21.1,
+   "usd": 0.002993,
+   "review_usd": 0,
+   "tokens": 101482,
+   "agents": [
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "bank",
+   "arm": "luna_rev",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 39.6,
+   "usd": 0.005969,
+   "review_usd": 0.003581,
+   "tokens": 161040,
+   "agents": [
+    "claude",
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": [
+    "pass"
+   ]
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "env-config",
+   "arm": "sonnet",
+   "ok": true,
+   "pytest": "2 passed in 0.05s",
+   "rc": 0,
+   "wall_s": 13.5,
+   "usd": 0.043841,
+   "tokens": 48504
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "env-config",
+   "arm": "luna",
+   "ok": true,
+   "pytest": "2 passed in 0.03s",
+   "rc": 0,
+   "wall_s": 20.0,
+   "usd": 0.002366,
+   "review_usd": 0,
+   "tokens": 114464,
+   "agents": [
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "env-config",
+   "arm": "luna_rev",
+   "ok": true,
+   "pytest": "2 passed in 0.02s",
+   "rc": 0,
+   "wall_s": 45.4,
+   "usd": 0.00661,
+   "review_usd": 0.004272,
+   "tokens": 176034,
+   "agents": [
+    "claude",
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": [
+    "pass"
+   ]
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "env-config",
+   "arm": "haiku",
+   "ok": true,
+   "pytest": "2 passed in 0.02s",
+   "rc": 0,
+   "wall_s": 26.4,
+   "usd": 0.00576,
+   "review_usd": 0,
+   "tokens": 140125,
+   "agents": [
+    "claude"
+   ],
+   "model": "haiku/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "env-config",
+   "arm": "flash",
+   "ok": true,
+   "pytest": "2 passed in 0.02s",
+   "rc": 0,
+   "wall_s": 26.3,
+   "usd": 0.005605,
+   "review_usd": 0,
+   "tokens": 75688,
+   "agents": [
+    "dsh"
+   ],
+   "model": "deepseek-flash/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "rename-slug",
+   "arm": "haiku",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 21.1,
+   "usd": 0.004757,
+   "review_usd": 0,
+   "tokens": 117694,
+   "agents": [
+    "claude"
+   ],
+   "model": "haiku/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "rename-slug",
+   "arm": "flash",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 22.4,
+   "usd": 0.004404,
+   "review_usd": 0,
+   "tokens": 96602,
+   "agents": [
+    "dsh"
+   ],
+   "model": "deepseek-flash/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "rename-slug",
+   "arm": "sonnet",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 13.5,
+   "usd": 0.044287,
+   "tokens": 49231
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "rename-slug",
+   "arm": "luna",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 28.0,
+   "usd": 0.002665,
+   "review_usd": 0,
+   "tokens": 134226,
+   "agents": [
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "courses",
+   "arm": "flash",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 16.5,
+   "usd": 0.003826,
+   "review_usd": 0,
+   "tokens": 58139,
+   "agents": [
+    "dsh"
+   ],
+   "model": "deepseek-flash/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "courses",
+   "arm": "sonnet",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 15.1,
+   "usd": 0.050863,
+   "tokens": 61931
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 1,
+   "task": "rename-slug",
+   "arm": "luna_rev",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 54.5,
+   "usd": 0.009645,
+   "review_usd": 0.007535,
+   "tokens": 218798,
+   "agents": [
+    "claude",
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": [
+    "pass"
+   ]
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "courses",
+   "arm": "luna",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 19.7,
+   "usd": 0.002113,
+   "review_usd": 0,
+   "tokens": 94800,
+   "agents": [
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "courses",
+   "arm": "haiku",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 2,
+   "wall_s": 41.0,
+   "usd": 0.008259,
+   "review_usd": 0,
+   "tokens": 217577,
+   "agents": [
+    "claude"
+   ],
+   "model": "haiku/low",
+   "status": "error",
+   "check": null,
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "rename-user",
+   "arm": "luna",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 20.9,
+   "usd": 0.003472,
+   "review_usd": 0,
+   "tokens": 114264,
+   "agents": [
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "rename-user",
+   "arm": "haiku",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 18.6,
+   "usd": 0.004049,
+   "review_usd": 0,
+   "tokens": 82950,
+   "agents": [
+    "claude"
+   ],
+   "model": "haiku/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "courses",
+   "arm": "luna_rev",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 48.7,
+   "usd": 0.010237,
+   "review_usd": 0.005999,
+   "tokens": 215777,
+   "agents": [
+    "claude",
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": [
+    "pass"
+   ]
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "rename-user",
+   "arm": "flash",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 2,
+   "wall_s": 24.0,
+   "usd": 0.005598,
+   "review_usd": 0,
+   "tokens": 112081,
+   "agents": [
+    "dsh"
+   ],
+   "model": "deepseek-flash/low",
+   "status": "error",
+   "check": null,
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "rename-user",
+   "arm": "sonnet",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 18.7,
+   "usd": 0.060489,
+   "tokens": 78134
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "display-name",
+   "arm": "sonnet",
+   "ok": true,
+   "pytest": "2 passed in 0.02s",
+   "rc": 0,
+   "wall_s": 12.5,
+   "usd": 0.041829,
+   "tokens": 47871
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "rename-user",
+   "arm": "luna_rev",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 40.1,
+   "usd": 0.006072,
+   "review_usd": 0.003952,
+   "tokens": 157745,
+   "agents": [
+    "claude",
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": [
+    "pass"
+   ]
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "display-name",
+   "arm": "luna",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 21.6,
+   "usd": 0.002339,
+   "review_usd": 0,
+   "tokens": 102067,
+   "agents": [
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "display-name",
+   "arm": "flash",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 24.2,
+   "usd": 0.004747,
+   "review_usd": 0,
+   "tokens": 102163,
+   "agents": [
+    "dsh"
+   ],
+   "model": "deepseek-flash/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "fleet",
+   "arm": "sonnet",
+   "ok": true,
+   "pytest": "2 passed in 0.02s",
+   "rc": 0,
+   "wall_s": 10.0,
+   "usd": 0.036528,
+   "tokens": 35474
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "display-name",
+   "arm": "haiku",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 27.3,
+   "usd": 0.006687,
+   "review_usd": 0,
+   "tokens": 160478,
+   "agents": [
+    "claude"
+   ],
+   "model": "haiku/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "fleet",
+   "arm": "luna",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 19.3,
+   "usd": 0.002066,
+   "review_usd": 0,
+   "tokens": 94991,
+   "agents": [
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "display-name",
+   "arm": "luna_rev",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 44.2,
+   "usd": 0.006637,
+   "review_usd": 0.004194,
+   "tokens": 177849,
+   "agents": [
+    "claude",
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": [
+    "pass"
+   ]
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "fleet",
+   "arm": "flash",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 17.5,
+   "usd": 0.003677,
+   "review_usd": 0,
+   "tokens": 69732,
+   "agents": [
+    "dsh"
+   ],
+   "model": "deepseek-flash/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "fleet",
+   "arm": "haiku",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 22.3,
+   "usd": 0.004761,
+   "review_usd": 0,
+   "tokens": 117410,
+   "agents": [
+    "claude"
+   ],
+   "model": "haiku/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "fleet",
+   "arm": "luna_rev",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 38.8,
+   "usd": 0.005889,
+   "review_usd": 0.003327,
+   "tokens": 168226,
+   "agents": [
+    "claude",
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": [
+    "pass"
+   ]
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "inventory",
+   "arm": "haiku",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 21.2,
+   "usd": 0.004311,
+   "review_usd": 0,
+   "tokens": 98199,
+   "agents": [
+    "claude"
+   ],
+   "model": "haiku/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "inventory",
+   "arm": "sonnet",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 12.0,
+   "usd": 0.037856,
+   "tokens": 35780
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "inventory",
+   "arm": "luna",
+   "ok": false,
+   "pytest": "1 failed, 1 passed in 0.14s",
+   "rc": 0,
+   "wall_s": 16.6,
+   "usd": 0.002049,
+   "review_usd": 0,
+   "tokens": 94605,
+   "agents": [
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "inventory",
+   "arm": "flash",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 20.8,
+   "usd": 0.004218,
+   "review_usd": 0,
+   "tokens": 70779,
+   "agents": [
+    "dsh"
+   ],
+   "model": "deepseek-flash/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "env-config",
+   "arm": "sonnet",
+   "ok": true,
+   "pytest": "3 passed in 0.02s",
+   "rc": 0,
+   "wall_s": 16.2,
+   "usd": 0.053083,
+   "tokens": 49286
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "env-config",
+   "arm": "luna",
+   "ok": true,
+   "pytest": "2 passed in 0.02s",
+   "rc": 0,
+   "wall_s": 22.6,
+   "usd": 0.002954,
+   "review_usd": 0,
+   "tokens": 114437,
+   "agents": [
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "inventory",
+   "arm": "luna_rev",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 67.3,
+   "usd": 0.010808,
+   "review_usd": 0.007355,
+   "tokens": 279288,
+   "agents": [
+    "claude",
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": true,
+   "verdicts": [
+    "issues",
+    "issues"
+   ]
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "env-config",
+   "arm": "flash",
+   "ok": true,
+   "pytest": "2 passed in 0.02s",
+   "rc": 0,
+   "wall_s": 25.5,
+   "usd": 0.00507,
+   "review_usd": 0,
+   "tokens": 86652,
+   "agents": [
+    "dsh"
+   ],
+   "model": "deepseek-flash/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "env-config",
+   "arm": "haiku",
+   "ok": true,
+   "pytest": "5 passed in 0.02s",
+   "rc": 0,
+   "wall_s": 28.1,
+   "usd": 0.005223,
+   "review_usd": 0,
+   "tokens": 139677,
+   "agents": [
+    "claude"
+   ],
+   "model": "haiku/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "csv-report",
+   "arm": "sonnet",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 11.4,
+   "usd": 0.03726,
+   "tokens": 35836
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "csv-report",
+   "arm": "haiku",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 22.0,
+   "usd": 0.00464,
+   "review_usd": 0,
+   "tokens": 117063,
+   "agents": [
+    "claude"
+   ],
+   "model": "haiku/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "csv-report",
+   "arm": "flash",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 24.2,
+   "usd": 0.004736,
+   "review_usd": 0,
+   "tokens": 84979,
+   "agents": [
+    "dsh"
+   ],
+   "model": "deepseek-flash/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "csv-report",
+   "arm": "luna",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 18.5,
+   "usd": 0.001784,
+   "review_usd": 0,
+   "tokens": 75162,
+   "agents": [
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "env-config",
+   "arm": "luna_rev",
+   "ok": true,
+   "pytest": "2 passed in 0.02s",
+   "rc": 0,
+   "wall_s": 47.8,
+   "usd": 0.008409,
+   "review_usd": 0.005235,
+   "tokens": 177069,
+   "agents": [
+    "claude",
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": [
+    "pass"
+   ]
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "debug-line",
+   "arm": "sonnet",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 14.5,
+   "usd": 0.041899,
+   "tokens": 48362
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "debug-line",
+   "arm": "luna",
+   "ok": false,
+   "pytest": "1 failed, 1 passed in 0.12s",
+   "rc": 0,
+   "wall_s": 20.1,
+   "usd": 0.00226,
+   "review_usd": 0,
+   "tokens": 113615,
+   "agents": [
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "csv-report",
+   "arm": "luna_rev",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 39.9,
+   "usd": 0.005933,
+   "review_usd": 0.003951,
+   "tokens": 154390,
+   "agents": [
+    "claude",
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": [
+    "pass"
+   ]
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "debug-line",
+   "arm": "haiku",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 18.9,
+   "usd": 0.004059,
+   "review_usd": 0,
+   "tokens": 81245,
+   "agents": [
+    "claude"
+   ],
+   "model": "haiku/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "debug-line",
+   "arm": "flash",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 30.6,
+   "usd": 0.005867,
+   "review_usd": 0,
+   "tokens": 87651,
+   "agents": [
+    "dsh"
+   ],
+   "model": "deepseek-flash/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "rename-slug",
+   "arm": "haiku",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 21.6,
+   "usd": 0.004917,
+   "review_usd": 0,
+   "tokens": 134732,
+   "agents": [
+    "claude"
+   ],
+   "model": "haiku/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "rename-slug",
+   "arm": "flash",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 21.8,
+   "usd": 0.004447,
+   "review_usd": 0,
+   "tokens": 96602,
+   "agents": [
+    "dsh"
+   ],
+   "model": "deepseek-flash/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "rename-slug",
+   "arm": "sonnet",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 14.3,
+   "usd": 0.049134,
+   "tokens": 62704
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "rename-slug",
+   "arm": "luna",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 20.0,
+   "usd": 0.00207,
+   "review_usd": 0,
+   "tokens": 94898,
+   "agents": [
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "cli-stats",
+   "arm": "sonnet",
+   "ok": true,
+   "pytest": "2 passed in 0.03s",
+   "rc": 0,
+   "wall_s": 17.9,
+   "usd": 0.056303,
+   "tokens": 64666
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "rename-slug",
+   "arm": "luna_rev",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 34.0,
+   "usd": 0.005145,
+   "review_usd": 0.002995,
+   "tokens": 139510,
+   "agents": [
+    "claude",
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": [
+    "pass"
+   ]
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "cli-stats",
+   "arm": "luna",
+   "ok": true,
+   "pytest": "2 passed in 0.02s",
+   "rc": 0,
+   "wall_s": 20.0,
+   "usd": 0.003301,
+   "review_usd": 0,
+   "tokens": 96842,
+   "agents": [
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "debug-line",
+   "arm": "luna_rev",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 76.8,
+   "usd": 0.012925,
+   "review_usd": 0.007904,
+   "tokens": 296146,
+   "agents": [
+    "claude",
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": true,
+   "verdicts": [
+    "issues",
+    "pass"
+   ]
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "cli-stats",
+   "arm": "flash",
+   "ok": true,
+   "pytest": "2 passed in 0.03s",
+   "rc": 0,
+   "wall_s": 22.1,
+   "usd": 0.004915,
+   "review_usd": 0,
+   "tokens": 88220,
+   "agents": [
+    "dsh"
+   ],
+   "model": "deepseek-flash/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "cli-stats",
+   "arm": "haiku",
+   "ok": true,
+   "pytest": "2 passed in 0.03s",
+   "rc": 0,
+   "wall_s": 24.0,
+   "usd": 0.005226,
+   "review_usd": 0,
+   "tokens": 121690,
+   "agents": [
+    "claude"
+   ],
+   "model": "haiku/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "cli-stats",
+   "arm": "luna_rev",
+   "ok": true,
+   "pytest": "2 passed in 0.02s",
+   "rc": 0,
+   "wall_s": 49.7,
+   "usd": 0.008593,
+   "review_usd": 0.005541,
+   "tokens": 247203,
+   "agents": [
+    "claude",
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": [
+    "pass"
+   ]
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "retry-json",
+   "arm": "sonnet",
+   "ok": true,
+   "pytest": "4 passed in 0.02s",
+   "rc": 0,
+   "wall_s": 17.6,
+   "usd": 0.057184,
+   "tokens": 63802
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "retry-json",
+   "arm": "luna",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 18.6,
+   "usd": 0.002298,
+   "review_usd": 0,
+   "tokens": 114788,
+   "agents": [
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "retry-json",
+   "arm": "haiku",
+   "ok": true,
+   "pytest": "5 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 27.1,
+   "usd": 0.006031,
+   "review_usd": 0,
+   "tokens": 160390,
+   "agents": [
+    "claude"
+   ],
+   "model": "haiku/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "retry-json",
+   "arm": "luna_rev",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 52.0,
+   "usd": 0.007814,
+   "review_usd": 0.004317,
+   "tokens": 252915,
+   "agents": [
+    "claude",
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": [
+    "pass"
+   ]
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "retry-json",
+   "arm": "flash",
+   "ok": true,
+   "pytest": "7 passed in 0.02s",
+   "rc": 0,
+   "wall_s": 32.0,
+   "usd": 0.006776,
+   "review_usd": 0,
+   "tokens": 117052,
+   "agents": [
+    "dsh"
+   ],
+   "model": "deepseek-flash/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "board",
+   "arm": "haiku",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 17.9,
+   "usd": 0.004541,
+   "review_usd": 0,
+   "tokens": 115631,
+   "agents": [
+    "claude"
+   ],
+   "model": "haiku/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "board",
+   "arm": "sonnet",
+   "ok": true,
+   "pytest": "4 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 18.4,
+   "usd": 0.061368,
+   "tokens": 76340
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "board",
+   "arm": "flash",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 20.1,
+   "usd": 0.004073,
+   "review_usd": 0,
+   "tokens": 71136,
+   "agents": [
+    "dsh"
+   ],
+   "model": "deepseek-flash/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "board",
+   "arm": "luna",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 22.4,
+   "usd": 0.002155,
+   "review_usd": 0,
+   "tokens": 95491,
+   "agents": [
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "bank",
+   "arm": "flash",
+   "ok": true,
+   "pytest": "2 passed in 0.02s",
+   "rc": 0,
+   "wall_s": 28.0,
+   "usd": 0.005482,
+   "review_usd": 0,
+   "tokens": 98831,
+   "agents": [
+    "dsh"
+   ],
+   "model": "deepseek-flash/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "board",
+   "arm": "luna_rev",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 39.7,
+   "usd": 0.007456,
+   "review_usd": 0.004302,
+   "tokens": 186238,
+   "agents": [
+    "claude",
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": [
+    "pass"
+   ]
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "bank",
+   "arm": "haiku",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 20.7,
+   "usd": 0.004486,
+   "review_usd": 0,
+   "tokens": 101453,
+   "agents": [
+    "claude"
+   ],
+   "model": "haiku/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "bank",
+   "arm": "sonnet",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 15.4,
+   "usd": 0.051871,
+   "tokens": 62091
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "bank",
+   "arm": "luna",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 18.6,
+   "usd": 0.002291,
+   "review_usd": 0,
+   "tokens": 101742,
+   "agents": [
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "bank",
+   "arm": "luna_rev",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 38.7,
+   "usd": 0.005812,
+   "review_usd": 0.00373,
+   "tokens": 155496,
+   "agents": [
+    "claude",
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": [
+    "unclear"
+   ]
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "coupon",
+   "arm": "sonnet",
+   "ok": true,
+   "pytest": "3 passed in 0.02s",
+   "rc": 0,
+   "wall_s": 16.0,
+   "usd": 0.051556,
+   "tokens": 50133
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "coupon",
+   "arm": "luna",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 23.1,
+   "usd": 0.003066,
+   "review_usd": 0,
+   "tokens": 115618,
+   "agents": [
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "coupon",
+   "arm": "luna_rev",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 44.0,
+   "usd": 0.008033,
+   "review_usd": 0.004889,
+   "tokens": 159424,
+   "agents": [
+    "claude",
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": [
+    "pass"
+   ]
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "search-api",
+   "arm": "haiku",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 15.3,
+   "usd": 0.003247,
+   "review_usd": 0,
+   "tokens": 63259,
+   "agents": [
+    "claude"
+   ],
+   "model": "haiku/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "coupon",
+   "arm": "flash",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 37.7,
+   "usd": 0.007874,
+   "review_usd": 0,
+   "tokens": 94098,
+   "agents": [
+    "dsh"
+   ],
+   "model": "deepseek-flash/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "coupon",
+   "arm": "haiku",
+   "ok": true,
+   "pytest": "6 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 39.1,
+   "usd": 0.007754,
+   "review_usd": 0,
+   "tokens": 209182,
+   "agents": [
+    "claude"
+   ],
+   "model": "haiku/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "search-api",
+   "arm": "flash",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 21.7,
+   "usd": 0.004405,
+   "review_usd": 0,
+   "tokens": 94516,
+   "agents": [
+    "dsh"
+   ],
+   "model": "deepseek-flash/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "search-api",
+   "arm": "sonnet",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 17.4,
+   "usd": 0.053342,
+   "tokens": 75914
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "search-api",
+   "arm": "luna_rev",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 37.9,
+   "usd": 0.005854,
+   "review_usd": 0.003546,
+   "tokens": 160097,
+   "agents": [
+    "claude",
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": [
+    "pass"
+   ]
+  },
+  {
+   "tag": "r4",
+   "exp": "calib",
+   "round": 2,
+   "task": "search-api",
+   "arm": "luna",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 28.9,
+   "usd": 0.003987,
+   "review_usd": 0,
+   "tokens": 113686,
+   "agents": [
+    "codex"
+   ],
+   "model": "gpt-6-luna/low",
+   "status": "done",
+   "check": {
+    "cmd": "python -m pytest -q",
+    "passed": true,
+    "exit": 0
+   },
+   "fix_round": false,
+   "verdicts": []
+  },
+  {
+   "tag": "r4",
+   "exp": "long",
+   "round": 1,
+   "task": "search-api",
+   "arm": "ccx",
+   "ok": true,
+   "pytest": "7 passed in 0.02s",
+   "rc": 0,
+   "wall_s": 75.4,
+   "usd": 0.584311,
+   "lead_usd": 0.57495,
+   "lead_only_usd": 0.57495,
+   "sub_usd": 0.009361,
+   "by_model_usd": {
+    "claude-sonnet-5-5": 0.57495
+   },
+   "ccx_usd": 0.009361,
+   "lead_requests": 5,
+   "lead_tokens": 578749,
+   "lead_output_tokens": 88,
+   "lead_tools": {
+    "Glob": 1,
+    "Read": 6,
+    "Bash": 2
+   },
+   "agent_calls": 0,
+   "ccx_runs": 1,
+   "ccx_resumes": 0,
+   "rework": 0,
+   "delegated": true,
+   "context_attached": 1
+  },
+  {
+   "tag": "r4",
+   "exp": "long",
+   "round": 1,
+   "task": "search-api",
+   "arm": "self",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 18.7,
+   "usd": 0.561157,
+   "lead_usd": 0.561157,
+   "lead_only_usd": 0.561157,
+   "sub_usd": 0,
+   "by_model_usd": {
+    "claude-sonnet-5-5": 0.561157
+   },
+   "ccx_usd": 0,
+   "lead_requests": 5,
+   "lead_tokens": 574600,
+   "lead_output_tokens": 403,
+   "lead_tools": {
+    "Glob": 1,
+    "Read": 6,
+    "Edit": 2,
+    "Bash": 1
+   },
+   "agent_calls": 0,
+   "ccx_runs": 0,
+   "ccx_resumes": 0,
+   "rework": 0,
+   "delegated": null
+  },
+  {
+   "tag": "r4",
+   "exp": "long",
+   "round": 1,
+   "task": "csv-report",
+   "arm": "self",
+   "ok": true,
+   "pytest": "3 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 28.9,
+   "usd": 0.596881,
+   "lead_usd": 0.596881,
+   "lead_only_usd": 0.596881,
+   "sub_usd": 0,
+   "by_model_usd": {
+    "claude-sonnet-5-5": 0.596881
+   },
+   "ccx_usd": 0,
+   "lead_requests": 7,
+   "lead_tokens": 811203,
+   "lead_output_tokens": 299,
+   "lead_tools": {
+    "Grep": 1,
+    "Glob": 1,
+    "Read": 5,
+    "Edit": 5,
+    "Bash": 1
+   },
+   "agent_calls": 0,
+   "ccx_runs": 0,
+   "ccx_resumes": 0,
+   "rework": 0,
+   "delegated": null
+  },
+  {
+   "tag": "r4",
+   "exp": "long",
+   "round": 1,
+   "task": "coupon",
+   "arm": "ccx",
+   "ok": true,
+   "pytest": "8 passed in 0.02s",
+   "rc": 0,
+   "wall_s": 97.1,
+   "usd": 0.600615,
+   "lead_usd": 0.590392,
+   "lead_only_usd": 0.590392,
+   "sub_usd": 0.010223,
+   "by_model_usd": {
+    "claude-sonnet-5-5": 0.590392
+   },
+   "ccx_usd": 0.010223,
+   "lead_requests": 5,
+   "lead_tokens": 581769,
+   "lead_output_tokens": 71,
+   "lead_tools": {
+    "Glob": 1,
+    "Read": 6,
+    "Bash": 2
+   },
+   "agent_calls": 0,
+   "ccx_runs": 1,
+   "ccx_resumes": 0,
+   "rework": 0,
+   "delegated": true,
+   "context_attached": 1
+  },
+  {
+   "tag": "r4",
+   "exp": "long",
+   "round": 1,
+   "task": "coupon",
+   "arm": "builtin",
+   "ok": true,
+   "pytest": "8 passed in 0.02s",
+   "rc": 0,
+   "wall_s": 58.7,
+   "usd": 0.624109,
+   "lead_usd": 0.624109,
+   "lead_only_usd": 0.618053,
+   "sub_usd": 0.006056,
+   "by_model_usd": {
+    "claude-sonnet-5-5": 0.618053,
+    "claude-haiku-5-5": 0.006056
+   },
+   "ccx_usd": 0,
+   "lead_requests": 6,
+   "lead_tokens": 708384,
+   "lead_output_tokens": 105,
+   "lead_tools": {
+    "Bash": 3,
+    "Agent": 1
+   },
+   "agent_calls": 1,
+   "ccx_runs": 0,
+   "ccx_resumes": 0,
+   "rework": 0,
+   "delegated": true
+  },
+  {
+   "tag": "r4",
+   "exp": "long",
+   "round": 1,
+   "task": "coupon",
+   "arm": "self",
+   "ok": true,
+   "pytest": "2 passed in 0.02s",
+   "rc": 0,
+   "wall_s": 21.8,
+   "usd": 0.567428,
+   "lead_usd": 0.567428,
+   "lead_only_usd": 0.567428,
+   "sub_usd": 0,
+   "by_model_usd": {
+    "claude-sonnet-5-5": 0.567428
+   },
+   "ccx_usd": 0,
+   "lead_requests": 5,
+   "lead_tokens": 575879,
+   "lead_output_tokens": 379,
+   "lead_tools": {
+    "Glob": 1,
+    "Read": 6,
+    "Write": 1,
+    "Edit": 1,
+    "Bash": 1
+   },
+   "agent_calls": 0,
+   "ccx_runs": 0,
+   "ccx_resumes": 0,
+   "rework": 0,
+   "delegated": null
+  },
+  {
+   "tag": "r4",
+   "exp": "long",
+   "round": 1,
+   "task": "debug-line",
+   "arm": "self",
+   "ok": true,
+   "pytest": "2 passed in 0.02s",
+   "rc": 0,
+   "wall_s": 17.8,
+   "usd": 0.559584,
+   "lead_usd": 0.559584,
+   "lead_only_usd": 0.559584,
+   "sub_usd": 0,
+   "by_model_usd": {
+    "claude-sonnet-5-5": 0.559584
+   },
+   "ccx_usd": 0,
+   "lead_requests": 5,
+   "lead_tokens": 575086,
+   "lead_output_tokens": 220,
+   "lead_tools": {
+    "Glob": 1,
+    "Grep": 1,
+    "Read": 5,
+    "Write": 1,
+    "Bash": 1
+   },
+   "agent_calls": 0,
+   "ccx_runs": 0,
+   "ccx_resumes": 0,
+   "rework": 0,
+   "delegated": null
+  },
+  {
+   "tag": "r4",
+   "exp": "long",
+   "round": 1,
+   "task": "debug-line",
+   "arm": "ccx",
+   "ok": true,
+   "pytest": "6 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 117.0,
+   "usd": 0.631439,
+   "lead_usd": 0.61875,
+   "lead_only_usd": 0.61875,
+   "sub_usd": 0.012689,
+   "by_model_usd": {
+    "claude-sonnet-5-5": 0.61875
+   },
+   "ccx_usd": 0.012689,
+   "lead_requests": 7,
+   "lead_tokens": 818584,
+   "lead_output_tokens": 685,
+   "lead_tools": {
+    "Glob": 1,
+    "Read": 6,
+    "Bash": 4
+   },
+   "agent_calls": 0,
+   "ccx_runs": 0,
+   "ccx_resumes": 1,
+   "rework": 1,
+   "delegated": false,
+   "context_attached": 1
+  },
+  {
+   "tag": "r4",
+   "exp": "long",
+   "round": 1,
+   "task": "debug-line",
+   "arm": "builtin",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 31.7,
+   "usd": 0.595139,
+   "lead_usd": 0.595139,
+   "lead_only_usd": 0.592902,
+   "sub_usd": 0.002237,
+   "by_model_usd": {
+    "claude-sonnet-5-5": 0.592902,
+    "claude-haiku-5-5": 0.002237
+   },
+   "ccx_usd": 0,
+   "lead_requests": 5,
+   "lead_tokens": 587876,
+   "lead_output_tokens": 278,
+   "lead_tools": {
+    "Bash": 2,
+    "Agent": 1
+   },
+   "agent_calls": 1,
+   "ccx_runs": 0,
+   "ccx_resumes": 0,
+   "rework": 0,
+   "delegated": true
+  },
+  {
+   "tag": "r4",
+   "exp": "long",
+   "round": 1,
+   "task": "rename-user",
+   "arm": "ccx",
+   "ok": true,
+   "pytest": "6 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 73.5,
+   "usd": 0.588294,
+   "lead_usd": 0.581232,
+   "lead_only_usd": 0.581232,
+   "sub_usd": 0.007062,
+   "by_model_usd": {
+    "claude-sonnet-5-5": 0.581232
+   },
+   "ccx_usd": 0.007062,
+   "lead_requests": 5,
+   "lead_tokens": 579842,
+   "lead_output_tokens": 67,
+   "lead_tools": {
+    "Glob": 1,
+    "Read": 5,
+    "Bash": 2
+   },
+   "agent_calls": 0,
+   "ccx_runs": 1,
+   "ccx_resumes": 0,
+   "rework": 0,
+   "delegated": true,
+   "context_attached": 1
+  },
+  {
+   "tag": "r4",
+   "exp": "long",
+   "round": 1,
+   "task": "rename-user",
+   "arm": "self",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 17.5,
+   "usd": 0.550003,
+   "lead_usd": 0.550003,
+   "lead_only_usd": 0.550003,
+   "sub_usd": 0,
+   "by_model_usd": {
+    "claude-sonnet-5-5": 0.550003
+   },
+   "ccx_usd": 0,
+   "lead_requests": 4,
+   "lead_tokens": 459371,
+   "lead_output_tokens": 389,
+   "lead_tools": {
+    "Read": 3,
+    "Glob": 1,
+    "Edit": 3,
+    "Bash": 1
+   },
+   "agent_calls": 0,
+   "ccx_runs": 0,
+   "ccx_resumes": 0,
+   "rework": 0,
+   "delegated": null
+  },
+  {
+   "tag": "r4",
+   "exp": "long",
+   "round": 1,
+   "task": "rename-user",
+   "arm": "builtin",
+   "ok": true,
+   "pytest": "9 passed in 0.02s",
+   "rc": 0,
+   "wall_s": 48.6,
+   "usd": 0.619528,
+   "lead_usd": 0.619528,
+   "lead_only_usd": 0.615074,
+   "sub_usd": 0.004454,
+   "by_model_usd": {
+    "claude-sonnet-5-5": 0.615074,
+    "claude-haiku-5-5": 0.004454
+   },
+   "ccx_usd": 0,
+   "lead_requests": 6,
+   "lead_tokens": 708430,
+   "lead_output_tokens": 547,
+   "lead_tools": {
+    "Glob": 1,
+    "Read": 5,
+    "Agent": 1,
+    "Bash": 1
+   },
+   "agent_calls": 1,
+   "ccx_runs": 0,
+   "ccx_resumes": 0,
+   "rework": 0,
+   "delegated": true
+  },
+  {
+   "tag": "r4",
+   "exp": "long",
+   "round": 1,
+   "task": "csv-report",
+   "arm": "builtin",
+   "ok": true,
+   "pytest": "6 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 36.1,
+   "usd": 0.615178,
+   "lead_usd": 0.615178,
+   "lead_only_usd": 0.612348,
+   "sub_usd": 0.00283,
+   "by_model_usd": {
+    "claude-sonnet-5-5": 0.612348,
+    "claude-haiku-5-5": 0.00283
+   },
+   "ccx_usd": 0,
+   "lead_requests": 6,
+   "lead_tokens": 708199,
+   "lead_output_tokens": 293,
+   "lead_tools": {
+    "Bash": 2,
+    "Read": 5,
+    "Agent": 1
+   },
+   "agent_calls": 1,
+   "ccx_runs": 0,
+   "ccx_resumes": 0,
+   "rework": 0,
+   "delegated": true
+  },
+  {
+   "tag": "r4",
+   "exp": "long",
+   "round": 1,
+   "task": "csv-report",
+   "arm": "ccx",
+   "ok": true,
+   "pytest": "6 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 66.4,
+   "usd": 0.568894,
+   "lead_usd": 0.561291,
+   "lead_only_usd": 0.561291,
+   "sub_usd": 0.007603,
+   "by_model_usd": {
+    "claude-sonnet-5-5": 0.561291
+   },
+   "ccx_usd": 0.007603,
+   "lead_requests": 5,
+   "lead_tokens": 579926,
+   "lead_output_tokens": 60,
+   "lead_tools": {
+    "Glob": 1,
+    "Bash": 3,
+    "Read": 5
+   },
+   "agent_calls": 0,
+   "ccx_runs": 1,
+   "ccx_resumes": 0,
+   "rework": 0,
+   "delegated": true,
+   "context_attached": 1
+  },
+  {
+   "tag": "r4",
+   "exp": "long",
+   "round": 1,
+   "task": "search-api",
+   "arm": "builtin",
+   "ok": true,
+   "pytest": "2 passed in 0.01s",
+   "rc": 0,
+   "wall_s": 44.2,
+   "usd": 0.608889,
+   "lead_usd": 0.608889,
+   "lead_only_usd": 0.605245,
+   "sub_usd": 0.003644,
+   "by_model_usd": {
+    "claude-sonnet-5-5": 0.605245,
+    "claude-haiku-5-5": 0.003644
+   },
+   "ccx_usd": 0,
+   "lead_requests": 6,
+   "lead_tokens": 706190,
+   "lead_output_tokens": 319,
+   "lead_tools": {
+    "Grep": 1,
+    "Read": 2,
+    "Agent": 1,
+    "Bash": 1
+   },
+   "agent_calls": 1,
+   "ccx_runs": 0,
+   "ccx_resumes": 0,
+   "rework": 0,
+   "delegated": true
+  }
+ ]
+}
