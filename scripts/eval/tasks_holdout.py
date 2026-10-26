@@ -23,7 +23,12 @@ the commit's own test file. Chosen so that
 
 External tasks carry `repo` (a key of REPOS) and the full 40-character sha; scripts/eval/ext_repo.py fetches each
 repository once per run and gives every unit the parent's tree in a fresh one-commit repository (no future history).
-Their tests need the modules in REPOS[...]["needs"] in the Python that runs them (r5.py --ext-python).
+Their tests need the modules in REPOS[...]["needs"] in the Python that runs them (r5.py --ext-python), which must not
+have the library itself installed (REPOS[...]["module"]).
+
+Report results per repository and by commit date (r5.py summary: by_repo, ext_dates): the itsdangerous commits are
+from 2018, humanize's a47a89e from February 2026, all before the models' training cutoffs (mid-2026), so they may be
+remembered; only the humanize commits from August-September 2026 are after them.
 
 Why ten and not all sixteen candidates: the confirmation run is 10 tasks x 5 arms x 3 rounds (~$19, ~5 h at two
 tasks at a time, the size the loop budgeted), the same unit count per round as r5, and half of it from another code
@@ -40,11 +45,14 @@ REPOS = {
     "humanize": {"url": "https://github.com/python-humanize/humanize.git", "license": "MIT",
                  "name": "humanize, a Python library that turns numbers, dates and times into human-readable text",
                  "pythonpath": "src", "stubs": ["src/humanize/_version.py"],   # hatch-vcs writes it at install time
-                 "needs": ["pytest", "freezegun"]},
+                 "needs": ["pytest", "freezegun"], "pytest_min": "9.0", "module": "humanize",
+                 # its benchmarks need pytest plugins (the `benchmark` fixture) that the eval does not install
+                 "note": "If tests/test_benchmarks.py is there, it needs pytest plugins that are not installed here: "
+                         "leave it out (--ignore=tests/test_benchmarks.py)."},
     "itsdangerous": {"url": "https://github.com/pallets/itsdangerous.git", "license": "BSD-3-Clause",
                      "name": "itsdangerous, a Python library that signs data so it can be sent to untrusted places "
                              "and loaded back safely",
-                     "pythonpath": "src", "stubs": [], "needs": ["pytest", "freezegun"]},
+                     "pythonpath": "src", "stubs": [], "needs": ["pytest", "freezegun"], "module": "itsdangerous"},
 }
 
 
@@ -267,7 +275,8 @@ datetime's own time zone is can come out as "tomorrow" or "yesterday", because "
 
 Wanted: when the value is a timezone-aware datetime, "today" is the current date in that value's own time zone, in
 both functions. Dates and naive datetimes behave as before. `naturaldate()` keeps its rule of adding the year when
-the date is more than about five months away, and what it finally shows comes from `naturalday()` as today.
+the date is more than about five months away, and otherwise hands the value, with its time zone, on to
+`naturalday()`.
 """, repo="humanize")
 
 task("hz-natural-list-iterables", "ffdf407fdfe1a5738159b989eb2df190ed780448", ["tests/test_lists.py"],

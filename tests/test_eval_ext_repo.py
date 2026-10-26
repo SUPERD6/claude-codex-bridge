@@ -33,6 +33,14 @@ def write(root: Path, files: dict):
         f.write_bytes(text.encode("utf-8"))                              # LF on every OS
 
 
+@pytest.fixture(autouse=True)
+def fresh_material():
+    """r5 keeps each external task's material for the whole process: every test reads its own fake upstream."""
+    r5._EXT.clear()
+    yield
+    r5._EXT.clear()
+
+
 @pytest.fixture()
 def upstream(tmp_path):
     """source/fakepkg: start -> fix (the task commit, with its test) -> a later commit and a tag (the future)."""
@@ -137,37 +145,119 @@ def test_task_env_and_prompt_for_another_repository(registered):
     task = registered["task"]
     env = r5.task_env(task, {"PATH": "p"}, python=str(Path("/py/bin/python")))
     assert env["PYTHONPATH"] == "src" and env["PATH"].startswith(str(Path("/py/bin")))
+    assert env["PIP_NO_INDEX"] == "1"                                      # nothing can be fetched or installed
     assert r5.task_env(r5.by_id(r5.IDS[0]), {"PATH": "p"}) == {"PATH": "p"}     # this repository's tasks: as before
-    text = r5.LEAD_PROMPT_EXT.format(name=registered["spec"]["name"], brief=task["brief"], how="HOW")
+    spec = registered["spec"]
+    text = r5.LEAD_PROMPT_EXT.format(name=spec["name"], note=r5.ext_note(spec), brief=task["brief"], how="HOW")
     assert "fakepkg, a fake library" in text and task["brief"] in text and "relayline" not in text
+    assert "{" not in text and "no package index" in text
+    spec["note"] = "Leave tests/test_slow.py out."
+    assert "Leave tests/test_slow.py out. Run" in r5.LEAD_PROMPT_EXT.format(name="x", note=r5.ext_note(spec),
+                                                                           brief="b", how="h")
+    assert "test_benchmarks" in tasks_holdout.REPOS["humanize"]["note"]
 
 
-def test_the_cache_is_denied_to_external_units_only(registered, tmp_path, monkeypatch):
+def test_the_copies_and_web_are_denied_to_external_units_only(registered, tmp_path, monkeypatch):
     class A:
         claude_isolation, codex_home, dsh_home = "flags", None, "unit"
+        ext_cache = str(registered["source"])
     work = tmp_path / "work"
     monkeypatch.setattr(r5, "by_id", lambda i: registered["task"] if i == "fake-f" else r5.tasks_r5.by_id(i))
     u = r5.unit_of({"round": 1, "task": "fake-f", "arm": "self", "label": "l"}, A, work)
-    assert r5.ext_cache(work) in PF.forbidden(u)
-    assert any("ext-cache" in d for d in PF.claude_settings(u)["permissions"]["deny"])
+    assert r5.ext_cache(work) in PF.forbidden(u) and Path(A.ext_cache) in PF.forbidden(u)
+    deny = PF.claude_settings(u)["permissions"]["deny"]
+    assert any("ext-cache" in d for d in deny) and "WebFetch" in deny and "WebSearch" in deny
     other = r5.unit_of({"round": 1, "task": r5.IDS[0], "arm": "self", "label": "l"}, A, work)
     assert r5.ext_cache(work) not in PF.forbidden(other)
-    assert PF.WORK_ENTRY.match("ext-cache")
+    assert "WebFetch" not in PF.claude_settings(other)["permissions"]["deny"]
+    assert not PF.WORK_ENTRY.match("ext-cache")                          # a leftover clone in the work dir: refused
 
 
-def test_prepare_external_reports_fetch_and_module_problems(registered, tmp_path, monkeypatch):
+def test_audit_flags_reaching_for_the_fix(registered, tmp_path, monkeypatch):
+    class A:
+        claude_isolation, codex_home, dsh_home = "flags", None, "unit"
+        ext_cache = str(registered["source"])
+    monkeypatch.setattr(r5, "by_id", lambda i: registered["task"] if i == "fake-f" else r5.tasks_r5.by_id(i))
+    u = r5.unit_of({"round": 1, "task": "fake-f", "arm": "self", "label": "l"}, A, tmp_path / "work")
+    bad = ['{"command": "git -C ../ext-cache/fakepkg.git log"}', '{"command": "pip install fakepkg"}',
+           '{"command": "python -m pip download fakepkg"}', '{"command": "ls ../../' + tmp_path.name + '/source"}',
+           '{"command": "curl -L https://github.com/x/fakepkg/archive/main.zip"}',
+           '{"url": "https://example.invalid/fakepkg"}']
+    ok = ['{"command": "python -m pytest -q tests/test_core.py"}', '{"command": "pip list"}']
+    hits = PF.path_hits(bad + ok, u)
+    assert len(hits) == len(bad), hits
+    other = r5.unit_of({"round": 1, "task": r5.IDS[0], "arm": "self", "label": "l"}, A, tmp_path / "work")
+    assert PF.path_hits(['{"command": "pip install x"}'], other) == []    # this repository's units: as before
+
+
+def test_prepare_external_reads_into_memory_and_reports_problems(registered, tmp_path, monkeypatch):
     monkeypatch.setattr(r5, "by_id", lambda i: registered["task"])
 
     class A:
         ext_cache, ext_python = str(registered["source"]), ""
     todo = [{"task": "fake-f"}]
-    assert r5.prepare_external(todo, A, tmp_path / "w") == []
+    work = tmp_path / "w"
+    made = []
+    real_mkdtemp = r5.tempfile.mkdtemp
+    monkeypatch.setattr(r5.tempfile, "mkdtemp", lambda **kw: made.append(real_mkdtemp(**kw)) or made[-1])
+    assert r5.prepare_external(todo, A, work) == []
+    assert not work.exists() and made and not Path(made[0]).exists()     # the clone was outside the work dir, gone
+    m = r5._EXT[r5._ext_key(registered["task"])]
+    assert m["parent"] == registered["start"] and "tests/test_core.py" in m["changed"] and len(m["date"]) == 10
+    assert A.ext_info["python"] == sys.executable and A.ext_info["pytest"] and A.ext_venv
     registered["spec"]["needs"] = ["pytest", "no_such_module_for_ccx_tests"]
-    probs = r5.prepare_external(todo, A, tmp_path / "w")
+    probs = r5.prepare_external(todo, A, work)
     assert len(probs) == 1 and "no_such_module_for_ccx_tests" in probs[0]
+    registered["spec"].update(needs=["pytest"], module="json", pytest_min="999.0")   # the library itself installed
+    probs = r5.prepare_external(todo, A, work)
+    assert any("json installed" in p for p in probs) and any("999.0" in p for p in probs)
+    registered["spec"].pop("module"), registered["spec"].pop("pytest_min")
+    A.ext_cache = str(Path(sys.executable).parent / "copies")           # the Python next to the copies: refused
+    assert any("--ext-cache" in p and "PATH" in p for p in r5.prepare_external(todo, A, work))
+    r5._EXT.clear()
     A.ext_cache = str(tmp_path / "empty")
     probs = r5.prepare_external(todo, A, tmp_path / "w2")
     assert any("fake-f" in p and "FileNotFoundError" in p for p in probs)
+
+
+def test_a_unit_needs_its_repository_prepared(registered, tmp_path, monkeypatch):
+    class A:
+        claude_isolation, codex_home, dsh_home = "flags", None, "unit"
+        ext_cache, ext_python = str(registered["source"]), ""
+    monkeypatch.setattr(r5, "by_id", lambda i: registered["task"])
+    monkeypatch.setattr(r5.PF, "snapshot", lambda: None)
+    work = tmp_path / "work"
+    work.mkdir()
+    row = r5.run_unit({"round": 1, "task": "fake-f", "arm": "self", "label": "l"}, A, work)
+    assert "not prepared" in row["error"] and not r5.ext_cache(work).exists()
+
+
+def test_scoring_puts_back_the_test_setup(registered, tmp_path):
+    task, work = registered["task"], tmp_path / "work"
+    work.mkdir()
+    repo = work / "1-fake-f-self"
+    r5.make_repo(task, repo, work, registered["source"])
+    (repo / "src/fakepkg/core.py").write_text(CORE_NEW, encoding="utf-8")   # a right answer, but the agent also ...
+    (repo / "tests/conftest.py").write_text("import pytest\n\n\n@pytest.fixture(autouse=True)\ndef boom():\n"
+                                            "    raise RuntimeError('x')\n", encoding="utf-8")
+    (repo / "conftest.py").write_text("raise RuntimeError('root')\n", encoding="utf-8")
+    (repo / "tests/test_extra.py").write_text("def test_extra():\n    assert False\n", encoding="utf-8")
+    (repo / "pyproject.toml").write_text("[tool.pytest.ini_options]\naddopts = '-x --no-such-flag'\n",
+                                         encoding="utf-8")
+    res = r5.score(repo, task, work, source=registered["source"])
+    assert res["ok"], res                                                  # none of that applies to the hidden test
+    assert not (repo / "conftest.py").exists() and not (repo / "tests/test_extra.py").exists()
+    assert (repo / "pyproject.toml").read_text(encoding="utf-8") == "[project]\nname = 'fakepkg'\n"
+    assert "\x1b" not in res["pytest"]
+
+
+def test_summary_reports_per_repository():
+    rows = [{"arm": "self", "ok": True, "task": "a", "ext": {"repo": "fakepkg", "date": "2018-01-01"}},
+            {"arm": "self", "ok": False, "task": "b"}]
+    s = r5.summarize(rows)
+    assert s["by_repo"] == {"fakepkg": {"self": {"ok": 1, "n": 1}}, "this repository": {"self": {"ok": 0, "n": 1}}}
+    assert s["ext_dates"] == {"a": "2018-01-01"}
+    assert "by_repo" not in r5.summarize([rows[1]])
 
 
 def test_holdout_check_handles_external_tasks(registered, tmp_path):
