@@ -405,6 +405,8 @@ def snapshot() -> list[dict] | None:
         # marker) at the end of a long command line. stat= lets parse_ps drop zombies: nothing left to kill.
         r = subprocess.run(["ps", "-A", "-ww", "-o", "pid=", "-o", "ppid=", "-o", "stat=", "-o", "args="],
                            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+        if r.returncode != 0 and not r.stdout.strip():
+            return None  # e.g. a ps without these options: "cannot list", not "nothing running"
         return parse_ps(r.stdout)
     except (OSError, subprocess.SubprocessError, ValueError):
         return None
