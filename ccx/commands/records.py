@@ -1,12 +1,13 @@
 """Looking at what happened: show, stats, report, config, repair, archive, undo."""
 from __future__ import annotations
 
+import time
 from pathlib import Path
 
 from .. import ledger, recover, report
 from ..config import SETTINGS, daily_cap, load_config, paths, set_setting
 from ..agents import leads
-from ..delegate import compact, undo
+from ..delegate import compact, recap, undo
 from .common import _out, lead_session_id, provider_agents
 
 
@@ -57,8 +58,83 @@ def cmd_undo(a) -> int:
     return 0
 
 
+POLL_SEC = 2.0                          # `ccx show --wait` reads run.json this often
+FIX_ROUND_GRACE = 30.0                  # a review fix round's run.json appears within this after its parent ends
+
+
+def _fix_round(p, rec: dict) -> dict | None:
+    """The review fix round a finished run started (delegate.run resumes the same sub-session once when the
+    independent review finds problems), or None. The fix run's record points back with resumed_from/review_of."""
+    if rec.get("kind") != "review_issues" or not rec.get("session_id") or not p.runs.exists():
+        return None
+    rid = rec["run_id"]
+    for d in sorted(x for x in p.runs.iterdir() if x.name > rid):       # run ids sort by start time
+        f = d / "run.json"
+        if not f.exists():
+            continue
+        try:
+            r = ledger.read_record(f)
+        except (OSError, ValueError):
+            continue
+        if r.get("review_of") == rid or r.get("resumed_from") == rid:
+            return r
+    return None
+
+
+def wait_run(p, run_id: str, seconds: float) -> tuple[dict | None, str]:
+    """Block until run_id, and any review fix round it started, is finished. Returns (last record of the chain or
+    None on timeout, the id being waited on)."""
+    start = time.time()
+    deadline = start + max(0.0, seconds)
+    rid, ended_at, swept = run_id, None, 0.0
+    if not (p.runs / rid).exists():
+        raise FileNotFoundError(f"no ccx run {rid!r} under {p.runs}")
+    while True:
+        if time.time() - swept >= 20:                # a run whose ccx process died: interrupted, not running forever
+            recover.sweep(p)
+            swept = time.time()
+        f = p.runs / rid / "run.json"
+        rec = None
+        if f.exists():                               # a --bg run writes it a moment after it was started
+            try:
+                rec = ledger.read_record(f)
+            except (OSError, ValueError):
+                rec = None
+        if rec and rec.get("state") != "running":
+            nxt = _fix_round(p, rec)
+            if nxt:
+                rid, ended_at = nxt["run_id"], None
+                continue
+            fix_due = rec.get("kind") == "review_issues" and bool(rec.get("session_id"))   # one is about to start
+            tag_due = rid != run_id and not rec.get("review_of")     # its parent writes review_of right after
+            if not (fix_due or tag_due):
+                return rec, rid
+            ended_at = ended_at or time.time()
+            if time.time() - ended_at > (FIX_ROUND_GRACE if fix_due else 5 * POLL_SEC):
+                return rec, rid                      # nothing more came (a fix round that failed to start)
+        if time.time() >= deadline:
+            return None, rid
+        time.sleep(min(POLL_SEC, max(0.0, deadline - time.time())))
+
+
 def cmd_show(a) -> int:
     p = paths()
+    if a.wait is not None:
+        t0 = time.time()
+        rec, rid = wait_run(p, a.run_id, a.wait)
+        if rec is None:
+            _out({"run_id": rid, "status": "running", "waited_s": round(time.time() - t0, 1),
+                  "next": f"ccx show {rid} --wait"})
+            return 0
+        if a.full:
+            _out(rec)
+            return 0
+        res = compact(rec)
+        if rid != a.run_id:
+            res["chain"] = f"{a.run_id} -> {rid}"      # the review fix round's result is the final one
+        res["recap"] = recap(rec, res)
+        _out(res)
+        return 0
     recover.sweep(p)                    # a run whose ccx process is gone shows as interrupted, not running
     rec = ledger.load_run(p, a.run_id)
     if a.full:
@@ -266,9 +342,13 @@ def register(sub) -> None:
     ud.add_argument("--wrong", action="store_true", help="with --apply: also record the run as wrong (teaches "
                     "routing). Without it undoing records no verdict")
     ud.set_defaults(fn=cmd_undo)
-    sh = sub.add_parser("show", help="show a run (compact by default)")
+    sh = sub.add_parser("show", help="show a run (compact by default); --wait blocks until it is finished")
     sh.add_argument("run_id")
     sh.add_argument("--full", action="store_true")
+    sh.add_argument("--wait", nargs="?", type=float, const=540.0, default=None, metavar="SECONDS",
+                    help="block until the run (and a review fix round it started) is finished, then print the "
+                         "same compact result as `ccx run`; default 540 s, under a 10-minute tool-call limit. "
+                         "Still running then: status=running and the command to call again")
     sh.set_defaults(fn=cmd_show)
     st = sub.add_parser("stats", help="token/time per agent and tier; --summary for spend and savings")
     st.add_argument("--summary", action="store_true")
