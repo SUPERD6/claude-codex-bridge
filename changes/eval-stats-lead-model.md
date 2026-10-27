@@ -8,3 +8,13 @@
   checks, reviews, fix rounds, the lead waiting; median and p75) and, with arms `balanced` and `save`, the tier
   decision rule (pass / fail per condition). `--budget` now counts only the tag's own spend (plus `--extra-spent`);
   each unit line and the end of a run print the run, tag and file totals.
+- Round-5 evaluation statistics, after review: the `direct` arm (no Claude lead) ignores `--lead-model` /
+  `--lead-effort`, so its units keep their key, folder, label and summary arm and are not re-run; the paired summary
+  adds an exact sign test over tasks (`task_sign_p`, Holm-adjusted too) and flags McNemar when a task has several
+  rounds; each arm adds a task-bootstrap CI of its right rate (`ok_rate_ci_tasks`) and flags the row-level Wilson CI
+  then; the cost-per-success CI says how many resamples were left out (`cps_diff_ci_dropped`, `cps_diff_note`);
+  the tier rule reports `n/a` (not `fail`) when it cannot tell, and uses the same median as `wall_med`; the phase
+  wall counts a review that ran while the check ran once (`overlap_s`) and the checks of rungs that failed and climbed
+  (ccx now keeps that check's time on the attempt, `check_seconds`); `by_repo` keeps another lead apart; rounds sort
+  numerically; builtin2r's worker is told to run the acceptance command instead of the whole suite, so it no longer
+  contradicts the WIRING rule.

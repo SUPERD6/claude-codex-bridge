@@ -71,7 +71,6 @@ import json
 import os
 import random
 import re
-import statistics
 import subprocess
 import sys
 import tarfile
@@ -181,9 +180,19 @@ HOW_BUILTIN2 = ("Do not edit files yourself: hand the implementation to your sub
                 + LEAN_ACCEPT.replace("{send_back}", "another Agent call to the worker, saying what to fix"))
 # builtin2r (opt-in, `--arms builtin2r`): builtin2's lead wording, and a worker whose own prompt also carries the
 # rules every ccx sub-agent gets (ccx/prompts.py, imported, not retyped): keep existing tests, test through the
-# named entry point. ccx2 vs builtin2r then differs by ccx alone, not by these rules (fairness C5).
+# named entry point; and it is told to run the acceptance command (targeted tests while it works), as a ccx sub-agent
+# with --check is, instead of the whole suite. ccx2 vs builtin2r then differs by ccx alone, not by these rules
+# (fairness C5).
+# The base worker prompt's "run the tests with `python -m pytest -q`" (the whole suite) would contradict WIRING's
+# "run only the relevant test files, not the whole suite", so builtin2r's worker is told what a ccx sub-agent with
+# --check is (SELFCHECK_CMD, in short): run the acceptance command it is given, targeted tests while it works.
+WORKER_TESTS_BASE = "run the tests with `python -m pytest -q`"
+WORKER_TESTS_R = ("run the acceptance command you are given (while you work, only the targeted tests touching your "
+                  "change; the full acceptance command at most once, at the end)")
+assert WORKER_TESTS_BASE in r3.WORKER["worker"]["prompt"]
 WORKER_RULES = {"worker": {**r3.WORKER["worker"],
-                           "prompt": r3.WORKER["worker"]["prompt"] + " Rules: " + KEEP_TESTS + " " + WIRING.rstrip()}}
+                           "prompt": r3.WORKER["worker"]["prompt"].replace(WORKER_TESTS_BASE, WORKER_TESTS_R)
+                           + " Rules: " + KEEP_TESTS + " " + WIRING.rstrip()}}
 CCX_ARMS = ("ccx", "ccx2")
 BUILTIN_ARMS = PF.BUILTIN_ARMS
 OPT_IN_ARMS = ("ccx2", "builtin2", "builtin2r")   # not in ARMS: the default schedule (and old tags' done-keys) stay
@@ -384,8 +393,19 @@ def worker_agents(arm: str) -> dict | None:
     return WORKER_RULES if arm == "builtin2r" else None
 
 
+NO_LEAD_ARMS = ("direct",)      # ccx straight from the command line: no Claude lead, --lead-model changes nothing
+
+
+def has_lead(arm: str) -> bool:
+    return arm not in NO_LEAD_ARMS
+
+
 def lead_of(r: dict) -> tuple[str, str]:
-    """A unit's or row's lead (model, effort); rows from before --lead-model had the default."""
+    """A unit's or row's lead (model, effort); rows from before --lead-model had the default. An arm without a lead
+    (direct) always counts as the default, whatever a row carries, so its units and rows keep one key, folder, label
+    and summary arm under any --lead-model (they are not re-run, and they pool and pair as one arm)."""
+    if not has_lead(r.get("arm") or ""):
+        return DEFAULT_LEAD
     return (r.get("lead_model") or DEFAULT_LEAD[0], r.get("lead_effort") or DEFAULT_LEAD[1])
 
 
@@ -455,18 +475,22 @@ def lead_unit(u: dict, a, work: Path, repo: Path, hub: Path, iso: PF.Unit | None
     return row
 
 
-PHASES = ("sub_s", "check_s", "review_s", "fix_s", "lead_wait_s", "lead_active_s")
+PHASES = ("sub_s", "check_s", "review_s", "fix_s", "overlap_s", "lead_wait_s", "lead_active_s")
 
 
 def phase_wall(hub: Path, run_ids: list, wall_s: float | None = None) -> dict:
     """Where a unit's ccx time went, from its run records (run.json): the sub-agent's attempts (sub_s, n_attempts),
     ccx's acceptance checks (check_s), the reviews (review_s: the `review:<id>` runs), the fix rounds after a review
     (fix_s: a run with review_of, its attempts and its check) and, with the lead's wall, the lead waiting on ccx
-    (lead_wait_s: the sum of the above, at most the wall; ccx runs block the lead, or it waits with show --wait)
-    and the rest (lead_active_s). Records that cannot be read are counted in `missing`."""
-    sub = check = review = fix = 0.0
+    (lead_wait_s, an estimate: ccx runs block the lead, or it waits with show --wait) and the rest (lead_active_s).
+    Checks count every run of ccx's check: the final one (record["check"]) and those of earlier rungs that failed
+    and climbed (an attempt's check_seconds). ccx runs a run's review while its final check runs, so lead_wait_s
+    counts that time once (overlap_s: the shorter of the two, per run with both) and is at most the wall. Records
+    that cannot be read are counted in `missing`."""
+    sub = check = review = fix = overlap = 0.0
     n_att = n_rev = n_fix = missing = 0
     ids, seen = list(dict.fromkeys(str(x) for x in run_ids)), set()
+    recs: dict[str, dict] = {}
     while ids:
         rid = ids.pop(0)
         if rid in seen:
@@ -476,22 +500,35 @@ def phase_wall(hub: Path, run_ids: list, wall_s: float | None = None) -> dict:
         if not rec:
             missing += 1
             continue
-        secs = sum(float(x.get("seconds") or 0) for x in rec.get("attempts") or [])
-        if str(rec.get("label") or "").startswith("review:"):
-            review, n_rev = review + secs, n_rev + 1
-            continue
+        recs[rid] = rec
         rv = (rec.get("review") or {}).get("run_id")
         if rv and str(rv) not in seen:          # a review not in the ledger list is still counted
             ids.append(str(rv))
-        c = float((rec.get("check") or {}).get("seconds") or 0)
+
+    def secs(rec: dict) -> float:
+        return sum(float(x.get("seconds") or 0) for x in rec.get("attempts") or [])
+
+    def is_review(rec: dict) -> bool:
+        return str(rec.get("label") or "").startswith("review:")
+
+    for rec in recs.values():
+        if is_review(rec):
+            review, n_rev = review + secs(rec), n_rev + 1
+            continue
+        final = (rec.get("check") or {}).get("seconds")
+        c = float(final or 0) + sum(float(x.get("check_seconds") or 0) for x in rec.get("attempts") or [])
+        rv = recs.get(str((rec.get("review") or {}).get("run_id")))
+        if final and rv and is_review(rv):      # the review ran alongside the final check
+            overlap += min(float(final), secs(rv))
         if rec.get("review_of"):
-            fix, n_fix = fix + secs + c, n_fix + 1
+            fix, n_fix = fix + secs(rec) + c, n_fix + 1
         else:
-            sub, check, n_att = sub + secs, check + c, n_att + len(rec.get("attempts") or [])
+            sub, check, n_att = sub + secs(rec), check + c, n_att + len(rec.get("attempts") or [])
     out = {"sub_s": round(sub, 1), "check_s": round(check, 1), "review_s": round(review, 1), "fix_s": round(fix, 1),
-           "n_attempts": n_att, "n_reviews": n_rev, "n_fix_rounds": n_fix, "missing": missing}
+           "overlap_s": round(overlap, 1), "n_attempts": n_att, "n_reviews": n_rev, "n_fix_rounds": n_fix,
+           "missing": missing}
     if wall_s is not None:
-        wait = min(float(wall_s), sub + check + review + fix)
+        wait = min(float(wall_s), sub + check + review + fix - overlap)
         out.update(lead_wait_s=round(wait, 1), lead_active_s=round(float(wall_s) - wait, 1))
     return out
 
@@ -527,7 +564,7 @@ def unit_of(u: dict, a, work: Path) -> PF.Unit:
 def unit_models(u: dict, row: dict) -> dict:
     """The models this unit was meant to use, and the ones its streams and ledger show it did use."""
     model, effort = lead_of(u)
-    out = {"lead": model, "lead_effort": effort, "builtin_worker": r3.WORKER_MODEL}
+    out = {"lead": model, "lead_effort": effort, "builtin_worker": r3.WORKER_MODEL}      # direct: replaced below
     if u["arm"] == "builtin2r":
         out["worker_rules"] = "KEEP_TESTS+WIRING"
     if u["arm"] == "direct":
@@ -738,7 +775,7 @@ def cmd_run(a) -> int:
     lead = {"lead_model": a.lead_model or DEFAULT_LEAD[0], "lead_effort": a.lead_effort or DEFAULT_LEAD[1]}
     todo = []
     for u in schedule(a.rounds, a.seed, tasks, arms):
-        u = {**u, "tag": a.tag, "seed": a.seed, "taskset": a.taskset, **lead}
+        u = {**u, "tag": a.tag, "seed": a.seed, "taskset": a.taskset, **(lead if has_lead(u["arm"]) else {})}
         u["label"] = f"eval-r5:{a.tag}:{u['round']}:{u['task']}:{u['arm']}{_lead_suffix(u)}"
         if done_key(u) not in done:
             todo.append(u)
@@ -844,6 +881,16 @@ def wall_stats(rs: list[dict]) -> dict:
             "wall_p75": w[-(-3 * len(w) // 4) - 1] if w else None}
 
 
+def round_key(rd) -> tuple:
+    """Rounds in numeric order (2 before 10), anything else after them by its text, a missing one last."""
+    return (rd is None, not isinstance(rd, int), rd if isinstance(rd, int) else 0, str(rd))
+
+
+def ok_rate(ps: list[tuple[dict, dict]]) -> float | None:
+    """The share of right rows (pairs of a row with itself, for task_boot)."""
+    return round(sum(bool(x.get("ok")) for x, _ in ps) / len(ps), 4) if ps else None
+
+
 def by_tag(rows: list[dict]) -> dict:
     """Per tag, per arm: wall_stats of its rows and of each round on its own, so different rounds (and the rounds
     of one tag) are never pooled without the split showing."""
@@ -853,7 +900,7 @@ def by_tag(rows: list[dict]) -> dict:
         for arm in arm_order(arm_of(r) for r in tr):
             ar = [r for r in tr if arm_of(r) == arm]
             rounds = {str(rd): wall_stats([r for r in ar if r.get("round") == rd])
-                      for rd in sorted({r.get("round") for r in ar}, key=lambda x: (x is None, str(x)))}
+                      for rd in sorted({r.get("round") for r in ar}, key=round_key)}
             out.setdefault(tag, {})[arm] = {**wall_stats(ar), "rounds": rounds}
     return out
 
@@ -882,12 +929,16 @@ def pair_units(rows: list[dict], A: str, B: str) -> list[tuple[dict, dict]]:
             if A in d and B in d]
 
 
-def task_boot(ps: list[tuple[dict, dict]], stat, n: int = 4000, seed: int = 7) -> tuple[float, float] | None:
-    """Bootstrap 95% CI of stat(pairs), resampling tasks (the independent unit; a task's rounds go together)."""
+def task_boot(ps: list[tuple[dict, dict]], stat, n: int = 4000, seed: int = 7,
+              info: dict | None = None) -> tuple[float, float] | None:
+    """Bootstrap 95% CI of stat(pairs), resampling tasks (the independent unit; a task's rounds go together).
+    Resamples where the stat is undefined (None) are left out; `info`, when given, gets how many (dropped, of n)."""
     by: dict = {}
     for p in ps:
         by.setdefault(p[0]["task"], []).append(p)
     ts = sorted(by)
+    if info is not None:
+        info.update(n=0, dropped=0)
     if len(ts) < 2:
         return None
     rnd = random.Random(seed)
@@ -896,8 +947,16 @@ def task_boot(ps: list[tuple[dict, dict]], stat, n: int = 4000, seed: int = 7) -
         v = stat([p for t in (rnd.choice(ts) for _ in ts) for p in by[t]])
         if v is not None:
             vals.append(v)
+    if info is not None:
+        info.update(n=n, dropped=n - len(vals))
     vals.sort()
     return (round(vals[int(0.025 * len(vals))], 4), round(vals[int(0.975 * len(vals)) - 1], 4)) if vals else None
+
+
+def _med(xs) -> float | None:
+    """The median as every wall_med of the summary takes it: the upper middle."""
+    w = sorted(xs)
+    return w[len(w) // 2] if w else None
 
 
 def cps_diff(ps: list[tuple[dict, dict]]) -> float | None:
@@ -907,28 +966,57 @@ def cps_diff(ps: list[tuple[dict, dict]]) -> float | None:
 
 
 def wall_med_diff(ps: list[tuple[dict, dict]]) -> float | None:
-    """Median wall of B minus that of A on these pairs."""
+    """Median wall (the upper middle, as wall_med) of B minus that of A on these pairs."""
     if not ps:
         return None
-    return round(statistics.median([y.get("wall_s") or 0 for _, y in ps])
-                 - statistics.median([x.get("wall_s") or 0 for x, _ in ps]), 1)
+    return round(_med([y.get("wall_s") or 0 for _, y in ps]) - _med([x.get("wall_s") or 0 for x, _ in ps]), 1)
+
+
+def task_sign(ps: list[tuple[dict, dict]]) -> tuple[int, int]:
+    """Per task (the independent unit), which arm was right more often over its rounds: (tasks where A was, tasks
+    where B was); ties are left out. Its exact sign test does not take a task's rounds as independent pairs."""
+    by: dict = {}
+    for x, y in ps:
+        d = by.setdefault(x["task"], [0, 0])
+        d[0] += bool(x.get("ok"))
+        d[1] += bool(y.get("ok"))
+    return sum(a > b for a, b in by.values()), sum(b > a for a, b in by.values())
 
 
 def compare_pair(ps: list[tuple[dict, dict]], A: str, B: str) -> dict:
-    """One arm pair on its shared units: right counts, McNemar exact p on the discordant units, and B - A of
-    cost per success and of the wall median with task-level bootstrap 95% CIs."""
+    """One arm pair on its shared units: right counts, McNemar exact p on the discordant units, the exact sign test
+    over tasks (task_sign_p: the one to read when a task has several rounds, which McNemar counts as independent
+    pairs), and B - A of cost per success and of the wall median with task-level bootstrap 95% CIs (resamples where
+    an arm has no success are left out of the cost one, and counted)."""
     b = sum(bool(x.get("ok")) and not y.get("ok") for x, y in ps)
     c = sum(bool(y.get("ok")) and not x.get("ok") for x, y in ps)
-    return {"arms": [A, B], "units": len(ps), "tasks": len({x["task"] for x, _ in ps}),
-            "ok": {A: sum(bool(x.get("ok")) for x, _ in ps), B: sum(bool(y.get("ok")) for _, y in ps)},
-            "discordant": {f"only_{A}": b, f"only_{B}": c}, "mcnemar_p": S.mcnemar_p(b, c), "diff_is": f"{B} - {A}",
-            "cps": {A: r3.cps([x for x, _ in ps]), B: r3.cps([y for _, y in ps])},
-            "cps_diff": cps_diff(ps), "cps_diff_ci": task_boot(ps, cps_diff),
-            "wall_med_diff": wall_med_diff(ps), "wall_med_diff_ci": task_boot(ps, wall_med_diff)}
+    tb, tc = task_sign(ps)
+    n_tasks = len({x["task"] for x, _ in ps})
+    ci_info: dict = {}
+    out = {"arms": [A, B], "units": len(ps), "tasks": n_tasks,
+           "ok": {A: sum(bool(x.get("ok")) for x, _ in ps), B: sum(bool(y.get("ok")) for _, y in ps)},
+           "discordant": {f"only_{A}": b, f"only_{B}": c}, "mcnemar_p": S.mcnemar_p(b, c),
+           "task_sign": {f"more_{A}": tb, f"more_{B}": tc}, "task_sign_p": S.mcnemar_p(tb, tc),
+           "diff_is": f"{B} - {A}",
+           "cps": {A: r3.cps([x for x, _ in ps]), B: r3.cps([y for _, y in ps])},
+           "cps_diff": cps_diff(ps), "cps_diff_ci": task_boot(ps, cps_diff, info=ci_info),
+           "cps_diff_ci_dropped": ci_info.get("dropped", 0),
+           "wall_med_diff": wall_med_diff(ps), "wall_med_diff_ci": task_boot(ps, wall_med_diff)}
+    if len(ps) > n_tasks:
+        out["mcnemar_note"] = (f"{len(ps)} units from {n_tasks} tasks: McNemar takes a task's rounds as independent "
+                               "pairs (anti-conservative); task_sign_p does not")
+    if out["cps_diff"] is None:
+        none = [arm for arm, v in out["cps"].items() if v is None]
+        out["cps_diff_note"] = f"no cost per success: {', '.join(none)} has no success on these units"
+    elif ci_info.get("dropped"):
+        out["cps_diff_note"] = (f"{ci_info['dropped']} of {ci_info['n']} resamples had an arm without a success and "
+                                "were left out: the CI is conditional on both arms succeeding")
+    return out
 
 
 def paired_all(rows: list[dict]) -> dict:
-    """compare_pair for every two arms that share units, with Holm-adjusted McNemar p over those pairs."""
+    """compare_pair for every two arms that share units, with Holm-adjusted McNemar and task sign p over those
+    pairs."""
     arms = arm_order(arm_of(r) for r in rows if "error" not in r)
     out = {}
     for i, A in enumerate(arms):
@@ -936,21 +1024,24 @@ def paired_all(rows: list[dict]) -> dict:
             ps = pair_units(rows, A, B)
             if ps:
                 out[f"{A} vs {B}"] = compare_pair(ps, A, B)
-    for k, (_p, adj) in S.holm({k: v["mcnemar_p"] for k, v in out.items()}).items():
-        out[k]["mcnemar_p_holm"] = adj
+    for key in ("mcnemar_p", "task_sign_p"):
+        for k, (_p, adj) in S.holm({k: v[key] for k, v in out.items()}).items():
+            out[k][f"{key}_holm"] = adj
     return out
 
 
 def tier_rule(rows: list[dict], bal: str = TIER_RULE_ARMS[0], save: str = TIER_RULE_ARMS[1]) -> dict | None:
     """The tier decision rule on the units both arms share: `balanced` is worth it over `save` when it is right at
     least as often, its wall median is at most 60% of save's and its cost per success at most 1.5x save's. Each
-    condition: pass / fail (n/a when a cost per success is missing). None unless both arms have rows."""
+    condition: pass / fail (n/a when a cost per success is missing); overall: fail when any condition fails, else n/a
+    when one cannot be told, else pass. The wall median is the upper middle, as wall_med. None unless both arms
+    have rows."""
     ps = pair_units(rows, save, bal)
     if not ps:
         return None
     s_ok, b_ok = sum(bool(x.get("ok")) for x, _ in ps), sum(bool(y.get("ok")) for _, y in ps)
-    s_w = statistics.median([x.get("wall_s") or 0 for x, _ in ps])
-    b_w = statistics.median([y.get("wall_s") or 0 for _, y in ps])
+    s_w = _med([x.get("wall_s") or 0 for x, _ in ps])
+    b_w = _med([y.get("wall_s") or 0 for _, y in ps])
     s_c, b_c = r3.cps([x for x, _ in ps]), r3.cps([y for _, y in ps])
     pf = lambda v: "pass" if v else "fail"  # noqa: E731
     cond = {"right": {"rule": f"{bal} right >= {save} right", "value": [b_ok, s_ok], "result": pf(b_ok >= s_ok)},
@@ -958,8 +1049,9 @@ def tier_rule(rows: list[dict], bal: str = TIER_RULE_ARMS[0], save: str = TIER_R
                      "result": pf(b_w <= 0.6 * s_w)},
             "cps": {"rule": f"{bal} $/success <= 1.5x {save}'s", "value": [b_c, s_c],
                     "result": "n/a" if b_c is None or s_c is None else pf(b_c <= 1.5 * s_c)}}
+    res = [c["result"] for c in cond.values()]
     return {"units": len(ps), "conditions": cond,
-            "result": pf(all(c["result"] == "pass" for c in cond.values()))}
+            "result": "fail" if "fail" in res else "n/a" if "n/a" in res else "pass"}
 
 
 def tier_rule_lines(tr: dict | None) -> list[str]:
@@ -994,8 +1086,15 @@ def summarize(rows: list[dict]) -> dict:
                     "lead_requests_med": med("lead_requests"), "wall_med": med("wall_s"),
                     **{k: v for k, v in wall_stats(rs).items() if k in ("wall_mean", "wall_p75")},
                     "wilson": S.wilson(ok, len(rs)),
+                    # Wilson takes every row as an independent trial; a task's rounds are not: this one resamples
+                    # tasks (task_boot), as the paired CIs do
+                    "ok_rate_ci_tasks": task_boot([(r, r) for r in rs], ok_rate),
                     "ok_by_round": {str(rd): sum(bool(r.get("ok")) for r in rs if r.get("round") == rd)
-                                    for rd in sorted({r.get("round") for r in rs}, key=str)}}
+                                    for rd in sorted({r.get("round") for r in rs}, key=round_key)}}
+        n_tasks = len({r.get("task") for r in rs})
+        if len(rs) > n_tasks:
+            out[arm]["wilson_note"] = (f"{len(rs)} rows from {n_tasks} tasks: Wilson takes them as independent "
+                                       "(too narrow); see ok_rate_ci_tasks")
         ph = phase_stats(rs)
         if ph:
             out[arm]["phases"] = ph
@@ -1012,7 +1111,7 @@ def summarize(rows: list[dict]) -> dict:
         by: dict = {}
         for r in rows:
             e = r.get("ext") or {}
-            cell = by.setdefault(e.get("repo") or "this repository", {}).setdefault(r["arm"], {"ok": 0, "n": 0})
+            cell = by.setdefault(e.get("repo") or "this repository", {}).setdefault(arm_of(r), {"ok": 0, "n": 0})
             cell["ok"] += bool(r.get("ok"))
             cell["n"] += 1
         res["by_repo"] = by

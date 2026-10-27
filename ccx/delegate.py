@@ -708,6 +708,7 @@ def run(req: Request, p: Paths) -> dict:
                     _finish_review(bg_review, record, p, keep=False)
                     bg_review = None
                 record["attempts"][-1]["kind"] = "check_failed"
+                record["attempts"][-1]["check_seconds"] = chk.get("seconds")   # record["check"] keeps only the last
                 _write_record(run_dir, record)
                 summary = f"you said done, but `{chk['cmd']}` failed (exit {chk['exit']}):\n{chk['tail'][-400:]}"
                 if plan[i + 1]["agent"] == to and session:
