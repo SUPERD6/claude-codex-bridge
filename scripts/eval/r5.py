@@ -14,6 +14,17 @@ so doing it takes many requests. Arms (the lead is a fresh headless Claude Code,
            for word (the worker reports check / files_changed / diffstat / status); not in the default schedule
   builtin2r opt-in (--arms builtin2r): builtin2 whose worker's own prompt also carries ccx's KEEP_TESTS and WIRING
            rules (imported from ccx/prompts.py), so ccx2 vs builtin2r tells ccx apart from those rules (fairness C5)
+  fast, balanced, save, cheapest
+           opt-in tier arms (whole-workflow tiers, docs/DECISIONS.md "tiers"): the unit's hub has the person's
+           `policy.picked = <tier>` (set as `ccx config set` does: that is the person's choice the arm simulates) and
+           the lead is told the person picked it. fast: the lead does it itself; balanced and save: the lead sizes the
+           task with `ccx propose --minutes --files` and follows its answer (authorized: run its `next` the ccx2 way,
+           --bg + show --wait and ccx2's lean acceptance; self: do it itself), so save is ccx2 through the tier path;
+           cheapest: no lead, the direct arm's command run in a hub that picked cheapest, labelled may_be_wrong.
+           Each row records the tier, what `ccx propose` planned (band, mode, from the unit hub's ledger), the
+           reference change's size (non-test code lines / files, and the band those files give), the mode that
+           actually ran (ledger actual_mode; none = self), the misbanding (planned vs reference band) and whether
+           ccx's --check passed (read on failures); the summary adds them per arm (`tiers`)
 
 The lead is sonnet medium unless --lead-model / --lead-effort say otherwise; both are recorded in every row, in its
 fingerprint and in the done-key, and a summary shows another lead's units as their own arm (`ccx2@opus-high`).
@@ -48,6 +59,8 @@ The work dir defaults to <temp>/<tag>, so two tags never share unit folders.
   python scripts/eval/r5.py run --rounds 2 --arms ccx,ccx2 --tag r5b --budget 20  # old vs new lead guidance
   python scripts/eval/r5.py run --rounds 2 --arms ccx2,builtin2 --tag r5d --budget 25  # same wording, ccx vs Agent
   python scripts/eval/r5.py run --taskset holdout --rounds 3 --tag ho1 --budget 20   # the unseen hold-out set (C1)
+  python scripts/eval/r5.py run --taskset holdout --rounds 3 --arms fast,balanced,save,ccx2,cheapest --tag ho2 \
+      --lead-model opus --budget 70 --dry-run          # the schedule and its cost estimate, nothing run
   python scripts/eval/r5.py summary [--taskset holdout]
   python scripts/eval/r5.py export docs/research/data/2026-10-26-r5.json
 
@@ -193,9 +206,32 @@ assert WORKER_TESTS_BASE in r3.WORKER["worker"]["prompt"]
 WORKER_RULES = {"worker": {**r3.WORKER["worker"],
                            "prompt": r3.WORKER["worker"]["prompt"].replace(WORKER_TESTS_BASE, WORKER_TESTS_R)
                            + " Rules: " + KEEP_TESTS + " " + WIRING.rstrip()}}
-CCX_ARMS = ("ccx", "ccx2")
+# tier arms (opt-in, `--arms fast,balanced,save,cheapest`): the person picked the tier in the unit hub's settings
+# (policy.picked); the lead is told so. fast never delegates, so its lead is not sent through ccx propose
+TIER_PICKED = ("The person picked the tier `{tier}` in their own ccx settings (`policy.picked`): it decides who does "
+               "each piece of work and pre-authorises what it delegates, so do not ask them anything about it.")
+HOW_FAST = TIER_PICKED + " Under `fast` every piece is yours: do the work yourself."
+# balanced / save: size the task with ccx propose and follow its answer; a delegated run is run and accepted the ccx2
+# way (--bg + show --wait, LEAN_BRIEF, LEAN_ACCEPT), so save vs ccx2 differs by the tier path alone
+HOW_TIER = (TIER_PICKED + " Before you start, size the work and ask ccx:\n"
+            "  {ccx} propose --lead claude:{model}:{effort} --minutes <minutes a skilled engineer would need> "
+            "--files <how many source files the change touches> \"<the task in one line>\"\n"
+            "It prints one JSON object. If it says `authorized: true`, do not edit files yourself: run its `next` "
+            "command once (`{ccx} run ...` with its --proposal and the same --minutes and --files), adding "
+            "`--bg --context auto --mode write --new --no-ab --label {label} --check \"<a pytest command for the "
+            "relevant test files>\"` and the brief, then wait for it with\n"
+            "  {ccx} show <run_id> --wait\n"
+            "and call that again while it says the run is still running (never resume a running run; do not pipe ccx "
+            "output through tail or head). " + LEAN_BRIEF + " "
+            + LEAN_ACCEPT.replace("{send_back}", "{ccx} resume <run_id> \"<what to fix>\"")
+            + " If it says the tier has you do it (no `authorized: true`), do the work yourself.")
+# the whole-workflow tier arms (opt-in): named as the tiers, so tier_rule (balanced vs save) reads them
+TIER_ARMS = ("fast", "balanced", "save", "cheapest")
+TIER_LEAD_ARMS = ("balanced", "save")            # the lead sizes with ccx propose and follows its answer
+CCX_ARMS = ("ccx", "ccx2", *TIER_LEAD_ARMS)      # leads that may hand work to ccx (session file, ccx metrics)
 BUILTIN_ARMS = PF.BUILTIN_ARMS
-OPT_IN_ARMS = ("ccx2", "builtin2", "builtin2r")   # not in ARMS: the default schedule (and old tags' done-keys) stay
+OPT_IN_ARMS = ("ccx2", "builtin2", "builtin2r", *TIER_ARMS)   # not in ARMS: the default schedule (and old tags'
+#                                                               done-keys) stay
 DEFAULT_LEAD = (r3.LEAD_MODEL, r3.LEAD_EFFORT)
 # with both of these arms present the summary checks the tier decision rule (tier_rule)
 TIER_RULE_ARMS = ("balanced", "save")
@@ -372,19 +408,26 @@ def changed(repo: Path) -> dict:
             "commits": len(git(repo, "rev-list", f"{start}..HEAD").split())}
 
 
-def lead_how(arm: str, label: str) -> str:
-    """What the lead is told about how to do the work, per arm."""
+def lead_how(arm: str, label: str, lead: tuple[str, str] = DEFAULT_LEAD) -> str:
+    """What the lead is told about how to do the work, per arm (`lead`: its own model and effort, which a tier arm's
+    lead passes to ccx propose as --lead)."""
     if arm == "ccx":
         return HOW_CCX.format(ccx=r3.CCX_CMD, label=label)
     if arm == "ccx2":
         return HOW_CCX2.format(ccx=r3.CCX_CMD, label=label)
     if arm in ("builtin2", "builtin2r"):          # builtin2r: the same lead wording, the rules are in the worker
         return HOW_BUILTIN2
+    if arm == "fast":
+        return HOW_FAST.format(tier=arm)
+    if arm in TIER_LEAD_ARMS:
+        return HOW_TIER.format(tier=arm, ccx=r3.CCX_CMD, label=label, model=lead[0], effort=lead[1])
     return r3.HOW[arm]
 
 
 def lead_flags_arm(arm: str) -> str:
     """The round-3 arm whose lead command line (tools, agents, session file) this arm uses."""
+    if arm == "fast":                             # the lead does it all itself: self's command line
+        return "self"
     return "ccx" if arm in CCX_ARMS else "builtin" if arm in BUILTIN_ARMS else arm
 
 
@@ -393,7 +436,9 @@ def worker_agents(arm: str) -> dict | None:
     return WORKER_RULES if arm == "builtin2r" else None
 
 
-NO_LEAD_ARMS = ("direct",)      # ccx straight from the command line: no Claude lead, --lead-model changes nothing
+# ccx straight from the command line: no Claude lead, --lead-model changes nothing (cheapest: direct's command in a
+# hub whose person picked cheapest)
+NO_LEAD_ARMS = ("direct", "cheapest")
 
 
 def has_lead(arm: str) -> bool:
@@ -437,7 +482,7 @@ def lead_unit(u: dict, a, work: Path, repo: Path, hub: Path, iso: PF.Unit | None
            "BASH_DEFAULT_TIMEOUT_MS": "900000", "BASH_MAX_TIMEOUT_MS": "1200000"}
     is_ccx, is_builtin = u["arm"] in CCX_ARMS, u["arm"] in BUILTIN_ARMS
     env = task_env(task, env, ext_python(a))
-    how = lead_how(u["arm"], u["label"])
+    how = lead_how(u["arm"], u["label"], lead_of(u))
     spec = ext_spec(task)
     prompt = (LEAD_PROMPT_EXT.format(name=spec["name"], note=ext_note(spec), brief=task["brief"], how=how)
               if spec else LEAD_PROMPT.format(brief=task["brief"], how=how))
@@ -567,6 +612,134 @@ def direct_unit(u: dict, a, repo: Path, hub: Path, env: dict | None = None, job:
     return row
 
 
+# ------------------------------------------------------------------ tier arms: the hub setting and what each row keeps
+
+def set_picked(hub: Path, tier: str, env: dict | None = None) -> str:
+    """The person's choice the tier arm simulates: `ccx config set policy.picked <tier>` in the unit's hub (ccx's own
+    command, so the setting is written exactly as the person's would be). Returns what the hub now picks."""
+    r = subprocess.run([sys.executable, str(ROOT / "ccx.py"), "config", "set", "policy.picked", tier], cwd=ROOT,
+                       env={**(env or r2.env_for(hub)), "CCX_HUB": str(hub)}, capture_output=True, text=True,
+                       encoding="utf-8", errors="replace", timeout=120)
+    if r.returncode:
+        raise RuntimeError(f"ccx config set policy.picked {tier} failed: {(r.stderr or r.stdout)[-300:]}")
+    from ccx.config import load_config
+    from ccx.commands.common import picked_tier
+    got = picked_tier(load_config(r2.Paths(hub)))
+    if got != tier:
+        raise RuntimeError(f"the unit hub picks {got!r} after setting policy.picked {tier}")
+    return got
+
+
+_TR = []
+
+
+def task_routing():
+    """skills/task-routing/scripts/task_routing.py of this checkout (size_band, merged_policy), loaded once."""
+    if not _TR:
+        import importlib.util
+        f = ROOT / "skills" / "task-routing" / "scripts" / "task_routing.py"
+        spec = importlib.util.spec_from_file_location("r5_task_routing", f)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        _TR.append(mod)
+    return _TR[0]
+
+
+def shipped_policy() -> dict:
+    """config/tiers.toml [policy] of this checkout (the shipped bands and tier rules)."""
+    import tomllib
+    with open(ROOT / "config" / "tiers.toml", "rb") as f:
+        return tomllib.load(f).get("policy") or {}
+
+
+_REF: dict[str, dict | None] = {}
+
+
+def ref_size(task: dict) -> dict | None:
+    """The reference change's size, counted as tasks_holdout counts it (non-test .py / .toml lines and files): the
+    hold-out tasks carry it, an r5 task's is read from this checkout's history (None when the commit is not there,
+    e.g. a shallow clone). `band`: the band those files give under the shipped [policy.bands] (files are the one
+    signal a reference change has; the lines are kept for another cut)."""
+    tid = task["id"]
+    if tid not in _REF:
+        if task.get("size") is not None and task.get("files") is not None:
+            lines, files = int(task["size"]), int(task["files"])
+        elif ext_spec(task):
+            lines = files = None
+        else:
+            try:
+                ch = ext_repo.ref_change(ROOT, task["commit"])
+                lines, files = ch["size"], len(ch["files"])
+            except Exception:  # noqa: BLE001 — no history here: unknown, not a failed unit
+                lines = files = None
+        if files is None:
+            _REF[tid] = None
+        else:
+            band = task_routing().size_band("", None, files, shipped_policy())["band"]
+            _REF[tid] = {"lines": lines, "files": files, "band": band}
+    return _REF[tid]
+
+
+BANDS = ("small", "medium", "large")
+
+
+def misband(planned: str | None, ref: str | None) -> str | None:
+    """Planned band vs the reference change's: same | under (planned smaller) | over; None when either is unknown."""
+    if planned not in BANDS or ref not in BANDS:
+        return None
+    d = BANDS.index(planned) - BANDS.index(ref)
+    return "same" if d == 0 else "under" if d < 0 else "over"
+
+
+def hub_rows(hub: Path) -> list[dict]:
+    return r2.ledger.rows(r2.Paths(hub))
+
+
+def ccx_check_passed(hub: Path, run_ids: list) -> bool | None:
+    """Whether ccx's --check passed on the unit's last sub-agent run (reviews left out); None: no run had a check.
+    Read on a failed unit, it says whether the check let a wrong result through."""
+    last = None
+    for rid in run_ids or []:
+        rec = r2.record(hub, rid)
+        if str(rec.get("label") or "").startswith("review:"):
+            continue
+        if isinstance(rec.get("check"), dict) and "passed" in rec["check"]:
+            last = bool(rec["check"]["passed"])
+    return last
+
+
+def tier_fields(arm: str, hub: Path, task: dict) -> dict:
+    """What a tier arm's row keeps: the tier, what was planned (the first `ccx propose` row in the unit hub's ledger:
+    band, mode, authorized; cheapest: its run's own plan, sized from direct's fixed --minutes 60; fast: self, never
+    proposed), the reference size, the mode that ran (the ledger runs' actual_mode, none = self) and the misbanding
+    (only for a band the lead proposed)."""
+    rows = hub_rows(hub)
+    props = [r for r in rows if r.get("type") == "proposal"]
+    runs = [r for r in rows if not r.get("type") and not str(r.get("label") or "").startswith("review:")]
+    if props:
+        p = props[0]
+        plan = {"source": "propose", "tier": p.get("policy_tier"), "band": p.get("band"),
+                "mode": p.get("planned_mode"), "authorized": bool(p.get("preauthorized")),
+                "explicit": bool(p.get("tier_explicit")), "estimate_minutes": p.get("estimate_minutes"),
+                "estimate_files": p.get("estimate_files"), "n_proposals": len(props)}
+    elif arm == "cheapest" and runs:
+        r = runs[0]
+        plan = {"source": "run", "tier": r.get("policy_tier"), "band": r.get("band"), "mode": r.get("planned_mode"),
+                "explicit": bool(r.get("tier_explicit")), "estimate_minutes": r.get("estimate_minutes")}
+    elif arm == "fast":
+        plan = {"source": "tier", "tier": "fast", "band": None, "mode": "self"}
+    else:
+        plan = {"source": "none", "tier": arm, "band": None, "mode": None, "n_proposals": 0}
+    modes = sorted({str(r.get("actual_mode") or "ccx2") for r in runs})
+    ref = ref_size(task)
+    out = {"tier": arm, "tier_plan": plan, "ref_size": ref, "actual_mode": "+".join(modes) if modes else "self",
+           "misband": misband(plan.get("band"), (ref or {}).get("band")) if plan["source"] == "propose" else None}
+    out["followed_plan"] = None if not plan.get("mode") else plan["mode"] == out["actual_mode"]
+    if arm == "cheapest":
+        out["may_be_wrong"] = True
+    return out
+
+
 def unit_of(u: dict, a, work: Path) -> PF.Unit:
     key = unit_key(u)
     return PF.Unit(key=key, work=work, repo=work / key, hub=work / f"h-{key}", label=u["label"],
@@ -580,8 +753,10 @@ def unit_models(u: dict, row: dict) -> dict:
     out = {"lead": model, "lead_effort": effort, "builtin_worker": r3.WORKER_MODEL}      # direct: replaced below
     if u["arm"] == "builtin2r":
         out["worker_rules"] = "KEEP_TESTS+WIRING"
-    if u["arm"] == "direct":
+    if not has_lead(u["arm"]):                    # direct, cheapest
         out = {"direct": " ".join(DIRECT)}
+    if u["arm"] in TIER_ARMS:                     # the hub's policy.picked (the person's choice the arm simulates)
+        out["tier_picked"] = u["arm"]
     seen = ((row.get("audit") or {}).get("init") or {}).get("model")
     if seen:
         out["lead_seen"] = seen
@@ -617,9 +792,15 @@ def run_unit(u: dict, a, work: Path) -> dict:
         hinfo["memory_empty"] = PF.hub_memory_empty(hub)
         row["hub"] = hinfo
         env = PF.prepare(iso)
-        row.update(direct_unit(u, a, repo, hub, env, job) if u["arm"] == "direct" else
+        if u["arm"] in TIER_ARMS:                 # the person's choice the arm simulates, in the unit's own hub
+            hinfo["picked"] = set_picked(hub, u["arm"], env)
+        row.update(direct_unit(u, a, repo, hub, env, job) if not has_lead(u["arm"]) else
                    lead_unit(u, a, work, repo, hub, iso, env, job))
         row.update(changed(repo))
+        if u["arm"] in TIER_ARMS:
+            row.update(tier_fields(u["arm"], hub, task))
+        if row.get("ccx_run_ids"):
+            row["ccx_check_passed"] = ccx_check_passed(hub, row["ccx_run_ids"])
         sc = score(repo, task, work, job, **({"python": ext_python(a), "source": xkw["source"]} if xkw else {}))
         row.update({**u, "ok": sc["ok"], "pytest": sc["pytest"], "hub": hinfo})
         for rid in row.get("ccx_run_ids") or []:
@@ -772,6 +953,77 @@ def prepare_external(todo: list[dict], a, work: Path) -> list[str]:
     return probs
 
 
+# ------------------------------------------------------------------ the dry-run planner's cost estimate
+
+# measured $/unit with the default (sonnet medium) lead, mean over the r5 tags' rows (self r5; builtin r5, r5f;
+# builtin2 r5d; ccx2 r5c-r5h; direct r5, r5c, r5e; ccx r5), and the lead's share of it (lead_only_usd / usd, median)
+UNIT_USD = {"self": 0.20, "builtin": 0.17, "builtin2": 0.10, "builtin2r": 0.10, "ccx": 0.21, "ccx2": 0.12,
+            "direct": 0.05}
+LEAD_SHARE = {"self": 1.0, "builtin": 0.75, "builtin2": 0.73, "builtin2r": 0.73, "ccx": 0.72, "ccx2": 0.64,
+              "direct": 0.0}
+OPUS_LEAD = 1.7            # an Opus lead's part costs about this much more than sonnet's (the design's assumption)
+PROPOSE_USD = 0.01         # one `ccx propose` call by the lead (design estimate)
+TIER_MODE_ARM = {"self": "self", "ccx2": "ccx2", "direct": "direct"}
+
+
+def planned_mode(arm: str, task: dict) -> str:
+    """The mode a tier arm is expected to run a task in, for the estimate: the tier's rule for the band of the
+    reference change's files (fallback: uncertain) and the brief's state-machine words, as tier_plan applies them."""
+    tr = task_routing()
+    pol = tr.merged_policy(shipped_policy())
+    rules = pol.get(arm) or tr.DEFAULT_POLICY[arm]
+    ref = ref_size(task)
+    hard = tr.size_band(task.get("brief") or "", None, 0, shipped_policy())["hard"]
+    if hard and "hard" in rules:
+        return rules["hard"]
+    if not ref:
+        return rules.get("uncertain") or rules.get("large", "self")
+    return rules.get(ref["band"], "self")
+
+
+def unit_estimate(u: dict) -> tuple[float, str]:
+    """(estimated $, the mode the estimate stands for) of one unit: the measured per-unit cost of its arm (a tier arm:
+    of the mode it is expected to run in, plus one ccx propose for balanced / save), the lead's share times OPUS_LEAD
+    when the lead is an Opus model. Arms without a measurement: ccx2's, marked `?`."""
+    arm = u["arm"]
+    if arm in TIER_ARMS:
+        mode = "self" if arm == "fast" else planned_mode(arm, by_id(u["task"]))
+        base = TIER_MODE_ARM.get(mode, "ccx2")
+    else:
+        mode, base = arm, arm if arm in UNIT_USD else "ccx2"
+    usd, share = UNIT_USD[base], LEAD_SHARE[base]
+    if has_lead(arm) and "opus" in lead_of(u)[0].lower():
+        usd = usd * (1 - share) + usd * share * OPUS_LEAD
+    if arm in TIER_LEAD_ARMS:
+        usd += PROPOSE_USD * (OPUS_LEAD if "opus" in lead_of(u)[0].lower() else 1)
+    return round(usd, 4), mode if arm in UNIT_USD or arm in TIER_ARMS else f"{mode}?"
+
+
+def plan_lines(todo: list[dict], budget: float, spent_usd: float) -> list[str]:
+    """The dry-run planner: per arm units, $/unit and $, the total, and whether it fits what is left of the budget."""
+    by: dict[str, list] = {}
+    for u in todo:
+        usd, mode = unit_estimate(u)
+        by.setdefault(arm_of(u), []).append((usd, mode))
+    out, total = [], 0.0
+    for arm in arm_order(by):
+        xs = by[arm]
+        s = sum(x for x, _ in xs)
+        total += s
+        modes: dict[str, int] = {}
+        for _, m in xs:
+            modes[m] = modes.get(m, 0) + 1
+        out.append(f"[estimate] {arm:22} {len(xs):3} units  ~${s / len(xs):.3f}/unit  ~${s:.2f}  modes "
+                   + " ".join(f"{m}={n}" for m, n in sorted(modes.items())))
+    left = round(budget - spent_usd, 4)
+    out.append(f"[estimate] total ~${total:.2f} for {len(todo)} units; budget ${budget} with ${spent_usd:.2f} of this "
+               f"tag spent leaves ${left:.2f}: " + ("fits" if total <= left else f"short by ~${total - left:.2f}"))
+    out.append("[estimate] from measured r5 means with a sonnet lead (Opus lead: its share x1.7; a ? mode has no "
+               "measurement and uses ccx2's); tier arms by the mode the shipped tier plans for each task's "
+               "reference size, so misbanding moves the real cost")
+    return out
+
+
 def cmd_run(a) -> int:
     out = Path(a.out) if a.out else results_file(a.taskset)
     ids = TASKSETS[a.taskset].IDS
@@ -796,7 +1048,10 @@ def cmd_run(a) -> int:
           f"{lead['lead_effort']}", flush=True)
     if a.dry_run:
         for u in todo:
-            print(f"[dry] {u['label']}")
+            usd, mode = unit_estimate(u)
+            print(f"[dry] {u['label']}  ~${usd:.3f} ({mode})")
+        for line in plan_lines(todo, a.budget, budget_spent(out, a.tag, a.extra_spent)):
+            print(line)
         return 0
     # the other repositories first: a bad --ext-python or copy must not cost the paid canary
     probs = prepare_external(todo, a, work)
@@ -1075,6 +1330,56 @@ def tier_rule_lines(tr: dict | None) -> list[str]:
         [f"  {c['result']:4}  {c['rule']}: {c['value'][0]} vs {c['value'][1]}" for c in tr["conditions"].values()]
 
 
+def tier_rules(rows: list[dict]) -> dict:
+    """tier_rule for every lead that has both arms (`balanced` and `save`, or `balanced@opus-high` and
+    `save@opus-high`): the same lead's arms only, never one lead's balanced against another's save."""
+    arms = {arm_of(r) for r in rows if "error" not in r}
+    out = {}
+    for b in arm_order(arms):
+        base, _, suf = b.partition("@")
+        s = TIER_RULE_ARMS[1] + (f"@{suf}" if suf else "")
+        if base == TIER_RULE_ARMS[0] and s in arms:
+            tr = tier_rule(rows, b, s)
+            if tr:
+                out[f"{b} vs {s}"] = tr
+    return out
+
+
+def _count(xs) -> dict:
+    out: dict = {}
+    for x in xs:
+        out[str(x)] = out.get(str(x), 0) + 1
+    return dict(sorted(out.items()))
+
+
+def tier_summary(rows: list[dict]) -> dict | None:
+    """Per tier arm (as arm_of names it): right, $/success, wall median / mean / p75 (wall_stats), the misbanding
+    rate (the band the lead proposed vs the reference change's band; under = planned smaller), the planned and the
+    actual modes, how often the actual mode was the planned one, and on failed units how often ccx's --check had
+    passed anyway. None without tier rows."""
+    rows = [r for r in rows if "error" not in r and r.get("arm") in TIER_ARMS]
+    if not rows:
+        return None
+    out = {}
+    for arm in arm_order(arm_of(r) for r in rows):
+        rs = [r for r in rows if arm_of(r) == arm]
+        mb = [r["misband"] for r in rs if r.get("misband")]
+        wrong = sum(m != "same" for m in mb)
+        fails = [r for r in rs if not r.get("ok") and r.get("ccx_check_passed") is not None]
+        fol = [r["followed_plan"] for r in rs if r.get("followed_plan") is not None]
+        out[arm] = {**wall_stats(rs), "right": f"{sum(bool(r.get('ok')) for r in rs)}/{len(rs)}",
+                    "misband": {"n": len(mb), "wrong": wrong, "rate": round(wrong / len(mb), 4) if mb else None,
+                                **{k: sum(m == k for m in mb) for k in ("under", "over")}},
+                    "planned_modes": _count((r.get("tier_plan") or {}).get("mode") for r in rs),
+                    "actual_modes": _count(r.get("actual_mode") for r in rs),
+                    "followed_plan": f"{sum(fol)}/{len(fol)}" if fol else None,
+                    "check_passed_on_fail": f"{sum(bool(r['ccx_check_passed']) for r in fails)}/{len(fails)}"
+                    if fails else None}
+        if any(r.get("may_be_wrong") for r in rs):
+            out[arm]["may_be_wrong"] = True
+    return out
+
+
 def phase_stats(rs: list[dict]) -> dict | None:
     """Median and p75 of each phase's wall (phase_wall) over the rows that carry one."""
     ph = [r["phases"] for r in rs if r.get("phases")]
@@ -1115,9 +1420,14 @@ def summarize(rows: list[dict]) -> dict:
            "long_style": r4.summarize_long([{**r, "arm": arm_of(r)} for r in rows
                                             if arm_of(r) in r4.LONG_ARMS])["paired"],
            "paired": paired_all(rows)}
-    tr = tier_rule(rows)
-    if tr:
-        res["tier_rule"] = tr
+    trs = tier_rules(rows)
+    if trs:
+        res["tier_rules"] = trs
+        # the default lead's (#142's field), else the first other lead's: the confirmation run's lead is Opus
+        res["tier_rule"] = trs.get(f"{TIER_RULE_ARMS[0]} vs {TIER_RULE_ARMS[1]}") or next(iter(trs.values()))
+    ts = tier_summary(rows)
+    if ts:
+        res["tiers"] = ts
     if any(r.get("ext") for r in rows):
         # per code base, with each external task's commit date (results are reported per repository and by date:
         # a fix from before a model's training cutoff may be remembered)
@@ -1140,8 +1450,10 @@ def tagged(rows: list[dict], tag: str | None) -> list[dict]:
 def cmd_summary(a) -> int:
     res = summarize(tagged(read_jsonl(results_file(a.taskset)), a.tag))
     print(json.dumps(res, ensure_ascii=False, indent=1))
-    for line in tier_rule_lines(res.get("tier_rule")):       # stdout stays one JSON object
-        print(line, file=sys.stderr)
+    for name, tr in (res.get("tier_rules") or {}).items():   # stdout stays one JSON object
+        for line in tier_rule_lines(tr):
+            print(line if name == "balanced vs save" else line.replace("tier rule", f"tier rule {name}", 1),
+                  file=sys.stderr)
     return 0
 
 
@@ -1150,7 +1462,8 @@ def cmd_export(a) -> int:
             "sub_usd", "by_model_usd", "ccx_usd", "ccx_review_usd", "ccx_agents", "lead_requests", "lead_tokens",
             "lead_output_tokens", "lead_tools", "lead_edits", "agent_calls", "ccx_runs", "ccx_resumes", "rework",
             "delegated", "context_attached", "files_changed", "diffstat", "model", "status", "verdicts", "error",
-            "env_clean", "fingerprint", "lead_model", "lead_effort", "phases")
+            "env_clean", "fingerprint", "lead_model", "lead_effort", "phases", "tier", "tier_plan", "ref_size",
+            "actual_mode", "misband", "followed_plan", "ccx_check_passed", "may_be_wrong")
     rows = tagged(read_jsonl(results_file(a.taskset)), a.tag)
     data = {"summary": summarize(rows),
             "rows": [r3.scrub({**{k: r[k] for k in keep if k in r},
