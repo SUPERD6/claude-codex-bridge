@@ -38,15 +38,51 @@ _TOKEN = re.compile(r"\"[^\"]*\"|'[^']*'|\S+")
 
 
 def _expand_globs(cmd: str, cwd: Path) -> str:
-    """cmd.exe passes `tests/test_*.py` on unexpanded (pytest then finds nothing): expand unquoted * / ? tokens
-    relative to cwd the way a POSIX shell would. A token with no match stays as it is."""
-    def one(m: re.Match) -> str:
-        tok = m.group(0)
-        if tok[0] in "\"'" or not any(c in tok for c in "*?") or tok.startswith("-"):
+    """For cmd.exe, which knows neither globs nor single quotes, in one pass over the tokens: expand unquoted * / ?
+    tokens relative to cwd the way a POSIX shell would (a token with no match stays as it is), and turn a
+    single-quoted token with no double quote inside into a double-quoted one: `-k 'a or b'` reached pytest as three
+    words there (exit 4, r5e-h: 5/80 checks broken). Only those tokens change; everything else, `&&`, `|` and
+    redirects included, is kept character for character (never re-joined with shlex / list2cmdline)."""
+    def one(tok: str) -> str:
+        if len(tok) >= 2 and tok[0] == tok[-1] == "'" and "'" not in tok[1:-1] and '"' not in tok:
+            return '"' + tok[1:-1] + '"'
+        if any(c in tok for c in "\"'") or not any(c in tok for c in "*?") or tok.startswith("-"):
             return tok
         hits = sorted(glob.glob(tok, root_dir=str(cwd)))
         return " ".join(h.replace("\\", "/") for h in hits) if hits else tok
-    return _TOKEN.sub(one, cmd)
+    return "".join(t if t.isspace() else one(t) for t in _shell_words(cmd))
+
+
+def _shell_words(cmd: str) -> list[str]:
+    """cmd split into words and the whitespace runs between them (joined back, it is cmd again), tracking quote
+    state the way the MSVC argv rules do: a `"` toggles it unless an odd number of backslashes comes right before
+    it, and a `'` groups only outside double quotes. So a `'...'` inside a double-quoted argument
+    (`"print('a b')"`, `--opt="a 'b c' d"`, one after a `\\"`) stays part of that word and is never rewritten on
+    its own. An unclosed quote makes the rest of the line one word, which is then left as it is."""
+    out: list[str] = []
+    cur: list[str] = []
+    dq = sq = False
+    bs = 0
+    for ch in cmd:
+        if ch.isspace() and not dq and not sq:
+            if cur:
+                out.append("".join(cur))
+                cur = []
+            if out and out[-1].isspace():
+                out[-1] += ch
+            else:
+                out.append(ch)
+            bs = 0
+            continue
+        if ch == '"' and not sq and bs % 2 == 0:
+            dq = not dq
+        elif ch == "'" and not dq:
+            sq = not sq
+        bs = bs + 1 if ch == "\\" else 0
+        cur.append(ch)
+    if cur:
+        out.append("".join(cur))
+    return out
 
 
 def _typo_of(want: str, have: str) -> bool:

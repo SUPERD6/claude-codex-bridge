@@ -14,6 +14,23 @@ from pathlib import Path
 from .config import Paths
 
 
+def new_run_id(p: Paths) -> str:
+    """A fresh run id (YYYYMMDD-HHMMSS-xxxx) whose folder this call created, so no other run can have it: two runs
+    started in the same second drew the same 4 hex digits once in a while (1 in 65536 per pair), shared one run
+    folder, and the second found the first one's final.lock (CI: 'final.lock was already taken by run')."""
+    import uuid
+    if getattr(p, "runs", None) is None:         # no hub paths (a caller's stand-in): an id, nothing reserved
+        return time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:4]
+    p.runs.mkdir(parents=True, exist_ok=True)
+    while True:
+        rid = time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:4]
+        try:
+            (p.runs / rid).mkdir()
+        except FileExistsError:
+            continue
+        return rid
+
+
 def append_event(p: Paths, event: dict) -> None:
     """Non-run rows (e.g. the lead's verdict). Readers that aggregate runs skip rows with a 'type'."""
     p.ledger.parent.mkdir(parents=True, exist_ok=True)

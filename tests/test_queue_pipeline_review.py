@@ -144,7 +144,8 @@ class TestWorktreeBranches(QEnv):
             self.q("add", f"w{i}", "--brief", f"write piece {i}", "--minutes", "5", "--mode", "write", "--to",
                    "codex", "--check", 'python -c "open(\'n.txt\', \'w\').write(\'x\')"')
         out = self.q("run")
-        self.assertEqual(len(out["unmerged"]), 2)
+        # CI (windows 3.11) once saw 1 != 2 and nothing else: show what each piece did when it happens again
+        self.assertEqual(len(out.get("unmerged") or []), 2, json.dumps(out.get("results"), indent=1)[:3000])
         self.assertTrue(all(u["branch"].startswith("ccx/") for u in out["unmerged"]))
         self.assertIn("unmerged", self.ccx("q", "tree").stdout)
 

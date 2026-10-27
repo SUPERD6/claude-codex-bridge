@@ -86,15 +86,17 @@ def lead_identity(env=None, cfg: dict | None = None) -> str:
     return "user"
 
 
-def detach(args: list[str], log: Path, env: dict) -> None:
-    """Start `ccx <args>` detached (hidden console), its output into `log`: `ccx run --bg`, `ccx discuss --bg`."""
+def detach(args: list[str], log: Path, env: dict):
+    """Start `ccx <args>` detached (hidden console), its output into `log`: `ccx run --bg`, `ccx discuss --bg`.
+    Returns the Popen, for a caller that waits on it in the same call (`ccx run --bg --wait N`)."""
     import subprocess
     from ..config import ccx_argv
     from ..winproc import BACKGROUND as kw   # hidden console: its git/codex/claude calls pop no windows
     log.parent.mkdir(parents=True, exist_ok=True)
     with open(log, "w", encoding="utf-8") as lf:
-        subprocess.Popen([*ccx_argv(), *[x for x in args if x != "--bg"]], stdout=lf, stderr=subprocess.STDOUT,
-                         stdin=subprocess.DEVNULL, env={**os.environ, **env}, cwd=os.getcwd(), **kw)
+        return subprocess.Popen([*ccx_argv(), *[x for x in args if x != "--bg"]], stdout=lf,
+                                stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env={**os.environ, **env},
+                                cwd=os.getcwd(), **kw)
 
 
 def _caller(explicit: str | None) -> str:
