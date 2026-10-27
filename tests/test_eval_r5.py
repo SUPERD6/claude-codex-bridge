@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "eval"))
+import pytest  # noqa: E402
 import r5  # noqa: E402
 import tasks_r5  # noqa: E402
 
@@ -273,3 +274,363 @@ def test_budget_counts_only_its_tag(tmp_path):
     assert r5.spent(f) == 51.25 and r5.spent(f, "new") == 1.25
     assert r5.budget_spent(f, "new", 0.5) == 1.75 and r5.budget_spent(f, "none") == 0
     assert r5.spend_line(f, "new", 0.5, 0.25) == "run=$0.250 tag=$1.750 file=$51.250"
+
+
+# ------------------------------------------------------------------ tier arms (fake CLIs and fake rows only)
+
+def _fake_env(tmp_path):
+    """An environment for ccx subprocesses: fake CLIs, throwaway homes, nothing of the machine's lead identity."""
+    import os
+    env = {k: v for k, v in os.environ.items()
+           if not k.startswith(("CCX_", "CODEX_", "CLAUDE")) and k not in ("FAKE_STATUS", "DSH_SESSION_ID")}
+    for var, sub in (("CODEX_HOME", "codex-home"), ("CLAUDE_CONFIG_DIR", "claude-home"), ("DSH_HOME", "dsh")):
+        (tmp_path / sub).mkdir(exist_ok=True)
+        env[var] = str(tmp_path / sub)
+    env.update({"CCX_CODEX_BIN": str(FAKES / "fake_codex.py"), "CCX_CLAUDE_BIN": str(FAKES / "fake_claude.py"),
+                "FAKE_LOG": str(tmp_path / "calls.jsonl"), "CCX_AB_RATE": "0", "CCX_NO_BENCH_REFRESH": "1",
+                "CCX_NO_QUOTA_PROBE": "1", "CCX_CONFIG": str(tmp_path / "user-config.toml"),
+                "PYTHONIOENCODING": "utf-8"})
+    return env
+
+
+def test_tier_arms_are_opt_in_and_registered(monkeypatch):
+    monkeypatch.setenv("CCX_CLAUDE_BIN", str(FAKES / "fake_claude.py"))       # CI has no claude
+    assert r5.TIER_ARMS == ("fast", "balanced", "save", "cheapest")
+    assert all(x in r5.OPT_IN_ARMS and x not in r5.ARMS for x in r5.TIER_ARMS)
+    assert r5.ARMS == ("self", "builtin", "ccx", "direct")                      # the default schedule stays
+    assert r5.TIER_RULE_ARMS == ("balanced", "save")                            # #142's rule reads these names
+    assert {"balanced", "save", "cheapest"} <= set(r5.PF.CODEX_ARMS) and "fast" not in r5.PF.CODEX_ARMS
+    assert not set(r5.TIER_ARMS) & set(r5.BUILTIN_ARMS)
+    assert not r5.has_lead("cheapest") and all(r5.has_lead(x) for x in ("fast", "balanced", "save"))
+    assert r5.lead_flags_arm("fast") == "self" and r5.lead_flags_arm("balanced") == r5.lead_flags_arm("save") == "ccx"
+    fast, bal = r5.r3.lead_argv(r5.lead_flags_arm("fast"), 1), r5.r3.lead_argv(r5.lead_flags_arm("balanced"), 1)
+    assert "Agent" not in fast[fast.index("--tools") + 1] and "--no-session-persistence" in fast
+    assert "--no-session-persistence" not in bal                               # ccx --context reads its session
+    # --lead-model: the lead arms get their own key, cheapest (no lead) keeps one
+    old = {"tag": "t", "round": 1, "task": "x"}
+    assert r5.unit_key({**old, "arm": "save", "lead_model": "opus", "lead_effort": "high"}) == "1-x-save@opus-high"
+    assert r5.unit_key({**old, "arm": "cheapest", "lead_model": "opus", "lead_effort": "high"}) == "1-x-cheapest"
+    m = r5.unit_models({**old, "arm": "cheapest"}, {})
+    assert m == {"direct": " ".join(r5.CHEAPEST), "tier_picked": "cheapest"}
+    assert r5.unit_models({**old, "arm": "direct"}, {}) == {"direct": " ".join(r5.DIRECT)}    # direct unchanged
+    # cheapest is the shipped cheapest tier's script run, not direct under a new name: save's model pick (no
+    # explicit model; the explicit --tradeoff save wins over the hub's picked tier, so ccx plans nothing), nobody
+    # reviews it; its --check (the repository's suite) is added per task by direct_unit
+    ch = r5.no_lead_flags("cheapest")
+    assert ch == r5.CHEAPEST and r5.no_lead_flags("direct") == r5.DIRECT
+    assert ch[ch.index("--review") + 1] == "off" and "--model" not in ch and "--effort" not in ch
+    assert ch[ch.index("--tradeoff") + 1] == "save"                             # as propose's `next` has it
+    assert "--minutes" not in ch and "--check" not in ch      # nobody sizes it; the suite check is per task (below)
+    assert "--no-escalate" not in ch and "--no-fallback" not in ch
+    assert r5.DIRECT[r5.DIRECT.index("--review") + 1] == "on" and "gpt-6-luna" in r5.DIRECT
+    m = r5.unit_models({**old, "arm": "balanced", "lead_model": "opus", "lead_effort": "high"}, {})
+    assert m["lead"] == "opus" and m["tier_picked"] == "balanced"
+    assert "tier_picked" not in r5.unit_models({**old, "arm": "ccx2"}, {})
+    us = r5.schedule(1, 53, tasks_r5.IDS[:2], list(r5.TIER_ARMS) + ["ccx2"])
+    assert sorted(u["arm"] for u in us) == sorted(list(r5.TIER_ARMS) * 2 + ["ccx2"] * 2)
+
+
+def test_tier_lead_wording():
+    bal = r5.lead_how("balanced", "L", ("opus", "high"))
+    save = r5.lead_how("save", "L")
+    fast = r5.lead_how("fast", "L")
+    for t, how in (("balanced", bal), ("save", save)):
+        assert f"`{t}`" in how and "policy.picked" in how and "propose --lead claude:" in how
+        assert "--minutes" in how and "--files" in how and "authorized: true" in how and "next" in how
+        assert "--label L" in how and "--bg" in how and "show <run_id> --wait" in how and "--no-ab" in how
+        assert r5.LEAN_BRIEF in how and "do the work yourself" in how
+        head, tail = r5.LEAN_ACCEPT.split("{send_back}")
+        assert head in how and tail in how                                       # ccx2's acceptance, shared
+        assert "{" not in how                                                    # every field filled
+        # the proposal is made on the text the run sends (its re-plan agrees), and a refused run is done by hand
+        assert "verbatim" in how.split("propose --lead")[0] and "in one line" not in how
+        assert "refuses the proposal" in how and "do not propose again" in how
+    assert "claude:opus:high" in bal and "claude:sonnet:medium" in save
+    # a full model id is not a ccx rung: the family alias goes to `ccx propose --lead`
+    assert "claude:opus:high" in r5.lead_how("save", "L", ("claude-opus-4-7", "high"))
+    assert r5.ccx_lead_model("claude-sonnet-4-6") == "sonnet" and r5.ccx_lead_model("haiku") == "haiku"
+    assert r5.ccx_lead_model("mystery-1") == "mystery-1"
+    assert "`fast`" in fast and "ccx" not in fast.replace("ccx settings", "") and "yourself" in fast
+    assert r5.lead_how("ccx2", "L") == r5.HOW_CCX2.format(ccx=r5.r3.CCX_CMD, label="L")      # old arms unchanged
+    assert r5.lead_how("self", "L") == r5.r3.HOW["self"]
+
+
+def test_set_picked_writes_the_hub_setting(tmp_path):
+    env = _fake_env(tmp_path)
+    hub = tmp_path / "hub"
+    (hub / "ccx").mkdir(parents=True)
+    assert r5.set_picked(hub, "balanced", env) == "balanced"
+    assert "picked" in (hub / "ccx" / "settings.toml").read_text(encoding="utf-8")
+    assert r5.set_picked(hub, "cheapest", env) == "cheapest"
+
+
+def test_tier_fields_from_a_real_propose_in_a_fake_hub(tmp_path):
+    """The lead's step through ccx itself (fake CLIs): the person picked balanced, a 4-file estimate is large ->
+    ccx2, authorized; the row's plan, reference band and misbanding come from the hub's ledger."""
+    import json
+    import subprocess
+    import sys as _sys
+    env = _fake_env(tmp_path)
+    hub = tmp_path / "hub"
+    (hub / "ccx").mkdir(parents=True)
+    env["CCX_HUB"] = str(hub)
+    r5.set_picked(hub, "balanced", env)
+    r = subprocess.run([_sys.executable, str(r5.ROOT / "ccx.py"), "propose", "--lead", "claude:opus:high",
+                        "--minutes", "60", "--files", "4", "rework the parser"], cwd=tmp_path, env=env,
+                       capture_output=True, text=True, encoding="utf-8", timeout=120)
+    assert r.returncode == 0, r.stdout + r.stderr
+    out = json.loads(r.stdout)
+    assert out["authorized"] is True and out["tier"]["band"] == "large" and out["tier"]["mode"] == "ccx2"
+    small = {"id": "tiny-x", "size": 8, "files": 1}
+    f = r5.tier_fields("balanced", hub, small)
+    assert f["tier"] == "balanced" and f["tier_plan"]["source"] == "propose"
+    assert f["tier_plan"]["band"] == "large" and f["tier_plan"]["mode"] == "ccx2" and f["tier_plan"]["authorized"]
+    assert f["tier_plan"]["estimate_minutes"] == 60 and f["tier_plan"]["n_proposals"] == 1
+    assert f["ref_size"] == {"lines": 8, "files": 1, "band": "small"} and f["tier_plan"]["estimate_files"] == 4
+    assert f["misband"] == "over" and f["misband_overall"] == "over"            # 4 files vs 1: over either way
+    assert f["actual_mode"] == "self" and f["followed_plan"] is False            # nothing went out
+    # a run the lead started from it: the ledger's actual_mode
+    led = hub / "ccx" / "ledger.jsonl"
+    with open(led, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps({"run_id": "r1", "label": "L", "actual_mode": "ccx2"}) + "\n")
+        fh.write(json.dumps({"run_id": "v1", "label": "review:r1"}) + "\n")
+    f = r5.tier_fields("balanced", hub, small)
+    assert f["actual_mode"] == "ccx2" and f["followed_plan"] is True
+    # fast: never proposed; cheapest: the tier's rule (direct for every band), unsized, no misbanding
+    empty = tmp_path / "h2"
+    (empty / "ccx").mkdir(parents=True)
+    f = r5.tier_fields("fast", empty, small)
+    assert f["tier_plan"]["mode"] == "self" and f["actual_mode"] == "self" and f["misband"] is None
+    (empty / "ccx" / "ledger.jsonl").write_text(json.dumps(
+        {"run_id": "d1", "label": "L", "actual_mode": "direct"}) + "\n", encoding="utf-8")
+    f = r5.tier_fields("cheapest", empty, small)
+    # the eval script's plan, not ccx's (ccx plans nothing for an unsized run with an explicit --tradeoff)
+    assert f["tier_plan"]["source"] == "eval-script" and f["tier_plan"]["mode"] == "direct"
+    assert f["tier_plan"]["ccx_planned"] is False
+    assert f["actual_mode"] == "direct" and f["may_be_wrong"] is True
+    assert f["tier_plan"]["sized"] is False and f["tier_plan"]["run_policy_tier"] is None
+    assert f["misband"] is None and f["followed_plan"] is None                  # no lead: nothing to follow
+
+
+def test_misband_compares_files_with_files(tmp_path):
+    """A one-file task with an exact --files 1 and a sensible 30-minute estimate is not misbanded: the minutes make
+    the planned band medium, but the reference change has only files, so only files are compared (`misband`);
+    `misband_overall` keeps the planned band's comparison, which is over by construction."""
+    import subprocess
+    import sys as _sys
+    env = _fake_env(tmp_path)
+    hub = tmp_path / "hub"
+    (hub / "ccx").mkdir(parents=True)
+    env["CCX_HUB"] = str(hub)
+    r5.set_picked(hub, "save", env)
+    r = subprocess.run([_sys.executable, str(r5.ROOT / "ccx.py"), "propose", "--lead", "claude:sonnet:medium",
+                        "--minutes", "30", "--files", "1", "rework the parser"], cwd=tmp_path, env=env,
+                       capture_output=True, text=True, encoding="utf-8", timeout=120)
+    assert r.returncode == 0, r.stdout + r.stderr
+    f = r5.tier_fields("save", hub, {"id": "tiny-y", "size": 8, "files": 1})
+    assert f["tier_plan"]["band"] == "medium" and f["ref_size"]["band"] == "small"
+    assert f["misband"] == "same" and f["misband_overall"] == "over"
+    assert r5.files_band(1) == "small" and r5.files_band(2) == "medium" and r5.files_band(3) == "large"
+    assert r5.files_band(None) is None and r5.files_band(0) is None
+
+
+def test_a_paraphrased_proposal_is_refused_by_its_run(tmp_path):
+    """Why the tier lead proposes on the verbatim request: under balanced a brief with a state-machine word is
+    planned self. Proposed verbatim, ccx says so up front (not authorized); proposed as a one-line paraphrase without
+    the word, it is authorized and then `ccx run --proposal` with the real brief refuses. Fake CLIs; the refused
+    run starts nothing."""
+    import json
+    import subprocess
+    import sys as _sys
+    env = _fake_env(tmp_path)
+    hub = tmp_path / "hub"
+    (hub / "ccx").mkdir(parents=True)
+    env["CCX_HUB"] = str(hub)
+    r5.set_picked(hub, "balanced", env)
+    brief = tasks_r5.by_id("brief-words")["brief"]
+    assert "resume" in r5.task_routing().size_band(brief, None, 3, r5.shipped_policy())["hard"]
+
+    def ccx(*args):
+        r = subprocess.run([_sys.executable, str(r5.ROOT / "ccx.py"), *args], cwd=tmp_path, env=env,
+                           capture_output=True, text=True, encoding="utf-8", timeout=120)
+        return json.loads(r.stdout)
+    est = ["--minutes", "60", "--files", "3"]
+    verbatim = ccx("propose", "--lead", "claude:sonnet:medium", *est, brief)
+    assert verbatim["authorized"] is False and verbatim["tier"]["mode"] == "self"
+    assert r5.planned_mode("balanced", tasks_r5.by_id("brief-words")) == "self"      # the dry run agrees
+    para = ccx("propose", "--lead", "claude:sonnet:medium", *est, "fix how memory notes are picked for briefs")
+    assert para["authorized"] is True
+    refused = ccx("run", "--tradeoff", "save", "--proposal", para["proposal"], *est, "--mode", "write", "--new",
+                  "--no-ab", "--label", "L", brief)
+    assert refused["ok"] is False and "plans this run's own task as self" in refused["error"]
+    assert not (tmp_path / "calls.jsonl").exists()                               # no sub-agent was started
+
+
+def test_reference_size_and_misband():
+    import tasks_holdout
+    t = tasks_holdout.by_id("ledger-repair")
+    ref = r5.ref_size(t)
+    assert ref["lines"] == t["size"] and ref["files"] == t["files"] and ref["band"] == "medium"   # 2 files
+    assert r5.ref_size(tasks_holdout.by_id("undo-not-verdict"))["band"] == "large"                # 4 files
+    assert r5.misband("small", "large") == "under" and r5.misband("large", "small") == "over"
+    assert r5.misband("medium", "medium") == "same" and r5.misband(None, "small") is None
+    r = r5.ref_size(tasks_r5.by_id("waiting-evals"))      # from this checkout's history; None in a shallow clone
+    assert r is None or (r["files"] >= 1 and r["band"] in r5.BANDS)
+
+
+def test_check_passed_reads_the_last_builder_run(tmp_path):
+    hub = tmp_path / "h"
+    _rec(hub, "a", label="L", check={"passed": False})
+    _rec(hub, "b", label="L", check={"passed": True})
+    _rec(hub, "v", label="review:b", check={"passed": False})
+    _rec(hub, "n", label="L")
+    assert r5.ccx_check_passed(hub, ["a", "b", "v"]) is True
+    assert r5.ccx_check_passed(hub, ["b", "a"]) is False
+    assert r5.ccx_check_passed(hub, ["n"]) is None and r5.ccx_check_passed(hub, []) is None
+
+
+def test_tier_summary_and_tier_rule_per_lead():
+    def tr(task, arm, ok, usd, wall, band, ref, actual, check=None, **kw):
+        return _row(task, 1, arm, ok, usd, wall, tier=arm, tier_plan={"band": band, "mode": "self"},
+                    ref_size={"band": ref}, misband=r5.misband(band, ref), actual_mode=actual,
+                    followed_plan=actual == "self", **({"ccx_check_passed": check} if check is not None else {}), **kw)
+    opus = {"lead_model": "opus", "lead_effort": "high"}
+    rows = []
+    for t in "ab":
+        rows += [tr(t, "balanced", True, 0.14, 60, "small", "small", "self", **opus),
+                 tr(t, "save", t == "a", 0.10, 100, "large", "small", "ccx2", check=True, **opus)]
+    s = r5.summarize(rows)
+    assert set(s["tier_rules"]) == {"balanced@opus-high vs save@opus-high"}
+    assert s["tier_rule"] == s["tier_rules"]["balanced@opus-high vs save@opus-high"]
+    assert s["tier_rule"]["units"] == 2 and s["tier_rule"]["conditions"]["right"]["result"] == "pass"
+    assert s["tier_rule"]["pair"] == "balanced@opus-high vs save@opus-high"     # says which lead's arms it is
+    sv, bl = s["tiers"]["save@opus-high"], s["tiers"]["balanced@opus-high"]
+    assert {k: v for k, v in sv["misband"].items() if k != "basis"} == {"n": 2, "wrong": 2, "rate": 1.0,
+                                                                         "under": 0, "over": 2}
+    assert sv["misband"]["basis"].startswith("files") and "by construction" in sv["misband_overall"]["basis"]
+    assert sv["misband_overall"]["n"] == 0 and sv["route_sources"] is None
+    assert bl["misband"]["rate"] == 0.0 and bl["right"] == "2/2" and bl["cps"] == 0.14
+    assert sv["check_passed_on_fail"] == "1/1" and sv["actual_modes"] == {"ccx2": 2}
+    assert sv["followed_plan"] == "0/2" and {"wall_med", "wall_mean", "wall_p75"} <= set(sv)
+    assert "balanced@opus-high vs save@opus-high" in s["paired"]
+    # one lead's balanced is never ruled against another lead's save
+    mixed = [tr("a", "balanced", True, 0.1, 10, "small", "small", "self"),
+             tr("a", "save", True, 0.1, 10, "small", "small", "ccx2", **opus)]
+    assert "tier_rule" not in r5.summarize(mixed) and r5.tier_rules(mixed) == {}
+    assert "tiers" not in r5.summarize([_row("a", 1, "ccx2", True, 0.1, 1)])
+
+
+def test_dry_run_prints_the_schedule_and_the_estimate(tmp_path, capsys):
+    import re
+    a = r5.parser().parse_args(["run", "--tag", "t", "--rounds", "1", "--tasks", ",".join(tasks_r5.IDS[:2]),
+                                "--arms", "fast,balanced,save,ccx2,cheapest", "--lead-model", "opus",
+                                "--lead-effort", "high", "--budget", "1", "--out", str(tmp_path / "r.jsonl"),
+                                "--workdir", str(tmp_path / "w"), "--dry-run"])
+    assert r5.cmd_run(a) == 0
+    out = capsys.readouterr().out
+    assert "units: 10" in out and len(re.findall(r"^\[dry\] eval-r5:t:", out, re.M)) == 10
+    assert ":fast@opus-high  ~$0.340 (self)" in out and ":cheapest  ~$0.050 (direct)" in out
+    assert ":ccx2@opus-high  ~$0.174 (ccx2)" in out
+    assert re.search(r"\[estimate\] save@opus-high\s+2 units\s+~\$0\.191/unit", out)
+    assert "[estimate] total ~$" in out and "short by" in out                  # $1 does not cover 10 units
+    assert not (tmp_path / "w").exists()                                       # nothing prepared, nothing run
+    # the estimate per unit: measured means, an Opus lead's share x1.7, one propose for balanced / save
+    assert r5.unit_estimate({"arm": "ccx2", "task": tasks_r5.IDS[0]}) == (0.12, "ccx2")
+    assert r5.unit_estimate({"arm": "self", "task": tasks_r5.IDS[0], "lead_model": "opus"})[0] == 0.34
+    assert r5.unit_estimate({"arm": "save", "task": tasks_r5.IDS[0]}) == (0.13, "ccx2")
+    assert r5.unit_estimate({"arm": "cheapest", "task": tasks_r5.IDS[0], "lead_model": "opus"}) == (0.05, "direct")
+    assert r5.unit_estimate({"arm": "ccx", "task": tasks_r5.IDS[0]}) == (0.21, "ccx")
+    assert r5.planned_mode("balanced", tasks_r5.by_id("q-resume-session")) == "self"            # resume: hard
+
+
+def _tiny_repo(path):
+    import subprocess
+    path.mkdir()
+    (path / "a.py").write_text("x = 1\n", encoding="utf-8")
+    for cmd in (["init", "-q"], ["add", "."], ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-qm", "i"]):
+        subprocess.run(["git", *cmd], cwd=path, check=True, capture_output=True)
+    return path
+
+
+def test_cheapest_check_is_the_repository_suite():
+    """The cheapest arm's --check is the whole existing suite, the same command for every task of a repository: it
+    names no task's test file (that would point at the hidden test), only the flaky nodes every task leaves out."""
+    import tasks_holdout
+    own = [t for t in tasks_r5.T]
+    checks = {r5.suite_check(t) for t in own}
+    assert len(checks) == 1
+    chk = checks.pop()
+    assert chk.startswith("python -m pytest -q tests") and "--deselect" in chk     # BG_RUN, flaky under load
+    rest = chk.replace(r5.SUITE, "")
+    hidden_files = {f for t in own for f in t["tests"]}
+    # only --deselect nodes follow the suite; a hidden file is named only as part of a node every task leaves out
+    assert all(x == "--deselect" or "::" in x for x in rest.split())
+    assert not any(f"{f} " in chk + " " for f in hidden_files)                     # no hidden file on its own
+    for t in tasks_holdout.T:
+        c = r5.suite_check(t)
+        if not t.get("repo"):
+            assert c == chk                                                        # this repository: one command
+        else:
+            assert c.startswith("python -m pytest -q tests") and not any(f in c for f in t["tests"])
+    hum = next(t for t in tasks_holdout.T if t.get("repo") == "humanize")
+    assert "--ignore=tests/test_benchmarks.py" in r5.suite_check(hum)
+
+
+@pytest.mark.parametrize("passes", [True, False])
+def test_cheapest_unit_runs_the_shipped_cheapest_tier(tmp_path, monkeypatch, passes):
+    """The cheapest unit through ccx itself (fake CLIs): in a hub that picked cheapest, save's model pick (no explicit
+    model, no fixed --minutes: the script sizes nothing, so the run has no tier plan and its route falls back to the
+    brief's keywords, as ccx2's run does), Codex, no review, the repository's suite as its --check, taken as it is
+    (a failed ccx re-check climbs a rung, as save does); the row says direct, may be wrong, and ccx planned nothing.
+    The direct arm's command keeps its explicit model, --minutes 60 and review."""
+    import json
+    from types import SimpleNamespace
+    chk = f'python -c "raise SystemExit({0 if passes else 1})"'
+    monkeypatch.setattr(r5, "suite_check", lambda task: chk)
+    env = _fake_env(tmp_path)
+    hub = tmp_path / "hub"
+    (hub / "ccx").mkdir(parents=True)
+    env["CCX_HUB"] = str(hub)
+    r5.set_picked(hub, "cheapest", env)
+    repo = _tiny_repo(tmp_path / "repo")
+    u = {"tag": "t", "round": 1, "task": tasks_r5.IDS[0], "arm": "cheapest", "label": "eval-r5:t:1:x:cheapest"}
+    row = r5.direct_unit(u, SimpleNamespace(timeout=300), repo, hub, env)
+    assert row["rc"] == 0, row
+    led = [json.loads(x) for x in (hub / "ccx" / "ledger.jsonl").read_text(encoding="utf-8").splitlines()]
+    runs = [x for x in led if not x.get("type")]
+    assert len(runs) == 1 and not any(str(x.get("label") or "").startswith("review:") for x in led)
+    assert "policy_tier" not in runs[0] and runs[0]["b"] is None                # unsized: no tier plan, no b
+    assert runs[0]["actual_mode"] == "direct" and runs[0]["rungs"][0].startswith("codex:")
+    assert not row["verdicts"]                                                  # nobody reviewed it
+    r5.bookkeeping(row, "cheapest", hub, tasks_r5.by_id(u["task"]))
+    assert "bookkeeping_error" not in row and row["ccx_check_passed"] is passes   # ccx's re-check, as it is
+    rec = r5.r2.record(hub, runs[0]["run_id"])
+    assert rec["check"]["cmd"] == chk
+    if not passes:                                    # save's climb on a failed ccx re-check fires
+        assert rec["attempts"][0]["kind"] == "check_failed" and len(rec["attempts"]) >= 2
+    assert row["ccx_routes"][0]["source"] != "explicit" and row["ccx_routes"][0]["b"] is None
+    assert row["tier_plan"]["mode"] == "direct" and row["tier_plan"]["source"] == "eval-script"
+    assert row["tier_plan"]["ccx_planned"] is False
+    assert row["may_be_wrong"] and row["followed_plan"] is None and row["misband"] is None
+
+
+def test_ccx_routes_and_bookkeeping_errors_keep_the_unit(tmp_path, monkeypatch):
+    hub = tmp_path / "h"
+    _rec(hub, "r1", label="L", route={"source": "task-routing", "b": 5.5, "rung": "codex:gpt-6-luna:low"},
+         attempts=[{"model": "gpt-6-luna", "effort": "low"}])
+    _rec(hub, "v1", label="review:r1", route={"source": "explicit"})
+    _rec(hub, "r2", label="L", route={"source": "keywords"}, attempts=[{"model": "m", "effort": "e", "rung": "x"}])
+    got = r5.ccx_routes(hub, ["r1", "v1", "r2", "missing"])
+    assert got == [{"source": "task-routing", "b": 5.5, "rung": "codex:gpt-6-luna:low", "model": "gpt-6-luna",
+                    "effort": "low"},
+                   {"source": "keywords", "b": None, "rung": "x", "model": "m", "effort": "e"}]
+    rows = [_row("a", 1, "save", True, 0.1, 10, tier="save", ccx_routes=got[:1]),
+            _row("b", 1, "save", True, 0.1, 10, tier="save", ccx_routes=got[1:])]
+    assert r5.tier_summary(rows)["save"]["route_sources"] == {"keywords": 1, "task-routing": 1}
+
+    def boom(*a, **k):
+        raise OSError("ledger unreadable")
+    monkeypatch.setattr(r5, "tier_fields", boom)
+    row = {"ccx_run_ids": ["r1"]}
+    r5.bookkeeping(row, "save", hub, {"id": "x"})                               # does not raise
+    assert row["bookkeeping_error"] == "OSError: ledger unreadable" and "ccx_routes" not in row
