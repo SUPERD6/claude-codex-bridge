@@ -48,7 +48,9 @@ REPOS = {
                  "needs": ["pytest", "freezegun"], "pytest_min": "9.0", "module": "humanize",
                  # its benchmarks need pytest plugins (the `benchmark` fixture) that the eval does not install
                  "note": "If tests/test_benchmarks.py is there, it needs pytest plugins that are not installed here: "
-                         "leave it out (--ignore=tests/test_benchmarks.py)."},
+                         "leave it out (--ignore=tests/test_benchmarks.py)."
+                 # the whole existing suite, as a script's --check (r5's cheapest arm), without those benchmarks
+                 , "suite": "python -m pytest -q tests --ignore=tests/test_benchmarks.py"},
     "itsdangerous": {"url": "https://github.com/pallets/itsdangerous.git", "license": "BSD-3-Clause",
                      "name": "itsdangerous, a Python library that signs data so it can be sent to untrusted places "
                              "and loaded back safely",
