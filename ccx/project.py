@@ -170,8 +170,9 @@ HANDOFF_TEMPLATE = """## Done
 
 def handoff(root: Path, by: str, to: str, text: str) -> dict:
     """Write a baton for the next lead. Each handoff gets its own file in .ccx/handoffs/, so parallel sessions can't
-    overwrite each other's; handoff.md is only the latest. The other side's session start lists every one it has
-    not seen yet."""
+    overwrite each other's; handoff.md is only the latest, and only while it is ccx's own unedited copy: a
+    hand-written or edited .ccx/handoff.md is never overwritten (`latest_skipped`). The other side's session start
+    lists every one it has not seen yet."""
     pp = ProjectPaths(root)
     if not pp.memory_index.exists():
         init(root)
@@ -188,11 +189,25 @@ def handoff(root: Path, by: str, to: str, text: str) -> dict:
         own = hist / f"{stem}-{n}.md"
     own.write_text(doc, encoding="utf-8")
     f = root / ".ccx" / "handoff.md"
-    f.write_text(doc, encoding="utf-8")
+    latest_skipped = None
+    if f.exists():
+        current = f.read_text(encoding="utf-8", errors="replace")
+        match = _HEAD.match(current)
+        copied_from_history = False
+        if match:
+            copied_from_history = any(p.read_text(encoding="utf-8", errors="replace") == current
+                                      for p in hist.glob("*.md"))
+        if not copied_from_history:
+            latest_skipped = "hand-written .ccx/handoff.md kept"
+    if latest_skipped is None:
+        f.write_text(doc, encoding="utf-8")
     rel = own.relative_to(root).as_posix()
     first = next((l.strip("-# ").strip() for l in body.splitlines() if l.strip("-# ").strip()), "")
     memory.add(pp, f"Handoff {by} -> {to}: {first[:160]} (full text: {rel})", by, "handoff")
-    return {"handoff": str(own), "latest": str(f), "chars": len(doc), "to": to}
+    result = {"handoff": str(own), "latest": str(f if latest_skipped is None else own), "chars": len(doc), "to": to}
+    if latest_skipped is not None:
+        result["latest_skipped"] = latest_skipped
+    return result
 
 
 _HEAD = re.compile(r"<!-- ccx:handoff from=(\S+) to=(\S+) ts=(\S+) -->")
