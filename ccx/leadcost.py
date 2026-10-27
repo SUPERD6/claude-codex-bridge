@@ -18,7 +18,10 @@ import json
 import re
 from pathlib import Path
 
-CLAUDE_TTL_MIN = 5          # default prompt-cache lifetime when the log doesn't say (Claude Code asks for 1 h)
+CLAUDE_TTL_MIN = 5          # prompt-cache lifetime when the log doesn't say: 5 min is Claude Code's default
+                            # except the main conversation on a subscription within plan usage (1 h); an API
+                            # key, usage credits and subagents get 5 min (code.claude.com/docs/en/prompt-caching,
+                            # 2026-10-26, Claude Code 2.1.309). A logged ttl of 1h below switches to 60.
 CODEX_TTL_MIN = 10          # OpenAI keeps cached prefixes for roughly 5–10 minutes of inactivity
 BREAK_MIN = 20_000          # a re-written prefix smaller than this is not worth reporting
 BIG_PART = 2_000            # parts above this get advice

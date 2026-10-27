@@ -85,6 +85,28 @@ class TestRead(AdapterEnv):
         self.assertNotIn("y" * 600, text)                                 # an older ask stays short
         self.assertLessEqual(len(cs.summary(evs * 20, "claude", SID, self.work, "t", max_chars=1500)), 1500)
 
+    def test_lead_only_delegation_sentences_are_dropped_real_constraints_kept(self):
+        # round 5: the lead's own "do not edit files yourself: hand the implementation to a sub-agent through ccx"
+        # reached a builder, which stopped; the spec's real constraints around it must survive
+        spec = ("Add parse_rows() to src/parse.py. Do not edit files yourself: hand the implementation to a "
+                "sub-agent through ccx. Never change tests/test_parse.py. An empty input must return [].\n"
+                "Accept it without re-running the tests.\n委派时交给 codex 做。不要用第三方库。")
+        evs = [{"ts": 1.0, "who": "person", "kind": "ask", "text": spec},
+               {"ts": 1.0, "who": "person", "kind": "decision", "text": "Delegate the work to codex."},
+               {"ts": 2.0, "who": "claude", "kind": "said", "text": "I will hand it to codex via ccx."},
+               {"ts": 2.0, "who": "claude", "kind": "file", "text": "src/parse.py"}]
+        kept = cs.drop_lead_only(evs)
+        text = cs.summary(kept, "claude", SID, self.work, "t")
+        for real in ("Add parse_rows() to src/parse.py.", "Never change tests/test_parse.py.",
+                     "An empty input must return [].", "不要用第三方库", "src/parse.py"):
+            self.assertIn(real, text)
+        for lead_only in ("yourself", "through ccx", "without re-running", "交给 codex", "Delegate the work",
+                          "hand it to codex"):
+            self.assertNotIn(lead_only, text)
+        self.assertEqual([e["kind"] for e in kept], ["ask", "file"])
+        plain = [{"ts": 1.0, "who": "person", "kind": "ask", "text": "Fix it.\nKeep the API."}]
+        self.assertEqual(cs.drop_lead_only(plain), plain)                 # untouched when nothing matches
+
     def test_codex_and_dsh_events(self):
         evs = cs.events_codex(_w(self.work / "r.jsonl", codex_session(str(self.work))))
         self.assertEqual([e["text"] for e in evs if e["kind"] == "file"], ["src/parse.py"])
@@ -130,6 +152,7 @@ class TestUse(AdapterEnv):
         self.assertIn(MARK, prompt)
         self.assertIn("empty list returns None", prompt)
         self.assertNotIn(SECRET, prompt)
+        self.assertIn("you are the implementer, so make the changes yourself", prompt)
         rec = self.rec(out["run_id"])
         self.assertGreater(rec["shared_context"]["chars"], 100)
         self.assertTrue((self.hub / "ccx" / "runs" / out["run_id"] / "shared-context.md").exists())

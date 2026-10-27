@@ -6,7 +6,10 @@ spend cap is the piece's budget (`--budget`, a queue item's share) or `[subagent
 over_budget and can be continued with more budget. F12: a Claude sub-run gets the Agent tool too, since its
 sub-agents' spend shows up while it runs (stream events and <session>/subagents/*.jsonl, checked 2026-10-24 with
 Claude Code 2.1.309). F13: their model is the tool's default, one rung down only when quota is tight. F14: a piece
-with independent parts says so in the words Codex's own instructions wait for ("explicitly asked ... sub-agents").
+run with `--parallel` says so in the words Codex's own instructions wait for ("explicitly asked ... sub-agents").
+Since 2026-10-26 a brief that merely lists 3+ items no longer gets them (`has_parts` is kept for callers that want
+the hint): in round 5, 40/100 first runs got the words, cost $0.007-0.024 more a run with no wall-clock gain, and
+3/100 stopped as blocked in 7-8 s.
 
 Measured caveat (PR #6, 2026-10-24): codex-cli 0.164 tells its model not to start sub-agents unless the user,
 AGENTS.md or a skill explicitly asks; gpt-6-luna/low started none in 5 runs, even when asked. So these limits have

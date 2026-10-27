@@ -457,6 +457,59 @@ class TestReviewRun(Env):
         self.assertNotIn("last resort", out["hint"])
         self.assertEqual(len(self.reviews()), 2)
 
+    def test_resume_after_a_fix_run_reviews_and_undoes_the_whole_chain(self):
+        # a fix run had no undo.json: resuming it reviewed an empty diff (--review on did nothing) and
+        # `ccx undo FIX` said there was no snapshot. Now a resume or fix round inherits its chain's snapshot.
+        from ccx.config import Paths
+        runs = Paths(self.hub).runs
+        fix = self.go("--review", "on", review_seq="issues")                # first run + one fix round, still failing
+        self.assertEqual(fix["kind"], "review_failed")
+        self.assertTrue((runs / fix["run_id"] / "undo.json").exists())
+        r = self.ccx("resume", "--review", "on", fix["run_id"], "set x to 3 instead",
+                     env={"FAKE_WRITE_RESUMED": f"{self.work / 'a.py'}=x = 3\n", "FAKE_REVIEW": "issues,issues,pass"})
+        self.assertIn(r.returncode, (0, 2), r.stderr)
+        again = json.loads(r.stdout or "null") or self.fail(r.stderr)
+        self.assertEqual(again["review"]["verdict"], "pass", again)
+        last = self.reviews()[-1]["prompt"]
+        self.assertIn("-x = 1", last)                                       # diffed from the first run's snapshot
+        self.assertIn("+x = 3", last)
+        self.assertEqual(again["diffstat"], "1 file changed, 1 insertion(+), 1 deletion(-)")
+        u = self.ccx("undo", again["run_id"], "--apply")
+        self.assertEqual(u.returncode, 0, u.stderr)
+        self.assertEqual((self.work / "a.py").read_text(encoding="utf-8"), "x = 1\n")   # the whole chain rolled back
+
+    def test_reviewer_cache_ttl_is_opt_in_and_reviewer_only(self):
+        def settings(call):
+            a = call["argv"]
+            return json.loads(a[a.index("--settings") + 1])
+        self.go("--review", "on")
+        self.assertNotIn("promptCacheTtl", settings(self.reviews()[-1]))            # default off
+        (self.hub / "ccx" / "tiers.toml").write_text('[review]\ncache_ttl = "5m"\n', encoding="utf-8")
+        (self.work / "a.py").write_text("x = 1\n", encoding="utf-8")                # so the next run changes it
+        self.go("--review", "on", "--new")
+        self.assertEqual(len(self.reviews()), 2)
+        self.assertEqual(settings(self.reviews()[-1])["promptCacheTtl"], "5m")
+        r = self.ccx("run", "--to", "claude", "--model", "haiku", "--effort", "low", "--mode", "write",
+                     "--review", "off", "change x", env={"FAKE_WRITE": f"{self.work / 'a.py'}=x = 4\n"})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        builder = [c for c in self.calls() if c["agent"] == "claude"][-1]
+        self.assertNotIn("[ccx review", builder["prompt"])
+        self.assertNotIn("promptCacheTtl", settings(builder))                        # a builder keeps the default
+
+    def test_edited_tests_flagged_without_a_review(self):
+        # backlog 0a: a changed pre-existing test is shown for every write run, also with --review off
+        g = ["git", "-c", "user.name=t", "-c", "user.email=t@t"]
+        (self.work / "test_a.py").write_text("import a\nassert a.x == 1\n", encoding="utf-8")
+        subprocess.run([*g, "add", "test_a.py"], cwd=self.work, check=True)
+        subprocess.run([*g, "commit", "-qm", "test"], cwd=self.work, check=True)
+        env = {"FAKE_WRITE": f"{self.work / 'a.py'}=x = 2\n;{self.work / 'test_a.py'}=import a\nassert a.x == 2\n"}
+        r = self.ccx("run", "--to", "codex", "--model", "gpt-6-luna", "--effort", "low", "--mode", "write",
+                     "--no-fallback", "--review", "off", "change x to 2 in a.py", env=env)
+        out = json.loads(r.stdout)
+        self.assertNotIn("review", out)
+        self.assertEqual(out["edited_tests"], ["test_a.py"])
+        self.assertEqual(self.reviews(), [])
+
     def test_claude_worker_may_run_the_check(self):
         r = self.ccx("run", "--to", "claude", "--model", "haiku", "--effort", "low", "--mode", "write", "--review",
                      "off", "--check", '"C:\\py\\python.exe" -m unittest -q', "change x")

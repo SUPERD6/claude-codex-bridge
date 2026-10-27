@@ -574,9 +574,10 @@ def review_run(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path, run_d
     rv = sys.modules[__name__]
     rc = cfg.get("review") or {}
     mode = req.review if req.review != "auto" else rc.get("mode", "auto")
-    first = req.resume_run if (req.resume_run and not req.continued) else None
-    undo = (p.runs / first / "undo.json") if first else (run_dir / "undo.json")
-    snap = json.loads(undo.read_text(encoding="utf-8")) if undo.exists() else None
+    # the run's own snapshot (a resume or fix round inherits its chain's), else the chain's: followed back through
+    # resumed_from, so resuming a fix run reviews the whole change, not an empty diff (older records had none)
+    from .workspace import run_snapshot
+    snap = run_snapshot(p, record)
     actual, diff = rv.changes(cwd, snap)
     res = record.get("result") or {}
     edited = rv.edited_tests(diff)

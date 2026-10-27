@@ -73,7 +73,7 @@ class Request:
     allow_subagents: bool = True    # the sub-agent may use its own sub-agents (one level, counted, capped: F9)
     subagents: str = "auto"         # auto | off | N: how many of its own at once (F10; auto = the tool's default)
     budget_usd: float | None = None # this piece's spending cap for its own sub-agents (F11; else [subagents] max_usd)
-    parallel: bool | None = None    # say "use sub-agents for the independent parts" (F14; None = when the brief lists parts)
+    parallel: bool | None = None    # say "use sub-agents for the independent parts" (F14; only when True, i.e. --parallel)
     lead_session: str | None = None # the lead conversation this run belongs to (for auto-continue)
     review: str = "auto"            # independent review by another vendor's cheap model: auto | on | off (F1)
     risk: str | None = None         # low | visible | critical (from the routing rubric): visible+ is reviewed
@@ -428,8 +428,10 @@ def run(req: Request, p: Paths) -> dict:
     selfcheck = (REVIEW_FINISH if reviewer
                  else SELFCHECK_CMD.format(check=req.check) if req.check else SELFCHECK)
     brief = req.brief.strip()
-    if req.allow_subagents and (req.parallel or (req.parallel is None and subagents.has_parts(brief))):
-        brief += "\n\n" + subagents.PARALLEL          # F14: the explicit request Codex's own instructions wait for
+    if req.allow_subagents and req.parallel:
+        # F14: the explicit request Codex's own instructions wait for, only on --parallel. No longer added just
+        # because the brief lists 3+ items (r5: 40/100 first runs got it, +$0.007-0.024 a run, no wall gain).
+        brief += "\n\n" + subagents.PARALLEL
     shared, shared_meta = "", None
     if (not prev or cont) and not req.fork_lead and context_share.wanted(req.share_context, cfg, req.mode):
         try:
@@ -484,8 +486,14 @@ def run(req: Request, p: Paths) -> dict:
         "shared_context": shared_meta,
     }
     _write_record(run_dir, record)          # visible to `ccx show` at once (background runs, crashes)
-    if req.mode == "write" and (not prev or cont):
-        snap = undo_snapshot(cwd)
+    if req.mode == "write":
+        # a fresh task takes its own snapshot; a resume or review fix round inherits the one of the run it goes on
+        # from (followed back the chain), so its review sees the whole change and `ccx undo` of any link in the
+        # chain puts back what the chain changed. Before, a fix run had none: resuming it gave a review no diff.
+        try:
+            snap = undo_snapshot(cwd) if (not prev or cont) else run_snapshot(p, record)
+        except Exception:  # noqa: BLE001 — a missing git or an odd old record never fails the run
+            snap = None
         if snap:
             (run_dir / "undo.json").write_text(json.dumps(snap), encoding="utf-8")
     if req.task and req.step:
@@ -577,8 +585,12 @@ def run(req: Request, p: Paths) -> dict:
             # --bare: auth is strictly ANTHROPIC_API_KEY, OAuth and keychain are never read (claude 2.1.309 --help),
             # so the caller's Claude login can't reach the provider's server
             perm += ["--bare"]
+        # opt-in ([review] cache_ttl, default off): ccx's one-shot reviewer is never resumed, so a 1-hour cache
+        # write (the subscription default for -p runs) is paid for and never read; lead and builder runs untouched
+        ttl = str((cfg.get("review") or {}).get("cache_ttl") or "").strip()
+        kw = {"cache_ttl": ttl} if (cli == "claude" and not extra and reviewer and ttl in ("5m", "1h")) else {}
         inv = BUILDERS[cli](model=spec["model"], effort=spec["effort"], perm=perm, cwd=cwd,
-                           prompt=prompt, run_dir=run_dir, resume_id=resume_id, lean=spec["lean"])
+                           prompt=prompt, run_dir=run_dir, resume_id=resume_id, lean=spec["lean"], **kw)
         t0 = time.time()
         # the attempt in flight: if this process dies, `ccx stop` / the sweep turn it into an attempt (ccx/recover.py)
         record["current"] = {"n": len(record["attempts"]), "agent": to, "cli": cli, "tier": spec.get("tier"),
@@ -796,12 +808,24 @@ def run(req: Request, p: Paths) -> dict:
         except Exception:  # noqa: BLE001 — learning is best effort
             pass
     if req.mode == "write":
+        snap = None
         try:                               # what changed, so the lead needs no `git diff --stat` of its own
-            ds = diffstat(run_snapshot(p, record))
+            snap = run_snapshot(p, record)
+            ds = diffstat(snap)
         except Exception:  # noqa: BLE001 — a missing git never fails the run
             ds = None
         if ds:
             record["diffstat"] = ds
+        if snap and "edited_tests" not in record:
+            # changed pre-existing tests are flagged for every write run, not only when a review step ran
+            # (review off, an ephemeral run): the lead looks at those first
+            try:
+                from .review import changes, edited_tests
+                ed = edited_tests(changes(cwd, snap)[1])
+            except Exception:  # noqa: BLE001 — weak evidence only
+                ed = []
+            if ed:
+                record["edited_tests"] = ed
     beat.set()
     record.pop("current", None)
     if not ledger.claim_final(run_dir, "run"):

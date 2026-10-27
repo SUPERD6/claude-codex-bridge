@@ -47,8 +47,34 @@ _DECIDED = re.compile(
     r"决定|定了|定下|约定|统一|一律|改成|改为|换成|就用|只用|不用|不要|别再|必须|采用|默认|以后|从现在",
     re.I)
 _SENT = re.compile(r"(?<=[.!?。！？；;])\s+|\n+")
+# Sentences that only tell the lead how to delegate or accept (round 5: a builder read "do not edit files yourself:
+# hand the implementation to a sub-agent through ccx" in its shared context and stopped). Kept narrow on purpose:
+# a sentence is dropped only when it names the hand-off itself; everything else in the spec stays.
+_LEAD_ONLY = re.compile(
+    r"\b(?:do not|don't|never)\s+(?:edit|change|modify|write)\s+(?:the\s+|any\s+)?(?:files?|code)\s+yourself\b|"
+    r"\bhand\s+(?:the\s+|this\s+|it\s+)?(?:implementation|work|task|it|this)?\s*(?:off\s+|over\s+)?"
+    r"(?:to\s+(?:a\s+)?(?:sub-?agents?|codex|claude|deepseek)|through\s+ccx|via\s+ccx)\b|"
+    r"\bdelegate\s+(?:the\s+|this\s+)?(?:implementation|work|task|it|this)?\s*(?:to|through|via)\s+"
+    r"(?:a\s+)?(?:sub-?agents?|codex|claude|deepseek|ccx)\b|"
+    r"\baccept\s+(?:it|the\s+result|the\s+work)\s+without\s+re-?running\b|"
+    r"不要自己(?:改|写|动)|(?:交给|派给)\s*(?:子智能体|子代理|子agent|sub-?agent|codex|claude|deepseek)",
+    re.I)
+_CLAUSE = re.compile(r"(?<=[.!?;])\s+|(?<=[。！？；])|\n+")      # Chinese sentences need no space after the stop
 _EDIT_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit", "edit", "write")
 _INJECTED_PREFIX = ("[ccx board", "[ccx sub-task", "[ccx follow-up", "[ccx shared work context")
+
+
+def drop_lead_only(evs: list[dict]) -> list[dict]:
+    """The events with the lead's own delegation/acceptance sentences taken out (for a delegated task only)."""
+    out = []
+    for e in evs:
+        if e["kind"] in ("ask", "decision", "said") and _LEAD_ONLY.search(e["text"] or ""):
+            kept = [s.strip() for s in _CLAUSE.split(e["text"]) if s.strip() and not _LEAD_ONLY.search(s)]
+            if not kept:
+                continue
+            e = {**e, "text": " ".join(kept)}
+        out.append(e)
+    return out
 
 
 def _iso(ts: str | None) -> float:
@@ -369,7 +395,7 @@ def for_run(p, cfg: dict, caller: str, lead_session: str | None, cwd: Path) -> t
     f = find(caller, cwd, lead_session, _sub_sessions(p) if not lead_session else None)
     if f is None or (not lead_session and time.time() - f.stat().st_mtime > RECENT_SEC):
         return "", {"source": None, "why": "the lead's session file was not found"}
-    evs = read_events(caller, f)
+    evs = drop_lead_only(read_events(caller, f) or [])
     if not evs:
         return "", {"source": str(f), "why": "nothing readable in the lead's session"}
     sid = lead_session or (f.parent.name if caller == "deepseek" else f.stem)
