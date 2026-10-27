@@ -158,6 +158,7 @@ def _one(it: dict, root: Path, caller: str, p, cfg, warm: str | None = None, got
     """Route and run one queue item; write its outcome back. Never raises (a thread must report).
     warm: a lane's last run (ccx/lanes.py), whose session takes this item as a new task; got["rec"]: its record.
     worktree: a write item that runs beside other writers works in its own git worktree (as `ccx batch`)."""
+    rec, live = None, None
     try:
         if it.get("budget_usd") is not None and float(it.get("cost_usd") or 0) >= float(it["budget_usd"]):
             wq.update(root, it["id"], status="blocked", summary="its budget is used up")
@@ -171,7 +172,7 @@ def _one(it: dict, root: Path, caller: str, p, cfg, warm: str | None = None, got
         kw, route = resolve(spec, caller, p, cfg)
         if kw is None:
             wq.update(root, it["id"], status="todo", summary=route.get("advice"))
-            return {"id": it["id"], "skipped": route.get("advice")}
+            return {"id": it["id"], "status": "todo", "skipped": route.get("advice")}
         # named up front: `ccx q ls` shows it as `live` while it runs, so a lead can `ccx show <ids> --any --wait`
         live = time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:4]
         wq.update(root, it["id"], status="doing", agent=kw["to"], live=live)
@@ -215,8 +216,36 @@ def _one(it: dict, root: Path, caller: str, p, cfg, warm: str | None = None, got
             out["restored"] = restored(resume, rec)
         return out
     except Exception as e:  # noqa: BLE001
-        wq.update(root, it["id"], status="failed", summary=f"{type(e).__name__}: {e}"[:300], live=None)
-        return {"id": it["id"], "error": str(e)}
+        why = f"{type(e).__name__}: {e}"[:300]
+        row = {"id": it["id"], "status": "failed", "error": why}
+        ran = {}
+        if not isinstance(rec, dict) and live:          # run() itself raised: its run (named up front) may exist
+            rec = _run_record(p, live)
+        if isinstance(rec, dict) and rec.get("run_id"):   # it failed after the run: keep the run and what it cost
+            ran = {"run": rec["run_id"], "agent": rec.get("to")}
+            try:
+                ran["cost_usd"] = round(float(it.get("cost_usd") or 0) + _cost(rec), 6)
+            except Exception:  # noqa: BLE001
+                pass
+            row["run"] = rec["run_id"]
+        elif live:
+            ran = {"run": live}                          # no record yet: still name the run it was started as
+            row["run"] = live
+        try:
+            wq.update(root, it["id"], status="failed", summary=why, live=None, **ran)
+        except Exception as e2:  # noqa: BLE001   writing the failure back failed too: still report, never raise
+            row["not_recorded"] = f"{type(e2).__name__}: {e2}"[:300]
+        return row
+
+
+def _run_record(p, run_id: str) -> dict | None:
+    """The record ccx wrote for run_id, if any (None when it was never written or cannot be read)."""
+    try:
+        from .. import ledger
+        rec = ledger.read_record(Path(p.runs) / run_id / "run.json")
+        return rec if isinstance(rec, dict) else None
+    except Exception:  # noqa: BLE001
+        return None
 
 
 PRESSURE_KINDS = ("quota", "auth")   # an attempt that hit these (runners.py: rate limits are `quota`): start nothing new

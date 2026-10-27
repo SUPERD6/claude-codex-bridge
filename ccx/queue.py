@@ -31,31 +31,116 @@ def _file(root: Path) -> Path:
     return qdir(root) / "queue.jsonl"
 
 
+_WINDOWS = os.name == "nt"
+
+
+def _can_create(d: Path) -> bool:
+    """Can this process create a file in d at all? Tells a lock file that is busy (Windows "delete pending") from a
+    folder it may not write (read-only, an ACL), where waiting would never help."""
+    probe = d / f"queue.probe.{os.getpid()}.{time.monotonic_ns()}"
+    try:
+        os.close(os.open(probe, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+    except PermissionError:
+        return False
+    except OSError:
+        return True
+    try:
+        probe.unlink()
+    except OSError:
+        pass
+    return True
+
+
+def _stale(lock: Path, timeout: float, seen: dict | None = None) -> bool:
+    """Is the lock older than any holder keeps it (a crashed writer's)? Judged by the lock file itself, not by how
+    long this waiter has waited, so a lock another writer has just taken is never taken over: stale when its mtime is
+    more than timeout ago, or when this waiter has watched the very same lock file (inode, mtime, size) sit unchanged
+    for more than timeout on its own monotonic clock. The second rule needs no agreement between clocks, so a lock
+    whose mtime is in the future (a file server's clock ahead, a copied or restored file) is still taken over."""
+    try:
+        st = lock.stat()
+    except OSError:
+        return False                   # gone (try again) or cannot be read (delete pending): not stale
+    if time.time() - st.st_mtime > timeout:
+        return True
+    if seen is None:
+        return False
+    sig, now = (st.st_ino, st.st_mtime_ns, st.st_size), time.monotonic()
+    if seen.get("sig") != sig:         # a different lock (taken again since): start watching this one
+        seen["sig"], seen["since"] = sig, now
+        return False
+    return now - seen["since"] > timeout
+
+
 @contextmanager
 def _lock(root: Path, timeout: float = 10.0):
-    qdir(root).mkdir(parents=True, exist_ok=True)
-    lock = qdir(root) / "queue.lock"
-    t0 = time.time()
+    """Hold the queue lock. Waits for a held one; takes over one older than timeout (a crashed writer's); gives up
+    after 2 * timeout in all (a lock that cannot be taken over, e.g. held open by a hung writer on Windows) with
+    PermissionError when the last attempt was denied, else RuntimeError. Never waits forever."""
+    d = qdir(root)
+    d.mkdir(parents=True, exist_ok=True)
+    lock = d / "queue.lock"
+    token = f"{os.getpid()}.{time.monotonic_ns()}.{id(lock)}".encode()
+    t0, probed, seen = time.time(), False, {}
     while True:
         try:
             fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             break
-        except FileExistsError:
-            if time.time() - t0 > timeout:      # a crashed writer left it: take it over
+        except (FileExistsError, PermissionError) as e:
+            last = e
+            if isinstance(e, PermissionError):
+                # Windows: a lock file the last holder just unlinked stays "delete pending" for a moment, and creating
+                # it then is denied, not FileExistsError: busy, so wait. Anywhere else, or when no file at all can be
+                # created here, the denial is real and lasting: say so at once.
+                if not _WINDOWS:
+                    raise
+                if not probed:
+                    probed = True
+                    if not _can_create(d):
+                        raise
+            if _stale(lock, timeout, seen):    # a crashed writer left it: take it over
                 try:
                     lock.unlink()
+                    continue
                 except FileNotFoundError:
-                    pass
-                continue
+                    continue
+                except PermissionError as e2:  # held open (a hung writer, Windows): wait, up to the deadline
+                    last = e2
+            waited = time.time() - t0
+            if waited > 2 * timeout:
+                msg = f"queue lock {lock} still busy after {waited:.1f}s ({type(last).__name__}: {last})"
+                raise (PermissionError(msg) if isinstance(last, PermissionError) else RuntimeError(msg)) from last
             time.sleep(0.05)
     try:
+        try:
+            token = token[:os.write(fd, token)]    # whose lock it is: a release removes only its own
+        except OSError:
+            token = b""                        # unmarked: ours only while it stays empty (a takeover marks it)
         yield
     finally:
         os.close(fd)
+        _unlink(lock, token)
+
+
+def _unlink(lock: Path, token: bytes | None = None, tries: int = 20) -> None:
+    """Release the lock file, if it is still ours (token): one taken over from us belongs to the next writer now.
+    On Windows the unlink can be denied for a moment (another writer's create racing with it, a virus scanner
+    holding it open): retry briefly. Left behind, it is taken over once stale, so a release never fails the write
+    it guarded. The check and the unlink are two steps: a takeover landing between them (only after we held the
+    lock past timeout, and only where an open file can be deleted, i.e. not Windows) can still lose the new
+    holder's lock; closing that needs OS file locking, which a plain lock file does not have."""
+    for _ in range(tries):
         try:
+            if token is not None and lock.read_bytes() != token:
+                return
             lock.unlink()
+            return
         except FileNotFoundError:
-            pass
+            return
+        except PermissionError:
+            time.sleep(0.01)
+        except OSError:
+            return
 
 
 def _append(root: Path, ev: dict) -> None:
