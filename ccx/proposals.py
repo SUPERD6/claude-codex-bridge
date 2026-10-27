@@ -35,13 +35,24 @@ def new(p: Paths, route: dict, text: str, lead_session: str | None) -> dict:
     return row
 
 
-def _row(p: Paths, proposal: str) -> dict | None:
+def get(p: Paths, proposal: str) -> dict | None:
+    """The proposal row, or None."""
     from . import ledger
     return next((r for r in ledger.rows(p) if r.get("type") == "proposal" and r.get("proposal") == proposal), None)
 
 
+_row = get
+
+
+def answered(p: Paths, proposal: str) -> bool:
+    """Has this proposal an answer yet (a yes or no, or the run of a pre-authorised one)?"""
+    from . import ledger
+    return any(r.get("type") == "proposal_answer" and r.get("proposal") == proposal for r in ledger.rows(p))
+
+
 def preauthorized(p: Paths, proposal: str) -> dict | None:
-    """The tier (as route["policy"]) when the person's picked tier pre-authorised this proposal, else None."""
+    """The tier (as route["policy"]) when the person's picked tier pre-authorised this proposal, else None. Whether
+    a run may still use it (once, at its size) is ccx run's check."""
     r = _row(p, proposal)
     if not r or not r.get("preauthorized"):
         return None
@@ -51,7 +62,8 @@ def preauthorized(p: Paths, proposal: str) -> dict | None:
 
 
 def answer(p: Paths, proposal: str, yes: bool, source: str = "person") -> dict:
-    """source: "person" (a yes or no to the offer) or "tier" (the run of a proposal the picked tier pre-authorised)."""
+    """source: "person" (a yes or no to the offer), "tier" (the run of a proposal the picked tier pre-authorised,
+    written when it starts) or "lead" (a proposal the picked tier planned self, sent out by the lead anyway)."""
     from . import ledger
     prop = _row(p, proposal)
     if not prop:

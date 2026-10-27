@@ -62,7 +62,10 @@ still stops before edits, and the answer is logged as the tier's, not as the per
 stays (agent-delegate section 0), A/B and trials are unchanged, and the tier plan is only shown. If the person
 names a tier in the conversation, that is their say for the pieces it delegates: run those with an ordinary
 `ccx run` (an approved handoff). `cheapest` run through you still costs your own turns; only a script or CI calling
-`ccx run` itself skips the lead. A `ccx run --tradeoff balanced|fast` you start yourself picks that tier's models.
+`ccx run` itself skips the lead. A `ccx run --tradeoff balanced|fast` you start yourself picks that tier's models;
+`policy.picked` changes who does a task, not the models (a run without `--tradeoff` picks them as before). A
+pre-authorised proposal covers one run of that task at the size you proposed: a second run with its id, or a
+smaller one, is refused.
 The default tier stays `save` until a confirmation run decides.
 
 ## Act within the task's scope

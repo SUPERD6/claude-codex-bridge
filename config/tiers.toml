@@ -27,7 +27,8 @@ namecheck = "warn"        # 写入运行后，静态查改动过的函数里有�
 # 不只选模型，还决定每块活谁做：self = 主智能体自己做；ccx2 = 交给 ccx、主智能体验收（模型按 save 选）；
 # direct = 交给 ccx、没人复核（标“可能做错”，适合脚本/CI）。
 # 预先授权只来自用户自己的设置 picked（`ccx config set policy.picked balanced`，none = 关）：设了以后，用这一档的
-# ccx propose 按档位直接派（authorized: true，L0/L1 改文件前仍要问）。主智能体传的 --tradeoff 只是选模型、不授权，
+# ccx propose 按档位直接派（authorized: true，一个提议只管一次运行，L0/L1 改文件前仍要问）；picked 只改谁做、
+# 不改选模型（不带 --tradeoff 的运行仍按 defaults.tradeoff 选）。主智能体传的 --tradeoff 只是选模型、不授权，
 # 仍是“先提议一句”，A/B 和试验照旧。分档：文件数、分钟数、简报长度任一项达标即算；两项估计都没给 = 拿不准。
 # 默认档仍是上面的 defaults.tradeoff（save），等确认实验定了再改。分档阈值是从第 5 轮看出来的暂定值。
 [policy]

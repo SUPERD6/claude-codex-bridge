@@ -83,14 +83,6 @@ POLICY_RETRY = """[ccx retry {run_id}] The sandbox policy rejected a command bef
 Do the same task with a different command or tool (e.g. a short python one-liner to read files), and return the JSON result."""
 
 
-# what the lead is told when the independent review still finds problems after the fix round: the lead fixes it
-# itself (round 5: another sub-agent round on the same review was slower and not more often right)
-REVIEW_FAILED = ("an independent review still finds problems after one fix round (review.issues). Check each [must] "
-                 "item against the task and the diff; fix the real ones yourself in the workspace (or "
-                 "worktree) and re-run the check; drop the ones that are wrong. A further `ccx resume {run_id}` "
-                 "is the last resort, not the default.")
-
-
 # the tool's own sandbox refused a command (codex-cli 0.164 on Windows rejects some PowerShell reads in read-only mode)
 POLICY_MARKERS = ("blocked by policy",)
 

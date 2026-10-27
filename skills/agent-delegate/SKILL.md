@@ -34,8 +34,9 @@ It reads your own conversation's size by itself and returns `worth_offering`, th
 odds, and `say`.
 - `authorized: true` (it comes with `worth_offering: true`; only when the person picked a tier in their own
   settings, `ccx config set policy.picked <tier>`, never from a flag you pass): the tier already decided, so don't
-  ask; tell the person its `say` line, run its `next` and accept as it says (task-routing, Tiers). A project's
-  autonomy level (L0/L1) may still stop the run before edits: then ask as that output says.
+  ask; tell the person its `say` line, run its `next` once, for that task, with the estimate you proposed with,
+  and accept as it says (task-routing, Tiers). A project's autonomy level (L0/L1) may still stop the run before
+  edits: then ask as that output says.
 - `worth_offering: false` → do it yourself and don't mention it.
 - `worth_offering: true` without `authorized` → ask with that one line (cost and odds, nothing more) and wait;
   don't start the work meanwhile.

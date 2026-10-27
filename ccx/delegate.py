@@ -33,8 +33,7 @@ from .agents.codex import _add_children, _codex_growth, _codex_seen, _codex_tota
 from .ledger import write_record as _write_record  # noqa: F401
 from .plan import _fallback_plan, _plan, _provider_envs, _rung_spec, _usable, _within_budget, other  # noqa: F401
 from .prompts import (CONTINUE, ESCALATE, FOLLOWUP, NEEDS_WRITE, POLICY_MARKERS, POLICY_RETRY, PROMPT,  # noqa: F401
-                      REVIEW_CALLER, REVIEW_FAILED, REVIEW_FINISH, REVIEW_PERMISSION, SELFCHECK, SELFCHECK_CMD,
-                      _policy_rejections)
+                      REVIEW_CALLER, REVIEW_FINISH, REVIEW_PERMISSION, SELFCHECK, SELFCHECK_CMD, _policy_rejections)
 from .review import review_run as _review  # noqa: F401
 from .verdicts import (REASONS, SOFT_AFTER_H, _hard_verdict, _soft_verdict, soft_verdicts, verify,  # noqa: F401
                        verify_builtin)
@@ -895,7 +894,8 @@ def compact(record: dict) -> dict:
         out.setdefault("review", {})["first_round"] = {k: record["first_review"].get(k) for k in ("verdict", "issues")}
         out["fixed_after_review_of"] = record["review_of"]
     if record.get("kind") == "review_failed":
-        out["hint"] = REVIEW_FAILED.format(run_id=record["run_id"])
+        out["hint"] = ("an independent review still finds problems after one fix round (review.issues): decide "
+                       f"yourself, or `ccx resume {record['run_id']} \"...\"`")
         first = ((record.get("review") or {}).get("issues") or ["(see review)"])[0]
         out["needs_lead"] = f"review_failed: {first}"[:300]
     if record.get("check"):

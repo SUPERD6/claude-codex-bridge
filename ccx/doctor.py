@@ -207,7 +207,7 @@ def tier_policy_check(p: Paths, cfg: dict | None = None) -> tuple[str, str]:
         from . import learn
         cfg = cfg if cfg is not None else load_config(p)
         pol = cfg.get("policy") or {}
-        raw = str(pol.get("picked") or "").strip()
+        raw = str(pol.get("picked") or "").strip().lower()      # read as routing reads it (picked_tier)
         tiers = ("save", "balanced", "fast", "cheapest")
         if raw and raw not in tiers:
             return "WARN", f"policy.picked = {raw!r} is not a tier ({', '.join(tiers)}): no tier is picked"

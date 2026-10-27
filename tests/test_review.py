@@ -453,6 +453,8 @@ class TestReviewRun(Env):
         out = self.go("--review", "on", review_seq="issues")
         self.assertEqual(out["kind"], "review_failed")
         self.assertIn("independent review", out["hint"])
+        self.assertIn("decide yourself", out["hint"])                 # the hint as on main (H11: no default change)
+        self.assertNotIn("last resort", out["hint"])
         self.assertEqual(len(self.reviews()), 2)
 
     def test_claude_worker_may_run_the_check(self):

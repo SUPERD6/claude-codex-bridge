@@ -41,7 +41,9 @@ python scripts/task_routing.py record --rung codex:gpt-6.1-sol:medium --b 4 --ok
 （L0/L1）改文件前仍会停下；这次回答记成档位决定的，不算用户点了头。不要自己设 `policy.picked`。你传的 `--tradeoff`
 不授权任何事：只是选模型，照旧“先提议一句”（agent-delegate 第 0 节），A/B 和试验不变，档位结果只展示。用户在对话里说了
 档位，就是对该档要委派的那些块点了头：用普通的 `ccx run` 派（已获准的委派）。`cheapest` 经你跑仍要花你自己的轮次，
-只有脚本或 CI 直接调用 `ccx run` 才省掉主智能体。你自己发起的 `ccx run --tradeoff balanced|fast` 按该档选模型。
+只有脚本或 CI 直接调用 `ccx run` 才省掉主智能体。你自己发起的 `ccx run --tradeoff balanced|fast` 按该档选模型；
+`policy.picked` 只改谁做，不改选模型（不带 `--tradeoff` 的运行和以前一样选）。一次预先授权只管这个任务按你提议的大小跑一次：
+用同一个 id 再跑，或跑得比提议小，都会被拒绝。
 默认档仍是 `save`，等确认实验再定。
 
 ## 自动校准

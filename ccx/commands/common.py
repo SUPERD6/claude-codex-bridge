@@ -270,9 +270,11 @@ def resolve(spec: dict, caller: str, p, cfg: dict) -> tuple[dict | None, dict]:
     Order: explicit --model/--effort  >  rubric (task-routing, learns from outcomes)  >  --tier  >
     keyword heuristic (fallback when no rubric is given)."""
     to = spec.get("to") or "auto"
-    # a tier the person picked in their settings (`ccx config set policy.picked <tier>`) is the tier when the lead
-    # names none; unset (shipped) = defaults.tradeoff as before
-    tradeoff = spec.get("tradeoff") or picked_tier(cfg) or cfg["defaults"].get("tradeoff", "save")
+    # the model pick: --tradeoff, else defaults.tradeoff, as before. A tier the person picked in their settings
+    # (`ccx config set policy.picked <tier>`) is the whole-workflow tier when the lead names none (who does it, the
+    # size band), but it does not change the models: the delegated part picks them like save (DECISIONS, tiers)
+    tradeoff = spec.get("tradeoff") or cfg["defaults"].get("tradeoff", "save")
+    policy_tier = spec.get("tradeoff") or picked_tier(cfg) or tradeoff
     route = {"tradeoff": tradeoff}
     if spec.get("no_ab"):                     # kept in the ledger: ledger.is_eval leaves such runs out
         route["no_ab"] = True
@@ -300,7 +302,7 @@ def resolve(spec: dict, caller: str, p, cfg: dict) -> tuple[dict | None, dict]:
         d = learn.combine_difficulty(p, b_rub, spec.get("minutes"), caller)
         route["b"], route["difficulty"] = d["b"], d["parts"]
     if "b" in route:
-        tp = tier_policy(p, cfg, {**spec, "files": given_files}, tradeoff)
+        tp = tier_policy(p, cfg, {**spec, "files": given_files}, policy_tier)
         if tp:
             route["policy"] = tp
 
@@ -437,5 +439,6 @@ def _routing_args(ap) -> None:
     g.add_argument("--tradeoff", choices=["save", "balanced", "fast", "cheapest"],
                    help="tier: save | balanced | fast | cheapest (task-routing). Picks the models; `ccx propose` "
                         "also shows who would do the task (self, ccx, or ccx unchecked for cheapest). Passing it "
-                        "authorises nothing. Default: the tier the person picked (`ccx config set policy.picked`, "
-                        "which pre-authorises what it delegates), else config defaults.tradeoff (shipped: save)")
+                        "authorises nothing. Default models: config defaults.tradeoff (shipped: save); default tier "
+                        "plan: the tier the person picked (`ccx config set policy.picked`, which pre-authorises "
+                        "what it delegates and does not change the models), else that default")

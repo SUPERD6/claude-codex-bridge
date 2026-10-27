@@ -240,14 +240,76 @@ class TestProposeTiers(ReportEnv):
         self.assertTrue(big["authorized"])
         for level in ("L0", "L1"):
             out = self.j("run", "--from", "claude", "--to", "codex", "--tradeoff", "save", "--autonomy", level,
-                         "--mode", "write", "--proposal", big["proposal"], "--b", "4", "rework the parser")
+                         "--mode", "write", "--proposal", big["proposal"], "--minutes", "60", "--files", "4",
+                         "--kind", "code", "rework the parser")
             self.assertIs(out["delegated"], False, level)
             self.assertIn(level, out["why"])
+        # nothing ran: no answer, no "went out as ccx2", and the pre-authorisation is not used up
+        self.assertFalse(any(r.get("type") == "proposal_answer" for r in self.rows()))
+        out = self.j("run", "--from", "claude", "--to", "codex", "--tradeoff", "save", "--proposal", big["proposal"],
+                     "--minutes", "60", "--files", "4", "--kind", "code", "rework the parser")
+        self.assertEqual(out["status"], "done", out)
+        ans = [r for r in self.rows() if r.get("type") == "proposal_answer"]
+        self.assertEqual([(r["source"], r["actual_mode"]) for r in ans], [("tier", "ccx2")])
         self.pick("none")
         offered = self.j("propose", "--minutes", "60", "--files", "4", *self.LEAD, "rework the parser")
         out = self.j("run", "--from", "claude", "--to", "codex", "--autonomy", "L1", "--mode", "write",
                      "--proposal", offered["proposal"], "--b", "4", "rework the parser")
         self.assertIn("run_id", out, out)                             # a person's yes still approves, as before
+
+    def test_preauthorisation_is_one_run_at_its_size(self):
+        self.pick("balanced")
+        big = self.j("propose", "--minutes", "60", "--files", "4", *self.LEAD, "rework the parser")
+        self.assertTrue(big["authorized"])
+        env = {**self.env, "CCX_AB_RATE": "1"}
+        base = ("run", "--from", "claude", "--to", "codex", "--tradeoff", "save", "--kind", "code",
+                "--proposal", big["proposal"])
+        small = self.ccx(*base, "--minutes", "5", "--files", "1", "fix a typo", env=env)
+        self.assertNotEqual(small.returncode, 0)                  # a small task the tier says to do yourself
+        self.assertIn("sized small", small.stdout + small.stderr)
+        out = self.j(*base, "--minutes", "90", "--files", "5", "rework the parser", env=env)
+        self.assertEqual(out["status"], "done", out)
+        row = self.run_row(out["run_id"])
+        # this run's own size and estimate; the proposal's tier, planned mode and authorised band
+        self.assertEqual((row["policy_tier"], row["planned_mode"], row["band"], row["proposal_band"],
+                          row["estimate_minutes"]), ("balanced", "ccx2", "large", "large", 90))
+        again = self.ccx(*base, "--minutes", "60", "--files", "4", "rework the parser", env=env)
+        self.assertNotEqual(again.returncode, 0)                  # used once: not a standing licence
+        self.assertIn("already used", again.stdout + again.stderr)
+        self.assertEqual(sum(r.get("type") == "proposal_answer" for r in self.rows()), 1)
+
+    def test_a_tier_planned_self_proposal_is_not_an_approval(self):
+        self.pick("balanced")
+        small = self.j("propose", "--minutes", "5", "--files", "1", *self.LEAD, "rename a flag")
+        self.assertEqual((small["recommend"], small["authorized"]), ("self", False))
+        out = self.j("run", "--from", "claude", "--to", "codex", "--autonomy", "L1", "--mode", "write",
+                     "--proposal", small["proposal"], "--b", "2", "rename a flag")
+        self.assertIs(out["delegated"], False)                    # never offered: L1 still asks
+        ans = [r for r in self.rows() if r.get("type") == "proposal_answer"]
+        self.assertEqual([r.get("source") for r in ans], ["lead"])   # not recorded as the person's yes
+        from ccx import proposals
+        from ccx.config import paths
+        self.assertEqual(proposals.stats(paths())["proposals"]["agreed"], 0)
+
+    def test_picked_tier_does_not_change_the_model_pick(self):
+        base = ("route", "--b", "2", "--kind", "code", "--to", "codex", "x")
+        before = self.j(*base)
+        self.pick("fast")
+        after = self.j(*base)
+        self.assertEqual((after["rung"], after["tradeoff"]), (before["rung"], before["tradeoff"]))
+        self.assertEqual(after["policy"]["tier"], "fast")         # the tier plan uses the pick
+        fast = self.j("route", "--b", "2", "--kind", "code", "--to", "codex", "--tradeoff", "fast", "x")
+        self.assertEqual(fast["tradeoff"], "fast")                # a --tradeoff the lead passes still picks models
+
+    def test_doctor_reads_picked_as_routing_does(self):
+        from ccx import doctor
+        from ccx.commands.common import picked_tier
+        from ccx.config import paths
+        cfg = {"policy": {"picked": "Balanced"}, "defaults": {}}
+        self.assertEqual(picked_tier(cfg), "balanced")
+        state, detail = doctor.tier_policy_check(paths(), cfg)
+        self.assertEqual(state, "ok")
+        self.assertIn("picked tier: balanced", detail)
 
     def test_ab_and_trial_sampling_stay_for_plain_runs(self):
         env = {**self.env, "CCX_AB_RATE": "1"}
@@ -295,14 +357,6 @@ class TestResumeChain(AdapterEnv):
                             caller="claude", escalate=False, mode="read", cwd=self.work, side_message=True),
                     Paths(self.hub))
         self.assertEqual(self.rec(r["run_id"])["resume_chain"], 0)
-
-
-class TestReviewFailedHint(unittest.TestCase):
-    def test_the_lead_fixes_it_itself(self):
-        from ccx.prompts import REVIEW_FAILED
-        txt = REVIEW_FAILED.format(run_id="r1")
-        self.assertIn("fix the real ones yourself", txt)
-        self.assertIn("last resort", txt)
 
 
 class TestTurnStdinUtf8(unittest.TestCase):

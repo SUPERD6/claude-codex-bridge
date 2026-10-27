@@ -42,6 +42,8 @@ def _slim(record: dict) -> dict:
         slim.update(policy_tier=tp.get("tier"), band=tp.get("band"), planned_mode=tp.get("mode"),
                     tier_explicit=bool(tp.get("explicit")),
                     estimate_minutes=(tp.get("signals") or {}).get("minutes"))
+        if tp.get("proposal_band"):          # a pre-authorised proposal's run: the band it was authorised for
+            slim["proposal_band"] = tp["proposal_band"]
     # what actually happened (this is a ccx run, so never "self"): from a person or a script, or the run of a
     # proposal the picked tier pre-authorised as direct (the lead takes the check result as it is), nobody re-checks
     # it (direct); otherwise the lead accepts it (ccx2). planned_mode "self" with actual ccx2 = the run went out
