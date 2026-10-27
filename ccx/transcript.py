@@ -174,8 +174,8 @@ def _plan_update(plan: list[dict], inp: dict) -> None:
 
 
 def _codex_sessions(home: Path) -> list[Path]:
-    return sorted((home / "sessions").rglob("rollout-*.jsonl"), key=lambda f: f.stat().st_mtime, reverse=True) \
-        if (home / "sessions").exists() else []
+    from .usage import walk
+    return sorted(walk(home / "sessions", "rollout-*.jsonl"), key=lambda f: f.stat().st_mtime, reverse=True)
 
 
 CLAUDE_SLUG_MAX = 200     # Claude Code cuts a longer folder name to 200 characters plus "-<hash>" (seen on 2.1.309)

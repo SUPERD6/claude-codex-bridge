@@ -50,10 +50,10 @@ def _codex_attempt(sid: str, since: float, home: Path | None = None) -> tuple[di
     session's running total of completed work, as its last token_count says). codex-cli 0.164 writes a
     token_usage_record per request, also for a turn that never finished; its token_count total covers only what
     got that far (a turn stopped during its first request was in no token_count at all: real run, 2026-10-25)."""
-    from .usage import _ts
+    from .usage import _ts, walk
     root = (home or codex_home()) / "sessions"
     spent, total = None, None
-    for f in root.rglob(f"rollout-*{sid}.jsonl") if root.exists() and sid else []:
+    for f in walk(root, f"rollout-*{sid}.jsonl") if sid else []:
         try:
             lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
         except OSError:
