@@ -26,8 +26,9 @@ Which agent
 - Same-agent sub-tasks: yourself, your built-in sub-agent or ccx — compare them with `three-way.md`
   (round 5, large tasks: a built-in sub-agent cost less per right task than ccx; with lean briefs both were
   about even, `docs/research/2026-10-26-r5.md`).
-- Check `ccx stats` after a while: if a tier's done_rate is low for one agent, raise
-  that tier in `<hub>/ccx/tiers.toml`; if it is ~1.0 and cheap, try one tier lower.
+- Check `ccx stats` after a while: if a tier's done_rate is low for one agent, pass `--tier` one higher for that
+  kind of work; if it is ~1.0 and cheap, try one lower. Routing also learns from every `ccx verify` by itself.
+  Don't edit tiers.toml: changing the defaults is the person's own config (`ccx config set`), only on their say.
 
 Escalation
 - ccx retries once, one tier up, **in the same session** (no re-briefing) when the

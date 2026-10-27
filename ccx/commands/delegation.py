@@ -914,8 +914,9 @@ def register(sub) -> None:
                    "your whole conversation (full context, costs more per turn)")
     r.add_argument("--worktree", action="store_true", help="isolate write task in a git worktree")
     r.add_argument("--quota", action="append", metavar="AGENT=USED",
-                   help="share of a subscription's quota already used (claude=0.8); from 70%% routing also "
-                        "considers pay-per-token providers such as deepseek")
+                   help="share of a subscription's quota already used (claude=0.8; default: read by ccx, "
+                        "`ccx quota`); the fuller it is, the dearer that quota is priced, so pay-per-token "
+                        "providers such as deepseek win more often")
     r.add_argument("--seat", metavar="NAME", help="a named long-lived role (e.g. reviewer): its sub-session is "
                    "kept for a week and reused by the next --seat NAME task here; --new starts it over")
     r.add_argument("--check", metavar="CMD", help="acceptance command (e.g. 'python -m pytest -q tests/test_x.py'): "

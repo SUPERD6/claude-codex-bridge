@@ -105,11 +105,10 @@ output = 20.00
 [escalate_to]
 deepseek = "claude"
 
-# Agents billed in real money per token (no subscription quota). three_way only offers them while a subscription
-# agent's quota is at or above `from_quota`; until then the subscription's cheap rungs cost nothing extra.
+# Agents billed in real money per token (no subscription quota). Their money competes with the subscriptions'
+# quota at its shadow price (method.md section 11); there is no quota threshold.
 [cash]
 agents = ["deepseek"]
-from_quota = 0.7
 
 # Off-peak prices (api-docs.deepseek.com/quick_start/pricing, read 2026-10-24): half price outside the peak hours,
 # which are UTC hours [1,4) and [6,10) Monday-Friday (Chinese public holidays are off-peak too; not modelled).
