@@ -45,7 +45,10 @@ def test_batches_are_hold_out_changes_of_one_repository():
 
 def test_old_eval_arms_and_tasksets_are_untouched():
     assert r5.ARMS == ("self", "builtin", "ccx", "direct")
-    assert not set(BT.ARMS) & set(r5.OPT_IN_ARMS) - {"self", "builtin"}
+    # shared names mean the same way of working (balanced = the balanced tier in both); results stay apart
+    # (.ccx/eval/batch vs .ccx/eval/r5), so only a different meaning under one name would be a clash
+    assert not set(BT.ARMS) & set(r5.OPT_IN_ARMS) - {"self", "builtin", "balanced"}
+    assert BT.OUT != r5.OUT
     assert sorted(r5.TASKSETS) == ["holdout", "r5"]
 
 
