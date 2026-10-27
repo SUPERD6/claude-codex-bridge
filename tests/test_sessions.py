@@ -92,13 +92,8 @@ class TestOneShotAndArchive(AdapterEnv):
 
     def test_archive_shared_session_once(self):
         env = {"CCX_LEAD_SESSION": "lead-1"}
-        # two distinct run ids: the two runs start within the same second, and ccx/delegate.py's own id (second +
-        # 4 random hex digits) could repeat there (CI, ubuntu 3.13: b found a's final.lock and exited 2)
-        stamp = time.strftime("%Y%m%d-%H%M%S-")
-        a = self.j("run", "--from", "claude", "--to", "codex", "--tier", "T2", "x",
-                   env={**env, "CCX_RUN_ID": stamp + "aaa1"})
-        b = self.j("run", "--from", "claude", "--to", "codex", "--tier", "T2", "y",
-                   env={**env, "CCX_RUN_ID": stamp + "bbb2"})                             # auto-continued
+        a = self.j("run", "--from", "claude", "--to", "codex", "--tier", "T2", "x", env=env)
+        b = self.j("run", "--from", "claude", "--to", "codex", "--tier", "T2", "y", env=env)   # auto-continued
         self.assertEqual(self.rec(a["run_id"])["session_id"], self.rec(b["run_id"])["session_id"])
         out = self.j("archive", "--apply")
         acts = [r["action"] for r in out["sessions"]]

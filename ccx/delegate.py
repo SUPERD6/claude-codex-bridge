@@ -21,7 +21,6 @@ import os
 import socket
 import threading
 import time
-import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -103,6 +102,20 @@ def _busy(p: Paths, prev: dict, scan: int = 300) -> str | None:
         if same and pid_alive(rec.get("ccx_pid")):
             return rec.get("run_id") or d.name
     return None
+
+
+class SessionBusy(RuntimeError):
+    """Resuming a session in which another run is still working."""
+
+
+def refuse_if_busy(p: Paths, prev: dict) -> None:
+    """Raise SessionBusy when a run is still alive in prev's session (`ccx resume --bg` asks before detaching)."""
+    busy = _busy(p, prev)
+    if busy:
+        raise SessionBusy(
+            f"run {busy} is still working in that session (its check, review or fix round included): wait for it "
+            f"with `ccx show {busy} --wait`, or stop it with `ccx stop {busy}`, then resume. Starting another run "
+            "in the same session now would fail (Codex: 'thread already has an active writer').")
 
 
 def _start_review(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path, run_dir: Path, result: dict | None) -> dict:
@@ -364,12 +377,8 @@ def run(req: Request, p: Paths) -> dict:
     timeout = int(cfg["defaults"].get("timeout_sec", 1800))
 
     prev = ledger.load_run(p, req.resume_run) if req.resume_run else None
-    busy = _busy(p, prev) if prev else None
-    if busy:
-        raise RuntimeError(
-            f"run {busy} is still working in that session (its check, review or fix round included): wait for it "
-            f"with `ccx show {busy} --wait`, or stop it with `ccx stop {busy}`, then resume. Starting another run "
-            "in the same session now would fail (Codex: 'thread already has an active writer').")
+    if prev:
+        refuse_if_busy(p, prev)
     if prev and prev.get("session_id"):
         try:                               # archived after its run (or by hand): put it back before continuing it
             from . import archive
@@ -404,7 +413,8 @@ def run(req: Request, p: Paths) -> dict:
         if req.tier == "auto":
             req.tier = prev.get("tier", "T2")
 
-    run_id = req.run_id or os.environ.pop("CCX_RUN_ID", None) or time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:4]
+    # ledger.new_run_id makes the folder: two runs started in the same second never share one
+    run_id = req.run_id or os.environ.pop("CCX_RUN_ID", None) or ledger.new_run_id(p)
     run_dir = p.runs / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
 
