@@ -22,7 +22,7 @@
 2. **派得省**（第 5 轮评测，2026-10-26：大任务上用 ccx 的主智能体请求数中位 8 次，用自带子智能体 6 次，多出来的就是下面这些习惯）：
    - **简报 = 用户原话照抄**（尤其接口、名字、精确字符串、数字）+ 你已经知道的文件路径 + 验收命令。不要转述接口（“第一个匹配的提示”被改写成“最早的位置”，结果做错）；不要为了写简报先读代码库或 README/STATUS/文档，子智能体自己读（还会读 `.ccx/context.md`），花的是便宜模型。复用已有 `.ccx/context.md`；只有上下文维护属于本次授权时才更新它。格式见 `references/brief-template.md`。
    - **大活或多文件**：`ccx run --bg ...` 打印 run_id，再 `ccx show <run_id> --wait`，显示还在跑就再调一次。还在跑的运行不要 `ccx resume`。不要把 ccx 输出接到 `tail`/`head`。
-   - **几块已获授权的活**：先用 task-split `check` 排计划；改同一个文件的块合成一块或你自己做，绝不并行（`q run` 让所有块在当前检出里跑）。每块 `ccx q add "<标题>" --brief "..." --check "..."`（有先后用 `--dep <id>`），再 `ccx q run --bg`。自己的块从短到长做，不要碰排队块的文件（它的 undo 快照和验收会把你的改动算进去）。`ccx q ls` 里正在跑的块的 run id 是 `live`：`ccx show <live ids> --any --wait` 谁先结束先交回谁。验收看 check+review 再扫一眼 diff，最后跑所有块验收命令的并集。`last_run` 是 `stopped: backpressure`（额度/登录）时，在额度恢复前不再开新活。
+   - **几块已获授权的活**：先用 task-split `check` 排计划；改同一个文件的块合成一块或你自己做，绝不并行（干净的 git 检出里，`q run` 让并行的写任务各用一个 worktree；否则都在当前检出里跑）。每块 `ccx q add "<标题>" --brief "..." --check "..."`（有先后用 `--dep <id>`），再 `ccx q run --bg`。自己的块从短到长做，不要碰排队块的文件（它的 undo 快照和验收会把你的改动算进去）。`ccx q ls` 里正在跑的块的 run id 是 `live`：`ccx show <live ids> --any --wait` 谁先结束先交回谁。验收看 check+review 再扫一眼 diff，最后跑所有块验收命令的并集。`waiting` / `unmerged` 下的块是在 worktree 里做的：合并列出的分支，再 `ccx q done <id> --ok 1`，然后重新 `ccx q run`；`dep_blocked` 的块在等一个失败的块（见 `references/three-way.md`）。`last_run` 是 `stopped: backpressure`（额度/登录）时，在额度恢复前不再开新活。
    - **`--review` 保持默认（auto）**；只有高风险或用户能直接看到的改动（以及需要审查通过的 L2 自动合并）才 `--review on` / `--risk visible`。
    - **不要让子智能体提交**（Codex 沙盒禁止写 `.git`）；你验收后自己提交。
    - **用户说到某个项目但没给路径**：先 `ccx where "<用户原话>"`；一个 `pick` 就 `ccx run --project <名字>`，几个候选就问。项目规则讲到审批时 ccx 停下并列出（`approval_rules`）：按规则判断或问用户，之后才加 `--rules-ok` 重跑。细节见 project-manager。

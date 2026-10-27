@@ -64,11 +64,14 @@ sub-agent. The extra requests came from the habits below.
   says running. Never `ccx resume` a run that is still running. Don't pipe ccx output through `tail`/`head`: the
   result is one small JSON object, and a pipe on a long run hits your shell's timeout.
 - **Several authorized pieces:** plan with task-split `check`; pieces sharing a file go to one piece or to you,
-  never in parallel (`q run` runs them all in this checkout). `ccx q add "<title>" --brief "..." --check "..."`
+  never in parallel (`q run` gives parallel writers in a clean git checkout their own worktree; otherwise they
+  share this checkout). `ccx q add "<title>" --brief "..." --check "..."`
   per piece (`--dep <id>` for an order), then `ccx q run --bg`. Your own pieces, shortest first, must not touch
   a queued piece's files (its undo snapshot and check would take in your edits). `ccx q ls` shows a running
   piece's run id as `live`: `ccx show <live ids> --any --wait` hands back each one as it finishes. Accept by
-  check+review plus a diff glance, then run the union of the checks. `last_run` with `stopped: backpressure`
+  check+review plus a diff glance, then run the union of the checks. Pieces under `waiting` / `unmerged` ran in a
+  worktree: merge each listed branch, then `ccx q done <id> --ok 1` and `ccx q run` again; `dep_blocked` pieces wait
+  on one that failed (`references/three-way.md`). `last_run` with `stopped: backpressure`
   (quota/auth): start nothing new until it has reset.
 - **Leave `--review` at its default (auto)**; `--review on` / `--risk visible` only for risky or user-facing work
   (and for an L2 auto-merge, which needs a passed review).
