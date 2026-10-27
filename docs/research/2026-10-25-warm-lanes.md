@@ -62,7 +62,7 @@ l2 round 1 piece by piece (ledger):
 
 ## 4. Recommendations
 
-1. Keep it off by default, also after the trial.
+1. Keep it off by default; the confirmation run decides, and on this data turning it on is not recommended.
 2. For many tiny pieces, the lead (`project-manager`, `task-split`) should first merge what can go together **into one
    brief for one run** (p1, or round 2's p3) instead of starting many runs; keep `--lanes` for pieces that each need
    their own check or undo.

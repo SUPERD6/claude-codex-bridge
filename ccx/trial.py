@@ -126,6 +126,11 @@ def _lead(p: Paths, agent: str, start_ts: float, end_ts: float, session: str | N
         tok += turn_tokens(e["usage"]) + int(e["usage"].get("output_tokens", 0) or 0)
         usd += learn.price_usd(p, agent, e.get("model") or "", e["usage"]) or 0.0
         n += 1
+    if session and n == 0:
+        # A lead that ran ccx has turns in this window; none found means its files were not read (a Codex date
+        # folder or a file that could not be opened), so it is not counted as a zero spend.
+        why = next((r for _, r in skipped), "no lead turns found")
+        return {"tokens": 0, "usd": 0.0, "turns": 0, "unmeasured": f"{why}: lead conversation {session}"}
     return {"tokens": tok, "usd": round(usd, 6), "turns": n}
 
 

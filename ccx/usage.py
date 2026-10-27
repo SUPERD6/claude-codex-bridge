@@ -69,15 +69,19 @@ def walk(root: Path, pattern: str, skipped: list | None = None):
             if is_dir:
                 stack.append(Path(e.path))
             elif fnmatch.fnmatch(e.name, pattern):
-                yield Path(e.path)
+                yield Path(_scan_path(Path(e.path)))   # a short folder can still hold a file past the limit
 
 
-def _recent(files, since: float):
+def _recent(files, since: float, skipped: list | None = None):
+    """Files changed since `since`; one that cannot be read is noted in `skipped` (see walk)."""
     for f in files:
         try:
             if f.stat().st_mtime >= since:
                 yield f
-        except OSError:
+        except OSError as e:
+            if skipped is not None:
+                skipped.append((f, "files gone" if isinstance(e, FileNotFoundError) else
+                                f"files unreadable ({type(e).__name__})"))
             continue
 
 
@@ -140,7 +144,7 @@ def claude_events(since: float, exclude: set[str], home: Path | None = None,
     # main sessions: projects/<folder>/<session>.jsonl; Claude Code's own (built-in) sub-agents:
     # projects/<folder>/<session>/subagents/agent-*.jsonl with isSidechain = true, and a workflow's
     # agents under <session>/subagents/workflows/wf_*/
-    for f in _recent(walk(root, "*.jsonl", skipped), since):
+    for f in _recent(walk(root, "*.jsonl", skipped), since, skipped):
         _claude_file(f, since, exclude, msgs)
     return list(msgs.values())
 
@@ -220,7 +224,7 @@ def codex_events(since: float, exclude: set[str], home: Path | None = None,
     # Codex repeats token_count lines (e.g. rate-limit refreshes), and resumed/forked sessions copy earlier
     # history into the new file — those copied lines are older than the file's own session_meta and only set
     # the baseline.
-    for f in _recent(walk(root, "rollout-*.jsonl", skipped), since):
+    for f in _recent(walk(root, "rollout-*.jsonl", skipped), since, skipped):
         sid, model, start, prev, last_seen, parent = f.stem, "?", None, None, None, None
         try:
             lines = f.read_text(encoding="utf-8", errors="replace").splitlines()

@@ -3,6 +3,7 @@ import json
 import random
 import time
 import unittest
+from pathlib import Path
 
 from ccx import trial
 from ccx.config import Paths
@@ -230,6 +231,67 @@ class TestTrialMissingFiles(ReportEnv):
         self.assertIn("files gone", md)
 
 
+class TestLeadNotRead(ReportEnv):
+    """A lead whose turns could not be read is unmeasured, not a zero spend that makes delegation look cheap."""
+    def _delegated(self, p, t, run_id, lead, ts, caller):
+        from ccx import ledger
+        ledger.append_event(p, {"run_id": run_id, "ts": ts, "seconds": 30, "caller": caller, "to": "claude",
+                                "lead_session": lead, "trial": t["id"], "bucket": "code:b4", "ae_usd": 0.01,
+                                "status": "done", "sessions": [f"sub-{run_id}"]})
+
+    def test_codex_lead_without_rollout_and_unreadable_claude_file(self):
+        import os
+        from unittest import mock
+        from ccx import usage
+        p = Paths(self.hub)
+        t = self.j("trial", "start", "--days", "7")
+        now = time.time()
+        self.codex_rollout("cx-ok", ts=now - 5)
+        self.claude_transcript("cl-locked", ts=now - 5)
+        self._delegated(p, t, "r-cx-ok", "cx-ok", now - 10, "codex")
+        self._delegated(p, t, "r-cx-gone", "cx-gone", now - 10, "codex")   # its rollout file is gone
+        self._delegated(p, t, "r-cl-locked", "cl-locked", now - 10, "claude")
+        real = Path.stat
+
+        def stat(self_, *a, **k):
+            if self_.name == "cl-locked.jsonl":
+                raise PermissionError(13, "denied", str(self_))
+            return real(self_, *a, **k)
+        with mock.patch.object(Path, "stat", stat):
+            s = trial.summarize(p)
+        why = {u["run_id"]: u["why"] for u in s["unmeasured"]}
+        self.assertEqual(sorted(why), ["r-cl-locked", "r-cx-gone"])
+        self.assertIn("no lead turns found", why["r-cx-gone"])
+        self.assertIn("files unreadable (PermissionError)", why["r-cl-locked"])
+        self.assertEqual(s["arms"]["delegated"]["n"], 1)
+        self.assertGreater(s["arms"]["delegated"]["lead_tokens_mean"], 0)
+
+    @unittest.skipUnless(__import__("os").name == "nt", "the 260-character path limit is Windows only")
+    def test_file_past_the_path_limit_in_a_shorter_folder(self):
+        import os
+        import shutil
+        import tempfile
+        from ccx import usage
+        tmp = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, "\\\\?\\" + os.path.abspath(tmp), True)   # rmtree too needs the prefix
+        sid = "0123abcd-0000-4000-8000-00000000abcd"
+        base = os.path.join(tmp, "projects")
+        folder = os.path.join(base, "x" * max(1, 230 - len(base) - 1))   # under 240, its file over 260
+        self.assertLess(len(folder), 240)
+        os.makedirs(folder)
+        f = os.path.join(folder, f"{sid}.jsonl")
+        self.assertGreaterEqual(len(f), 260)
+        with open("\\\\?\\" + f, "w", encoding="utf-8") as h:
+            h.write(json.dumps({"type": "assistant", "sessionId": sid, "timestamp": "2026-10-25T00:00:00Z",
+                                "message": {"id": "m1", "model": "claude-opus-5-5",
+                                            "usage": {"input_tokens": 10, "output_tokens": 5}}}) + "\n")
+        skipped = []
+        evs = usage.claude_events(0.0, set(), home=Path(tmp), skipped=skipped)
+        self.assertEqual(([e["session"] for e in evs], skipped), ([sid], []))
+        got = list(usage.walk(Path(base), "*.jsonl"))
+        self.assertTrue(str(got[0]).startswith("\\\\?\\"), got)
+
+
 class TestTrialVoid(ReportEnv):
     def test_stop_void_records_reason_and_report_claims_nothing(self):
         p = Paths(self.hub)
@@ -238,6 +300,13 @@ class TestTrialVoid(ReportEnv):
         for i in range(12):
             ledger.append_event(p, {"type": "selfrun", "trial": t["id"], "bucket": "code:b4", "ae_usd": 0.02,
                                     "usage4": {"input_tokens": 10}, "seconds": 60, "ok": True, "agent": "claude"})
+            ledger.append_event(p, {"type": "trialtag", "trial": t["id"], "arm": "delegated", "bucket": "code:b4",
+                                    "lead_tokens": 5, "lead_usd": 0.001 * (1 + i % 3), "sub_usd": 0.005,
+                                    "minutes": 1.0, "ok": True, "agent": "claude", "session": f"s{i}"})
+        before = self.j("trial", "report")                               # enough rows: a saving is claimed
+        self.assertTrue(before["enough"])
+        self.assertIsNotNone(before["saving_per_task_usd"])
+        self.assertIn("saving per task", self.ccx("trial", "report", "--markdown").stdout)
         out = self.j("trial", "stop", "--void", "skill text changed mid-trial")
         self.assertEqual(out["void"], "skill text changed mid-trial")
         self.assertIsNone(trial.active(p))
