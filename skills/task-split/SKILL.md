@@ -29,7 +29,8 @@ python scripts/split_plan.py check plan.json --lanes 3
 
 The template contains `id`, `title`, `minutes`, `depends_on`, `files`, `checkable`, and optional
 `rung`. Outputs include waves, critical path, estimates and flags for file clashes, missing
-checks or excessive handoffs. `--lanes` describes possible concurrency, not permission to
+checks or excessive handoffs. `files` decides which pieces can run in parallel: pieces sharing a file
+never do. `--lanes` describes possible concurrency, not permission to
 launch agents. Use current-task estimates; defaults are dated guesses, not demonstrated
 success rates or precise time limits. Read [references/method.md](references/method.md)
 only when the assumptions matter.
