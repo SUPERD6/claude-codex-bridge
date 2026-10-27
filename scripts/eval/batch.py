@@ -174,6 +174,16 @@ def tasks_sha() -> str:
     return h.hexdigest()[:16]
 
 
+def check_sha() -> str:
+    """What a cached check depends on: the batches and tasks (tasks_sha) and the code that builds the start and
+    selects the nodes (batch_start.py, this file). A cached check is used only when this is the same."""
+    import hashlib
+    h = hashlib.sha256(tasks_sha().encode())
+    for f in (BS.__file__, __file__):
+        h.update((PF.sha256_file(Path(f)) or "").encode())
+    return h.hexdigest()[:16]
+
+
 def check_file(bid: str) -> Path:
     return OUT / "checks" / f"{bid}.json"
 
@@ -201,10 +211,13 @@ def _tree_env(iso: Path, spec: dict | None, python: str) -> dict:
 
 def pytest_nodes(repo: Path, files: list[str], spec: dict | None, python: str, scratch: Path,
                  deselect: list[str] = (), job: PF.Job | None = None, timeout: int = 1200) -> dict:
-    """The hidden test files run in `repo` (throwaway homes, as r5.score), node by node."""
+    """The hidden test files run in `repo` (throwaway homes, as r5.score), node by node. A file that does not
+    collect (it imports a name the tree lacks) is an error for that file only: the other files still run
+    (--continue-on-collection-errors), so one change's missing name does not fail every change's nodes."""
     iso = Path(tempfile.mkdtemp(prefix="r5iso-", dir=scratch))
     try:
-        args = [python, "-m", "pytest", "-q", "-rA", "-p", "no:cacheprovider", "--color=no", *files]
+        args = [python, "-m", "pytest", "-q", "-rA", "-p", "no:cacheprovider", "--color=no",
+                "--continue-on-collection-errors", *files]
         for n in deselect:
             args += ["--deselect", n]
         out, _err, rc, _left = PF.run(args, cwd=repo, env=_tree_env(iso, spec, python), timeout=timeout, job=job)
@@ -264,7 +277,8 @@ def smoke(tar: bytes, spec: dict | None, python: str, scratch: Path) -> str | No
 def build(b: dict, tmp: Path, ext_source: str | None = None, python: str | None = None, run_tests: bool = True,
           cached: dict | None = None, source: Path | None = None, tasks: list[dict] | None = None) -> dict:
     """A batch's material: the start and end trees (tar bytes, in memory), the hidden test files, every change's
-    hidden nodes and the check's findings. `cached` (an earlier check of the same start) saves the pytest runs.
+    hidden nodes and the check's findings. `cached` (an earlier check of the same start tree, end, changes and
+    check code) saves the pytest runs.
     `source` / `tasks` replace the batch's repository and task definitions (tests use a small repository)."""
     python = python or sys.executable
     spec = spec_of(b)
@@ -300,11 +314,13 @@ def build(b: dict, tmp: Path, ext_source: str | None = None, python: str | None 
            "deselect": sorted({n for t in kept for n in t.get("deselect") or ()}),
            "changed": sorted({f for v in files.values() for f in v}),
            "start_tar": BS.archive(c, rev["start"]), "end_tar": BS.archive(c, end), "hidden": hidden,
-           "tasks_sha256": tasks_sha()}
-    if cached and cached.get("start") == mat["start"] and cached.get("end") == end and \
-            cached.get("tasks") == mat["tasks"] and cached.get("nodes"):
+           "start_tree": BS.tree(c, rev["start"]), "tasks_sha256": tasks_sha(), "check_sha256": check_sha()}
+    # the start's tree, not its commit: what the lead and the scoring see is the tree
+    if cached and cached.get("start_tree") == mat["start_tree"] and cached.get("end") == end and \
+            cached.get("tasks") == mat["tasks"] and cached.get("check_sha256") == mat["check_sha256"] and \
+            cached.get("nodes"):
         for k in ("nodes", "start_passed", "failing_at_end", "not_failing_at_start", "coupled", "leaks",
-                  "smoke", "without_how"):
+                  "smoke", "without_how", "collect_errors"):
             mat[k] = cached.get(k)
         probs += [p for p in cached.get("problems") or [] if p not in probs and not p.startswith(("end is",
                                                                                                     "cannot be put"))]
@@ -328,8 +344,14 @@ def build(b: dict, tmp: Path, ext_source: str | None = None, python: str | None 
         mat["not_failing_at_start"] = sel["not_failing_at_start"]
         mat["coupled"] = sel["coupled"]
         mat["failing_at_end"] = sorted(e["failed"])
+        # a hidden file that does not collect at the start (it imports what the change adds) is expected; it
+        # is recorded, and its nodes simply do not pass there
+        mat["collect_errors"] = {"end": sorted(e["errors"]), "start": sorted(s["errors"]),
+                                 "without": {t: sorted(w["errors"]) for t, w in without.items() if w}}
         if e["errors"]:
             probs.append(f"test files that do not even collect at the end: {sorted(e['errors'])}")
+        if not (s["passed"] or s["failed"] or s["errors"]):
+            probs.append(f"the start run gave no result: {s['tail']}")
         mat["start_passed"] = sorted(s["passed"])
         mat["leaks"] = BS.leaks(sel["nodes"], hidden, start_files)
         mat["smoke"] = smoke(mat["start_tar"], spec, python, scratch)
@@ -359,7 +381,7 @@ def load_cached(bid: str) -> dict | None:
         d = json.loads(check_file(bid).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    return d if d.get("tasks_sha256") == tasks_sha() else None
+    return d if d.get("check_sha256") == check_sha() else None
 
 
 def cmd_check(a) -> int:
@@ -474,7 +496,7 @@ def run_timed(argv: list[str], *, cwd: Path, env: dict, timeout: float, input: s
 
 WAIT_BASH = (re.compile(r"\bshow\b[^\n;&|]*--wait"), re.compile(r"ccx(\.py)?[\"']?\s+batch\b"))
 FG_CCX = re.compile(r"ccx(\.py)?[\"']?\s+(run|resume|q\s+run)\b([^\n;&|]*)")
-CONFLICT = re.compile(r"^CONFLICT \(|Automatic merge failed", re.M)
+CONFLICT = re.compile(r"^CONFLICT \(", re.M)        # one line per conflicted file ("Automatic merge failed" follows)
 MERGE_CMD = re.compile(r"\bgit\s+(merge|cherry-pick|rebase|am)\b")
 QUOTA_KINDS = ("quota", "rate_limit", "auth")
 
@@ -584,7 +606,7 @@ def score_batch(repo: Path, mat: dict, scratch: Path, python: str | None = None,
     right = sum(v["ok"] for v in tasks.values())
     return {"ok": right == len(tasks) and not regs, "right": right, "n_tasks": len(tasks), "tasks_ok": tasks,
             "regressions": regs[:20], "n_regressions": len(regs), "conflict_markers": n_mark,
-            "pytest": r["tail"]}
+            "collect_errors": sorted(r["errors"]), "pytest": r["tail"]}
 
 
 def make_repo(mat: dict, dest: Path) -> None:
@@ -601,6 +623,33 @@ def make_repo(mat: dict, dest: Path) -> None:
     ext_repo._git(dest, "init", "-q")
     ext_repo._git(dest, "add", "-A")
     ext_repo._git(dest, "commit", "-q", "--no-verify", "-m", "start")
+
+
+def review_run_ids(hub: Path) -> set[str]:
+    """The hub's independent-review runs: their ledger label is `review:<run id>` (their own run ids are ordinary
+    timestamp ids), as r2.hub_cost tells them apart."""
+    try:
+        rows = r2.ledger.rows(r2.Paths(hub))
+    except Exception:  # noqa: BLE001 — no ledger: no reviews
+        return set()
+    return {r.get("run_id") for r in rows if not r.get("type") and str(r.get("label") or "").startswith("review:")}
+
+
+def cost_split(u: dict, by_model: dict, usd: float, ccx_usd: float) -> dict:
+    """Lead $ and sub-agent $. ccx arms: the hub's ledger is the sub-agents'. builtin: the worker model's share of
+    the lead's bill; this also holds Claude Code's own side calls on that model, which the other arms book as lead
+    $ (`lead_worker_model_usd`, kept on every row, shows their size). A lead on the worker's model cannot be split:
+    sub_usd and lead_only_usd are then None."""
+    worker = round(sum(v for m, v in by_model.items() if r3.WORKER_MODEL in m), 6)
+    out = {"lead_worker_model_usd": worker}
+    if u["arm"] != "builtin":
+        sub = ccx_usd
+    elif r3.WORKER_MODEL in lead_of(u)[0]:
+        out["cost_split"] = f"the lead runs on the worker's model ({r3.WORKER_MODEL}): no lead / sub-agent split"
+        return {**out, "sub_usd": None, "lead_only_usd": None}
+    else:
+        sub = worker
+    return {**out, "sub_usd": sub, "lead_only_usd": round(usd - sub, 6)}
 
 
 def lead_unit(u: dict, a, b: dict, mat: dict, work: Path, repo: Path, hub: Path, iso: PF.Unit | None = None,
@@ -625,11 +674,10 @@ def lead_unit(u: dict, a, b: dict, mat: dict, work: Path, repo: Path, hub: Path,
            "by_model_usd": by_model, "ccx_usd": cost["usd"], "ccx_review_usd": cost["review_usd"],
            "ccx_agents": cost["agents"], "ccx_run_ids": cost["run_ids"], "usd": round(lead_usd + cost["usd"], 6),
            "lead_turns": fin.get("num_turns"), **lm, **timeline(lines, wall)}
-    row["sub_usd"] = round(sum(v for m, v in by_model.items() if r3.WORKER_MODEL in m), 6) \
-        if u["arm"] == "builtin" else cost["usd"]
-    row["lead_only_usd"] = round(row["usd"] - row["sub_usd"], 6)
+    row.update(cost_split(u, by_model, row["usd"], cost["usd"]))
     # how much was handed away: built-in worker calls, or ccx runs in the ledger (review runs left out)
-    row["ccx_ledger_rows"] = len([x for x in cost["run_ids"] if not str(x).startswith("review")])
+    reviews = review_run_ids(hub)
+    row["ccx_ledger_rows"] = len([x for x in cost["run_ids"] if x not in reviews])
     row["delegated"] = lm["agent_calls"] if u["arm"] == "builtin" else row["ccx_ledger_rows"]
     row["ccx_quota_attempts"] = quota_attempts(hub, cost["run_ids"]) if cost["run_ids"] else 0
     row["quota_events"] = row["ccx_quota_attempts"] + row["rate_limit_rejected"] + row["backpressure"]
@@ -740,7 +788,7 @@ def spent(f: Path, tag: str | None = None) -> float:
 def prepare(todo: list[dict], a, tmp: Path) -> tuple[dict, list[str]]:
     """Every batch's material, before the first unit and before the paid canary, built in `tmp` (outside the work
     dir, removed after): the end and the other repositories' clones never sit next to a unit. A check cached by
-    `check` with the same start saves the pytest runs. For another repository, its Python is checked as r5 does."""
+    `check` with the same start tree, end, changes and check code (check_sha) saves the pytest runs. For another repository, its Python is checked as r5 does."""
     mats, probs = {}, []
     for bid in dict.fromkeys(u["batch"] for u in todo):
         b = TB.by_id(bid)

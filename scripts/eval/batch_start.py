@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import ast
 import io
+import os
 import re
 import subprocess
 import tarfile
@@ -30,10 +31,15 @@ DOCS = (".md", ".rst", ".txt", ".adoc")
 RESULT = re.compile(r"^(PASSED|FAILED|ERROR|XPASS|XFAIL) (.+)$")
 
 
+# Commits made here (reverts, cherry-picks) carry this date, so the same batch built twice gets the same start sha.
+FIXED_DATE = "2000-01-01T00:00:00+0000"
+
+
 def git(cwd: Path | None, *args: str, data: bool = False, check: bool = True):
+    env = {**os.environ, "GIT_AUTHOR_DATE": FIXED_DATE, "GIT_COMMITTER_DATE": FIXED_DATE}
     r = subprocess.run(["git", "-c", "user.name=eval", "-c", "user.email=eval@example.invalid",
                         "-c", "core.autocrlf=false", "-c", "advice.detachedHead=false", *args],
-                       cwd=cwd, capture_output=True, stdin=subprocess.DEVNULL)
+                       cwd=cwd, capture_output=True, stdin=subprocess.DEVNULL, env=env)
     if check and r.returncode:
         raise RuntimeError(f"git {' '.join(args[:3])} failed: {r.stderr.decode('utf-8', 'replace').strip()[:300]}")
     return r if not check else (r.stdout if data else r.stdout.decode("utf-8", "replace"))
@@ -80,6 +86,39 @@ def _unmerged(repo: Path) -> list[str]:
     return [x for x in git(repo, "diff", "--name-only", "--diff-filter=U").split("\n") if x.strip()]
 
 
+def tree(repo: Path, rev: str) -> str:
+    return git(repo, "rev-parse", "--verify", f"{rev}^{{tree}}").strip()
+
+
+def _apply(repo: Path, op: str, c: str) -> tuple[bool, list[str], list[str]]:
+    """`git revert` / `git cherry-pick` of `c` (op), with conflicts in documentation only settled by taking the
+    commit's side (for a revert: the reverted one). -> (applied, the docs settled so, the code or test files that
+    conflicted or why it failed). When it is not applied, the operation is aborted and the tree is clean."""
+    extra = ["--allow-empty"] if op == "cherry-pick" else []
+    r = git(repo, op, "--no-edit", *extra, c, check=False)
+    if r.returncode == 0:
+        return True, [], []
+    um = _unmerged(repo)
+    code = [f for f in um if not f.endswith(DOCS)]
+    if code or not um:
+        git(repo, op, "--abort", check=False)
+        git(repo, "reset", "-q", "--hard", "HEAD")
+        return False, [], code or [f"{op} failed: " + r.stderr.decode("utf-8", "replace").strip()[:200]]
+    for f in um:
+        if git(repo, "checkout", "--theirs", "--", f, check=False).returncode:
+            git(repo, "rm", "-q", "--", f, check=False)
+        else:
+            git(repo, "add", "--", f)
+    if git(repo, "-c", "core.editor=true", op, "--continue", check=False).returncode:
+        # nothing left to commit after the docs were settled (a cherry-pick of docs only): commit it empty
+        if git(repo, "-c", "core.editor=true", "commit", "-q", "--allow-empty", "--no-edit",
+               check=False).returncode:
+            git(repo, op, "--abort", check=False)
+            git(repo, "reset", "-q", "--hard", "HEAD")
+            return False, [], [f"{op} --continue failed"]
+    return True, um, []
+
+
 def revert_all(repo: Path, base: str, order: list[str]) -> dict:
     """Check out `base` and revert `order` on it one by one (a commit each). Returns what was reverted, what was
     dropped (code or test conflicts) and the documentation files taken from the reverted side."""
@@ -87,31 +126,19 @@ def revert_all(repo: Path, base: str, order: list[str]) -> dict:
     git(repo, "reset", "-q", "--hard", base)
     done, dropped, docs = [], {}, []
     for c in order:
-        r = git(repo, "revert", "--no-edit", c, check=False)
-        if r.returncode == 0:
-            done.append(c)
+        ok, settled, bad = _apply(repo, "revert", c)
+        if not ok:
+            dropped[c] = bad
             continue
-        um = _unmerged(repo)
-        code = [f for f in um if not f.endswith(DOCS)]
-        if code or not um:
-            git(repo, "revert", "--abort", check=False)
-            git(repo, "reset", "-q", "--hard", "HEAD")
-            dropped[c] = code or ["revert failed: " + r.stderr.decode("utf-8", "replace").strip()[:200]]
-            continue
-        for f in um:
-            if git(repo, "checkout", "--theirs", "--", f, check=False).returncode:
-                git(repo, "rm", "-q", "--", f, check=False)
-            else:
-                git(repo, "add", "--", f)
-        git(repo, "-c", "core.editor=true", "revert", "--continue")
-        docs += um
+        docs += settled
         done.append(c)
     return {"reverted": done, "dropped": dropped, "docs_from_parent": docs, "start": full(repo, "HEAD")}
 
 
 def without_one(repo: Path, end: str, start: str, order: list[str], sha: str) -> tuple[bytes | None, str]:
     """The tree with only `sha` taken out: `sha` reverted on the end, or, when that revert conflicts (a later batch
-    commit changed the same lines), the start with every other batch commit put back (cherry-picked oldest first).
+    commit changed the same lines), the start with every other batch commit put back (cherry-picked oldest first;
+    a conflict in documentation only takes the picked commit's side, as revert_all does).
     -> (tar bytes or None, how: 'revert' / 'start+others' / 'none')."""
     git(repo, "checkout", "-q", "--detach", end)
     git(repo, "reset", "-q", "--hard", end)
@@ -124,8 +151,7 @@ def without_one(repo: Path, end: str, start: str, order: list[str], sha: str) ->
     for c in reversed(order):
         if c == sha:
             continue
-        if git(repo, "cherry-pick", "--no-edit", "--allow-empty", c, check=False).returncode:
-            git(repo, "cherry-pick", "--abort", check=False)
+        if not _apply(repo, "cherry-pick", c)[0]:
             git(repo, "reset", "-q", "--hard", start)
             return None, "none"
     return archive(repo, "HEAD"), "start+others"

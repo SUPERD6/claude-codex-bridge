@@ -28,9 +28,13 @@ the reverted side. The lead gets the start as a fresh one-commit repository (no 
 dropped), only two revert onto one start, and both have a same-file overlap (the other one has two); so the
 conflict-free variant has four changes. In ho5-overlap, send-busy-guard alone does not revert on the end
 (undo-not-verdict sits on top of it in the same file), so its hidden nodes are found on the start with the other four
-put back. `batch.py check` passed for both batches of this repository on 2026-10-27; humanize has only four hold-out changes; itsdangerous's two candidates both change
-`timed.py` and cannot share a start, so it has no batch. The design asked for N=8–10 conflict-free batches: the
-hold-out set is too small for that.
+put back. `batch.py check` said ok for both batches of this repository on 2026-10-27, but that check ran all hidden
+files in one pytest session, which a file that does not import at the start (test_codex_lead_sandbox.py) stopped:
+the start passed no node, so the regression check had nothing to compare and `coupled` was false. The check now
+runs with `--continue-on-collection-errors` and must be run again before a paid run (old cached checks no longer
+match). Humanize has only four hold-out changes; itsdangerous's two candidates both change `timed.py`, and on an
+earlier try (not re-run here) the older one's revert conflicted there, so it has no batch. The design asked for
+N=8–10 conflict-free batches: the hold-out set is too small for that.
 
 **Check** (`python scripts/eval/batch.py check`, no agent): per change, holdout_check's band and leakage checks
 against round 5; its hidden nodes are those of its own test files that pass at the end and fail with only that change
@@ -53,7 +57,9 @@ The lead is a fresh headless Claude Code in round 5's clean room; `--lead-model`
 
 ## 3. Metrics (per batch × repeat × arm)
 
-- total wall; lead $ and sub-agent $ (builtin: the worker model's share of the lead's bill; ccx arms: the hub ledger)
+- total wall; lead $ and sub-agent $ (builtin: the worker model's share of the lead's bill, which also holds Claude
+  Code's own side calls on that model; every row keeps that share as `lead_worker_model_usd`, so the other arms
+  show its usual size; a lead on the worker's model gets no split; ccx arms: the hub ledger)
 - hidden tests on the **final tree of the lead's checkout**: per change (all its nodes pass), all-right (every change
   right and no node that passed at the start fails), regressions
 - merge conflicts the lead met (`CONFLICT` lines in its tool results) and conflict markers left in the tree
@@ -78,5 +84,7 @@ person's go-ahead; nothing in this change spends money.
 
 - Any claim of "faster" or "as right" waits for the measured rows.
 - Four batches of three to five changes are not N=8–10; a pipeline that only pays off on wide batches is not tested.
-- The humanize batches' revert and overlap were taken from an earlier try of the check and are confirmed only when
-  `batch.py check` runs on a clone of humanize.
+- The humanize batches have never been checked: that all four revert onto ca892b3 and the declared overlap are
+  expectations, confirmed only when `batch.py check` runs on a clone of humanize.
+- Hidden test files run in one pytest session per tree with `--continue-on-collection-errors`: a file that does not
+  import fails only its own nodes. Two changes that share a test file still fail together when it does not import.

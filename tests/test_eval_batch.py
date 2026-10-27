@@ -166,6 +166,106 @@ def test_without_one_reverts_alone_or_says_it_cannot(small, tmp_path):
     assert BS.without_one(cl2, end2, rev2["start"], order2, BS.full(cl2, ca)) == (None, "none")
 
 
+def test_without_one_falls_back_to_the_start_with_the_others_put_back(tmp_path):
+    """A's revert on the end conflicts (README lines B changed next to A's); the start with B cherry-picked back
+    conflicts in README only, which is settled by taking B's side: 'start+others', not 'none'."""
+    d = tmp_path / "docs"
+    d.mkdir()
+    _git(d, "init", "-q")
+
+    def w(p, s):
+        (d / p).write_text(s, encoding="utf-8", newline="\n")
+    w("README.md", "a\nb\n")
+    w("x.py", "x = 1\n")
+    w("y.py", "y = 1\n")
+    _git(d, "add", "-A")
+    _git(d, "commit", "-qm", "base")
+    w("README.md", "A\nb\n")
+    w("x.py", "x = 2\n")
+    _git(d, "commit", "-qam", "A")
+    ca = _git(d, "rev-parse", "HEAD")
+    w("README.md", "A\nB\n")
+    w("y.py", "y = 2\n")
+    _git(d, "commit", "-qam", "B")
+    cb = _git(d, "rev-parse", "HEAD")
+    cl = BS.clone(d, tmp_path / "c")
+    end, order = BS.plan(cl, [ca, cb], cb)
+    rev = BS.revert_all(cl, end, order)
+    assert not rev["dropped"]
+    tar, how = BS.without_one(cl, end, rev["start"], order, ca)
+    assert how == "start+others"
+    assert _member(tar, "x.py") == b"x = 1\n" and _member(tar, "y.py") == b"y = 2\n"
+    assert _member(tar, "README.md") == b"A\nB\n"
+    # the same batch built twice has the same start (fixed commit dates)
+    cl2 = BS.clone(d, tmp_path / "c2")
+    assert BS.revert_all(cl2, end, order)["start"] == rev["start"]
+
+
+TEST_C = "from pkg.c import k\n\n\ndef test_k():\n    assert k() == 3\n"
+
+
+def test_a_new_test_file_that_does_not_collect_at_the_start_fails_only_its_own_nodes(tmp_path):
+    """C adds pkg/c.py and tests/test_c.py: at the start test_c.py cannot import, but the other files still run
+    (start_passed is not empty), and on the final tree a missing C fails C only."""
+    src = tmp_path / "src"
+    c = _small_repo(src)
+    (src / "pkg/c.py").write_text("def k():\n    return 3\n", encoding="utf-8", newline="\n")
+    (src / "tests/test_c.py").write_text(TEST_C, encoding="utf-8", newline="\n")
+    _git(src, "add", "-A")
+    _git(src, "commit", "-qm", "C")
+    c["C"] = _git(src, "rev-parse", "HEAD")
+    tasks = _tasks(c) + [{"id": "C", "commit": c["C"], "tests": ["tests/test_c.py"], "brief": "add k"}]
+    b = {"id": "t3", "tasks": ["A", "B", "C"], "overlap": [], "end": c["C"][:7], "note": "test"}
+    mat = BT.build(b, tmp_path / "tmp", source=src, tasks=tasks)
+    assert mat["problems"] == [], mat["problems"]
+    assert set(mat["start_passed"]) == {"tests/test_a.py::test_f_old", "tests/test_b.py::test_g_old"}
+    assert mat["collect_errors"]["start"] == ["tests/test_c.py"] and mat["collect_errors"]["end"] == []
+    assert mat["nodes"]["C"] == ["tests/test_c.py::test_k"] and mat["coupled"] == {}
+    repo = tmp_path / "repo"
+    BT.make_repo(mat, repo)
+    (repo / "pkg/a.py").write_text(A_OLD.replace("return 1", "return 2"), encoding="utf-8")
+    (repo / "pkg/b.py").write_text("def g():\n    return 2\n", encoding="utf-8")
+    s = BT.score_batch(repo, mat, tmp_path)
+    assert s["right"] == 2 and not s["ok"] and not s["tasks_ok"]["C"]["ok"] and s["n_regressions"] == 0
+    assert s["collect_errors"] == ["tests/test_c.py"]
+    (repo / "pkg/a.py").write_text("def f():\n    return 9\n", encoding="utf-8")      # a regression still shows
+    s2 = BT.score_batch(repo, mat, tmp_path)
+    assert "tests/test_a.py::test_f_old" in s2["regressions"]
+
+
+def test_a_cached_check_is_used_for_the_same_start_tree_and_check_code(small, monkeypatch):
+    d, b, c = small["dir"], small["batch"], small["commits"]
+    rep = BT.report(small["mat"])
+    again = BT.build(b, d / "tmp2", source=d / "src", tasks=_tasks(c), cached=rep)
+    assert again.get("from_cache") and again["start"] == small["mat"]["start"]
+    assert again["nodes"] == small["mat"]["nodes"]
+    stale = {**rep, "check_sha256": "0" * 16}                       # the selection code changed
+    assert not BT.build(b, d / "tmp3", source=d / "src", tasks=_tasks(c), cached=stale, run_tests=False) \
+        .get("from_cache")
+
+
+def test_merge_conflicts_count_one_per_conflicted_file():
+    out = ("Auto-merging a.py\nCONFLICT (content): Merge conflict in a.py\n"
+           "Automatic merge failed; fix conflicts and then commit the result.\n")
+    assert len(BT.CONFLICT.findall(out)) == 1
+
+
+def test_cost_split_and_review_runs(tmp_path):
+    by = {"claude-opus-x": 1.0, "claude-haiku-y": 0.25}
+    s = BT.cost_split({"arm": "builtin"}, by, 1.25, 0.0)
+    assert s["sub_usd"] == 0.25 and s["lead_only_usd"] == 1.0 and s["lead_worker_model_usd"] == 0.25
+    h = BT.cost_split({"arm": "builtin", "lead_model": "haiku"}, {"claude-haiku-y": 0.5}, 0.5, 0.0)
+    assert h["sub_usd"] is None and h["lead_only_usd"] is None and "worker" in h["cost_split"]
+    x = BT.cost_split({"arm": "ccx-batch"}, by, 2.0, 0.75)
+    assert x["sub_usd"] == 0.75 and x["lead_only_usd"] == 1.25 and x["lead_worker_model_usd"] == 0.25
+    hub = tmp_path / "hub"
+    (hub / "ccx").mkdir(parents=True)
+    rows = [{"run_id": "20261027-1-aa", "label": "eval-batch:x"},
+            {"run_id": "20261027-2-bb", "label": "review:20261027-1-aa"}, {"type": "verdict", "label": "review:z"}]
+    (hub / "ccx" / "ledger.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+    assert BT.review_run_ids(hub) == {"20261027-2-bb"}
+
+
 def _member(tar: bytes, name: str) -> bytes:
     import io
     import tarfile
