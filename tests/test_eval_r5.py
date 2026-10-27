@@ -6,6 +6,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "eval")
 import r5  # noqa: E402
 import tasks_r5  # noqa: E402
 
+FAKES = Path(__file__).resolve().parent / "fakes"
+
 
 def test_tasks_are_complete():
     assert len(tasks_r5.IDS) == len(set(tasks_r5.IDS)) == 10
@@ -73,7 +75,8 @@ def _row(task, rd, arm, ok, usd, wall, **kw):
             "lead_only_usd": usd, "lead_tokens": 1, "lead_requests": 1, **kw}
 
 
-def test_builtin2r_worker_carries_ccx_rules_word_for_word():
+def test_builtin2r_worker_carries_ccx_rules_word_for_word(monkeypatch):
+    monkeypatch.setenv("CCX_CLAUDE_BIN", str(FAKES / "fake_claude.py"))       # CI has no claude
     from ccx import prompts
     assert "builtin2r" in r5.OPT_IN_ARMS and "builtin2r" not in r5.ARMS
     assert "builtin2r" in r5.BUILTIN_ARMS and "builtin2r" not in r5.PF.CODEX_ARMS
@@ -96,7 +99,8 @@ def test_builtin2r_worker_carries_ccx_rules_word_for_word():
     assert "worker_rules" not in r5.unit_models({"arm": "builtin2"}, {})
 
 
-def test_lead_model_defaults_and_keys():
+def test_lead_model_defaults_and_keys(monkeypatch):
+    monkeypatch.setenv("CCX_CLAUDE_BIN", str(FAKES / "fake_claude.py"))       # CI has no claude
     argv = r5.r3.lead_argv("ccx", 1)
     assert argv[argv.index("--model") + 1] == "sonnet" and argv[argv.index("--effort") + 1] == "medium"
     argv = r5.r3.lead_argv("ccx", 1, "opus", "high")
