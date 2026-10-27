@@ -30,6 +30,50 @@ class TestCheckHelpers(unittest.TestCase):
         self.assertEqual(_expand_globs('python -c "print(1*2)" tests/nomatch_*.py', d),
                          'python -c "print(1*2)" tests/nomatch_*.py')       # quoted and unmatched stay as they are
 
+    def test_single_quotes_become_double_quotes_for_cmd_exe(self):
+        # r5e-h: `-k 'a or b'` reached pytest as three words under cmd.exe (exit 4, check_broken)
+        d = _tree()
+        self.assertEqual(_expand_globs("python -m pytest -q tests/test_board.py -k 'a or b'", d),
+                         'python -m pytest -q tests/test_board.py -k "a or b"')
+        for same in ("x && y", "a | b > out.txt 2>&1", "echo 'say \"hi\"'", 'python -c "print(\'x\')"', "don't"):
+            self.assertEqual(_expand_globs(same, d), same)            # compound / mixed quotes kept as they are
+        self.assertEqual(_expand_globs("pytest -k 'a or b' && echo 'ok' > o.txt", d),
+                         'pytest -k "a or b" && echo "ok" > o.txt')    # only the quoted tokens change
+
+    def test_single_quotes_inside_a_double_quoted_argument_are_kept(self):
+        # review: a regex tokenizer cut `"..."` at an escaped \" (or swallowed `--opt="a` as one word) and then
+        # rewrote the `'...'` inside the double-quoted argument, ending its quoting under cmd.exe
+        d = _tree()
+        for same in ('python -c "import sys; print(\\"x\\", \'a b\')"',
+                     'python -c "import sys; print(sys.argv[1:])" --opt="a \'b c\' d"',
+                     '--opt="x" \'a', "-k'a b'"):
+            self.assertEqual(_expand_globs(same, d), same)
+        self.assertEqual(_expand_globs('python -c "print(\\"x\\")" -k \'a or b\'', d),
+                         'python -c "print(\\"x\\")" -k "a or b"')       # a quote state that is closed again
+        self.assertEqual(_expand_globs("a  'b c'\t tests/test_memory_*.py", d),
+                         'a  "b c"\t tests/test_memory_e7.py tests/test_memory_rank.py')   # spacing kept
+
+    @unittest.skipUnless(sys.platform == "win32", "cmd.exe only")
+    def test_run_check_keeps_the_argv_of_a_nested_single_quote(self):
+        d = _tree()
+        cmd = f'"{sys.executable}" -c "import sys; print(\\"x\\", \'a b\')"'
+        c = run_check(cmd, d)
+        self.assertTrue(c["passed"], c)
+        self.assertNotIn("ran", c)
+        cmd = (f'"{sys.executable}" -c "import sys; sys.exit(0 if sys.argv[1:] == [chr(45) + \'-opt=a \' + chr(39) '
+               f'+ \'b c\' + chr(39) + \' d\'] else 1)" --opt="a \'b c\' d"')
+        c = run_check(cmd, d)
+        self.assertTrue(c["passed"], c)
+
+    @unittest.skipUnless(sys.platform == "win32", "cmd.exe only")
+    def test_run_check_records_the_rewritten_command(self):
+        d = _tree()
+        cmd = f'"{sys.executable}" -c "import sys; sys.exit(0 if sys.argv[1:] == [chr(97) + \' or b\'] else 1)" \'a or b\''
+        c = run_check(cmd, d)
+        self.assertTrue(c["passed"], c)
+        self.assertEqual(c["cmd"], cmd)
+        self.assertTrue(c["ran"].endswith('"a or b"'), c)
+
     def test_missing_test_paths_lists_close_matches(self):
         d = _tree()
         miss = missing_test_paths("python -m pytest -q tests/test_memory.py tests/test_board.py::test_x", d)

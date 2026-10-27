@@ -109,6 +109,8 @@ ccx run "任务" --provider deepseek-codex   # 同一个模型经 Codex（用 -c
 ccx run "任务" --to dsh --tier T2          # DeepSeek 自己的智能体 DeepSeek Harness（无头模式）
 ccx run "任务" --provider glm              # 较新的 API 经 Claude Code：kimi、glm、qwen、openrouter（要有密钥）
 ccx run "任务" ... --bg             # 后台跑，马上返回 run_id；用 ccx show <run_id> --wait 等结果
+ccx run "任务" ... --bg --wait 540  # 后台跑并在同一次调用里等：做完就打印最终结果；到时没做完就原样打印 --bg 的输出
+                                  # （run_id 马上打到 stderr）。ccx resume ... --bg [--wait N] 同理
 ccx send --list | --thread <id> "消息"   # 发消息给正在运行的 Codex 桌面/交互会话（只有 Codex：Claude Code 的终端
                                         # 和桌面会话都没有接收外部消息的入口；Claude 子智能体用 ccx resume <run_id> 追问）
 ccx say --to codex|claude|deepseek|all "消息"   # 对话板：本项目开着的会话下一轮就能看到
