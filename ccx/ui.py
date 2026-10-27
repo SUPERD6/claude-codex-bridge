@@ -270,7 +270,8 @@ def _session_file(rd: Reader, agent: str, sid: str) -> Path | None:
         if agent == "codex":
             root = home / "sessions"
             from .usage import walk
-            hits = sorted(walk(root, f"rollout-*{sid}.jsonl"))
+            hits = sorted(walk(root, f"rollout-*{sid}.jsonl"),   # newest last, a \\?\ prefix aside
+                          key=lambda f: Path(str(f).removeprefix("\\\\?\\")))
         elif agent == "claude":
             root = home / "projects"
             hits = sorted(root.glob(f"*/{sid}.jsonl")) if root.exists() else []

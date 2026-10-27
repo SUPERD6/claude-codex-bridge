@@ -61,15 +61,17 @@ def walk(root: Path, pattern: str, skipped: list | None = None):
                 skipped.append((d, "files gone" if isinstance(e, FileNotFoundError) else
                                 f"files unreadable ({type(e).__name__})"))
             continue
+        subdirs = []
         for e in entries:
             try:
                 is_dir = e.is_dir(follow_symlinks=False)
             except OSError:
                 continue
             if is_dir:
-                stack.append(Path(e.path))
+                subdirs.append(Path(e.path))
             elif fnmatch.fnmatch(e.name, pattern):
                 yield Path(_scan_path(Path(e.path)))   # a short folder can still hold a file past the limit
+        stack.extend(reversed(subdirs))   # folders in listing order, as rglob gave them (callers keep the last)
 
 
 def _recent(files, since: float, skipped: list | None = None):
@@ -96,10 +98,14 @@ def _helper_parent(f: Path) -> str | None:
     return None
 
 
-def _claude_file(f: Path, since: float, exclude: set[str], msgs: dict[str, dict]) -> None:
+def _claude_file(f: Path, since: float, exclude: set[str], msgs: dict[str, dict],
+                 skipped: list | None = None) -> None:
     try:
         lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
-    except OSError:
+    except OSError as e:
+        if skipped is not None:
+            skipped.append((f, "files gone" if isinstance(e, FileNotFoundError) else
+                            f"files unreadable ({type(e).__name__})"))
         return
     parent = _helper_parent(f)
     for line in lines:
@@ -145,7 +151,7 @@ def claude_events(since: float, exclude: set[str], home: Path | None = None,
     # projects/<folder>/<session>/subagents/agent-*.jsonl with isSidechain = true, and a workflow's
     # agents under <session>/subagents/workflows/wf_*/
     for f in _recent(walk(root, "*.jsonl", skipped), since, skipped):
-        _claude_file(f, since, exclude, msgs)
+        _claude_file(f, since, exclude, msgs, skipped)
     return list(msgs.values())
 
 
@@ -166,9 +172,18 @@ def session_files(session: str, home: Path | None = None, skipped: list | None =
     out: list[Path] = []
     try:
         with os.scandir(_scan_path(root)) as it:
-            folders = [Path(e.path) for e in it if e.is_dir(follow_symlinks=False)]
+            entries = list(it)
     except OSError:
         return out
+    folders = []
+    for e in entries:
+        try:
+            if e.is_dir():                 # follows a symlinked project folder, as glob("*/...") did
+                folders.append(Path(e.path))
+        except OSError as err:             # one bad entry does not hide the others
+            if skipped is not None:
+                skipped.append((Path(e.path), "files gone" if isinstance(err, FileNotFoundError) else
+                                f"files unreadable ({type(err).__name__})"))
     for d in folders:
         f = d / f"{session}.jsonl"
         if os.path.isfile(_scan_path(f)):

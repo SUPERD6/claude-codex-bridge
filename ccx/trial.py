@@ -19,7 +19,7 @@ import json
 import random
 import time
 
-from .config import Paths
+from .config import Paths, codex_home
 
 ARMS = ("self", "delegated", "native")
 TAIL_S = 600              # the lead reads and checks a delegated result in about this long after it returns
@@ -48,6 +48,10 @@ def start(p: Paths, days: float = 7.0, rate: float = 0.5, note: str = "") -> dic
     if old:
         raise ValueError(f"a trial is already running ({old['id']}); `ccx trial stop` first")
     _file(p).parent.mkdir(parents=True, exist_ok=True)
+    prev = _last(p)
+    if prev:                               # keep the ended trial (and its void reason) before it is replaced
+        with (p.state / "trials.jsonl").open("a", encoding="utf-8") as h:
+            h.write(json.dumps(prev) + "\n")
     _file(p).write_text(json.dumps(t), encoding="utf-8")
     return t
 
@@ -55,6 +59,8 @@ def start(p: Paths, days: float = 7.0, rate: float = 0.5, note: str = "") -> dic
 def stop(p: Paths, void: str | None = None) -> dict:
     """End the running trial. With `void`, the trial is recorded as void with that reason — the running one, or
     the last one when it has already ended — and its report claims no result."""
+    if void is not None and not void.strip():
+        raise ValueError("--void needs a reason")
     t = active(p)
     if not t and void:
         t = _last(p)
@@ -126,10 +132,14 @@ def _lead(p: Paths, agent: str, start_ts: float, end_ts: float, session: str | N
         tok += turn_tokens(e["usage"]) + int(e["usage"].get("output_tokens", 0) or 0)
         usd += learn.price_usd(p, agent, e.get("model") or "", e["usage"]) or 0.0
         n += 1
-    if session and n == 0:
-        # A lead that ran ccx has turns in this window; none found means its files were not read (a Codex date
-        # folder or a file that could not be opened), so it is not counted as a zero spend.
-        why = next((r for _, r in skipped), "no lead turns found")
+    if session and n == 0 and agent != "claude" and not any(
+            usage.walk(codex_home() / "sessions", f"rollout-*{session}.jsonl")):
+        # No turns and no session file of this lead at all (its Codex date folder was not listed, or the file is
+        # gone): not counted as a zero spend. A lead whose own file was found and read but has no turns in the
+        # window (it sat idle) is a real zero, as before; a file that could not be read is caught above.
+        why = "no lead turns found and no session file for it"
+        if skipped:
+            why += f" ({len(skipped)} other session folder(s) or file(s) could not be read)"
         return {"tokens": 0, "usd": 0.0, "turns": 0, "unmeasured": f"{why}: lead conversation {session}"}
     return {"tokens": tok, "usd": round(usd, 6), "turns": n}
 

@@ -186,6 +186,63 @@ class TestWalk(unittest.TestCase):
                              [("locked", "files unreadable (PermissionError)"), ("subagents", "files gone")])
             self.assertEqual(list(usage.walk(root / "missing", "*.jsonl", skipped)), [])   # no root: nothing
 
+    def test_sibling_folders_in_rglob_order(self):
+        import tempfile
+        from pathlib import Path
+        from ccx import usage
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for rel in ("top.jsonl", "A/f.jsonl", "A/sub/g.jsonl", "B/f.jsonl", "C/f.jsonl"):
+                (root / rel).parent.mkdir(parents=True, exist_ok=True)
+                (root / rel).write_text("{}", encoding="utf-8")
+            want = [f.relative_to(root).as_posix() for f in root.rglob("*.jsonl")]
+            got = [f.relative_to(root).as_posix() for f in usage.walk(root, "*.jsonl")]
+            self.assertEqual(got, want)
+
+    def test_session_files_one_bad_folder_entry_and_symlinked_folder(self):
+        import os
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+        from ccx import usage
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            for name in ("good", "bad", "real"):
+                (home / "projects" / name).mkdir(parents=True)
+                (home / "projects" / name / "S1.jsonl").write_text("{}", encoding="utf-8")
+            linked = False
+            try:
+                os.symlink(home / "projects" / "real", home / "projects" / "link", target_is_directory=True)
+                linked = True
+            except (OSError, NotImplementedError):
+                pass                       # no symlink privilege (Windows): the rest still runs
+            real = os.scandir
+
+            class Entry:
+                def __init__(self, e):
+                    self._e, self.path, self.name = e, e.path, e.name
+
+                def is_dir(self, follow_symlinks=True):
+                    if self.name == "bad":
+                        raise PermissionError(13, "denied", self.path)
+                    return self._e.is_dir(follow_symlinks=follow_symlinks)
+
+            class Scan:
+                def __init__(self, path):
+                    self._it = real(path)
+
+                def __enter__(self):
+                    return (Entry(e) for e in self._it)
+
+                def __exit__(self, *a):
+                    self._it.close()
+            skipped = []
+            with mock.patch.object(usage.os, "scandir", Scan):
+                got = usage.session_files("S1", home, skipped)
+            names = sorted(Path(str(f)).parent.name for f in got)
+            self.assertEqual(names, sorted(["good", "real"] + (["link"] if linked else [])))
+            self.assertEqual([(Path(d).name, r) for d, r in skipped], [("bad", "files unreadable (PermissionError)")])
+
 
 class TestTrialMissingFiles(ReportEnv):
     def _delegated(self, p, t, run_id, lead, ts):
@@ -266,6 +323,21 @@ class TestLeadNotRead(ReportEnv):
         self.assertEqual(s["arms"]["delegated"]["n"], 1)
         self.assertGreater(s["arms"]["delegated"]["lead_tokens_mean"], 0)
 
+    def test_idle_lead_with_readable_files_is_a_real_zero(self):
+        from ccx import ledger
+        p = Paths(self.hub)
+        t = self.j("trial", "start", "--days", "7")
+        now = time.time()
+        self.claude_transcript("cl-idle", ts=now - 100000)     # readable, but no turns in the run's window
+        self.codex_rollout("cx-idle", ts=now - 100000)
+        self._delegated(p, t, "r-cl-idle", "cl-idle", now - 10, "claude")
+        self._delegated(p, t, "r-cx-idle", "cx-idle", now - 10, "codex")
+        ledger.append_event(p, {"type": "selfrun", "trial": t["id"], "bucket": "code:b4", "ae_usd": 0.02,
+                                "usage4": {"input_tokens": 10}, "seconds": 60, "ok": True, "agent": "claude"})
+        s = trial.summarize(p)
+        self.assertEqual(s["unmeasured"], [])
+        self.assertEqual((s["arms"]["delegated"]["n"], s["arms"]["delegated"]["lead_usd_mean"]), (2, 0.0))
+
     @unittest.skipUnless(__import__("os").name == "nt", "the 260-character path limit is Windows only")
     def test_file_past_the_path_limit_in_a_shorter_folder(self):
         import os
@@ -335,6 +407,23 @@ class TestTrialVoid(ReportEnv):
         out = self.j("trial", "stop", "--void", "voided afterwards")     # an ended trial can still be voided
         self.assertEqual((out["void"], out["stopped"]), ("voided afterwards", stopped))
         self.assertEqual(self.j("trial", "report")["void"], "voided afterwards")
+
+    def test_empty_void_reason_is_an_error(self):
+        p = Paths(self.hub)
+        self.j("trial", "start", "--days", "7")
+        r = self.ccx("trial", "stop", "--void", "  ")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("--void needs a reason", r.stdout + r.stderr)
+        self.assertIsNotNone(trial.active(p))                          # nothing stopped
+
+    def test_next_start_keeps_the_voided_trial(self):
+        p = Paths(self.hub)
+        first = self.j("trial", "start", "--days", "7")
+        self.j("trial", "stop", "--void", "changed mid-trial")
+        second = self.j("trial", "start", "--days", "7")
+        kept = [json.loads(x) for x in (p.state / "trials.jsonl").read_text(encoding="utf-8").splitlines()]
+        self.assertEqual([(k["id"], k.get("void")) for k in kept], [(first["id"], "changed mid-trial")])
+        self.assertEqual(trial.active(p)["id"], second["id"])
 
 
 class TestNoUltracodeInSubRuns(unittest.TestCase):
