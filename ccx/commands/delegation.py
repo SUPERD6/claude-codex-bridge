@@ -99,6 +99,24 @@ def _bg_not_delegated(p, a, route: dict, caller: str) -> None:
     ledger.write_record(p.runs / rid, rec)
 
 
+def _bg_refused(p, a, caller: str, error: str) -> None:
+    """The detached half of `ccx run --bg` refused before any sub-agent starts (a pre-authorised proposal that is
+    used up, sized smaller, or lapsed): write a finished record so `ccx show <id> --wait` ends at once instead of
+    waiting out its timeout. Only for that detached process; a foreground refusal stays an error."""
+    rid = os.environ.get("CCX_RUN_ID")
+    if not rid or not (p.runs / rid / "bg.log").exists() or (p.runs / rid / "run.json").exists():
+        return
+    rec = {"run_id": rid, "ts": time.time(), "state": "finished", "ok": False, "kind": "refused",
+           "to": getattr(a, "to", None) or "-", "tier": getattr(a, "tier", None) or "-", "mode": None,
+           "caller": caller, "route": {"proposal": getattr(a, "proposal", None)},
+           "cwd": str(Path(a.cwd or os.getcwd()).resolve()), "label": getattr(a, "label", None) or "",
+           "attempts": [], "error": error, "proposal": getattr(a, "proposal", None),
+           "ephemeral": True,                       # no session, no spend: not a piece of work in stats or the ui
+           "result": {"status": "refused", "summary": error,
+                      "next_step": "run `ccx propose` again for this task, then run it with the new id"}}
+    ledger.write_record(p.runs / rid, rec)
+
+
 _BANDS = ("small", "medium", "large")
 
 
@@ -106,7 +124,9 @@ def _preauth_for_run(p, cfg: dict, proposal: str, spec: dict) -> dict | None:
     """The tier (as route["policy"]) when the person's picked tier pre-authorised `proposal` and this run may use
     it, else None. A pre-authorisation covers one run of that task: refused when the setting changed since, when a
     run already used it, or when this run is sized smaller than the proposal (its band would not have been sent out
-    by the tier). The returned policy keeps the proposal's tier and planned mode, with this run's band and estimate."""
+    by the tier), and when the tier would not send this run's own brief out (its hard or uncertain rules plan it
+    self). The returned policy keeps the proposal's tier and planned mode, with this run's band and estimate.
+    Being used is claimed atomically when the run starts (proposals.claim), not here."""
     from .. import proposals
     pre = proposals.preauthorized(p, proposal)
     if not pre:
@@ -114,7 +134,7 @@ def _preauth_for_run(p, cfg: dict, proposal: str, spec: dict) -> dict | None:
     if pre.get("tier") != picked_tier(cfg):
         raise ValueError(f"proposal {proposal} was pre-authorised by tier {pre.get('tier')}, which the "
                          "person's settings no longer pick (policy.picked): run `ccx propose` again and offer it")
-    if proposals.answered(p, proposal):
+    if proposals.answered(p, proposal) or proposals.claimed(p, proposal):
         raise ValueError(f"proposal {proposal} was pre-authorised for one run, which has already used it: run "
                          "`ccx propose` again for this task")
     own = tier_policy(p, cfg, {**spec, "files": int(spec.get("files") or 0)}, pre["tier"]) or {}
@@ -124,6 +144,12 @@ def _preauth_for_run(p, cfg: dict, proposal: str, spec: dict) -> dict | None:
                              f"sized {own['band']} (its --minutes / --files / brief): pass the estimate you proposed "
                              "with, or `ccx propose` this task on its own")
         pre = {**pre, "proposal_band": pre["band"], "band": own["band"], "signals": own.get("signals") or {}}
+    if own.get("error") or (own.get("mode") and own["mode"] not in ("ccx2", "direct")):
+        # re-plan this run's own brief: the tier's hard / uncertain rules apply to what is sent, not only its size
+        why = own.get("error") or own.get("why") or ""
+        raise ValueError(f"proposal {proposal} was pre-authorised by tier {pre['tier']}, but that tier plans this "
+                         f"run's own task as {own.get('mode') or 'unplannable'}" + (f" ({why})" if why else "") +
+                         ": a pre-authorisation covers the task it was proposed for; `ccx propose` this brief")
     return pre
 
 
@@ -146,6 +172,10 @@ def cmd_run(a) -> int:
     if a.bg and not a.brief and not a.brief_file:
         raise ValueError("--bg needs the task as text or --brief-file (stdin is not passed on)")
     if a.bg and not auto:
+        if a.proposal:
+            # refuse a used-up, smaller or lapsed pre-authorisation here, before detaching: the detached child's
+            # refusal would leave `ccx show <id> --wait` waiting (it checks again, and records a refusal, below)
+            _preauth_for_run(p, cfg, a.proposal, _spec_from_args(a, _brief(a)))
         _out(_background(sys.argv[1:], p))
         return 0
     text = _brief(a)
@@ -154,7 +184,11 @@ def cmd_run(a) -> int:
     preauth, tier_self = None, False
     if a.proposal:
         from .. import proposals
-        preauth = _preauth_for_run(p, cfg, a.proposal, spec)   # a tier the person picked, not a yes to this offer
+        try:
+            preauth = _preauth_for_run(p, cfg, a.proposal, spec)   # a tier the person picked, not a yes to it
+        except ValueError as e:
+            _bg_refused(p, a, caller, str(e))
+            raise
         if preauth:
             spec["tier_preauth"] = True          # the tier decided who does it: no random A/B self-run, no trial
         else:
@@ -218,7 +252,13 @@ def cmd_run(a) -> int:
                   parallel=True if a.parallel else None, share_context=a.context, **kw)
     if preauth:
         # the run of a proposal the picked tier pre-authorised starts now: only now is it used (once), and only now
-        # did it go out (actual_mode). Source "tier": not counted as a yes in proposals.stats
+        # did it go out (actual_mode). Source "tier": not counted as a yes in proposals.stats. The claim is atomic:
+        # of two runs started together, only one gets it
+        if not proposals.claim(p, a.proposal):
+            err = (f"proposal {a.proposal} was pre-authorised for one run, which has already used it: run "
+                   "`ccx propose` again for this task")
+            _bg_refused(p, a, caller, err)
+            raise ValueError(err)
         proposals.answer(p, a.proposal, True, source="tier")
     rec = run(req, p)
     res = compact(rec)

@@ -50,6 +50,31 @@ def answered(p: Paths, proposal: str) -> bool:
     return any(r.get("type") == "proposal_answer" and r.get("proposal") == proposal for r in ledger.rows(p))
 
 
+def _claim_file(p: Paths, proposal: str):
+    return p.state / "proposals" / f"{proposal}.used"
+
+
+def claimed(p: Paths, proposal: str) -> bool:
+    """Has a run already taken this pre-authorised proposal (claim())?"""
+    return _claim_file(p, proposal).exists()
+
+
+def claim(p: Paths, proposal: str) -> bool:
+    """Take a pre-authorised proposal for one run, atomically: True for the first caller only. An exclusive file
+    create, so two runs started together (two `--bg` children, a `q run` refill and a manual run) cannot both pass
+    a read-then-write check of the ledger."""
+    import os
+    f = _claim_file(p, proposal)
+    f.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        fd = os.open(f, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        return False
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(f"{time.time()} {os.getpid()}\n")
+    return True
+
+
 def preauthorized(p: Paths, proposal: str) -> dict | None:
     """The tier (as route["policy"]) when the person's picked tier pre-authorised this proposal, else None. Whether
     a run may still use it (once, at its size) is ccx run's check."""

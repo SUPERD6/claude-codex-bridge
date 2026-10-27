@@ -278,6 +278,55 @@ class TestProposeTiers(ReportEnv):
         self.assertIn("already used", again.stdout + again.stderr)
         self.assertEqual(sum(r.get("type") == "proposal_answer" for r in self.rows()), 1)
 
+    def test_preauthorisation_replans_the_runs_own_brief(self):
+        self.pick("balanced")
+        big = self.j("propose", "--minutes", "60", "--files", "4", *self.LEAD, "rework the parser")
+        self.assertTrue(big["authorized"])
+        hard = "add resume after a crash to the queue state machine"
+        r = self.ccx("run", "--from", "claude", "--to", "codex", "--tradeoff", "save", "--kind", "code",
+                     "--proposal", big["proposal"], "--minutes", "60", "--files", "4", hard)
+        self.assertNotEqual(r.returncode, 0)                  # the tier's hard rule plans this brief self
+        self.assertIn("own task as self", r.stdout + r.stderr)
+        self.assertFalse(any(x.get("type") == "proposal_answer" for x in self.rows()))   # not used up
+
+    def test_bg_refusal_comes_before_detaching_and_a_child_refusal_ends(self):
+        self.pick("save")
+        big = self.j("propose", "--minutes", "60", "--files", "4", *self.LEAD, "rework the parser")
+        base = ("run", "--from", "claude", "--to", "codex", "--tradeoff", "save", "--kind", "code",
+                "--proposal", big["proposal"], "--minutes", "60", "--files", "4", "rework the parser")
+        self.assertEqual(self.j(*base)["status"], "done")
+        runs = self.hub / "ccx" / "runs"
+        before = set(runs.iterdir())
+        r = self.ccx(*base[:1], "--bg", *base[1:])
+        self.assertNotEqual(r.returncode, 0)                  # refused in the foreground: no run id handed out
+        self.assertIn("already used", r.stdout + r.stderr)
+        self.assertEqual(set(runs.iterdir()), before)
+        # the detached child itself refused (a race the parent's check lost): it leaves a finished record
+        rid = "20990101-000000-beef"
+        (runs / rid).mkdir()
+        (runs / rid / "bg.log").write_text("", encoding="utf-8")
+        r = self.ccx(*base, env={**self.env, "CCX_RUN_ID": rid})
+        self.assertNotEqual(r.returncode, 0)
+        rec = json.loads((runs / rid / "run.json").read_text(encoding="utf-8"))
+        self.assertEqual((rec["state"], rec["ok"], rec["kind"], rec["result"]["status"]),
+                         ("finished", False, "refused", "refused"))
+        self.assertIn("already used", rec["error"])
+        self.assertEqual(self.j("show", rid, "--wait", "5")["status"], "refused")
+        self.assertEqual(sum(x.get("type") == "proposal_answer" for x in self.rows()), 1)
+
+    def test_preauthorisation_claim_is_atomic(self):
+        from ccx import proposals
+        from ccx.config import paths
+        self.pick("save")
+        big = self.j("propose", "--minutes", "60", "--files", "4", *self.LEAD, "rework the parser")
+        self.assertTrue(proposals.claim(paths(), big["proposal"]))      # another run took it first
+        self.assertFalse(proposals.claim(paths(), big["proposal"]))     # exclusive: only the first caller
+        r = self.ccx("run", "--from", "claude", "--to", "codex", "--tradeoff", "save", "--kind", "code",
+                     "--proposal", big["proposal"], "--minutes", "60", "--files", "4", "rework the parser")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("already used", r.stdout + r.stderr)
+        self.assertFalse(any(x.get("type") == "proposal_answer" for x in self.rows()))
+
     def test_a_tier_planned_self_proposal_is_not_an_approval(self):
         self.pick("balanced")
         small = self.j("propose", "--minutes", "5", "--files", "1", *self.LEAD, "rename a flag")

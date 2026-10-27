@@ -8,7 +8,10 @@
   tier the person picks. Only it pre-authorises: `ccx propose` for that tier returns `authorized: true` with
   `worth_offering: true` and a `say` line (proposal row `preauthorized`); that proposal's run skips the random A/B
   self-run, keeps the proposal's tier in the ledger, and is refused if the setting changed. A pre-authorisation
-  covers one run of that task: a second run with the same id, or a run sized smaller than the proposal, is refused;
+  covers one run of that task: a second run with the same id (claimed atomically when the run starts), a run
+  sized smaller than the proposal, or a run whose own brief the tier would plan `self` (its hard / uncertain rules)
+  is refused; with `--bg` the refusal comes before detaching (a refused detached child leaves a finished `refused`
+  record, so `ccx show --wait` ends);
   its answer (`source: tier`) is written only when the run starts (an L0/L1 stop or a routing refusal records
   nothing). Project autonomy L0/L1 still asks before edits; a proposal the picked tier planned `self` is not an
   approval for it either (sent out anyway, its answer is `source: lead`). `policy.picked` sets the tier plan, not the
