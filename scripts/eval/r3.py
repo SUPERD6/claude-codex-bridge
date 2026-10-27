@@ -264,14 +264,17 @@ def make_hub(d: Path) -> dict:
     return info
 
 
-def lead_argv(arm: str, budget: float) -> list[str]:
+def lead_argv(arm: str, budget: float, model: str | None = None, effort: str | None = None,
+              agents: dict | None = None) -> list[str]:
+    """The lead's command line. `model` / `effort` default to LEAD_MODEL / LEAD_EFFORT (round 5's --lead-model /
+    --lead-effort); `agents` replaces the builtin arm's WORKER definition (round 5's builtin2r)."""
     tools = "Read,Grep,Glob,Edit,Write,Bash" + (",Agent" if arm == "builtin" else "")
-    argv = [*bin_argv("claude"), "-p", "--output-format", "stream-json", "--verbose", "--model", LEAD_MODEL,
-            "--effort", LEAD_EFFORT, "--tools", tools, "--permission-mode", "acceptEdits",
+    argv = [*bin_argv("claude"), "-p", "--output-format", "stream-json", "--verbose", "--model", model or LEAD_MODEL,
+            "--effort", effort or LEAD_EFFORT, "--tools", tools, "--permission-mode", "acceptEdits",
             "--allowed-tools", tools.replace(",", " "), "--strict-mcp-config",
             "--exclude-dynamic-system-prompt-sections", "--disable-slash-commands", "--max-budget-usd", str(budget)]
     if arm == "builtin":
-        argv += ["--agents", json.dumps(WORKER)]
+        argv += ["--agents", json.dumps(agents or WORKER)]
     if arm != "ccx":              # ccx --context reads the lead's session file, so only that lead keeps one
         argv.append("--no-session-persistence")
     return argv
