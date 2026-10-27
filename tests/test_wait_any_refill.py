@@ -114,6 +114,8 @@ class TestRefill(unittest.TestCase):
         self.events: list[tuple[str, str, float]] = []
         self.lock = threading.Lock()
         self.kinds: dict[str, list] = {}
+        self.ended: dict[str, threading.Event] = {}
+        self.hold: dict[str, str] = {}               # item id -> id it waits for (ends only after that one ended)
         self.orig = workqueue._one
         workqueue._one = self.fake_one
 
@@ -121,17 +123,24 @@ class TestRefill(unittest.TestCase):
         workqueue._one = self.orig
         self.tmp.cleanup()
 
+    def _ended(self, i):
+        with self.lock:
+            return self.ended.setdefault(i, threading.Event())
+
     def fake_one(self, it, root, caller, p, cfg, warm=None, got=None):
         with self.lock:
             self.events.append(("start", it["id"], time.time()))
         wq.update(root, it["id"], status="doing")
         time.sleep(float(it["brief"]))
+        if it["id"] in self.hold:                    # an order, not a timing guess (slow CI runners start late)
+            self._ended(self.hold[it["id"]]).wait(10)
         rec = {"run_id": "r-" + it["id"], "attempts": [{"kind": k} for k in self.kinds.get(it["id"], [])]}
         if got is not None:
             got["rec"] = rec
         wq.update(root, it["id"], status="done", cost_usd=0.01)
         with self.lock:
             self.events.append(("end", it["id"], time.time()))
+        self._ended(it["id"]).set()
         return {"id": it["id"], "status": "done", "run": rec["run_id"]}
 
     def add(self, sec, deps=()):
@@ -141,8 +150,9 @@ class TestRefill(unittest.TestCase):
         return [i for e, i, _ in self.events if e == "start"]
 
     def test_a_free_slot_is_refilled_before_the_slow_run_ends(self):
-        slow, fast = self.add(1.5), self.add(0.1)
+        slow, fast = self.add(0.3), self.add(0.1)
         third = self.add(0.1)
+        self.hold[slow] = third                      # slow ends only after the refilled third one ended
         done: list = []
         stop = workqueue._refill(_args(), self.root, "claude", None, {}, 2, done)
         self.assertIsNone(stop)
