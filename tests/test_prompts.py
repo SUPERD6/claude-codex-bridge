@@ -5,7 +5,7 @@ from ccx import prompts
 
 def _first(selfcheck):
     return prompts.PROMPT.format(run_id="r1", caller="lead", cwd="/w", mode_text="write", context_line="",
-                                 memory_line="", brief="do x", selfcheck=selfcheck)
+                                 memory_line="", brief="do x", selfcheck=selfcheck, lead_note="")
 
 
 def test_selfchecks_ask_to_test_through_the_named_command_from_outside_the_repo():
@@ -23,7 +23,7 @@ def test_existing_tests_rule_reaches_first_follow_up_and_continue_prompts():
     assert rule in first.split("## Task")[0]                    # on the Rules lines, before the task
     assert rule in prompts.FOLLOWUP.format(run_id="r1", brief="again")
     assert rule in prompts.CONTINUE.format(run_id="r1", caller="lead", cwd="/w", mode_text="write",
-                                           brief="next", selfcheck=prompts.SELFCHECK)
+                                           brief="next", selfcheck=prompts.SELFCHECK, lead_note="")
     assert "satisfy both" in prompts.KEEP_TESTS and "say why" in prompts.KEEP_TESTS
 
 

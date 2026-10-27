@@ -45,8 +45,9 @@ tool's own choice; ccx sets only the edges:
   else `[subagents] max_usd` ($2). The run ends as `over_budget`; `ccx resume RUN --budget X` goes on.
 - **Quota.** When a subscription is projected over its limit at this pace, Codex's children are held to 1 at a
   time and one model rung down; when it is snug (≥ 80 %), 2. `--subagents N` sets a number, `off` none.
-- **Asking.** A brief that lists 3 or more parts (or `--parallel`) tells the sub-agent explicitly to use
-  sub-agents for the independent parts — the words Codex's own instructions wait for.
+- **Asking.** Only `--parallel` tells the sub-agent explicitly to use sub-agents for the independent parts — the
+  words Codex's own instructions wait for. A brief that just lists several parts no longer does (round 5: it cost
+  more per run and saved no time), so pass `--parallel` only when the parts really are independent and large.
 - **Counting.** Their tokens are added to the run (Claude's result now counts the whole session, sub-agents
   included).
 

@@ -47,8 +47,52 @@ _DECIDED = re.compile(
     r"决定|定了|定下|约定|统一|一律|改成|改为|换成|就用|只用|不用|不要|别再|必须|采用|默认|以后|从现在",
     re.I)
 _SENT = re.compile(r"(?<=[.!?。！？；;])\s+|\n+")
+# Sentences that only tell the lead how to delegate or accept (round 5: a builder read "do not edit files yourself:
+# hand the implementation to a sub-agent through ccx" in its shared context and stopped). Kept narrow on purpose:
+# a clause is dropped only when the WHOLE clause is the hand-off (fullmatch): "delegate the task to codex when
+# Claude is out of quota", "hand it to claude.py", "不要自己写解析器" or "交给 codex 的 argv" are specs and stay.
+_TARGET = r"(?:to\s+(?:a\s+|the\s+)?(?:sub-?agents?|codex|claude|deepseek)(?:\s+(?:through|via|with)\s+ccx)?|" \
+          r"(?:through|via|with)\s+ccx)"
+_LEAD_ONLY = re.compile(
+    r"(?:please\s+)?(?:do not|don't|never)\s+(?:edit|change|modify|write|touch)\s+(?:the\s+|any\s+)?(?:files?|code)"
+    r"\s+yourself|"
+    r"(?:(?:i|we)(?:'ll|\s+will)\s+|let'?s\s+|please\s+|then\s+)?(?:hand|delegate|pass|give)\s+(?:the\s+|this\s+)?"
+    r"(?:implementation|work|task|job|it|this)\s+(?:off\s+|over\s+)?" + _TARGET + r"|"
+    r"(?:then\s+)?accept\s+(?:it|the\s+result|the\s+work)\s+without\s+re-?running(?:\s+(?:the\s+)?(?:tests?|checks?))?|"
+    r"不要自己(?:改|写|动)(?:文件|代码)?|"
+    r"(?:委派时|请|然后)?(?:把(?:实现|任务|这个任务|这件事|活)?)?\s*(?:交给|派给)\s*"
+    r"(?:子智能体|子代理|子agent|sub-?agent|codex|claude|deepseek)\s*(?:去|来)?\s*(?:做|实现|处理|改)?(?:吧)?",
+    re.I)
+# where a clause ends: an English stop followed by space, the end or a capital ("X.Do"; not "claude.py"), a Chinese
+# stop or comma (no space needed), a newline. Zero-width, so the kept clauses join back exactly as written.
+_CLAUSE = re.compile(r"(?<=[.!?;:])(?=\s|$|[A-Z])|(?<=[。！？；：，])|(?<=\n)")
+_CLAUSE_END = " \t\n.!?;:。！？；：，"
 _EDIT_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit", "edit", "write")
 _INJECTED_PREFIX = ("[ccx board", "[ccx sub-task", "[ccx follow-up", "[ccx shared work context")
+
+
+def _lead_only(clause: str) -> bool:
+    c = clause.strip(_CLAUSE_END)
+    return bool(c) and _LEAD_ONLY.fullmatch(c) is not None
+
+
+def drop_lead_only(evs: list[dict], dropped: list[str] | None = None) -> list[dict]:
+    """The events with the lead's own delegation/acceptance clauses taken out (for a delegated task only). A clause
+    goes only when all of it is such an instruction; what went is appended to `dropped` (recorded with the run)."""
+    out = []
+    for e in evs:
+        if e["kind"] in ("ask", "decision", "said") and e.get("text"):
+            parts = _CLAUSE.split(e["text"])
+            gone = [s.strip() for s in parts if _lead_only(s)]
+            if gone:
+                if dropped is not None:
+                    dropped.extend(gone)
+                text = "".join(s for s in parts if not _lead_only(s)).strip()
+                if not text.strip(_CLAUSE_END):
+                    continue
+                e = {**e, "text": text}
+        out.append(e)
+    return out
 
 
 def _iso(ts: str | None) -> float:
@@ -369,13 +413,21 @@ def for_run(p, cfg: dict, caller: str, lead_session: str | None, cwd: Path) -> t
     f = find(caller, cwd, lead_session, _sub_sessions(p) if not lead_session else None)
     if f is None or (not lead_session and time.time() - f.stat().st_mtime > RECENT_SEC):
         return "", {"source": None, "why": "the lead's session file was not found"}
-    evs = read_events(caller, f)
+    dropped: list[str] = []
+    evs = drop_lead_only(read_events(caller, f) or [], dropped)
+    dropped = list(dict.fromkeys(dropped))              # an ask's sentence also comes back as its decision event
     if not evs:
-        return "", {"source": str(f), "why": "nothing readable in the lead's session"}
+        return "", {"source": str(f), "why": "nothing readable in the lead's session", "lead_only_dropped": dropped}
     sid = lead_session or (f.parent.name if caller == "deepseek" else f.stem)
     text = summary(evs, caller, sid, cwd, f"what your lead ({caller}) and its person have been working on, "
                    f"for background", int(setting(cfg, "max_chars", MAX_CHARS)))
-    return text, {"source": str(f), "chars": len(text), "items": sum(1 for e in evs if e["kind"] != "said")}
+    if text and dropped:
+        text += (f"\n\n(ccx left out {len(dropped)} clause(s) that only told the lead how to hand this work off or "
+                 f"accept it; that was done by giving you this task.)")
+    meta = {"source": str(f), "chars": len(text), "items": sum(1 for e in evs if e["kind"] != "said")}
+    if dropped:
+        meta["lead_only_dropped"] = [_short(d, 200) for d in dropped[:20]]
+    return text, meta
 
 
 def peek(p, agent: str, root: Path, session: str | None = None, turns: int = 3,

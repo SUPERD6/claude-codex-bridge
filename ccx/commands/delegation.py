@@ -929,7 +929,7 @@ def register(sub) -> None:
     r.add_argument("--budget", type=float, metavar="USD", help="spending cap for its own sub-agents on this piece "
                    "(default [subagents] max_usd, $2); over it the run stops and can go on with ccx resume --budget")
     r.add_argument("--parallel", action="store_true", help="tell it explicitly to use sub-agents for independent "
-                   "parts")
+                   "parts (only with this flag: a brief that lists several items does not add it)")
     r.add_argument("--review", choices=["auto", "on", "off"], default="auto", help="independent review of the diff "
                    "by another vendor's cheap model: auto = only when --risk is visible/critical, the sub-agent is "
                    "unsure, or its claimed files don't match the diff (default); on = every write run; off")

@@ -38,7 +38,12 @@ def _extra_settings() -> dict:
 
 
 def claude_invocation(*, model: str, effort: str, perm: list[str], cwd: Path, prompt: str,
-                      run_dir: Path, resume_id: str | None = None, lean: bool = False) -> Invocation:
+                      run_dir: Path, resume_id: str | None = None, lean: bool = False,
+                      cache_ttl: str | None = None) -> Invocation:
+    """cache_ttl: "5m" or "1h" sets Claude Code's `promptCacheTtl` for this run's main conversation (only ccx's
+    one-shot reviewer, when `[review] cache_ttl` is set; None = Claude Code's own choice). Checked 2026-10-26 against
+    code.claude.com/docs/en/prompt-caching ("Choose the TTL yourself": `promptCacheTtl` takes 5m or 1h, applies to
+    -p runs, needs Claude Code v2.1.242+; local version 2.1.309)."""
     schema = json.dumps(claude_schema())
     # stream-json (+ --verbose, required with -p): the session id arrives in the first event, so a crash
     # mid-run still leaves a resumable session on record
@@ -60,8 +65,10 @@ def claude_invocation(*, model: str, effort: str, perm: list[str], cwd: Path, pr
     if "--settings" not in argv:
         # ultracode (standing dynamic workflows) is session-scoped, set by the desktop app or --settings; a
         # sub-run must not inherit it or opt in through the keyword in a brief (checked against 2.1.309)
-        argv += ["--settings", json.dumps({**_extra_settings(), "ultracode": False,
-                                           "workflowKeywordTriggerEnabled": False})]
+        settings = {**_extra_settings(), "ultracode": False, "workflowKeywordTriggerEnabled": False}
+        if cache_ttl in ("5m", "1h"):
+            settings["promptCacheTtl"] = cache_ttl
+        argv += ["--settings", json.dumps(settings)]
     if resume_id:
         argv += ["--resume", resume_id]
     return Invocation(argv, prompt, cwd, None)

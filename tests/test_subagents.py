@@ -40,8 +40,11 @@ class TestRuns(Env):
     def test_parallel_words_and_off(self):
         brief = "Write four modules:\n- a.py\n- b.py\n- c.py\n- d.py"
         self.ccx("run", "--from", "claude", "--to", "codex", "--tier", "T1", brief)
-        self.assertIn("You are explicitly asked to use sub-agents", self.last()["prompt"])     # F14, by itself
-        self.ccx("run", "--from", "claude", "--to", "codex", "--tier", "T1", "--new", "--subagents", "off", brief)
+        self.assertNotIn("explicitly asked to use sub-agents", self.last()["prompt"])  # F14: listing parts is not enough
+        self.ccx("run", "--from", "claude", "--to", "codex", "--tier", "T1", "--new", "--parallel", brief)
+        self.assertIn("You are explicitly asked to use sub-agents", self.last()["prompt"])     # only --parallel asks
+        self.ccx("run", "--from", "claude", "--to", "codex", "--tier", "T1", "--new", "--parallel",
+                 "--subagents", "off", brief)
         c = self.last()
         self.assertNotIn("explicitly asked to use sub-agents", c["prompt"])
         self.assertIn("multi_agent", c["argv"])                                                 # --disable multi_agent
