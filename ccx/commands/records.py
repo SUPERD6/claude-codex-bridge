@@ -81,65 +81,116 @@ def _fix_round(p, rec: dict) -> dict | None:
     return None
 
 
-def wait_run(p, run_id: str, seconds: float) -> tuple[dict | None, str]:
-    """Block until run_id, and any review fix round it started, is finished. Returns (last record of the chain or
-    None on timeout, the id being waited on)."""
-    start = time.time()
-    deadline = start + max(0.0, seconds)
-    rid, ended_at, swept = run_id, None, 0.0
-    if not (p.runs / rid).exists():
-        raise FileNotFoundError(f"no ccx run {rid!r} under {p.runs}")
+class RunWaiter:
+    """One run being waited on, a poll at a time: follows a review fix round it started (the chain's last record
+    is the result). `wait_run` blocks on one; `ccx show ID... --any` polls several in turn."""
+
+    def __init__(self, p, run_id: str):
+        if not (p.runs / run_id).exists():
+            raise FileNotFoundError(f"no ccx run {run_id!r} under {p.runs}")
+        self.p, self.run_id, self.rid, self.ended_at = p, run_id, run_id, None
+
+    def poll(self) -> dict | None:
+        """The chain's last record once everything in it is finished, else None (still running)."""
+        while True:
+            f = self.p.runs / self.rid / "run.json"
+            rec = None
+            if f.exists():                           # a --bg run writes it a moment after it was started
+                try:
+                    rec = ledger.read_record(f)
+                except (OSError, ValueError):
+                    rec = None
+            if not (rec and rec.get("state") != "running"):
+                return None
+            nxt = _fix_round(self.p, rec)
+            if nxt:
+                self.rid, self.ended_at = nxt["run_id"], None
+                continue
+            fix_due = rec.get("kind") == "review_issues" and bool(rec.get("session_id"))   # one is about to start
+            tag_due = self.rid != self.run_id and not rec.get("review_of")   # its parent writes review_of right after
+            if not (fix_due or tag_due):
+                return rec
+            self.ended_at = self.ended_at or time.time()
+            if time.time() - self.ended_at > (FIX_ROUND_GRACE if fix_due else 5 * POLL_SEC):
+                return rec                           # nothing more came (a fix round that failed to start)
+            return None
+
+
+def wait_any(p, run_ids: list[str], seconds: float) -> tuple[list[tuple[str, dict, str]], list[tuple[str, str]]]:
+    """Block until at least one of run_ids (with any review fix round it started) is finished, or `seconds` pass.
+    Returns ([(asked id, last record, last id)] for every finished one, [(asked id, id being waited on)] for the
+    ones still running: a fix round's id, when its first run has handed over to one)."""
+    waiters = [RunWaiter(p, r) for r in dict.fromkeys(run_ids)]        # unknown id -> FileNotFoundError up front
+    deadline = time.time() + max(0.0, seconds)
+    swept = 0.0
     while True:
         if time.time() - swept >= 20:                # a run whose ccx process died: interrupted, not running forever
             recover.sweep(p)
             swept = time.time()
-        f = p.runs / rid / "run.json"
-        rec = None
-        if f.exists():                               # a --bg run writes it a moment after it was started
-            try:
-                rec = ledger.read_record(f)
-            except (OSError, ValueError):
-                rec = None
-        if rec and rec.get("state") != "running":
-            nxt = _fix_round(p, rec)
-            if nxt:
-                rid, ended_at = nxt["run_id"], None
-                continue
-            fix_due = rec.get("kind") == "review_issues" and bool(rec.get("session_id"))   # one is about to start
-            tag_due = rid != run_id and not rec.get("review_of")     # its parent writes review_of right after
-            if not (fix_due or tag_due):
-                return rec, rid
-            ended_at = ended_at or time.time()
-            if time.time() - ended_at > (FIX_ROUND_GRACE if fix_due else 5 * POLL_SEC):
-                return rec, rid                      # nothing more came (a fix round that failed to start)
-        if time.time() >= deadline:
-            return None, rid
+        done, running = [], []
+        for w in waiters:
+            rec = w.poll()
+            if rec is None:
+                running.append((w.run_id, w.rid))
+            else:
+                done.append((w.run_id, rec, w.rid))
+        if done or time.time() >= deadline:
+            return done, running
         time.sleep(min(POLL_SEC, max(0.0, deadline - time.time())))
+
+
+def wait_run(p, run_id: str, seconds: float) -> tuple[dict | None, str]:
+    """Block until run_id, and any review fix round it started, is finished. Returns (last record of the chain or
+    None on timeout, the id being waited on)."""
+    done, running = wait_any(p, [run_id], seconds)
+    if done:
+        return done[0][1], done[0][2]
+    return None, running[0][1]
+
+
+def _result(rec: dict, asked: str, rid: str, full: bool) -> dict:
+    if full:
+        return rec
+    res = compact(rec)
+    if rid != asked:
+        res["chain"] = f"{asked} -> {rid}"          # the review fix round's result is the final one
+    res["recap"] = recap(rec, res)
+    return res
 
 
 def cmd_show(a) -> int:
     p = paths()
+    ids = a.run_id
+    if a.any:
+        # several runs in flight: hand back every one that has finished (blocking with --wait until one has)
+        t0 = time.time()
+        done, running = wait_any(p, ids, a.wait if a.wait is not None else 0.0)
+        # running: the ids as asked, so the next call still reports the chain (asked -> fix round) and the lead
+        # can match them up
+        running = [asked for asked, _ in running]
+        out = {"finished": [_result(rec, asked, rid, a.full) for asked, rec, rid in done], "running": running,
+               "waited_s": round(time.time() - t0, 1)}
+        if running:
+            out["next"] = f"ccx show {' '.join(running)} --any --wait"
+        _out(out)
+        return 0
+    if len(ids) > 1:
+        raise ValueError("several run ids need --any (it returns every finished one)")
+    run_id = ids[0]
     if a.wait is not None:
         t0 = time.time()
-        rec, rid = wait_run(p, a.run_id, a.wait)
+        rec, rid = wait_run(p, run_id, a.wait)
         if rec is None:
             _out({"run_id": rid, "status": "running", "waited_s": round(time.time() - t0, 1),
                   "next": f"ccx show {rid} --wait"})
             return 0
-        if a.full:
-            _out(rec)
-            return 0
-        res = compact(rec)
-        if rid != a.run_id:
-            res["chain"] = f"{a.run_id} -> {rid}"      # the review fix round's result is the final one
-        res["recap"] = recap(rec, res)
-        _out(res)
+        _out(_result(rec, run_id, rid, a.full))
         return 0
     recover.sweep(p)                    # a run whose ccx process is gone shows as interrupted, not running
-    rec = ledger.load_run(p, a.run_id)
+    rec = ledger.load_run(p, run_id)
     if a.full:
         _out(rec)
-        d = p.runs / a.run_id
+        d = p.runs / run_id
         print(f"\nlogs: {d}")
     else:
         _out(compact(rec))
@@ -344,13 +395,17 @@ def register(sub) -> None:
     ud.add_argument("--wrong", action="store_true", help="with --apply: also record the run as wrong (teaches "
                     "routing). Without it undoing records no verdict")
     ud.set_defaults(fn=cmd_undo)
-    sh = sub.add_parser("show", help="show a run (compact by default); --wait blocks until it is finished")
-    sh.add_argument("run_id")
+    sh = sub.add_parser("show", help="show a run (compact by default); --wait blocks until it is finished; "
+                                     "several ids with --any: every one that has finished")
+    sh.add_argument("run_id", nargs="+", metavar="RUN_ID", help="one run id; several need --any")
     sh.add_argument("--full", action="store_true")
     sh.add_argument("--wait", nargs="?", type=float, const=540.0, default=None, metavar="SECONDS",
                     help="block until the run (and a review fix round it started) is finished, then print the "
                          "same compact result as `ccx run`; default 540 s, under a 10-minute tool-call limit. "
                          "Still running then: status=running and the command to call again")
+    sh.add_argument("--any", action="store_true", help="with one or more ids: print every run among them that has "
+                    "finished ('finished', compact results) and the ids still running ('running', plus the command "
+                    "to wait on them); with --wait, block until at least one has finished")
     sh.set_defaults(fn=cmd_show)
     st = sub.add_parser("stats", help="token/time per agent and tier; --summary for spend and savings")
     st.add_argument("--summary", action="store_true")
