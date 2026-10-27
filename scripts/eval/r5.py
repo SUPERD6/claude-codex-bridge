@@ -18,13 +18,20 @@ so doing it takes many requests. Arms (the lead is a fresh headless Claude Code,
            opt-in tier arms (whole-workflow tiers, docs/DECISIONS.md "tiers"): the unit's hub has the person's
            `policy.picked = <tier>` (set as `ccx config set` does: that is the person's choice the arm simulates) and
            the lead is told the person picked it. fast: the lead does it itself; balanced and save: the lead sizes the
-           task with `ccx propose --minutes --files` and follows its answer (authorized: run its `next` the ccx2 way,
-           --bg + show --wait and ccx2's lean acceptance; self: do it itself), so save is ccx2 through the tier path;
-           cheapest: no lead, the direct arm's command run in a hub that picked cheapest, labelled may_be_wrong.
+           task with `ccx propose --minutes --files` on the person's request verbatim (the brief its run sends, so
+           the run's own re-plan agrees) and follows its answer (authorized: run its `next` the ccx2 way, --bg +
+           show --wait and ccx2's lean acceptance; self, or a run ccx refuses: do it itself). save is ccx2 through
+           the tier path, and its run also carries --minutes / --files, so its model pick comes from that
+           difficulty (ccx2's from the brief's keywords): rows keep each run's route (`ccx_routes`) to tell them apart.
+           cheapest: no lead, the shipped cheapest tier's script run (CHEAPEST: --tradeoff save --review off, no
+           explicit model, no estimate, no check) in a hub that picked cheapest, its result taken as it is, labelled
+           may_be_wrong; unlike direct it has no review, no fixed gpt-6-luna low and no fixed --minutes 60.
            Each row records the tier, what `ccx propose` planned (band, mode, from the unit hub's ledger), the
            reference change's size (non-test code lines / files, and the band those files give), the mode that
-           actually ran (ledger actual_mode; none = self), the misbanding (planned vs reference band) and whether
-           ccx's --check passed (read on failures); the summary adds them per arm (`tiers`)
+           actually ran (ledger actual_mode; none = self), the misbanding (the lead's --files band vs the reference
+           files' band, like with like; `misband_overall` keeps the planned band, words + minutes + files, against
+           it, which leans over by construction) and whether ccx's --check passed (read on failures); the summary
+           adds them per arm (`tiers`)
 
 The lead is sonnet medium unless --lead-model / --lead-effort say otherwise; both are recorded in every row, in its
 fingerprint and in the done-key, and a summary shows another lead's units as their own arm (`ccx2@opus-high`).
@@ -212,10 +219,16 @@ TIER_PICKED = ("The person picked the tier `{tier}` in their own ccx settings (`
                "each piece of work and pre-authorises what it delegates, so do not ask them anything about it.")
 HOW_FAST = TIER_PICKED + " Under `fast` every piece is yours: do the work yourself."
 # balanced / save: size the task with ccx propose and follow its answer; a delegated run is run and accepted the ccx2
-# way (--bg + show --wait, LEAN_BRIEF, LEAN_ACCEPT), so save vs ccx2 differs by the tier path alone
-HOW_TIER = (TIER_PICKED + " Before you start, size the work and ask ccx:\n"
+# way (--bg + show --wait, LEAN_BRIEF, LEAN_ACCEPT). save vs ccx2 is not the tier path alone: save's run carries the
+# lead's --minutes / --files, so its model pick comes from that difficulty (ccx2's run has neither and falls back to
+# the brief's keywords), and the lead makes one more call (rows keep each run's route, `ccx_routes`).
+# The proposal is made on the person's request verbatim, the text its run sends: `ccx run --proposal` re-plans the
+# run's own brief (a tier's hard / uncertain rules), and a one-line paraphrase that drops a state-machine word
+# (resume, kill, ...) would be authorised by propose and then refused by the run.
+HOW_TIER = (TIER_PICKED + " Before you start, size the work and ask ccx, giving it the person's request above "
+            "copied verbatim (the same text your brief starts with):\n"
             "  {ccx} propose --lead claude:{model}:{effort} --minutes <minutes a skilled engineer would need> "
-            "--files <how many source files the change touches> \"<the task in one line>\"\n"
+            "--files <how many source files the change touches> \"<the person's request, verbatim>\"\n"
             "It prints one JSON object. If it says `authorized: true`, do not edit files yourself: run its `next` "
             "command once (`{ccx} run ...` with its --proposal and the same --minutes and --files), adding "
             "`--bg --context auto --mode write --new --no-ab --label {label} --check \"<a pytest command for the "
@@ -224,7 +237,17 @@ HOW_TIER = (TIER_PICKED + " Before you start, size the work and ask ccx:\n"
             "and call that again while it says the run is still running (never resume a running run; do not pipe ccx "
             "output through tail or head). " + LEAN_BRIEF + " "
             + LEAN_ACCEPT.replace("{send_back}", "{ccx} resume <run_id> \"<what to fix>\"")
-            + " If it says the tier has you do it (no `authorized: true`), do the work yourself.")
+            + " If it says the tier has you do it (no `authorized: true`), do the work yourself. If `ccx run` "
+            "refuses the proposal (it prints `ok: false` and an error instead of a run_id), do not propose again: "
+            "do the work yourself.")
+
+
+def ccx_lead_model(model: str) -> str:
+    """The lead's model as ccx's --lead rung names it (claude:<alias>:<effort>): a full model id such as
+    claude-opus-4-7 is not a rung ccx knows (`ccx propose` fails, and the tier lead would silently do it itself),
+    so the family alias it names is passed; anything else as given."""
+    m = str(model or "").lower()
+    return next((x for x in ("opus", "sonnet", "haiku") if x in m), model)
 # the whole-workflow tier arms (opt-in): named as the tiers, so tier_rule (balanced vs save) reads them
 TIER_ARMS = ("fast", "balanced", "save", "cheapest")
 TIER_LEAD_ARMS = ("balanced", "save")            # the lead sizes with ccx propose and follows its answer
@@ -237,6 +260,23 @@ DEFAULT_LEAD = (r3.LEAD_MODEL, r3.LEAD_EFFORT)
 TIER_RULE_ARMS = ("balanced", "save")
 DIRECT = ["--to", "codex", "--model", "gpt-6-luna", "--effort", "low", "--review", "on", "--context", "off",
           "--no-escalate", "--no-fallback"]
+# cheapest (opt-in): the shipped cheapest tier as a script / CI runs it (docs/DECISIONS.md, tiers: "only a script or
+# CI calling `ccx run` itself"), in a hub whose person picked cheapest. Unlike DIRECT: no explicit model (the tier's
+# delegated part picks it like save: --tradeoff save, as propose's `next` has it), no fixed --minutes (a script
+# has nobody to size the task: ccx then makes no tier plan for the run, which changes nothing here since cheapest
+# sends every band direct, and its model comes from the brief's keywords, as ccx2's does; a lead's cheapest run
+# would carry its --minutes / --files and pick from that difficulty, like save's), --review off (nobody re-checks: its result is taken as it is, may_be_wrong), ccx's own escalation and
+# fallback. --to codex: the other arms' delegated part goes from a Claude lead to Codex, and the eval's isolation
+# prepares Codex for this arm (preflight CODEX_ARMS); --context off: no conversation to attach. No --check, for the
+# reason direct has none (the r5 plan): a check the script wrote would tell the sub-agent which file the hidden test
+# is in. The shipped path takes a --check result as it is when there is one; here there is none, so the result is
+# taken as it is and ccx_check_passed stays None for this arm.
+CHEAPEST = ["--to", "codex", "--tradeoff", "save", "--review", "off", "--context", "off"]
+
+
+def no_lead_flags(arm: str) -> list[str]:
+    """The ccx run flags of an arm without a lead (direct, cheapest)."""
+    return CHEAPEST if arm == "cheapest" else DIRECT
 
 
 def ext_spec(task: dict) -> dict | None:
@@ -420,7 +460,7 @@ def lead_how(arm: str, label: str, lead: tuple[str, str] = DEFAULT_LEAD) -> str:
     if arm == "fast":
         return HOW_FAST.format(tier=arm)
     if arm in TIER_LEAD_ARMS:
-        return HOW_TIER.format(tier=arm, ccx=r3.CCX_CMD, label=label, model=lead[0], effort=lead[1])
+        return HOW_TIER.format(tier=arm, ccx=r3.CCX_CMD, label=label, model=ccx_lead_model(lead[0]), effort=lead[1])
     return r3.HOW[arm]
 
 
@@ -436,8 +476,8 @@ def worker_agents(arm: str) -> dict | None:
     return WORKER_RULES if arm == "builtin2r" else None
 
 
-# ccx straight from the command line: no Claude lead, --lead-model changes nothing (cheapest: direct's command in a
-# hub whose person picked cheapest)
+# ccx straight from the command line: no Claude lead, --lead-model changes nothing (cheapest: the shipped cheapest
+# tier's script run, CHEAPEST, in a hub whose person picked cheapest)
 NO_LEAD_ARMS = ("direct", "cheapest")
 
 
@@ -593,8 +633,10 @@ def phase_wall(hub: Path, run_ids: list, wall_s: float | None = None) -> dict:
 
 def direct_unit(u: dict, a, repo: Path, hub: Path, env: dict | None = None, job: PF.Job | None = None) -> dict:
     task = by_id(u["task"])
-    argv = ["run", "--mode", "write", "--new", "--no-ab", "--force", "--label", u["label"], "--minutes", "60",
-            *DIRECT, task["brief"]]
+    # direct keeps its fixed --minutes 60; cheapest's script has nobody to size the task, so it gives no estimate
+    est = [] if u["arm"] == "cheapest" else ["--minutes", "60"]
+    argv = ["run", "--mode", "write", "--new", "--no-ab", "--force", "--label", u["label"], *est,
+            *no_lead_flags(u["arm"]), task["brief"]]
     t0 = time.time()
     env = task_env(task, {**(env or PF.base_env()), "CCX_HUB": str(hub)}, ext_python(a))
     out, err, rc, _left = PF.run([sys.executable, str(ROOT / "ccx.py"), *argv], cwd=repo, env=env,
@@ -708,11 +750,37 @@ def ccx_check_passed(hub: Path, run_ids: list) -> bool | None:
     return last
 
 
+def files_band(files) -> str | None:
+    """The band a file count alone gives under the shipped [policy.bands] (None without a count)."""
+    if not files:
+        return None
+    return task_routing().size_band("", None, int(files), shipped_policy())["band"]
+
+
+def ccx_routes(hub: Path, run_ids: list) -> list[dict]:
+    """How each builder run of a unit picked its model (reviews left out): the route's source (task-routing from a
+    rubric / --minutes difficulty, keywords, tier, explicit), its difficulty b and the rung it ran. save's run
+    carries the lead's --minutes / --files and ccx2's does not, so this tells their model picks apart."""
+    out = []
+    for rid in run_ids or []:
+        rec = r2.record(hub, rid)
+        if not rec or str(rec.get("label") or "").startswith("review:"):
+            continue
+        rt = rec.get("route") or {}
+        att = (rec.get("attempts") or [{}])[0]
+        out.append({"source": rt.get("source"), "b": rt.get("b"), "rung": rt.get("rung") or att.get("rung"),
+                    "model": att.get("model"), "effort": att.get("effort")})
+    return out
+
+
 def tier_fields(arm: str, hub: Path, task: dict) -> dict:
     """What a tier arm's row keeps: the tier, what was planned (the first `ccx propose` row in the unit hub's ledger:
-    band, mode, authorized; cheapest: its run's own plan, sized from direct's fixed --minutes 60; fast: self, never
-    proposed), the reference size, the mode that ran (the ledger runs' actual_mode, none = self) and the misbanding
-    (only for a band the lead proposed)."""
+    band, mode, authorized; cheapest: the tier's rule, direct, the script's run unsized; fast: self,
+    never proposed), the reference size, the mode that ran (the ledger runs' actual_mode, none = self) and the
+    misbanding, only for a band the lead proposed: `misband` compares like with like, the band of the lead's --files
+    against the band of the reference change's files (a reference change has no minutes or brief words of its own);
+    `misband_overall` keeps the planned band (the largest of the brief's words, --minutes and --files) against the
+    same files band, which leans over by construction (any --minutes >= 15 makes it at least medium)."""
     rows = hub_rows(hub)
     props = [r for r in rows if r.get("type") == "proposal"]
     runs = [r for r in rows if not r.get("type") and not str(r.get("label") or "").startswith("review:")]
@@ -722,22 +790,42 @@ def tier_fields(arm: str, hub: Path, task: dict) -> dict:
                 "mode": p.get("planned_mode"), "authorized": bool(p.get("preauthorized")),
                 "explicit": bool(p.get("tier_explicit")), "estimate_minutes": p.get("estimate_minutes"),
                 "estimate_files": p.get("estimate_files"), "n_proposals": len(props)}
-    elif arm == "cheapest" and runs:
-        r = runs[0]
-        plan = {"source": "run", "tier": r.get("policy_tier"), "band": r.get("band"), "mode": r.get("planned_mode"),
-                "explicit": bool(r.get("tier_explicit")), "estimate_minutes": r.get("estimate_minutes")}
+    elif arm == "cheapest":
+        # the script gives no --minutes / --files, so ccx sizes nothing (a run without a difficulty gets no tier
+        # plan: no policy_tier on its row); cheapest's rule is direct for every band, so that is the plan
+        r = runs[0] if runs else {}
+        plan = {"source": "tier", "tier": "cheapest", "band": r.get("band"), "mode": "direct", "sized": False,
+                "run_policy_tier": r.get("policy_tier")}
     elif arm == "fast":
         plan = {"source": "tier", "tier": "fast", "band": None, "mode": "self"}
     else:
         plan = {"source": "none", "tier": arm, "band": None, "mode": None, "n_proposals": 0}
     modes = sorted({str(r.get("actual_mode") or "ccx2") for r in runs})
     ref = ref_size(task)
+    proposed = plan["source"] == "propose"
+    ref_band = (ref or {}).get("band")
     out = {"tier": arm, "tier_plan": plan, "ref_size": ref, "actual_mode": "+".join(modes) if modes else "self",
-           "misband": misband(plan.get("band"), (ref or {}).get("band")) if plan["source"] == "propose" else None}
-    out["followed_plan"] = None if not plan.get("mode") else plan["mode"] == out["actual_mode"]
+           "misband": misband(files_band(plan.get("estimate_files")), ref_band) if proposed else None,
+           "misband_overall": misband(plan.get("band"), ref_band) if proposed else None}
+    # cheapest has no lead to follow its plan or not (the script always runs it): None, not a trivial yes
+    out["followed_plan"] = None if not plan.get("mode") or arm == "cheapest" else plan["mode"] == out["actual_mode"]
     if arm == "cheapest":
         out["may_be_wrong"] = True
     return out
+
+
+def bookkeeping(row: dict, arm: str, hub: Path, task: dict) -> None:
+    """The tier fields, ccx's --check result and the runs' routes, added to a unit's row after its agents ran. An
+    error here is kept in the row (`bookkeeping_error`) and the unit is still scored: its lead and sub-agent are
+    already paid for, so a failed read of metadata must not throw the hidden-test result away."""
+    try:
+        if arm in TIER_ARMS:
+            row.update(tier_fields(arm, hub, task))
+        if row.get("ccx_run_ids"):
+            row["ccx_check_passed"] = ccx_check_passed(hub, row["ccx_run_ids"])
+            row["ccx_routes"] = ccx_routes(hub, row["ccx_run_ids"])
+    except Exception as e:  # noqa: BLE001 — metadata only; the score below still runs
+        row["bookkeeping_error"] = f"{type(e).__name__}: {e}"[:400]
 
 
 def unit_of(u: dict, a, work: Path) -> PF.Unit:
@@ -753,8 +841,8 @@ def unit_models(u: dict, row: dict) -> dict:
     out = {"lead": model, "lead_effort": effort, "builtin_worker": r3.WORKER_MODEL}      # direct: replaced below
     if u["arm"] == "builtin2r":
         out["worker_rules"] = "KEEP_TESTS+WIRING"
-    if not has_lead(u["arm"]):                    # direct, cheapest
-        out = {"direct": " ".join(DIRECT)}
+    if not has_lead(u["arm"]):                    # direct, cheapest: the ccx run flags
+        out = {"direct": " ".join(no_lead_flags(u["arm"]))}
     if u["arm"] in TIER_ARMS:                     # the hub's policy.picked (the person's choice the arm simulates)
         out["tier_picked"] = u["arm"]
     seen = ((row.get("audit") or {}).get("init") or {}).get("model")
@@ -797,10 +885,7 @@ def run_unit(u: dict, a, work: Path) -> dict:
         row.update(direct_unit(u, a, repo, hub, env, job) if not has_lead(u["arm"]) else
                    lead_unit(u, a, work, repo, hub, iso, env, job))
         row.update(changed(repo))
-        if u["arm"] in TIER_ARMS:
-            row.update(tier_fields(u["arm"], hub, task))
-        if row.get("ccx_run_ids"):
-            row["ccx_check_passed"] = ccx_check_passed(hub, row["ccx_run_ids"])
+        bookkeeping(row, u["arm"], hub, task)
         sc = score(repo, task, work, job, **({"python": ext_python(a), "source": xkw["source"]} if xkw else {}))
         row.update({**u, "ok": sc["ok"], "pytest": sc["pytest"], "hub": hinfo})
         for rid in row.get("ccx_run_ids") or []:
@@ -963,6 +1048,8 @@ LEAD_SHARE = {"self": 1.0, "builtin": 0.75, "builtin2": 0.73, "builtin2r": 0.73,
               "direct": 0.0}
 OPUS_LEAD = 1.7            # an Opus lead's part costs about this much more than sonnet's (the design's assumption)
 PROPOSE_USD = 0.01         # one `ccx propose` call by the lead (design estimate)
+# the measured arm a tier mode is estimated from (direct: the direct arm's mean, which paid a review and a fixed
+# gpt-6-luna low that cheapest's run does not, so cheapest's estimate is rough, not a measurement of it)
 TIER_MODE_ARM = {"self": "self", "ccx2": "ccx2", "direct": "direct"}
 
 
@@ -1341,7 +1428,7 @@ def tier_rules(rows: list[dict]) -> dict:
         if base == TIER_RULE_ARMS[0] and s in arms:
             tr = tier_rule(rows, b, s)
             if tr:
-                out[f"{b} vs {s}"] = tr
+                out[f"{b} vs {s}"] = {**tr, "pair": f"{b} vs {s}"}   # which lead's arms, read on its own too
     return out
 
 
@@ -1354,22 +1441,33 @@ def _count(xs) -> dict:
 
 def tier_summary(rows: list[dict]) -> dict | None:
     """Per tier arm (as arm_of names it): right, $/success, wall median / mean / p75 (wall_stats), the misbanding
-    rate (the band the lead proposed vs the reference change's band; under = planned smaller), the planned and the
+    rate (`misband`: the lead's --files band vs the reference change's files band; `misband_overall`: the planned
+    band vs that, which leans over by construction; each says its basis; under = planned smaller), how the runs
+    picked their models (`route_sources`), the planned and the
     actual modes, how often the actual mode was the planned one, and on failed units how often ccx's --check had
     passed anyway. None without tier rows."""
     rows = [r for r in rows if "error" not in r and r.get("arm") in TIER_ARMS]
     if not rows:
         return None
+    def mb_stats(xs: list, basis: str) -> dict:
+        wrong = sum(m != "same" for m in xs)
+        return {"basis": basis, "n": len(xs), "wrong": wrong, "rate": round(wrong / len(xs), 4) if xs else None,
+                **{k: sum(m == k for m in xs) for k in ("under", "over")}}
+
     out = {}
     for arm in arm_order(arm_of(r) for r in rows):
         rs = [r for r in rows if arm_of(r) == arm]
-        mb = [r["misband"] for r in rs if r.get("misband")]
-        wrong = sum(m != "same" for m in mb)
         fails = [r for r in rs if not r.get("ok") and r.get("ccx_check_passed") is not None]
         fol = [r["followed_plan"] for r in rs if r.get("followed_plan") is not None]
+        routes = [x.get("source") for r in rs for x in r.get("ccx_routes") or []]
         out[arm] = {**wall_stats(rs), "right": f"{sum(bool(r.get('ok')) for r in rs)}/{len(rs)}",
-                    "misband": {"n": len(mb), "wrong": wrong, "rate": round(wrong / len(mb), 4) if mb else None,
-                                **{k: sum(m == k for m in mb) for k in ("under", "over")}},
+                    "misband": mb_stats([r["misband"] for r in rs if r.get("misband")],
+                                        "files: the lead's --files band vs the reference change's files band"),
+                    "misband_overall": mb_stats(
+                        [r["misband_overall"] for r in rs if r.get("misband_overall")],
+                        "planned band (brief words, --minutes, --files) vs the reference files band: leans over by "
+                        "construction"),
+                    "route_sources": _count(routes) if routes else None,
                     "planned_modes": _count((r.get("tier_plan") or {}).get("mode") for r in rs),
                     "actual_modes": _count(r.get("actual_mode") for r in rs),
                     "followed_plan": f"{sum(fol)}/{len(fol)}" if fol else None,
@@ -1423,7 +1521,8 @@ def summarize(rows: list[dict]) -> dict:
     trs = tier_rules(rows)
     if trs:
         res["tier_rules"] = trs
-        # the default lead's (#142's field), else the first other lead's: the confirmation run's lead is Opus
+        # the default lead's (#142's field), else the first other lead's in arm_order (sorted, so stable): the
+        # confirmation run's lead is Opus. Its `pair` says which lead's arms it is
         res["tier_rule"] = trs.get(f"{TIER_RULE_ARMS[0]} vs {TIER_RULE_ARMS[1]}") or next(iter(trs.values()))
     ts = tier_summary(rows)
     if ts:
@@ -1463,7 +1562,8 @@ def cmd_export(a) -> int:
             "lead_output_tokens", "lead_tools", "lead_edits", "agent_calls", "ccx_runs", "ccx_resumes", "rework",
             "delegated", "context_attached", "files_changed", "diffstat", "model", "status", "verdicts", "error",
             "env_clean", "fingerprint", "lead_model", "lead_effort", "phases", "tier", "tier_plan", "ref_size",
-            "actual_mode", "misband", "followed_plan", "ccx_check_passed", "may_be_wrong")
+            "actual_mode", "misband", "misband_overall", "followed_plan", "ccx_check_passed", "may_be_wrong",
+            "ccx_routes", "bookkeeping_error")
     rows = tagged(read_jsonl(results_file(a.taskset)), a.tag)
     data = {"summary": summarize(rows),
             "rows": [r3.scrub({**{k: r[k] for k in keep if k in r},
