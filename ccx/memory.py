@@ -240,7 +240,7 @@ def kind_of(e: dict) -> str:
 
 
 def by_kind_on(p: Paths) -> bool:
-    """[memory] by_kind (default false until the H11 trial ends): kinds decide what a start and a brief carry,
+    """[memory] by_kind (default false; to be decided by measurement, H11 voided): kinds decide what a start and a brief carry,
     and a brief picks notes by BM25 instead of by shared words."""
     try:
         from .config import load_config

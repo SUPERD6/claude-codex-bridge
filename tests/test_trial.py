@@ -155,6 +155,119 @@ class TestBalanced(unittest.TestCase):
         self.assertGreater(lo, 0)
 
 
+class TestWalk(unittest.TestCase):
+    """A session folder that cannot be listed (removed while walking, or past the Windows path limit) is skipped
+    and noted; Path.rglob raised FileNotFoundError / WinError 3 there and ended `ccx trial report`."""
+    def test_skips_and_notes_unlistable_folders(self):
+        import os
+        import tempfile
+        from pathlib import Path
+        from unittest import mock
+        from ccx import usage
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for rel in ("a/x.jsonl", "b/gone/subagents/y.jsonl", "c/locked/z.jsonl", "a/note.txt"):
+                (root / rel).parent.mkdir(parents=True, exist_ok=True)
+                (root / rel).write_text("{}", encoding="utf-8")
+            real = os.scandir
+
+            def scandir(path):
+                if str(path).endswith("subagents"):
+                    raise FileNotFoundError(3, "The system cannot find the path specified", str(path))
+                if str(path).endswith("locked"):
+                    raise PermissionError(13, "denied", str(path))
+                return real(path)
+            skipped = []
+            with mock.patch.object(usage.os, "scandir", scandir):
+                got = sorted(f.name for f in usage.walk(root, "*.jsonl", skipped))
+            self.assertEqual(got, ["x.jsonl"])
+            self.assertEqual(sorted((d.name, why) for d, why in skipped),
+                             [("locked", "files unreadable (PermissionError)"), ("subagents", "files gone")])
+            self.assertEqual(list(usage.walk(root / "missing", "*.jsonl", skipped)), [])   # no root: nothing
+
+
+class TestTrialMissingFiles(ReportEnv):
+    def _delegated(self, p, t, run_id, lead, ts):
+        from ccx import ledger
+        ledger.append_event(p, {"run_id": run_id, "ts": ts, "seconds": 30, "caller": "claude", "to": "codex",
+                                "lead_session": lead, "trial": t["id"], "bucket": "code:b4", "ae_usd": 0.01,
+                                "status": "done", "sessions": [f"sub-{run_id}"]})
+
+    def test_report_survives_missing_session_folders(self):
+        import os
+        from unittest import mock
+        from ccx import ledger, usage
+        p = Paths(self.hub)
+        t = self.j("trial", "start", "--days", "7")
+        now = time.time()
+        self.claude_transcript("lead-ok", ts=now - 5)
+        self.claude_transcript("lead-sub", ts=now - 5)
+        (self.home_claude / "projects" / "-work" / "lead-sub" / "subagents").mkdir(parents=True)
+        self._delegated(p, t, "r-ok", "lead-ok", now - 10)
+        self._delegated(p, t, "r-gone", "lead-scratch", now - 10)     # its conversation's files were deleted
+        self._delegated(p, t, "r-sub", "lead-sub", now - 10)           # its helpers' folder vanishes mid-walk
+        ledger.append_event(p, {"type": "selfrun", "trial": t["id"], "bucket": "code:b4", "ae_usd": 0.02,
+                                "usage4": {"input_tokens": 10}, "seconds": 60, "ok": True, "agent": "claude"})
+        s = self.j("trial", "report")                                   # the real CLI: no crash
+        self.assertEqual([u["run_id"] for u in s["unmeasured"]], ["r-gone"])
+        self.assertIn("files gone", s["unmeasured"][0]["why"])
+        real = os.scandir
+
+        def scandir(path):
+            if str(path).endswith(os.path.join("lead-sub", "subagents")):
+                raise FileNotFoundError(3, "The system cannot find the path specified", str(path))
+            return real(path)
+        with mock.patch.object(usage.os, "scandir", scandir):
+            s = trial.summarize(p)
+        self.assertEqual(sorted(u["run_id"] for u in s["unmeasured"]), ["r-gone", "r-sub"])
+        self.assertEqual(s["arms"]["delegated"]["n"], 1)                 # measured only
+        self.assertEqual(s["arms"]["delegated"]["unmeasured"], 2)
+        self.assertEqual(s["compare"]["delegated"]["n_arm"], 1)          # left out of the comparison too
+        self.assertIn("unmeasured and left out", s["note"])
+        self.assertGreater(s["arms"]["delegated"]["lead_tokens_mean"], 0)
+        md = trial.markdown(s)
+        self.assertIn("Unmeasured, left out: delegated r-sub", md)
+        self.assertIn("files gone", md)
+
+
+class TestTrialVoid(ReportEnv):
+    def test_stop_void_records_reason_and_report_claims_nothing(self):
+        p = Paths(self.hub)
+        t = self.j("trial", "start", "--days", "7")
+        from ccx import ledger
+        for i in range(12):
+            ledger.append_event(p, {"type": "selfrun", "trial": t["id"], "bucket": "code:b4", "ae_usd": 0.02,
+                                    "usage4": {"input_tokens": 10}, "seconds": 60, "ok": True, "agent": "claude"})
+        out = self.j("trial", "stop", "--void", "skill text changed mid-trial")
+        self.assertEqual(out["void"], "skill text changed mid-trial")
+        self.assertIsNone(trial.active(p))
+        s = self.j("trial", "report")
+        self.assertEqual(s["void"], "skill text changed mid-trial")
+        self.assertEqual(s["trial"]["void"], "skill text changed mid-trial")
+        self.assertEqual(s["arms"]["self"]["n"], 12)                     # numbers stay visible
+        self.assertEqual((s["compare"], s["saving_per_task_usd"], s["enough"]), ({}, None, False))
+        self.assertIn("no result is claimed", s["note"])
+        md = self.ccx("trial", "report", "--markdown").stdout
+        self.assertIn("**Void** — skill text changed mid-trial", md)
+        self.assertNotIn("saving per task", md)
+        self.j("report", "--no-lead")
+        html = (self.hub / "ccx" / "report" / "index.html").read_text(encoding="utf-8")
+        self.assertIn("(void)", html)
+        summ = json.loads((self.hub / "ccx" / "report" / "summary.json").read_text(encoding="utf-8"))
+        self.assertNotEqual(summ.get("saving_kind"), "measured")
+
+    def test_plain_stop_unchanged_and_void_after_stop(self):
+        self.j("trial", "start", "--days", "7")
+        out = self.j("trial", "stop")
+        self.assertIsNotNone(out["stopped"])
+        self.assertNotIn("void", out)
+        self.assertNotIn("void", self.j("trial", "report"))
+        stopped = out["stopped"]
+        out = self.j("trial", "stop", "--void", "voided afterwards")     # an ended trial can still be voided
+        self.assertEqual((out["void"], out["stopped"]), ("voided afterwards", stopped))
+        self.assertEqual(self.j("trial", "report")["void"], "voided afterwards")
+
+
 class TestNoUltracodeInSubRuns(unittest.TestCase):
     def test_settings_flag_and_effort_env(self):
         import os

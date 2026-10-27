@@ -217,7 +217,7 @@ def cmd_trial(a) -> int:
                           "(close each with `ccx ab done ID --ok 1|0`), and judge delegated work with `ccx verify` "
                           "as usual; `ccx trial report` any time"})
     elif a.trial_cmd == "stop":
-        _out(trial.stop(p))
+        _out(trial.stop(p, a.void))
     elif a.trial_cmd == "tag":
         from ..usage import _ts
         def when(s):
@@ -300,7 +300,9 @@ def register(sub) -> None:
     ts.add_argument("--days", type=float, default=7.0)
     ts.add_argument("--rate", type=float, default=0.5, help="share of tasks the lead does itself (default 0.5)")
     ts.add_argument("--note", help="what this trial is about")
-    trs.add_parser("stop")
+    tsp = trs.add_parser("stop")
+    tsp.add_argument("--void", metavar="REASON", help="record the trial as void with this reason (the last one when "
+                     "it has already ended): its report then claims no result")
     tt = trs.add_parser("tag", help="count a Claude conversation that did a task with its own helpers or a "
                         "workflow (native) into the trial; its spend, helpers included, is read from its files")
     tt.add_argument("--arm", choices=["native", "self"], default="native")

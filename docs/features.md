@@ -125,8 +125,9 @@ note needn't contain every word (`--all-words` keeps the old filter, `--limit N`
 preference, constraint, fact, pitfall, event (偏好 / 约束 / 事实 / 坑 / 事件), else other: `ccx mem add --kind`, and
 an older note's kind is guessed from its topic or words when it is read (`ccx mem kinds --list`; the journal is never
 rewritten). With `[memory] by_kind = true` a session start carries only new preferences and constraints, a
-sub-agent's brief picks pitfalls, facts and others by BM25, and events are found by search only. It is off by default
-until the week-long trial ends (2026-11-01), so starts and briefs carry what they did. `ccx mem compact --by project`
+sub-agent's brief picks pitfalls, facts and others by BM25, and events are found by search only. It is off by default,
+so starts and briefs carry what they did; whether to turn it on is decided by measurement (the confirmation
+run), since the week-long H11 trial was voided on 2026-10-26. `ccx mem compact --by project`
 writes one short block per project to `memory/scenes.md`; `[memory] start_scene = true` adds the current project's
 block at a session start (off by default: a start's notes are already capped at ~600 tokens).
 

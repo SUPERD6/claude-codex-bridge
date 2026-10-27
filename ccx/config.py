@@ -245,7 +245,8 @@ SETTINGS = {   # key -> (type, help). Only these can be set with `ccx config set
                             "per project: `ccx autonomy set`)"),
     "memory.by_kind": (_bool, "true | false: kinds decide what a session start and a brief carry (preferences and "
                               "constraints at start, events by search only) and briefs pick notes by BM25 (default "
-                              "false until the H11 trial ends on 2026-11-01)"),
+                              "false; to be decided by measurement, the confirmation run — the H11 trial was voided "
+                              "on 2026-10-26)"),
     "memory.start_scene": (_bool, "true | false: a session start also carries this project's block from "
                                   "`ccx mem compact --by project` (default false)"),
     "hooks.timeout_s": (float, "seconds a session hook (ccx mem delta / turn) may run before it prints nothing and "

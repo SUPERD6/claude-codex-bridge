@@ -52,11 +52,21 @@ def start(p: Paths, days: float = 7.0, rate: float = 0.5, note: str = "") -> dic
     return t
 
 
-def stop(p: Paths) -> dict:
+def stop(p: Paths, void: str | None = None) -> dict:
+    """End the running trial. With `void`, the trial is recorded as void with that reason — the running one, or
+    the last one when it has already ended — and its report claims no result."""
     t = active(p)
-    if not t:
+    if not t and void:
+        t = _last(p)
+        if not t:
+            return {"stopped": None, "note": "no trial yet"}
+        t["stopped"] = t.get("stopped") or min(time.time(), float(t["end"]))
+    elif not t:
         return {"stopped": None, "note": "no trial running"}
-    t["stopped"] = time.time()
+    else:
+        t["stopped"] = time.time()
+    if void:
+        t["void"] = void
     _file(p).write_text(json.dumps(t), encoding="utf-8")
     return t
 
@@ -95,8 +105,17 @@ def assign(p: Paths, t: dict, kind: str | None, b: float | None, rng=random) -> 
 
 
 def _lead(p: Paths, agent: str, start_ts: float, end_ts: float, session: str | None, subs: set[str]) -> dict:
+    """The lead's own usage in a delegated run's window. "unmeasured" says why it could not be read (the lead
+    conversation's files gone or unreadable): such a run is shown but left out of the comparison."""
     from . import learn, usage
-    evs = usage.claude_events(start_ts, subs) if agent == "claude" else usage.codex_events(start_ts, subs)[0]
+    skipped: list = []
+    evs = (usage.claude_events(start_ts, subs, skipped=skipped) if agent == "claude"
+           else usage.codex_events(start_ts, subs, skipped=skipped)[0])
+    why = next((r for d, r in skipped if session and session in str(d)), None)
+    if why is None and session and agent == "claude" and not usage.session_files(session):
+        why = "files gone"                 # e.g. a temporary scratchpad's conversation, deleted with it
+    if why:
+        return {"tokens": 0, "usd": 0.0, "turns": 0, "unmeasured": f"{why}: lead conversation {session}"}
     tok, usd, n = 0, 0.0, 0
     from .context import turn_tokens
     for e in evs:
@@ -137,7 +156,8 @@ def samples(p: Paths, t: dict, now: float | None = None) -> list[dict]:
                         "lead_tokens": lead["tokens"], "lead_usd": lead["usd"], "sub_usd": r.get("ae_usd") or 0.0,
                         "minutes": round((end_ts - TAIL_S - float(r["ts"])) / 60, 1), "ok": bool(ok),
                         "judged": ("soft" if v.get("soft") else "lead") if v else "none",
-                        "agent": r.get("caller"), "run_id": r["run_id"]})
+                        "agent": r.get("caller"), "run_id": r["run_id"],
+                        **({"unmeasured": lead["unmeasured"]} if lead.get("unmeasured") else {})})
         elif r.get("type") == "trialtag" and r.get("trial") == t["id"]:
             out.append({k: r.get(k) for k in ("arm", "bucket", "lead_tokens", "lead_usd", "sub_usd", "minutes",
                                               "agent", "session")}
@@ -205,7 +225,8 @@ def summarize(p: Paths, t: dict | None = None) -> dict:
     if not t:
         return {"trial": None, "note": "no trial yet: `ccx trial start` (7 days, half the delegable tasks done "
                                        "by the lead itself)"}
-    ss = samples(p, t)
+    every = samples(p, t)
+    ss = [s for s in every if not s.get("unmeasured")]          # a task whose spend could not be read is left out
     arms = {}
     for arm in ARMS:
         xs = [s for s in ss if s["arm"] == arm]
@@ -217,15 +238,26 @@ def summarize(p: Paths, t: dict | None = None) -> dict:
                      "lead_usd_mean": _mean([s["lead_usd"] for s in xs]),
                      "sub_usd_mean": _mean([s["sub_usd"] for s in xs]),
                      "total_usd_mean": _mean(total), "minutes_mean": _mean([s["minutes"] for s in xs]),
-                     "judged_by_lead": sum(s["judged"] == "lead" for s in xs)}
+                     "judged_by_lead": sum(s["judged"] == "lead" for s in xs),
+                     "unmeasured": sum(s["arm"] == arm and bool(s.get("unmeasured")) for s in every)}
+    unmeasured = [{"arm": s["arm"], "bucket": s["bucket"], "why": s["unmeasured"],
+                   **({"run_id": s["run_id"]} if s.get("run_id") else {})} for s in every if s.get("unmeasured")]
+    info = {k: t[k] for k in ("id", "start", "end", "rate", "note", "stopped")} | (
+        {"void": t["void"]} if t.get("void") else {})
+    res = {"trial": info, "running": active(p) is not None, "arms": arms,
+           "buckets": sorted({s["bucket"] for s in ss}), "unmeasured": unmeasured}
+    if t.get("void"):                      # the numbers stay visible; no saving and no result are claimed
+        return res | {"void": t["void"], "compare": {}, "saving_per_task_usd": None, "saving_ci95": None,
+                      "enough": False, "note": f"void: {t['void']} — no result is claimed from this trial"}
     compare = {arm: balanced(ss, arm) for arm in ("delegated", "native")}
     d = compare["delegated"]
-    res = {"trial": {k: t[k] for k in ("id", "start", "end", "rate", "note", "stopped")},
-           "running": active(p) is not None, "arms": arms, "compare": compare,
-           "saving_per_task_usd": d["saving_per_task_usd"], "saving_ci95": d["saving_ci95"], "enough": d["enough"],
-           "buckets": sorted({s["bucket"] for s in ss})}
+    res |= {"compare": compare, "saving_per_task_usd": d["saving_per_task_usd"], "saving_ci95": d["saving_ci95"],
+            "enough": d["enough"]}
     if not d["enough"]:
         res["note"] = d["note"]
+    if unmeasured:
+        res["note"] = (res.get("note", "") + f"; {len(unmeasured)} task(s) unmeasured and left out (see "
+                       "`unmeasured`)").lstrip("; ")
     return res
 
 
@@ -286,8 +318,12 @@ def markdown(s: dict) -> str:
     head = (f"Trial {t['id']} ({time.strftime('%Y-%m-%d', time.localtime(t['start']))} – "
             f"{time.strftime('%Y-%m-%d', time.localtime(t.get('stopped') or t['end']))}), API-equivalent dollars.")
     names = ["Lead did it itself", "Delegated with ccx", "Claude Code's own helpers / workflow"][:len(arms)]
+    if t.get("void"):
+        head = f"**Void** — {t['void']}. No result is claimed from this trial.\n\n" + head
     lines = [head, "", "| | " + " | ".join(names) + " |", "|---|" + "---:|" * len(arms)]
     lines += [f"| {name} | " + " | ".join(f(x[key], k) for x in arms) + " |" for name, key, k in rows]
+    for u in s.get("unmeasured") or []:
+        lines += ["", f"Unmeasured, left out: {u['arm']} {u.get('run_id') or ''} ({u['bucket']}) — {u['why']}"]
     for arm, label in (("delegated", "Delegated with ccx"), ("native", "Claude Code's own helpers / workflow")):
         c = (s.get("compare") or {}).get(arm)
         if not c or not s["arms"].get(arm, {}).get("n"):

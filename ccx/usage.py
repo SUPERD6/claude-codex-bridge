@@ -17,6 +17,7 @@ Sessions that ccx itself started as sub-agents are excluded (their usage is alre
 from __future__ import annotations
 
 import json
+import os
 import time
 from datetime import datetime
 from pathlib import Path
@@ -32,6 +33,43 @@ def _ts(s: str | None) -> float | None:
         return datetime.fromisoformat(s.replace("Z", "+00:00")).timestamp()
     except ValueError:
         return None
+
+
+def _scan_path(d: Path) -> str:
+    r"""Windows: a folder near the 260-character limit is listed with the \\?\ prefix (scandir adds "\*" to it,
+    and Path.rglob raised WinError 3 on such a folder that plainly exists); elsewhere the path as it is."""
+    s = str(d)
+    if os.name != "nt" or s.startswith("\\\\") or len(s) < 240:
+        return s
+    return "\\\\?\\" + os.path.abspath(s)
+
+
+def walk(root: Path, pattern: str, skipped: list | None = None):
+    """Files under root whose name matches pattern, like root.rglob(pattern), but a folder that cannot be listed —
+    removed while walking (a temporary scratchpad's sessions), or too long a path — is skipped and noted in
+    `skipped` as (folder, reason) instead of ending the whole walk with FileNotFoundError."""
+    import fnmatch
+    root = Path(root)
+    stack = [root]
+    while stack:
+        d = stack.pop()
+        try:
+            with os.scandir(_scan_path(d)) as it:
+                entries = list(it)
+        except OSError as e:
+            if skipped is not None and d != root:
+                skipped.append((d, "files gone" if isinstance(e, FileNotFoundError) else
+                                f"files unreadable ({type(e).__name__})"))
+            continue
+        for e in entries:
+            try:
+                is_dir = e.is_dir(follow_symlinks=False)
+            except OSError:
+                continue
+            if is_dir:
+                stack.append(Path(e.path))
+            elif fnmatch.fnmatch(e.name, pattern):
+                yield Path(e.path)
 
 
 def _recent(files, since: float):
@@ -92,7 +130,9 @@ def _claude_file(f: Path, since: float, exclude: set[str], msgs: dict[str, dict]
                                          out=u.get("output_tokens", 0) or 0)}
 
 
-def claude_events(since: float, exclude: set[str], home: Path | None = None) -> list[dict]:
+def claude_events(since: float, exclude: set[str], home: Path | None = None,
+                  skipped: list | None = None) -> list[dict]:
+    """Every Claude turn since `since`; folders that cannot be listed are noted in `skipped` (see walk)."""
     root = (home or claude_home()) / "projects"
     if not root.exists():
         return []
@@ -100,7 +140,7 @@ def claude_events(since: float, exclude: set[str], home: Path | None = None) -> 
     # main sessions: projects/<folder>/<session>.jsonl; Claude Code's own (built-in) sub-agents:
     # projects/<folder>/<session>/subagents/agent-*.jsonl with isSidechain = true, and a workflow's
     # agents under <session>/subagents/workflows/wf_*/
-    for f in _recent(root.rglob("*.jsonl"), since):
+    for f in _recent(walk(root, "*.jsonl", skipped), since):
         _claude_file(f, since, exclude, msgs)
     return list(msgs.values())
 
@@ -110,10 +150,29 @@ def claude_session_events(session: str, home: Path | None = None) -> list[dict]:
     that conversation's files."""
     root = (home or claude_home()) / "projects"
     msgs: dict[str, dict] = {}
-    if root.exists():
-        for f in [*root.glob(f"*/{session}.jsonl"), *root.glob(f"*/{session}/subagents/**/*.jsonl")]:
-            _claude_file(f, 0.0, set(), msgs)
+    for f in session_files(session, home):
+        _claude_file(f, 0.0, set(), msgs)
     return list(msgs.values())
+
+
+def session_files(session: str, home: Path | None = None, skipped: list | None = None) -> list[Path]:
+    """A Claude conversation's own file and its helpers' and workflow agents' files, in whichever project folder;
+    a folder that cannot be listed is noted in `skipped` (see walk)."""
+    root = (home or claude_home()) / "projects"
+    out: list[Path] = []
+    try:
+        with os.scandir(_scan_path(root)) as it:
+            folders = [Path(e.path) for e in it if e.is_dir(follow_symlinks=False)]
+    except OSError:
+        return out
+    for d in folders:
+        f = d / f"{session}.jsonl"
+        if os.path.isfile(_scan_path(f)):
+            out.append(Path(_scan_path(f)))       # opens past the Windows path limit too
+        sub = d / session / "subagents"
+        if os.path.isdir(_scan_path(sub)):
+            out += walk(sub, "*.jsonl", skipped)
+    return out
 
 
 def codex_parent(meta: dict) -> str | None:
@@ -129,7 +188,7 @@ def codex_children(parent: str, since: float, home: Path | None = None) -> dict[
     {child_id: {"input", "cached", "output"}}. Their tokens are not in the parent's reported usage."""
     root = (home or codex_home()) / "sessions"
     out = {}
-    for f in _recent(root.rglob("rollout-*.jsonl"), since) if root.exists() else []:
+    for f in _recent(walk(root, "rollout-*.jsonl"), since):
         try:
             with f.open(encoding="utf-8", errors="replace") as fh:
                 first = json.loads(fh.readline() or "{}")
@@ -150,8 +209,9 @@ def codex_children(parent: str, since: float, home: Path | None = None) -> dict[
     return out
 
 
-def codex_events(since: float, exclude: set[str], home: Path | None = None) -> tuple[list[dict], list[dict]]:
-    """-> (usage events, quota samples)."""
+def codex_events(since: float, exclude: set[str], home: Path | None = None,
+                 skipped: list | None = None) -> tuple[list[dict], list[dict]]:
+    """-> (usage events, quota samples); folders that cannot be listed are noted in `skipped` (see walk)."""
     root = (home or codex_home()) / "sessions"
     if not root.exists():
         return [], []
@@ -160,7 +220,7 @@ def codex_events(since: float, exclude: set[str], home: Path | None = None) -> t
     # Codex repeats token_count lines (e.g. rate-limit refreshes), and resumed/forked sessions copy earlier
     # history into the new file — those copied lines are older than the file's own session_meta and only set
     # the baseline.
-    for f in _recent(root.rglob("rollout-*.jsonl"), since):
+    for f in _recent(walk(root, "rollout-*.jsonl", skipped), since):
         sid, model, start, prev, last_seen, parent = f.stem, "?", None, None, None, None
         try:
             lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
@@ -225,7 +285,7 @@ def codex_threads(hours: float = 48, limit: int = 15, home: Path | None = None) 
     files. `codex agents` would list live ones, but it is an interactive browser (codex-cli 0.164)."""
     root = (home or codex_home()) / "sessions"
     rows = []
-    for f in _recent(root.rglob("rollout-*.jsonl"), time.time() - hours * 3600):
+    for f in _recent(walk(root, "rollout-*.jsonl"), time.time() - hours * 3600):
         try:
             with f.open(encoding="utf-8", errors="replace") as fh:
                 meta = (json.loads(fh.readline()) or {}).get("payload") or {}
@@ -248,7 +308,7 @@ def thread_activity(thread: str, home: Path | None = None, now: float | None = N
     task_complete after it) or for 90 s after the person's last message. Read from the session file's tail."""
     now = now or time.time()
     root = (home or codex_home()) / "sessions"
-    files = sorted(root.rglob(f"*{thread}*.jsonl"), key=lambda f: f.stat().st_mtime) if root.exists() else []
+    files = sorted(walk(root, f"*{thread}*.jsonl"), key=lambda f: f.stat().st_mtime)
     if not files:
         return {"busy": False, "why": "no session file found"}
     f = files[-1]

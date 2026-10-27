@@ -1,5 +1,5 @@
 """L1-L3: BM25 ranking for `ccx mem search` and briefs, five fixed kinds behind [memory] by_kind, scene blocks by
-project (`ccx mem compact --by project`). Until the H11 trial ends, a session start and a brief get what they got."""
+project (`ccx mem compact --by project`). By default (by_kind off), a session start and a brief get what they got."""
 import json
 import sys
 import tempfile
@@ -57,7 +57,7 @@ class TestBm25(unittest.TestCase):
 
 
 class TestDefaultsUnchanged(unittest.TestCase):
-    """H11 runs until 2026-11-01: by default a brief picks exactly what it picked before."""
+    """By default (by_kind off) a brief picks exactly what it picked before."""
 
     def test_brief_pick_is_the_old_one(self):
         p = Paths(Path(tempfile.mkdtemp()))
