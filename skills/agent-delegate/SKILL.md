@@ -69,6 +69,16 @@ sub-agent. The extra requests came from the habits below.
 - **Long or multi-file work:** `ccx run --bg ...` prints the run_id; then `ccx show <run_id> --wait`, again while it
   says running. Never `ccx resume` a run that is still running. Don't pipe ccx output through `tail`/`head`: the
   result is one small JSON object, and a pipe on a long run hits your shell's timeout.
+- **Several authorized pieces:** plan with task-split `check`; pieces sharing a file go to one piece or to you,
+  never in parallel (`q run` gives parallel writers in a clean git checkout their own worktree; otherwise they
+  share this checkout). `ccx q add "<title>" --brief "..." --check "..."`
+  per piece (`--dep <id>` for an order), then `ccx q run --bg`. Your own pieces, shortest first, must not touch
+  a queued piece's files (its undo snapshot and check would take in your edits). `ccx q ls` shows a running
+  piece's run id as `live`: `ccx show <live ids> --any --wait` hands back each one as it finishes. Accept by
+  check+review plus a diff glance, then run the union of the checks. Pieces under `waiting` / `unmerged` ran in a
+  worktree: merge each listed branch, then `ccx q done <id> --ok 1` and `ccx q run` again; `dep_blocked` pieces wait
+  on one that failed (`references/three-way.md`). `last_run` with `stopped: backpressure`
+  (quota/auth): start nothing new until it has reset.
 - **Leave `--review` at its default (auto)**; `--review on` / `--risk visible` only for risky or user-facing work
   (and for an L2 auto-merge, which needs a passed review).
 - **Never ask the sub-agent to commit** (Codex's sandbox blocks `.git` writes: wasted turns). You commit after
@@ -123,10 +133,12 @@ A printed result with a `run_id` means that delegation ran: do not send the same
   (a command, a CLI) and no test runs it as a real process: resume once asking for one.
 - `verification: not-run` = unverified — say so.
 - A `review` field is the independent review: `pass` (its notes are optional reading) or `issues` with
-  `file:line`. ccx runs one fix round itself (`show --wait` follows it); after that, `review_failed` /
-  `needs_lead` is your call. Judge `kind` only from `ccx show <run_id> --wait` (a plain `show` can see the first
+  `file:line`. ccx runs one fix round itself (`show --wait` follows it); after that, `needs_lead` is
+  your call and `review_failed` is below. Judge `kind` only from `ccx show <run_id> --wait` (a plain `show` can see the first
   record before the fix round starts; resuming then collides with it). `review_issues` there means no fix round
   ran (no session to resume, or it failed to start): fix it yourself or dispatch it again.
+- `review_failed` (the fix round did not satisfy the review): check each `[must]` item against the diff; fix
+  the real ones yourself and drop the wrong ones. Don't `ccx resume` for it.
 
 Then give your verdict:
 `ccx verify <run_id> --ok 1|0 [--reason unfinished|wrong|overreach|other] [--note "..."]` — this calibrates
