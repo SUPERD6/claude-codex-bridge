@@ -107,6 +107,28 @@ class TestRead(AdapterEnv):
         plain = [{"ts": 1.0, "who": "person", "kind": "ask", "text": "Fix it.\nKeep the API."}]
         self.assertEqual(cs.drop_lead_only(plain), plain)                 # untouched when nothing matches
 
+    def test_lead_only_filter_keeps_specs_about_delegation_itself(self):
+        # review of the first version: product requirements about delegation, file names like claude.py and
+        # "don't write X yourself" constraints were dropped without a word. Only a clause that is ALL hand-off goes.
+        keep = ["Add a --to flag so the queue can delegate the task to codex when Claude is out of quota.",
+                "Bug: ccx run should hand the work to a sub-agent through ccx even when the brief is long. "
+                "Fix it in delegate.py.",
+                "把这个功能交给 Claude 审查之前先跑测试。实现 parser。",
+                "Make sure we never write code yourself in tests",
+                "Fix a.py. 不要自己写解析器，用 json 模块。",
+                "Hand it to claude.py so it parses.",
+                "交给 codex 的 argv 里要加 --json。",
+                "Never write code yourself in prod; use the generator."]
+        for t in keep:
+            dropped = []
+            self.assertEqual(cs.drop_lead_only([{"kind": "ask", "text": t}], dropped)[0]["text"], t)
+            self.assertEqual(dropped, [], t)
+        dropped = []
+        out = cs.drop_lead_only([{"kind": "ask", "text": "Implement X.Do not edit files yourself."},
+                                 {"kind": "ask", "text": "不要自己改文件，交给子智能体。实现 Y。"}], dropped)
+        self.assertEqual([e["text"] for e in out], ["Implement X.", "实现 Y。"])   # no space after the stop
+        self.assertEqual(len(dropped), 3)
+
     def test_codex_and_dsh_events(self):
         evs = cs.events_codex(_w(self.work / "r.jsonl", codex_session(str(self.work))))
         self.assertEqual([e["text"] for e in evs if e["kind"] == "file"], ["src/parse.py"])
@@ -144,6 +166,20 @@ class TestUse(AdapterEnv):
         slug = re.sub(r"[^A-Za-z0-9]", "-", str(self.work.resolve()))
         _w(self.home_claude / "projects" / slug / f"{SID}.jsonl", claude_lead())
 
+    def test_lead_only_clauses_left_out_are_said_and_recorded(self):
+        slug = re.sub(r"[^A-Za-z0-9]", "-", str(self.work.resolve()))
+        _w(self.home_claude / "projects" / slug / f"{SID}.jsonl", [
+            {"type": "user", "timestamp": _iso(30), "message": {"content":
+                "Fix average() in calc.py. Do not edit files yourself: hand the implementation to a sub-agent "
+                "through ccx."}}])
+        out = self.j("run", "--from", "claude", "--to", "codex", "--tier", "T2", "--mode", "write", "fix calc.py",
+                     env=self.LEAD)
+        prompt = self.calls()[-1]["prompt"]
+        self.assertIn("Fix average() in calc.py.", prompt)
+        self.assertNotIn("hand the implementation", prompt)
+        self.assertIn("ccx left out 2 clause(s)", prompt)
+        self.assertEqual(len(self.rec(out["run_id"])["shared_context"]["lead_only_dropped"]), 2)
+
     def test_write_task_gets_the_leads_context(self):
         self.lead()
         out = self.j("run", "--from", "claude", "--to", "codex", "--tier", "T2", "--mode", "write", "fix calc.py",
@@ -162,9 +198,11 @@ class TestUse(AdapterEnv):
         self.j("run", "--from", "claude", "--to", "codex", "--tier", "T2", "--mode", "read", "look at calc.py",
                env=self.LEAD)
         self.assertNotIn(MARK, self.calls()[-1]["prompt"])
+        self.assertNotIn("you are the implementer", self.calls()[-1]["prompt"])      # read, and no block either
         self.j("run", "--from", "claude", "--to", "codex", "--tier", "T2", "--mode", "read", "--context", "on",
                "--new", "look at calc.py", env=self.LEAD)
         self.assertIn(MARK, self.calls()[-1]["prompt"])
+        self.assertNotIn("you are the implementer", self.calls()[-1]["prompt"])      # a read task is no implementer
         self.j("run", "--from", "claude", "--to", "codex", "--tier", "T2", "--mode", "write", "--context", "off",
                "--new", "fix calc.py", env=self.LEAD)
         self.assertNotIn(MARK, self.calls()[-1]["prompt"])
@@ -172,6 +210,7 @@ class TestUse(AdapterEnv):
     def test_no_lead_session_no_context(self):
         out = self.j("run", "--from", "user", "--to", "codex", "--tier", "T2", "--mode", "write", "fix calc.py")
         self.assertNotIn(MARK, self.calls()[-1]["prompt"])
+        self.assertNotIn("that shared work context block", self.calls()[-1]["prompt"])   # no block to refer to
         self.assertIsNone(self.rec(out["run_id"])["shared_context"]["source"])
 
     def test_peek(self):

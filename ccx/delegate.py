@@ -32,12 +32,13 @@ from .runners import BUILDERS, Outcome, execute, usage_dict
 from .agents.codex import _add_children, _codex_growth, _codex_seen, _codex_total  # noqa: F401
 from .ledger import write_record as _write_record  # noqa: F401
 from .plan import _fallback_plan, _plan, _provider_envs, _rung_spec, _usable, _within_budget, other  # noqa: F401
-from .prompts import (CONTINUE, ESCALATE, FOLLOWUP, NEEDS_WRITE, POLICY_MARKERS, POLICY_RETRY, PROMPT,  # noqa: F401
+from .prompts import (CONTINUE, ESCALATE, FOLLOWUP, LEAD_NOTE, NEEDS_WRITE, POLICY_MARKERS, POLICY_RETRY, PROMPT,  # noqa: F401
                       REVIEW_CALLER, REVIEW_FINISH, REVIEW_PERMISSION, SELFCHECK, SELFCHECK_CMD, _policy_rejections)
 from .review import review_run as _review  # noqa: F401
 from .verdicts import (REASONS, SOFT_AFTER_H, _hard_verdict, _soft_verdict, soft_verdicts, verify,  # noqa: F401
                        verify_builtin)
-from .workspace import _git, diffstat, make_worktree, run_check, run_snapshot, undo, undo_snapshot  # noqa: F401
+from .workspace import (_git, chain_snapshot, diffstat, make_worktree, mark_run_end, run_check,  # noqa: F401
+                        run_snapshot, undo, undo_snapshot)
 
 AGENTS = DELEGATE_AGENTS
 
@@ -441,15 +442,18 @@ def run(req: Request, p: Paths) -> dict:
         if shared:
             (run_dir / "shared-context.md").write_text(shared, encoding="utf-8")
             brief += "\n\n" + shared
+    # "you are the implementer" only where it is true and the block it refers to is there: a write run with the
+    # lead's shared context attached; never ccx's read-only reviewer or a read task
+    lead_note = LEAD_NOTE if shared and req.mode == "write" and not reviewer else ""
     if cont:
         first_prompt = CONTINUE.format(run_id=run_id, caller=req.caller, cwd=cwd, brief=brief,
-                                       mode_text=mode_text, selfcheck=selfcheck)
+                                       mode_text=mode_text, selfcheck=selfcheck, lead_note=lead_note)
     elif prev:
         first_prompt = FOLLOWUP.format(run_id=run_id, brief=req.brief)
     else:
         first_prompt = PROMPT.format(
             run_id=run_id, caller=req.caller, cwd=cwd, brief=brief,
-            mode_text=mode_text, selfcheck=selfcheck,
+            mode_text=mode_text, selfcheck=selfcheck, lead_note=lead_note,
             context_line=f"Project context (read first): {ctx}\n" if ctx else "",
             memory_line=(f"User background index (open only if the task needs it): {p.memory_index}\n"
                          if p.memory_index.exists() else "") + _brief_notes(p, cfg, req.to, brief, req.cwd.resolve()),
@@ -490,8 +494,11 @@ def run(req: Request, p: Paths) -> dict:
         # a fresh task takes its own snapshot; a resume or review fix round inherits the one of the run it goes on
         # from (followed back the chain), so its review sees the whole change and `ccx undo` of any link in the
         # chain puts back what the chain changed. Before, a fix run had none: resuming it gave a review no diff.
+        # Only while nobody else touched the tree between the links (no commit, no edit): otherwise, and for a
+        # board message answered in the session, the run takes a fresh snapshot of its own (chain_snapshot).
         try:
-            snap = undo_snapshot(cwd) if (not prev or cont) else run_snapshot(p, record)
+            snap = (chain_snapshot(p, record, cwd, req.resume_run) if prev and not cont and not req.side_message
+                    else undo_snapshot(cwd))
         except Exception:  # noqa: BLE001 — a missing git or an odd old record never fails the run
             snap = None
         if snap:
@@ -816,6 +823,7 @@ def run(req: Request, p: Paths) -> dict:
             ds = None
         if ds:
             record["diffstat"] = ds
+        mark_run_end(run_dir, cwd)           # the tree as this run left it: a resume inherits only if still so
         if snap and "edited_tests" not in record:
             # changed pre-existing tests are flagged for every write run, not only when a review step ran
             # (review off, an ephemeral run): the lead looks at those first

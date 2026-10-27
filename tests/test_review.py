@@ -474,9 +474,43 @@ class TestReviewRun(Env):
         self.assertIn("-x = 1", last)                                       # diffed from the first run's snapshot
         self.assertIn("+x = 3", last)
         self.assertEqual(again["diffstat"], "1 file changed, 1 insertion(+), 1 deletion(-)")
+        self.assertNotIn("you are the implementer", last)                   # the read-only reviewer is not told so
         u = self.ccx("undo", again["run_id"], "--apply")
         self.assertEqual(u.returncode, 0, u.stderr)
         self.assertEqual((self.work / "a.py").read_text(encoding="utf-8"), "x = 1\n")   # the whole chain rolled back
+        self.assertIn("whole chain", json.loads(u.stdout)["warning"])         # and the person is told so
+
+    def test_resume_after_the_lead_committed_does_not_inherit_the_chain_snapshot(self):
+        # review: the lead accepted and committed run 1, then resumed it; `ccx undo FIX --apply` checked out the
+        # pre-chain base and reverted the committed work. Now the fix run counts from its own start.
+        from ccx.config import Paths
+        runs = Paths(self.hub).runs
+        first = self.go("--review", "off")
+        g = ["git", "-c", "user.name=t", "-c", "user.email=t@t"]
+        subprocess.run([*g, "commit", "-qam", "accept run 1"], cwd=self.work, check=True)
+        r = self.ccx("resume", "--review", "off", first["run_id"], "set x to 3 instead",
+                     env={"FAKE_WRITE_RESUMED": f"{self.work / 'a.py'}=x = 3\n"})
+        self.assertIn(r.returncode, (0, 2), r.stderr)
+        again = json.loads(r.stdout or "null") or self.fail(r.stderr)
+        snap = json.loads((runs / again["run_id"] / "undo.json").read_text(encoding="utf-8"))
+        self.assertIn("chain_broken", snap)
+        self.assertNotIn("chain_from", snap)
+        u = self.ccx("undo", again["run_id"], "--apply")
+        self.assertEqual(u.returncode, 0, u.stderr)
+        self.assertEqual((self.work / "a.py").read_text(encoding="utf-8"), "x = 2\n")   # the commit is kept
+
+    def test_resume_after_the_lead_edited_does_not_inherit_the_chain_snapshot(self):
+        from ccx.config import Paths
+        runs = Paths(self.hub).runs
+        first = self.go("--review", "off")
+        (self.work / "b.py").write_text("y = 1\n", encoding="utf-8")       # the lead's own new file in between
+        r = self.ccx("resume", "--review", "off", first["run_id"], "set x to 3 instead",
+                     env={"FAKE_WRITE_RESUMED": f"{self.work / 'a.py'}=x = 3\n"})
+        again = json.loads(r.stdout or "null") or self.fail(r.stderr)
+        self.assertIn("chain_broken", json.loads((runs / again["run_id"] / "undo.json").read_text(encoding="utf-8")))
+        self.ccx("undo", again["run_id"], "--apply")
+        self.assertEqual((self.work / "a.py").read_text(encoding="utf-8"), "x = 2\n")
+        self.assertTrue((self.work / "b.py").exists())                       # not moved aside as the run's file
 
     def test_reviewer_cache_ttl_is_opt_in_and_reviewer_only(self):
         def settings(call):

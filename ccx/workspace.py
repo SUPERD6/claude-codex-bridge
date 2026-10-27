@@ -131,7 +131,53 @@ def undo_snapshot(cwd: Path) -> dict | None:
     if not base:
         return None
     _, untracked = _git(Path(top), "ls-files", "--others", "--exclude-standard")
-    return {"repo": top, "base": base, "untracked": untracked.splitlines()}
+    return {"repo": top, "base": base, "head": head, "untracked": untracked.splitlines()}
+
+
+def tree_state(cwd: Path) -> dict | None:
+    """HEAD, the content of the working tree (tracked files, incl. uncommitted edits) and the untracked files."""
+    snap = undo_snapshot(cwd)
+    if not snap:
+        return None
+    rc, tree = _git(cwd, "rev-parse", snap["base"] + "^{tree}")
+    return {"head": snap.get("head"), "tree": tree if rc == 0 else None, "untracked": sorted(snap["untracked"])}
+
+
+def mark_run_end(run_dir: Path, cwd: Path) -> None:
+    """Add to a write run's undo.json how it left the tree, so a resume can tell whether anything changed since."""
+    f = run_dir / "undo.json"
+    try:
+        if f.exists():
+            snap = json.loads(f.read_text(encoding="utf-8"))
+            snap["after"] = tree_state(cwd)
+            f.write_text(json.dumps(snap), encoding="utf-8")
+    except (OSError, ValueError, TypeError):    # best effort: without it a resume just checks HEAD
+        pass
+
+
+def chain_snapshot(p: Paths, record: dict, cwd: Path, prev_id: str | None) -> dict | None:
+    """A resume / review fix round's undo snapshot: the chain's first one when the tree is still exactly as the
+    previous link left it (same HEAD, same files; HEAD only when that link never finished), so its review and
+    `ccx undo` cover the whole chain. When the lead committed or edited in between, a fresh snapshot instead:
+    undoing then must not revert the lead's own work."""
+    inherited = run_snapshot(p, record)
+    if not inherited:
+        return undo_snapshot(cwd)
+    after = inherited.get("after")
+    if after:
+        same = after == tree_state(cwd)
+    else:
+        now = undo_snapshot(cwd)
+        same = bool(inherited.get("head")) and bool(now) and inherited.get("head") == now.get("head")
+    if not same:
+        snap = undo_snapshot(cwd)
+        if snap:
+            snap["chain_broken"] = (f"the tree changed after run {prev_id} ended (a commit or an edit): this run's "
+                                    "review and undo count from its own start")
+        return snap
+    snap = {k: v for k, v in inherited.items() if k != "after"}
+    snap["chain_from"] = inherited.get("chain_from") or prev_id
+    return snap
 
 
 def run_snapshot(p: Paths, record: dict, depth: int = 5) -> dict | None:
@@ -186,6 +232,13 @@ def undo(p: Paths, run_id: str, apply: bool = False, wrong: bool = False) -> dic
     restore = [x for x in changed.splitlines() if x]
     out = {"run_id": run_id, "restore": restore, "move_aside": new_files, "applied": False,
            "warning": "also reverts any edits you made to these files after the run"}
+    if snap.get("chain_from"):
+        out["chain_from"] = snap["chain_from"]
+        out["warning"] = (f"this run went on from run {snap['chain_from']}: undo puts back what the whole chain "
+                          "changed since that run started (the earlier runs' work too), and any edits you made to "
+                          "these files after the run")
+        if wrong:
+            out["wrong_scope"] = f"only {run_id} is recorded as wrong; `ccx verify` the earlier runs yourself"
     if apply:
         if restore:
             rc, msg = _git(repo, "checkout", base, "--", *restore)
