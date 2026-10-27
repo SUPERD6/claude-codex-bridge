@@ -197,7 +197,11 @@ class TestWalk(unittest.TestCase):
                 (root / rel).write_text("{}", encoding="utf-8")
             want = [f.relative_to(root).as_posix() for f in root.rglob("*.jsonl")]
             got = [f.relative_to(root).as_posix() for f in usage.walk(root, "*.jsonl")]
-            self.assertEqual(got, want)
+            self.assertEqual(sorted(got), sorted(want))
+            # rglob's depth order differs by Python version (3.12+ lists a level before going deeper), so
+            # only sibling folders' order is compared: walk must not reverse it
+            siblings = lambda xs: [x for x in xs if x.count("/") == 1]  # noqa: E731
+            self.assertEqual(siblings(got), siblings(want))
 
     def test_session_files_one_bad_folder_entry_and_symlinked_folder(self):
         import os
