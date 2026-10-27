@@ -105,6 +105,16 @@ class TestCoreFeaturesTaught(unittest.TestCase):
             for w in words:
                 self.assertTrue(mentioned(w, text), f"core feature '{feature}': no README.zh.md mentions {w!r}")
 
+    def test_queue_merge_step_taught_where_pieces_are_planned(self):
+        """Parallel queue writers run in worktrees (#141): the skill text that plans several pieces must not say
+        they all run in this checkout, and must teach the merge + `ccx q done` step for waiting pieces."""
+        for name in ("SKILL.md", "README.zh.md"):
+            text = (SKILLS / "agent-delegate" / name).read_text(encoding="utf-8")
+            self.assertNotIn("runs them all in this checkout", text, name)
+            self.assertNotIn("让所有块在当前检出里跑", text, name)
+            for w in ("worktree", "`waiting`", "`unmerged`", "`dep_blocked`", "ccx q done <id> --ok 1"):
+                self.assertIn(w, text, f"{name}: {w}")
+
     def test_whole_word(self):
         self.assertFalse(mentioned("--from", "use --from-transcript"))
         self.assertTrue(mentioned("--from", "`--from codex`"))

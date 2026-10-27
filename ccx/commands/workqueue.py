@@ -5,7 +5,10 @@ import functools
 import json
 import os
 import subprocess
-from concurrent.futures import ThreadPoolExecutor
+import sys
+import time
+import uuid
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
 from .. import lanes, queue as wq
@@ -40,8 +43,16 @@ def cmd_q(a) -> int:
             print("\n".join(wq.tree(q)) or "(queue empty)")
         else:
             gate = bool(getattr(a, "gate", False))
-            _out({"items": [q["items"][i] for i in q["order"]], "ready": [x["id"] for x in wq.ready(q, gate)],
-                  "spent_usd": wq.spent(q), "budget_usd": q["budget_usd"]})
+            out = {"items": [q["items"][i] for i in q["order"]], "ready": [x["id"] for x in wq.ready(q, gate)],
+                   "spent_usd": wq.spent(q), "budget_usd": q["budget_usd"]}
+            held = runner(root)
+            if held:
+                out["runner"] = held                 # a `q run` (--bg or not) is working on it now
+            try:
+                out["last_run"] = json.loads((wq.qdir(root) / LAST).read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                pass
+            _out(out)
     elif a.q_cmd == "budget":
         wq.set_budget(root, a.usd)
         _out({"budget_usd": a.usd})
@@ -147,7 +158,7 @@ def _one(it: dict, root: Path, caller: str, p, cfg, warm: str | None = None, got
     """Route and run one queue item; write its outcome back. Never raises (a thread must report).
     warm: a lane's last run (ccx/lanes.py), whose session takes this item as a new task; got["rec"]: its record.
     worktree: a write item that runs beside other writers works in its own git worktree (as `ccx batch`)."""
-    rec = None
+    rec, live = None, None
     try:
         if it.get("budget_usd") is not None and float(it.get("cost_usd") or 0) >= float(it["budget_usd"]):
             wq.update(root, it["id"], status="blocked", summary="its budget is used up")
@@ -162,12 +173,14 @@ def _one(it: dict, root: Path, caller: str, p, cfg, warm: str | None = None, got
         if kw is None:
             wq.update(root, it["id"], status="todo", summary=route.get("advice"))
             return {"id": it["id"], "status": "todo", "skipped": route.get("advice")}
-        wq.update(root, it["id"], status="doing", agent=kw["to"])
+        # named up front: `ccx q ls` shows it as `live` while it runs, so a lead can `ccx show <ids> --any --wait`
+        live = time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:4]
+        wq.update(root, it["id"], status="doing", agent=kw["to"], live=live)
         resume = it.get("run") if it.get("resume") else None
         left = (max(0.0, float(it["budget_usd"]) - float(it.get("cost_usd") or 0))   # F11: the cap is what it has left
                 if it.get("budget_usd") is not None else None)
         brief = (RESUME_NOTE + spec["brief"]) if resume else spec["brief"]
-        rec = run(Request(brief=brief, mode=spec["mode"], mode_source=spec["mode_source"],
+        rec = run(Request(brief=brief, mode=spec["mode"], mode_source=spec["mode_source"], run_id=live,
                           mode_why=spec["mode_why"], cwd=root, caller=caller, label=f"q:{it['id']}",
                           check=it.get("check"), resume_run=resume or warm, continued=bool(warm and not resume),
                           budget_usd=left, worktree=worktree, **kw), p)
@@ -177,7 +190,7 @@ def _one(it: dict, root: Path, caller: str, p, cfg, warm: str | None = None, got
         status = res.get("status")
         cost = _cost(rec)
         fields = {"run": rec["run_id"], "agent": rec["to"], "summary": (res.get("summary") or "")[:300],
-                  "cost_usd": round(float(it.get("cost_usd") or 0) + cost, 6), "resume": False}
+                  "cost_usd": round(float(it.get("cost_usd") or 0) + cost, 6), "resume": False, "live": None}
         where, sha = _tree_fields(rec)
         fields.update(where)
         pieces = wq.parse_split(rec.get("result")) if status == "blocked" else None
@@ -206,6 +219,8 @@ def _one(it: dict, root: Path, caller: str, p, cfg, warm: str | None = None, got
         why = f"{type(e).__name__}: {e}"[:300]
         row = {"id": it["id"], "status": "failed", "error": why}
         ran = {}
+        if not isinstance(rec, dict) and live:          # run() itself raised: its run (named up front) may exist
+            rec = _run_record(p, live)
         if isinstance(rec, dict) and rec.get("run_id"):   # it failed after the run: keep the run and what it cost
             ran = {"run": rec["run_id"], "agent": rec.get("to")}
             try:
@@ -213,11 +228,272 @@ def _one(it: dict, root: Path, caller: str, p, cfg, warm: str | None = None, got
             except Exception:  # noqa: BLE001
                 pass
             row["run"] = rec["run_id"]
+        elif live:
+            ran = {"run": live}                          # no record yet: still name the run it was started as
+            row["run"] = live
         try:
-            wq.update(root, it["id"], status="failed", summary=why, **ran)
+            wq.update(root, it["id"], status="failed", summary=why, live=None, **ran)
         except Exception as e2:  # noqa: BLE001   writing the failure back failed too: still report, never raise
             row["not_recorded"] = f"{type(e2).__name__}: {e2}"[:300]
         return row
+
+
+def _run_record(p, run_id: str) -> dict | None:
+    """The record ccx wrote for run_id, if any (None when it was never written or cannot be read)."""
+    try:
+        from .. import ledger
+        rec = ledger.read_record(Path(p.runs) / run_id / "run.json")
+        return rec if isinstance(rec, dict) else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+PRESSURE_KINDS = ("quota", "auth")   # an attempt that hit these (runners.py: rate limits are `quota`): start nothing new
+
+
+def _pressure(rec: dict | None) -> str | None:
+    """The quota/auth kind any attempt of this run hit (a fallback to another agent included), else None."""
+    for x in (rec or {}).get("attempts") or []:
+        if x.get("kind") in PRESSURE_KINDS:
+            return x["kind"]
+    return (rec or {}).get("kind") if (rec or {}).get("kind") in PRESSURE_KINDS else None
+
+
+def _over_budget(root: Path) -> dict | None:
+    q = wq.load(root)
+    if q["budget_usd"] is not None and wq.spent(q) >= float(q["budget_usd"]):
+        return {"stopped": "budget reached", "spent_usd": wq.spent(q), "budget_usd": q["budget_usd"],
+                "ask": "raise it with `ccx q budget <usd>` if the rest is worth it"}
+    return None
+
+
+def _backpressure(kind: str, rec: dict | None) -> dict:
+    return {"stopped": "backpressure", "kind": kind, "run": (rec or {}).get("run_id"),
+            "ask": "a run hit a quota/auth limit (its fallback may have finished the item): nothing new was "
+                   "started; run `ccx q run --max 1` when it has reset"}
+
+
+def _writer(it: dict) -> bool:
+    return _mode(it)["mode"] == "write"
+
+
+def _place(root: Path, new: list[str], alongside: dict[str, bool], st: dict) -> dict[str, bool]:
+    """{writer id: True} for the writers about to start that get their own git worktree. Writers that run at the
+    same time (these and `alongside`, {writer still running: in a worktree}) must not trample each other: with more
+    than one, each new one gets a worktree, as in `ccx batch`. Outside git there is no worktree, and with uncommitted
+    changes a worktree (made from the last commit) would miss them: then they share the folder, as before (listed
+    in st["shared"]); task-split's `files` keep them apart. st["git"] caches whether the project is in git."""
+    if not new or len(new) + len(alongside) < 2:
+        return {}
+    if st.get("git") is None:
+        st["git"] = _in_git(root)
+    if not st["git"]:
+        return {}
+    if not _clean(root):
+        st["shared"] += [i for i, tree in alongside.items() if not tree] + new
+        return {}
+    return {i: True for i in new}
+
+
+def _waves(a, root: Path, caller: str, p, cfg, width: int, n: int, done: list,
+           shared: list | None = None) -> dict | None:
+    """Warm lanes: ready items for the same agent and mode share at most n sessions, one after another. An item is
+    tried once per `q run` (one routing skipped stays todo and would otherwise be picked again and again). Writers
+    of one round get worktrees (_place). A run that hit quota/auth: the lanes start nothing new (their next items
+    stay todo), then it stops (`stopped: backpressure`)."""
+    gate = bool(getattr(a, "gate", False))
+    st = {"git": None, "shared": shared if shared is not None else []}
+    started: set[str] = set()
+    hit: dict = {}
+    while True:
+        wq.propagate(root)             # a stuck dependency: what waits for it is dep_blocked, not left todo forever
+        stop = _over_budget(root)
+        if stop:
+            return stop
+        batch = [it for it in wq.ready(wq.load(root), gate) if it["id"] not in started]
+        if not batch:
+            return None
+        started.update(it["id"] for it in batch)
+        tree = _place(root, [it["id"] for it in batch if _writer(it)], {}, st)
+
+        def step(it, warm):
+            if hit:
+                return {"id": it["id"], "skipped": "backpressure: a run hit a quota/auth limit"}, None
+            got: dict = {}
+            kw = {"worktree": True} if tree.get(it["id"]) else {}
+            res = _one(it, root, caller, p, cfg, warm=warm, got=got, **kw)
+            kind = _pressure(got.get("rec"))
+            if kind:
+                hit.setdefault("stop", _backpressure(kind, got.get("rec")))
+            return res, got.get("rec")
+        done += lanes.run_lanes(lanes.split(batch, n, lambda it: (it.get("to"), it.get("mode"))), step,
+                                lanes.limits(cfg), width)
+        wq.close_parents(root)
+        if hit:
+            return hit["stop"]
+        if a.once:
+            return None
+
+
+def _refill(a, root: Path, caller: str, p, cfg, width: int, done: list,
+            shared: list | None = None) -> dict | None:
+    """At most `width` runs at once; whenever one finishes, the slot goes to the next ready item (submit +
+    wait-first-completed, not wave by wave). --once: only the items ready at the start. Ready as the queue says
+    (dependencies accepted, --gate, dep_blocked propagated before each fill), and no file shared with a run in
+    flight; a writer starting beside other writers gets its own worktree (_place). A run any of whose attempts
+    hit quota/auth: nothing new starts, the runs in flight finish, then it stops (`stopped: backpressure`)."""
+    gate = bool(getattr(a, "gate", False))
+    st = {"git": None, "shared": shared if shared is not None else []}
+    started: set[str] = set()           # an item is tried once per `q run` (one routing skipped stays todo)
+    stop: dict | None = None
+    first = True
+    with ThreadPoolExecutor(max_workers=max(1, width)) as ex:
+        live: dict = {}                 # future -> (item, got, in a worktree)
+        while True:
+            if stop is None and (first or not a.once):
+                wq.propagate(root)
+                stop = _over_budget(root)
+                if stop is None:
+                    running = [x[0] for x in live.values()]
+                    new: list[dict] = []
+                    for it in wq.ready(wq.load(root), gate):
+                        if len(live) + len(new) >= width:
+                            break
+                        if it["id"] in started:
+                            continue
+                        # held_by sees a run as `doing` only once its thread wrote that: check the runs in flight
+                        if any(wq.overlaps(it, o) for o in running + new):
+                            continue
+                        new.append(it)
+                    tree = _place(root, [it["id"] for it in new if _writer(it)],
+                                  {x[0]["id"]: x[2] for x in live.values() if _writer(x[0])}, st)
+                    for it in new:
+                        started.add(it["id"])
+                        got: dict = {}
+                        wt = bool(tree.get(it["id"]))
+                        kw = {"worktree": True} if wt else {}
+                        live[ex.submit(_one, it, root, caller, p, cfg, None, got, **kw)] = (it, got, wt)
+            first = False
+            if not live:
+                return stop
+            fin, _ = wait(list(live), return_when=FIRST_COMPLETED)
+            for fu in fin:
+                _, got, _ = live.pop(fu)
+                done.append(fu.result())
+                kind = _pressure(got.get("rec"))
+                if kind and stop is None:
+                    stop = _backpressure(kind, got.get("rec"))
+            wq.close_parents(root)
+
+
+RUNNER = "run.lock"                     # the live `q run` / `q resume` of this queue: {"pid", "started"}
+LAST = "last-run.json"                  # how the last one ended (read by `ccx q ls`, for a --bg run's lead)
+
+
+def runner(root: Path) -> dict | None:
+    """The `q run` working on this queue now, or None (no lock, or its process is gone)."""
+    from ..runners import pid_alive
+    try:
+        info = json.loads((wq.qdir(root) / RUNNER).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return info if isinstance(info, dict) and pid_alive(info.get("pid")) else None
+
+
+def _claim(root: Path) -> dict | None:
+    """Take the queue's runner lock; the holder's info if another live `q run` has it (two runners would hand
+    the same ready item out twice, and `q resume` would re-dispatch items the other one is running)."""
+    wq.qdir(root).mkdir(parents=True, exist_ok=True)
+    f = wq.qdir(root) / RUNNER
+    for _ in range(2):
+        try:
+            fd = os.open(f, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            held = runner(root)
+            if held:
+                return held
+            try:
+                f.unlink()              # left by a `q run` that was killed
+            except FileNotFoundError:
+                pass
+            continue
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump({"pid": os.getpid(), "started": time.time()}, fh)
+        return None
+    return runner(root) or {"pid": None}
+
+
+def _release(root: Path) -> None:
+    f = wq.qdir(root) / RUNNER
+    try:
+        if json.loads(f.read_text(encoding="utf-8")).get("pid") == os.getpid():
+            f.unlink()
+    except (OSError, ValueError):
+        pass
+
+
+def _background(a, root: Path) -> int:
+    """`ccx q run --bg`: the same command detached (hidden console on Windows), its output in the queue folder.
+    detach() drops --bg from the child's arguments, so the child runs in the foreground of its hidden console."""
+    from .common import detach
+    held = runner(root)
+    if held:
+        _out(_busy(held))
+        return 2
+    log = wq.qdir(root) / f"run-bg-{time.strftime('%Y%m%d-%H%M%S')}-{os.getpid()}.log"
+    detach(sys.argv[1:], log, {})
+    _out({"state": "started", "log": str(log),
+          "next": "ccx q ls: an item being run shows its run id as `live`; `ccx show <live ids> --any --wait` hands "
+                  "back each one as it finishes; `runner` is set while the batch runs, `last_run` says how it ended"})
+    return 0
+
+
+def _busy(held: dict) -> dict:
+    return {"stopped": "already running", "pid": held.get("pid"),
+            "ask": "another `ccx q run` is working on this queue: follow it with `ccx q ls`, or stop that process "
+                   "first"}
+
+
+def _finish(root: Path, done: list, stop: dict | None, gate: bool = False,
+            shared: list | None = None) -> tuple[dict, int]:
+    """The summary `q run` prints and its exit code. A stop adds its fields (exit 2) unless it is backpressure and
+    nothing is left open: then every item is closed and the summary only notes the limit (exit 0). New keys
+    (dep_blocked, waiting, unmerged, shared_folder, restored, backpressure) only when there is something to say."""
+    wq.propagate(root)
+    q = wq.load(root)
+    out = {"results": done, "open": [i for i in q["order"] if q["items"][i]["status"] not in ("done", "failed")],
+           "spent_usd": wq.spent(q), "tree": wq.tree(q)}
+    stuck = [i for i in q["order"] if q["items"][i]["status"] == "dep_blocked"]
+    if stuck:
+        # {piece: the pieces that did not finish behind it}: settle those (fix, then `ccx q done <id> --ok 1`)
+        out["dep_blocked"] = {i: q["items"][i].get("blocked_by") or [] for i in stuck}
+        out["settle"] = ("each piece under dep_blocked waits on the pieces listed with it, which failed, got "
+                         "blocked or need write access: fix or redo those, then `ccx q done <id> --ok 1` and "
+                         "`ccx q run` again (or drop the waiting pieces)")
+    waits = wq.waiting(q, gate)
+    if waits:
+        out["waiting"] = waits
+        out["next"] = ("they wait for your verdict on what they depend on: check it (merge its worktree branch "
+                       "first, if it has one), then `ccx q done <id> --ok 1` and `ccx q run` again")
+    waited_on = {x for w in waits for x in w["on"]}
+    loose = [u for u in wq.unmerged(q) if u["id"] not in waited_on]
+    if loose:
+        out["unmerged"] = loose          # nothing waits on them, but their work is only on these branches
+    if shared:
+        out["shared_folder"] = {"ids": list(dict.fromkeys(shared)), "why": (
+            "the project has uncommitted changes, which a worktree (made from the last commit) would not see: these "
+            "writers worked side by side in the project folder, as before; commit first to give each its own "
+            "worktree")}
+    back = {r["id"]: r["restored"] for r in done if r.get("restored")}
+    if back:
+        # resumed = same session; fresh = started again; decide = needs you; finished = it had finished already
+        out["restored"] = back
+    if stop and stop.get("stopped") == "backpressure" and not out["open"]:
+        out["backpressure"] = {"kind": stop["kind"], "run": stop.get("run")}
+        stop = None
+    if stop:
+        return {**stop, **out}, 2       # out's spent_usd: counted after the runs in flight finished
+    return out, 0
 
 
 def _in_git(root: Path) -> bool:
@@ -241,6 +517,27 @@ def _clean(root: Path) -> bool:
 
 
 def _run(a, root: Path) -> int:
+    if getattr(a, "bg", False):
+        return _background(a, root)
+    held = _claim(root)
+    if held:
+        _out(_busy(held))
+        return 2
+    try:
+        out, code = _locked_run(a, root)
+    finally:
+        _release(root)
+    try:
+        (wq.qdir(root) / LAST).write_text(json.dumps(
+            {"ended": time.time(), "code": code, "stopped": out.get("stopped"), "kind": out.get("kind"),
+             "open": out.get("open"), "ask": out.get("ask")}, ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        pass
+    _out(out)
+    return code
+
+
+def _locked_run(a, root: Path) -> tuple[dict, int]:
     p = paths()
     cfg = load_config(p)
     caller = _caller(a.caller)
@@ -262,7 +559,7 @@ def _run(a, root: Path) -> int:
                     where, sha = _tree_fields(last)
                     wq.update(root, it["id"], status="done", run=last["run_id"], agent=last.get("to"), cost_usd=cost,
                               summary=str((last.get("result") or {}).get("summary") or "")[:300], resume=False,
-                              **where)
+                              live=None, **where)
                     row = {"id": it["id"], "status": "done", "run": last["run_id"], "restored": "finished"}
                     if where["worktree"]:
                         row.update(worktree=where["worktree"], branch=where["branch"], **({"commit": sha} if sha else {}))
@@ -270,80 +567,16 @@ def _run(a, root: Path) -> int:
                     continue
                 # the run it was in the middle of (a review's fix round included): its session goes on
                 run_id = last["run_id"] if last.get("session_id") else it.get("run")
-                wq.update(root, it["id"], status="todo", resume=bool(run_id), run=run_id, cost_usd=cost)
+                wq.update(root, it["id"], status="todo", resume=bool(run_id), run=run_id, cost_usd=cost, live=None)
     width = int(a.max or cfg["defaults"].get("max_parallel", 3))
     gate = bool(getattr(a, "gate", False))
-    git = None
-    shared: list[str] = []
-    while True:
-        wq.propagate(root)             # a stuck dependency: what waits for it is dep_blocked, not left todo forever
-        q = wq.load(root)
-        if q["budget_usd"] is not None and wq.spent(q) >= float(q["budget_usd"]):
-            _out({"stopped": "budget reached", "spent_usd": wq.spent(q), "budget_usd": q["budget_usd"],
-                  "results": done, "ask": "raise it with `ccx q budget <usd>` if the rest is worth it"})
-            return 2
-        n = lanes.width(getattr(a, "lanes", None), cfg)
-        batch = wq.ready(q, gate)      # pieces naming a common file are never in one round (queue.held_by)
-        batch = batch if n else batch[:width]
-        if not batch:
-            break
-        writers = [it["id"] for it in batch if _mode(it)["mode"] == "write"]
-        if len(writers) > 1 and git is None:
-            git = _in_git(root)
-        # parallel writers in one repo must not trample each other: each gets a worktree, as in `ccx batch`.
-        # Outside git there is no worktree, and with uncommitted changes a worktree (made from the last commit)
-        # would miss them: then they share the folder, as before; task-split's `files` keep them apart
-        split = len(writers) > 1 and bool(git)
-        if split and not _clean(root):
-            split = False
-            shared += writers
-        tree = {i: split for i in writers}
-        if n:
-            # warm lanes: ready items for the same agent and mode share at most n sessions, one after another
-            def step(it, warm):
-                got: dict = {}
-                return (_one(it, root, caller, p, cfg, warm=warm, got=got, worktree=tree.get(it["id"], False)),
-                        got.get("rec"))
-            done += lanes.run_lanes(lanes.split(batch, n, lambda it: (it.get("to"), it.get("mode"))), step,
-                                    lanes.limits(cfg), width)
-        else:
-            with ThreadPoolExecutor(max_workers=width) as ex:
-                done += list(ex.map(lambda it: _one(it, root, caller, p, cfg, worktree=tree.get(it["id"], False)),
-                                    batch))
-        wq.close_parents(root)
-        if a.once:
-            break
-    wq.propagate(root)
-    q = wq.load(root)
-    out = {"results": done, "open": [i for i in q["order"] if q["items"][i]["status"] not in ("done", "failed")],
-           "spent_usd": wq.spent(q), "tree": wq.tree(q)}
-    stuck = [i for i in q["order"] if q["items"][i]["status"] == "dep_blocked"]
-    if stuck:
-        # {piece: the pieces that did not finish behind it}: settle those (fix, then `ccx q done <id> --ok 1`)
-        out["dep_blocked"] = {i: q["items"][i].get("blocked_by") or [] for i in stuck}
-        out["settle"] = ("each piece under dep_blocked waits on the pieces listed with it, which failed, got "
-                         "blocked or need write access: fix or redo those, then `ccx q done <id> --ok 1` and "
-                         "`ccx q run` again (or drop the waiting pieces)")
-    wait = wq.waiting(q, gate)
-    if wait:
-        out["waiting"] = wait
-        out["next"] = ("they wait for your verdict on what they depend on: check it (merge its worktree branch "
-                       "first, if it has one), then `ccx q done <id> --ok 1` and `ccx q run` again")
-    waited_on = {x for w in wait for x in w["on"]}
-    loose = [u for u in wq.unmerged(q) if u["id"] not in waited_on]
-    if loose:
-        out["unmerged"] = loose          # nothing waits on them, but their work is only on these branches
-    if shared:
-        out["shared_folder"] = {"ids": list(dict.fromkeys(shared)), "why": (
-            "the project has uncommitted changes, which a worktree (made from the last commit) would not see: these "
-            "writers worked side by side in the project folder, as before; commit first to give each its own "
-            "worktree")}
-    back = {r["id"]: r["restored"] for r in done if r.get("restored")}
-    if back:
-        # resumed = same session; fresh = started again; decide = needs you; finished = it had finished already
-        out["restored"] = back
-    _out(out)
-    return 0
+    shared: list[str] = []            # writers that shared the folder (uncommitted changes): see _place
+    n = lanes.width(getattr(a, "lanes", None), cfg)
+    if n:
+        stop = _waves(a, root, caller, p, cfg, width, n, done, shared)
+    else:
+        stop = _refill(a, root, caller, p, cfg, width, done, shared)
+    return _finish(root, done, stop, gate, shared)
 
 
 def register(sub) -> None:
@@ -383,6 +616,9 @@ def register(sub) -> None:
         r.add_argument("--gate", action="store_true", help="an item's dependents start only after your verdict "
                        "on it (`ccx q done <id> --ok 1`), not as soon as its run reports done (default: off)")
         r.add_argument("--from", dest="caller")
+        r.add_argument("--bg", action="store_true", help="run detached; its output goes to a log in the queue "
+                       "folder; `ccx q ls` shows each running item's run id (`live`), the runner and how the last "
+                       "run ended")
     for x in (ad, bu, dn):
         x.add_argument("--cwd")
     qp.add_argument("--cwd")

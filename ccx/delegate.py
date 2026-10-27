@@ -79,6 +79,7 @@ class Request:
     review_round: int = 0           # 1 = this run fixes what a review found
     share_context: str | None = None  # auto | on | off: the lead's recent work, from its session file (context_share)
     namecheck: str | None = None    # warn | fail | off: static undefined-name check (None = [defaults] namecheck)
+    run_id: str | None = None       # the id to use (`ccx q run` names it up front so `q ls` can show it)
 
 
 def _busy(p: Paths, prev: dict, scan: int = 300) -> str | None:
@@ -402,7 +403,7 @@ def run(req: Request, p: Paths) -> dict:
         if req.tier == "auto":
             req.tier = prev.get("tier", "T2")
 
-    run_id = os.environ.pop("CCX_RUN_ID", None) or time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:4]
+    run_id = req.run_id or os.environ.pop("CCX_RUN_ID", None) or time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:4]
     run_dir = p.runs / run_id
     run_dir.mkdir(parents=True, exist_ok=True)
 

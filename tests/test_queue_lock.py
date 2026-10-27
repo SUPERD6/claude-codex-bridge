@@ -113,12 +113,47 @@ class TestLockRetries(unittest.TestCase):
     def test_fresh_lock_is_never_taken_over(self):
         wq.qdir(self.root).mkdir(parents=True)
         self.lock.write_bytes(b"another writer")
-        new = time.time() + 30             # taken just now, every time this waiter looks (fresh writers, contention)
-        os.utime(self.lock, (new, new))
-        with self.assertRaises(RuntimeError):     # waited past timeout, but the lock is not old: no takeover
+        stop = threading.Event()
+
+        def retake():                      # taken again just now, every time this waiter looks (contention)
+            while not stop.is_set():
+                new = time.time()
+                os.utime(self.lock, (new, new))
+                time.sleep(0.02)
+        th = threading.Thread(target=retake, daemon=True)
+        th.start()
+        self.addCleanup(th.join)
+        self.addCleanup(stop.set)
+        with self.assertRaises(RuntimeError):     # waited past timeout, but the lock is never old: no takeover
             with wq._lock(self.root, timeout=0.2):
                 pass
         self.assertEqual(self.lock.read_bytes(), b"another writer")
+
+    def test_lock_from_the_future_is_taken_over_before_the_deadline(self):
+        wq.qdir(self.root).mkdir(parents=True)
+        self.lock.write_bytes(b"crashed, server clock ahead")
+        new = time.time() + 3600           # clock skew on a shared folder, or a restored file: mtime never "old"
+        os.utime(self.lock, (new, new))
+        t = time.time()
+        with wq._lock(self.root, timeout=0.3):    # unchanged for > timeout as this waiter watched it: taken over
+            pass
+        self.assertGreaterEqual(time.time() - t, 0.3)
+        self.assertLess(time.time() - t, 0.6)    # before the 2 * timeout deadline
+        self.assertFalse(self.lock.exists())
+        wq.update(self.root, "q1", status="doing")                     # and later writes work again
+        self.assertFalse(self.lock.exists())
+
+    def test_unmarked_lock_is_released_only_while_still_unmarked(self):
+        def no_write(fd, data):
+            raise OSError(28, "No space left on device")
+        with mock.patch("ccx.queue.os.write", no_write):
+            with wq._lock(self.root, timeout=5):
+                pass
+        self.assertFalse(self.lock.exists())                            # ours (still empty): released
+        with mock.patch("ccx.queue.os.write", no_write):
+            with wq._lock(self.root, timeout=5):
+                self.lock.write_bytes(b"the writer that took it over")
+        self.assertEqual(self.lock.read_bytes(), b"the writer that took it over")
 
     def test_stale_lock_is_taken_over_at_once(self):
         wq.qdir(self.root).mkdir(parents=True)
@@ -202,6 +237,43 @@ class TestFailedRow(unittest.TestCase):
         self.assertEqual((got["status"], got["run"], got["agent"]), ("failed", "r-1", "codex"))
         self.assertAlmostEqual(got["cost_usd"], 0.75)
         self.assertAlmostEqual(wq.spent(wq.load(root)), 0.75)
+        self.assertIsNone(got.get("live"))                             # no stale `live` for `ccx show --any --wait`
+
+    def test_run_that_raises_keeps_the_run_it_was_started_as(self):
+        root = _tmp(self)
+        it = wq.add(root, "x", "look at x", to="codex", mode="read", minutes=5)
+        p = SimpleNamespace(runs=root / "runs")
+        seen = {}
+
+        def boom(req, _p):
+            seen["run_id"] = req.run_id
+            raise RuntimeError("the run itself broke")
+        with mock.patch.object(workqueue, "resolve", return_value=({"to": "codex"}, {})), \
+                mock.patch.object(workqueue, "run", side_effect=boom):
+            row = workqueue._one(it, root, "claude", p, {})
+        self.assertEqual((row["status"], row["run"]), ("failed", seen["run_id"]))
+        got = wq.load(root)["items"][it["id"]]
+        self.assertEqual((got["status"], got["run"]), ("failed", seen["run_id"]))
+        self.assertIsNone(got.get("live"))
+
+    def test_run_that_raises_after_writing_its_record_keeps_its_cost(self):
+        root = _tmp(self)
+        it = wq.add(root, "x", "look at x", to="codex", mode="read", minutes=5)
+        p = SimpleNamespace(runs=root / "runs")
+
+        def boom(req, _p):
+            d = p.runs / req.run_id
+            d.mkdir(parents=True)
+            (d / "run.json").write_text('{"run_id": "%s", "to": "codex"}' % req.run_id, encoding="utf-8")
+            raise RuntimeError("after the record")
+        with mock.patch.object(workqueue, "resolve", return_value=({"to": "codex"}, {})), \
+                mock.patch.object(workqueue, "run", side_effect=boom), \
+                mock.patch.object(workqueue, "_cost", return_value=0.4):
+            row = workqueue._one(it, root, "claude", p, {})
+        got = wq.load(root)["items"][it["id"]]
+        self.assertEqual((got["status"], got["run"], got["agent"]), ("failed", row["run"], "codex"))
+        self.assertAlmostEqual(got["cost_usd"], 0.4)
+        self.assertIsNone(got.get("live"))
 
 
 if __name__ == "__main__":
