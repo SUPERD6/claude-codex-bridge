@@ -211,7 +211,7 @@ def cmd_mem(a) -> int:
         root = project.find_root()
         shown: list[int] = []
         me = _lead_as(a.as_)
-        by_kind = memory.by_kind_on(p)          # L2: off until the H11 trial ends (2026-11-01)
+        by_kind = memory.by_kind_on(p)          # L2: off by default; decided by measurement (H11 voided)
         parts = [memory.format_delta(memory.delta(p, me, advance=not a.peek), project=(root or Path.cwd()).name,
                                      shown=shown, kinds=memory.START_KINDS if by_kind else None)]
         if memory.start_scene_on(p):            # L3: optional, this project's scene block only

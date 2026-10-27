@@ -13,7 +13,7 @@ English · [中文](2026-10-25-warm-lanes.zh.md)
 | Fewer tokens? | **Not by count**: 0.94–1.21M in all, about the same as ten parallel runs (0.99–1.16M). Codex re-reads its system prompt and tool definitions from the cache on every request; continuing only saves the fresh part |
 | Faster? | **Slower**: 2 lanes 97–101 s, 3 lanes 82–93 s; ten parallel runs 28–43 s; one run doing all ten 69–100 s. Pieces in a lane go one after another; a continued piece itself is ~25% faster (13–16 s vs 18–25 s) |
 | Right? | 10/10 in every arm and round, no merge conflicts |
-| Default | Stays off (`[lanes] default = 0`). The lead decides after the H11 trial ends on 2026-11-01; on this data, **turning it on by default is not recommended** |
+| Default | Stays off (`[lanes] default = 0`). Decided by measurement (the confirmation run; the H11 trial was voided on 2026-10-26); on this data, **turning it on by default is not recommended** |
 
 ## 1. Setup
 
@@ -62,7 +62,7 @@ l2 round 1 piece by piece (ledger):
 
 ## 4. Recommendations
 
-1. Keep it off by default, also after the trial.
+1. Keep it off by default; the confirmation run decides, and on this data turning it on is not recommended.
 2. For many tiny pieces, the lead (`project-manager`, `task-split`) should first merge what can go together **into one
    brief for one run** (p1, or round 2's p3) instead of starting many runs; keep `--lanes` for pieces that each need
    their own check or undo.

@@ -73,7 +73,7 @@
 
 **什么记忆放哪里。** 用户提出的长期要求（比如“每次修改都提交”）写进用户自己的共用规则文件，要等用户同意才写。项目里的事实用 `ccx mem add --project` 记下（用 `--source` 写明从哪来的）。不再成立的记忆要替换（`--supersedes N`），不要和新的并排留着；30 天没人核对的会标成“待核对”（`ccx mem stale`、`ccx mem verify N`）；更早的记忆用 `ccx mem search` 找；开局时新增的记忆最多带约 600 token。两个工具各自的自动记忆归各自所有，ccx 不会把一边的复制到另一边。
 
-**找记忆和分类。** `ccx mem search` 按 BM25 排序：少见的词比常见的词分量重，也不要求每个词都出现（`--all-words` 保留旧的“每个词都要有”，`--limit N` 限条数）。每条记忆属于五类之一——偏好、约束、事实、坑、事件（preference / constraint / fact / pitfall / event），都不是就算“其他”：`ccx mem add --kind` 指定；旧记录读取时按 topic 或关键词自动归类（`ccx mem kinds --list` 查看；不改写日志）。打开 `[memory] by_kind = true` 后：开局只推新的偏好和约束，子智能体简报按 BM25 挑相关的坑、事实和其他，事件只能搜到。一周试用到 2026-11-01 结束，在那之前默认关闭，开局和简报的内容不变。`ccx mem compact --by project` 给每个项目写一小段场景块到 `memory/scenes.md`；`[memory] start_scene = true` 让开局再带当前项目那一块（默认关：开局的记忆本来就封顶约 600 token）。
+**找记忆和分类。** `ccx mem search` 按 BM25 排序：少见的词比常见的词分量重，也不要求每个词都出现（`--all-words` 保留旧的“每个词都要有”，`--limit N` 限条数）。每条记忆属于五类之一——偏好、约束、事实、坑、事件（preference / constraint / fact / pitfall / event），都不是就算“其他”：`ccx mem add --kind` 指定；旧记录读取时按 topic 或关键词自动归类（`ccx mem kinds --list` 查看；不改写日志）。打开 `[memory] by_kind = true` 后：开局只推新的偏好和约束，子智能体简报按 BM25 挑相关的坑、事实和其他，事件只能搜到。默认关闭，开局和简报的内容不变；开不开由实测（确认实验）决定，一周的 H11 试用已于 2026-10-26 作废。`ccx mem compact --by project` 给每个项目写一小段场景块到 `memory/scenes.md`；`[memory] start_scene = true` 让开局再带当前项目那一块（默认关：开局的记忆本来就封顶约 600 token）。
 
 **hook 不拖住每一轮。** 开局 hook（`ccx mem delta`）和每轮 hook（`ccx turn`）最多跑 `[hooks] timeout_s` 秒（默认 2 秒；
 `ccx config set hooks.timeout_s N`，0 = 不限）：超时就什么都不输出、退出码 0，在 `ccx/hook-timeouts.jsonl` 记一行（命令、用时、

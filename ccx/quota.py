@@ -114,7 +114,8 @@ def codex_readings(days: float = 8, p=None, home: Path | None = None, now: float
     now = now or time.time()
     root = (home or codex_home()) / "sessions"
     files = []
-    for f in root.rglob("rollout-*.jsonl") if root.exists() else []:
+    from .usage import walk
+    for f in walk(root, "rollout-*.jsonl"):
         try:
             st = f.stat()
         except OSError:
