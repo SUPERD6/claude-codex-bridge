@@ -473,7 +473,8 @@ def render_html(s: dict) -> str:
                   ("held up", "–" if a["ok_rate"] is None else f'{a["ok_rate"]:.0%}',
                    "–" if d["ok_rate"] is None else f'{d["ok_rate"]:.0%}')]
         ab_html += (f'<div class="card"><h2>Formal comparison {_esc(tr["trial"]["id"])} — lead itself vs delegated'
-                    f'{"" if not tr["running"] else " (running)"}</h2><div class="scroll"><table class="tbl"><tr><th></th>'
+                    f'{"" if not tr["running"] else " (running)"}{" (void)" if tr.get("void") else ""}</h2>'
+                    '<div class="scroll"><table class="tbl"><tr><th></th>'
                     '<th class="r">lead did it itself</th><th class="r">delegated with ccx</th></tr>'
                     + "".join(f'<tr><td>{n}</td><td class="r">{x}</td><td class="r">{y}</td></tr>' for n, x, y in rows_t)
                     + f'</table></div><p class="note">{_esc(tr.get("note") or "")} Both halves measure the lead '

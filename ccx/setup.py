@@ -91,7 +91,8 @@ def recent_sessions(days: float = COLD_DAYS, limit: int = COLD_FILES, now: float
         except OSError:
             continue
     root = codex_home() / "sessions"
-    for f in (root.rglob("rollout-*.jsonl") if root.exists() else []):
+    from .usage import walk
+    for f in walk(root, "rollout-*.jsonl"):
         try:
             if (mt := f.stat().st_mtime) < since:
                 continue
