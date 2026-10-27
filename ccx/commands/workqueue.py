@@ -7,11 +7,10 @@ import os
 import subprocess
 import sys
 import time
-import uuid
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from pathlib import Path
 
-from .. import lanes, queue as wq
+from .. import lanes, ledger, queue as wq
 from ..config import load_config, paths
 from ..delegate import Request, compact, run, verify
 from ..modes import resolve_mode
@@ -174,7 +173,9 @@ def _one(it: dict, root: Path, caller: str, p, cfg, warm: str | None = None, got
             wq.update(root, it["id"], status="todo", summary=route.get("advice"))
             return {"id": it["id"], "status": "todo", "skipped": route.get("advice")}
         # named up front: `ccx q ls` shows it as `live` while it runs, so a lead can `ccx show <ids> --any --wait`
-        live = time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:4]
+        # (ledger.new_run_id makes its folder: two pieces started in the same second can no longer draw one id and
+        # share a run folder and a ccx/<run> branch)
+        live = ledger.new_run_id(p)
         wq.update(root, it["id"], status="doing", agent=kw["to"], live=live)
         resume = it.get("run") if it.get("resume") else None
         left = (max(0.0, float(it["budget_usd"]) - float(it.get("cost_usd") or 0))   # F11: the cap is what it has left

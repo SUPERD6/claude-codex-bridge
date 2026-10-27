@@ -38,10 +38,15 @@ _TOKEN = re.compile(r"\"[^\"]*\"|'[^']*'|\S+")
 
 
 def _expand_globs(cmd: str, cwd: Path) -> str:
-    """cmd.exe passes `tests/test_*.py` on unexpanded (pytest then finds nothing): expand unquoted * / ? tokens
-    relative to cwd the way a POSIX shell would. A token with no match stays as it is."""
+    """For cmd.exe, which knows neither globs nor single quotes, in one pass over the tokens: expand unquoted * / ?
+    tokens relative to cwd the way a POSIX shell would (a token with no match stays as it is), and turn a
+    single-quoted token with no double quote inside into a double-quoted one: `-k 'a or b'` reached pytest as three
+    words there (exit 4, r5e-h: 5/80 checks broken). Only those tokens change; everything else, `&&`, `|` and
+    redirects included, is kept character for character (never re-joined with shlex / list2cmdline)."""
     def one(m: re.Match) -> str:
         tok = m.group(0)
+        if len(tok) >= 2 and tok[0] == tok[-1] == "'" and '"' not in tok:
+            return '"' + tok[1:-1] + '"'
         if tok[0] in "\"'" or not any(c in tok for c in "*?") or tok.startswith("-"):
             return tok
         hits = sorted(glob.glob(tok, root_dir=str(cwd)))

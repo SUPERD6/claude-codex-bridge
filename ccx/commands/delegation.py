@@ -7,7 +7,6 @@ import os
 import re
 import sys
 import time
-import uuid
 
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -47,14 +46,76 @@ def cmd_ab(a) -> int:
 
 
 # ---------------------------------------------------------------- commands
-def _background(argv: list[str], p) -> dict:
-    """Re-run this exact command detached; the run id is fixed up front so the caller can poll it."""
+def _background(argv: list[str], p, procs: list | None = None) -> dict:
+    """Re-run this exact command detached; the run id is fixed up front so the caller can poll it. `procs`, when
+    given, gets the detached process (for `--bg --wait N`, which waits on it in the same call)."""
     from .common import detach
-    run_id = time.strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:4]
+    run_id = ledger.new_run_id(p)                # its folder made here: no other run can draw the same id
     log = p.runs / run_id / "bg.log"
-    detach(argv, log, {"CCX_RUN_ID": run_id})
+    proc = detach(_without_wait(argv), log, {"CCX_RUN_ID": run_id})
+    if procs is not None:
+        procs.append(proc)
     return {"run_id": run_id, "state": "started", "check": f"ccx show {run_id}", "log": str(log),
             "next": f"ccx show {run_id} --wait"}     # blocks until done, under a 10-minute tool-call limit
+
+
+def _without_wait(argv: list[str]) -> list[str]:
+    """argv without `--wait N` / `--wait=N`: the detached child runs the work itself and must not wait on itself."""
+    out, skip = [], False
+    for x in argv:
+        if skip:
+            skip = False
+        elif x == "--wait":
+            skip = True
+        elif not x.startswith("--wait="):
+            out.append(x)
+    return out
+
+
+def _bg_maybe_wait(argv: list[str], p, wait: float | None) -> int:
+    """`--bg`: detach and print the run id. `--bg --wait N` (one call instead of `--bg` then `ccx show --wait`):
+    the id goes to stderr at once (flushed: a lead whose tool call is cut off still has it), then this process waits
+    up to N s. Finished: the final compact result on stdout (exit 0 / 2 as a foreground run). Not finished:
+    exactly what plain --bg prints. A child that exits without writing its record (a crash before the run
+    started) ends the wait at once with the end of its log; refusals write a finished record (_bg_refused /
+    _bg_not_delegated) and end it the same way."""
+    procs: list = []
+    bg = _background(argv, p, procs)
+    if wait is None:
+        _out(bg)
+        return 0
+    from .. import recover
+    from .records import POLL_SEC, RunWaiter, _result
+    rid = bg["run_id"]
+    print(f"ccx: started {rid} in the background; waiting up to {wait:g} s (else: ccx show {rid} --wait)",
+          file=sys.stderr, flush=True)
+    proc = procs[0] if procs else None
+    waiter = RunWaiter(p, rid)                   # the same polling as `ccx show --wait` (follows a fix round)
+    deadline = time.time() + max(0.0, wait)
+    swept = time.time()
+    while True:
+        rec = waiter.poll()
+        if rec is not None:
+            res = _result(rec, rid, waiter.rid, False)
+            _out(res)
+            return 0 if res.get("ok") else 2
+        if time.time() - swept >= 20:            # a run whose ccx process died: interrupted, not running forever
+            recover.sweep(p)
+            swept = time.time()
+        if proc is not None and proc.poll() is not None and not (p.runs / rid / "run.json").exists():
+            tail = ""
+            try:
+                tail = (p.runs / rid / "bg.log").read_text(encoding="utf-8", errors="replace")[-2000:]
+            except OSError:
+                pass
+            _out({"run_id": rid, "state": "failed", "ok": False, "exit": proc.returncode,
+                  "error": "the background ccx process ended before the run started", "log": bg["log"],
+                  "log_tail": tail.strip()})
+            return 2
+        if time.time() >= deadline:
+            _out(bg)                             # exactly what plain --bg prints: the lead goes on as it would
+            return 0
+        time.sleep(min(POLL_SEC / 4, max(0.0, deadline - time.time())))
 
 
 def _check_names_real_tests(check: str | None, cwd: Path) -> str | None:
@@ -171,13 +232,14 @@ def cmd_run(a) -> int:
         a.check = _check_names_real_tests(a.check, Path(a.cwd or os.getcwd()))
     if a.bg and not a.brief and not a.brief_file:
         raise ValueError("--bg needs the task as text or --brief-file (stdin is not passed on)")
+    if a.wait is not None and not a.bg:
+        raise ValueError("--wait N goes with --bg (a foreground run already waits until it is done)")
     if a.bg and not auto:
         if a.proposal:
             # refuse a used-up, smaller or lapsed pre-authorisation here, before detaching: the detached child's
             # refusal would leave `ccx show <id> --wait` waiting (it checks again, and records a refusal, below)
             _preauth_for_run(p, cfg, a.proposal, _spec_from_args(a, _brief(a)))
-        _out(_background(sys.argv[1:], p))
-        return 0
+        return _bg_maybe_wait(sys.argv[1:], p, a.wait)
     text = _brief(a)
     caller = _caller(a.caller)
     spec = _spec_from_args(a, text)
@@ -225,8 +287,7 @@ def cmd_run(a) -> int:
             _out(stop)
             return 0
         if a.bg:
-            _out(_background(sys.argv[1:], p))
-            return 0
+            return _bg_maybe_wait(sys.argv[1:], p, a.wait)
     lead = lead_session_id(caller)
     cwd = Path(a.cwd or os.getcwd())
     fork = None
@@ -507,6 +568,15 @@ def cmd_namecheck(a) -> int:
 def cmd_resume(a) -> int:
     p = paths()
     from ..recover import sweep
+    if getattr(a, "wait", None) is not None and not getattr(a, "bg", False):
+        raise ValueError("--wait N goes with --bg (a foreground resume already waits until it is done)")
+    if getattr(a, "bg", False):
+        if not a.brief and not a.brief_file:
+            raise ValueError("--bg needs the follow-up as text or --brief-file (stdin is not passed on)")
+        prev = ledger.load_run(p, a.run_id)          # an unknown run id fails here, not in the detached child
+        if a.check:                                  # the same check the child makes, before anything detaches
+            _check_names_real_tests(a.check, Path(prev.get("cwd") or os.getcwd()))
+        return _bg_maybe_wait(sys.argv[1:], p, a.wait)
     sweep(p)                            # closes it as interrupted first if its ccx process died mid-run
     req = Request(to="codex", brief=_brief(a), tier=a.tier, resume_run=a.run_id,
                   caller=_caller(a.caller), escalate=False if a.no_escalate else None,
@@ -759,6 +829,9 @@ def register(sub) -> None:
     r.add_argument("--from", dest="caller", choices=[*DELEGATE_AGENTS, *PROVIDER_AGENTS, "user"])
     r.add_argument("--provider", help="model API behind an agent CLI, e.g. deepseek (see [providers] in config)")
     r.add_argument("--bg", action="store_true", help="run detached; wait for it with `ccx show <run_id> --wait`")
+    r.add_argument("--wait", type=float, metavar="SECONDS", help="with --bg: wait up to this long in the same call "
+                   "and print the final result (the run id goes to stderr at once); not done by then: exactly what "
+                   "--bg prints. Keep it under your tool-call limit (e.g. 540)")
     r.add_argument("--tier", choices=["auto", *TIER_ORDER], default="auto")
     r.add_argument("--mode", choices=["read", "write"],
                    help="read: analyse only; write: may edit files. Not given: inferred from the task text "
@@ -804,7 +877,7 @@ def register(sub) -> None:
     r.add_argument("--budget", type=float, metavar="USD", help="spending cap for its own sub-agents on this piece "
                    "(default [subagents] max_usd, $2); over it the run stops and can go on with ccx resume --budget")
     r.add_argument("--parallel", action="store_true", help="tell it explicitly to use sub-agents for independent "
-                   "parts (done by itself when the brief lists 3 or more items)")
+                   "parts")
     r.add_argument("--review", choices=["auto", "on", "off"], default="auto", help="independent review of the diff "
                    "by another vendor's cheap model: auto = only when --risk is visible/critical, the sub-agent is "
                    "unsure, or its claimed files don't match the diff (default); on = every write run; off")
@@ -873,6 +946,10 @@ def register(sub) -> None:
     rs.add_argument("run_id")
     rs.add_argument("brief", nargs="*")
     rs.add_argument("--brief-file")
+    rs.add_argument("--bg", action="store_true", help="run detached, as ccx run --bg (needs the text or "
+                    "--brief-file); wait for it with `ccx show <run_id> --wait`")
+    rs.add_argument("--wait", type=float, metavar="SECONDS", help="with --bg: wait up to this long in the same call "
+                    "and print the final result, as ccx run --bg --wait")
     rs.add_argument("--tier", choices=["auto", *TIER_ORDER], default="auto")
     rs.add_argument("--from", dest="caller", choices=[*DELEGATE_AGENTS, *PROVIDER_AGENTS, "user"])
     rs.add_argument("--no-escalate", action="store_true")

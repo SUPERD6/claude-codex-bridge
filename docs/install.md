@@ -80,7 +80,7 @@ ccx run "task" --from claude --files 3 --coupling cross --clarity goal   # route
 ccx run "task" --model gpt-6.1-sol --effort high                         # explicit model and effort
 ccx run "task" --tier T2                                                 # fixed tier
      [--mode read] [--check "pytest -q tests/test_x.py"] [--kind code|read|research|write] [--minutes 60]
-     [--review auto|on|off] [--risk visible] [--seat reviewer] [--worktree] [--task <id> --step <n>] [--no-subagents] [--no-fallback] [--force] [--bg]
+     [--review auto|on|off] [--risk visible] [--seat reviewer] [--worktree] [--task <id> --step <n>] [--no-subagents] [--no-fallback] [--force] [--bg [--wait 540]]
 ccx quota [--probe]                   # each subscription window projected to its reset (what routing prices quota at)
 ccx bench [refresh]                   # the public benchmark data routing uses, its age and credits
 ccx run "task" --to gemini --tier T2                         # Gemini CLI as the sub-agent
@@ -90,6 +90,9 @@ ccx run "task" --to dsh --tier T2            # DeepSeek's own agent, DeepSeek Ha
 ccx run "task" --provider glm                # smaller APIs through Claude Code: kimi, glm, qwen, openrouter (key needed)
 ccx verify <run_id> --ok 1|0 [--note "..."]   # the lead's verdict: calibrates routing/splitting, closes the checkpoint step
 ccx resume <run_id> "follow-up"       # same sub-session; also how an interrupted run continues
+ccx run "task" ... --bg --wait 540     # detached, then waits in the same call: the final result, or (not done by
+                                      # then) exactly the --bg output; the id goes to stderr at once.
+                                      # `ccx resume ... --bg [--wait N]` likewise
 ccx stop <run_id>                     # stop a running delegation (its whole process tree); resume continues it
 ccx task status | resume <task>       # long tasks: one command continues the interrupted step (hands off on quota)
 ccx handoff --by claude --to codex "what's done / decided / next" [--next "task 5" ...]   # switch leads

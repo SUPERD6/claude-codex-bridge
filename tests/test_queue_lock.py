@@ -263,7 +263,7 @@ class TestFailedRow(unittest.TestCase):
 
         def boom(req, _p):
             d = p.runs / req.run_id
-            d.mkdir(parents=True)
+            d.mkdir(parents=True, exist_ok=True)      # as delegate.run: ledger.new_run_id made it already
             (d / "run.json").write_text('{"run_id": "%s", "to": "codex"}' % req.run_id, encoding="utf-8")
             raise RuntimeError("after the record")
         with mock.patch.object(workqueue, "resolve", return_value=({"to": "codex"}, {})), \

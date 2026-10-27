@@ -30,6 +30,25 @@ class TestCheckHelpers(unittest.TestCase):
         self.assertEqual(_expand_globs('python -c "print(1*2)" tests/nomatch_*.py', d),
                          'python -c "print(1*2)" tests/nomatch_*.py')       # quoted and unmatched stay as they are
 
+    def test_single_quotes_become_double_quotes_for_cmd_exe(self):
+        # r5e-h: `-k 'a or b'` reached pytest as three words under cmd.exe (exit 4, check_broken)
+        d = _tree()
+        self.assertEqual(_expand_globs("python -m pytest -q tests/test_board.py -k 'a or b'", d),
+                         'python -m pytest -q tests/test_board.py -k "a or b"')
+        for same in ("x && y", "a | b > out.txt 2>&1", "echo 'say \"hi\"'", 'python -c "print(\'x\')"', "don't"):
+            self.assertEqual(_expand_globs(same, d), same)            # compound / mixed quotes kept as they are
+        self.assertEqual(_expand_globs("pytest -k 'a or b' && echo 'ok' > o.txt", d),
+                         'pytest -k "a or b" && echo "ok" > o.txt')    # only the quoted tokens change
+
+    @unittest.skipUnless(sys.platform == "win32", "cmd.exe only")
+    def test_run_check_records_the_rewritten_command(self):
+        d = _tree()
+        cmd = f'"{sys.executable}" -c "import sys; sys.exit(0 if sys.argv[1:] == [chr(97) + \' or b\'] else 1)" \'a or b\''
+        c = run_check(cmd, d)
+        self.assertTrue(c["passed"], c)
+        self.assertEqual(c["cmd"], cmd)
+        self.assertTrue(c["ran"].endswith('"a or b"'), c)
+
     def test_missing_test_paths_lists_close_matches(self):
         d = _tree()
         miss = missing_test_paths("python -m pytest -q tests/test_memory.py tests/test_board.py::test_x", d)
