@@ -6,9 +6,11 @@
   way; otherwise, or when `ccx run` refuses the proposal, do it itself); cheapest is the shipped cheapest tier as a
   script runs it, propose's `next` without a lead (`ccx run --to codex --tradeoff save --review off`: no explicit
   model, so save's model pick; no fixed `--minutes`, since nobody sizes it, so ccx makes no tier plan for the run and
-  its model comes from the brief's keywords as ccx2's does; no review; no `--check`, for the reason direct has none,
-  it would point at the hidden test's file, so the result is taken as it is), in a hub that picked cheapest, labelled
-  may_be_wrong; it is not the direct arm under a new name (direct keeps gpt-6-luna low, `--minutes 60` and its
+  its model comes from the brief's keywords as ccx2's does; no review; its `--check` is the repository's whole existing
+  suite, the same command for every task of a repository, so it names no hidden test file, and its result is taken as it
+  is, while save's climb on a failed ccx re-check can fire), in a hub that picked cheapest, labelled may_be_wrong.
+  The explicit `--tradeoff save` wins over the hub's pick and the run is unsized, so ccx plans nothing for it: the row's
+  plan says `source: eval-script`, `ccx_planned: false`, and the summary counts plan sources (`plan_sources`); it is not the direct arm under a new name (direct keeps gpt-6-luna low, `--minutes 60` and its
   review). Where save differs from ccx2: save's lead makes one more call (`ccx propose`) and its run carries the
   lead's `--minutes` / `--files`, so its model is picked from that difficulty, while ccx2's run picks from the brief's
   keywords; a save-vs-ccx2 difference is the tier path plus that model pick, not the tier path alone. ccx2 stays the all-delegated baseline; the default

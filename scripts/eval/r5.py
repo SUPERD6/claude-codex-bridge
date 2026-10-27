@@ -24,8 +24,9 @@ so doing it takes many requests. Arms (the lead is a fresh headless Claude Code,
            the tier path, and its run also carries --minutes / --files, so its model pick comes from that
            difficulty (ccx2's from the brief's keywords): rows keep each run's route (`ccx_routes`) to tell them apart.
            cheapest: no lead, the shipped cheapest tier's script run (CHEAPEST: --tradeoff save --review off, no
-           explicit model, no estimate, no check) in a hub that picked cheapest, its result taken as it is, labelled
-           may_be_wrong; unlike direct it has no review, no fixed gpt-6-luna low and no fixed --minutes 60.
+           explicit model, no estimate, the repository's existing suite as --check, ccx planning nothing: the
+           explicit --tradeoff wins over the hub's pick) in a hub that picked cheapest, its result taken as it is,
+           labelled may_be_wrong; unlike direct it has no review, no fixed gpt-6-luna low and no fixed --minutes 60.
            Each row records the tier, what `ccx propose` planned (band, mode, from the unit hub's ledger), the
            reference change's size (non-test code lines / files, and the band those files give), the mode that
            actually ran (ledger actual_mode; none = self), the misbanding (the lead's --files band vs the reference
@@ -267,11 +268,28 @@ DIRECT = ["--to", "codex", "--model", "gpt-6-luna", "--effort", "low", "--review
 # sends every band direct, and its model comes from the brief's keywords, as ccx2's does; a lead's cheapest run
 # would carry its --minutes / --files and pick from that difficulty, like save's), --review off (nobody re-checks: its result is taken as it is, may_be_wrong), ccx's own escalation and
 # fallback. --to codex: the other arms' delegated part goes from a Claude lead to Codex, and the eval's isolation
-# prepares Codex for this arm (preflight CODEX_ARMS); --context off: no conversation to attach. No --check, for the
-# reason direct has none (the r5 plan): a check the script wrote would tell the sub-agent which file the hidden test
-# is in. The shipped path takes a --check result as it is when there is one; here there is none, so the result is
-# taken as it is and ccx_check_passed stays None for this arm.
+# prepares Codex for this arm (preflight CODEX_ARMS); --context off: no conversation to attach. Its --check is the
+# repository's existing suite (suite_check), what a script or CI passes: it names no task's test file, so it gives the
+# hidden test away no more than the repository itself does, and the shipped path's "take its --check result as it is"
+# and save's climb on a failed ccx re-check both happen (ccx_check_passed is read like the lead arms'). Direct keeps
+# no --check (the r5 plan). The explicit --tradeoff save wins over the hub's policy.picked (commands/common.resolve)
+# and, unsized, the run gets no tier plan: ccx plans nothing for this arm, and its row's tier_plan says so
+# (source "eval-script", ccx_planned false). policy.picked = cheapest is set so the hub is the person's setup.
 CHEAPEST = ["--to", "codex", "--tradeoff", "save", "--review", "off", "--context", "off"]
+SUITE = "python -m pytest -q tests"
+
+
+def suite_check(task: dict) -> str:
+    """The cheapest arm's --check: the task repository's whole existing suite (a hold-out repository's own `suite`
+    when it has one). The same command for every task of a repository: this repository's known-flaky nodes (the
+    union of all its tasks' deselects, dropped candidates too) are left out for every task alike, so it says
+    nothing about any one task."""
+    spec = ext_spec(task)
+    if spec:
+        return spec.get("suite") or SUITE
+    flaky = sorted({n for mod in TASKSETS.values() for t in [*mod.T, *getattr(mod, "DROPPED", [])]
+                    if not t.get("repo") for n in t.get("deselect") or ()})
+    return " ".join([SUITE, *(f"--deselect {n}" for n in flaky)])
 
 
 def no_lead_flags(arm: str) -> list[str]:
@@ -634,7 +652,8 @@ def phase_wall(hub: Path, run_ids: list, wall_s: float | None = None) -> dict:
 def direct_unit(u: dict, a, repo: Path, hub: Path, env: dict | None = None, job: PF.Job | None = None) -> dict:
     task = by_id(u["task"])
     # direct keeps its fixed --minutes 60; cheapest's script has nobody to size the task, so it gives no estimate
-    est = [] if u["arm"] == "cheapest" else ["--minutes", "60"]
+    # cheapest's script passes the repository's suite as its --check (suite_check); direct has none
+    est = ["--check", suite_check(task)] if u["arm"] == "cheapest" else ["--minutes", "60"]
     argv = ["run", "--mode", "write", "--new", "--no-ab", "--force", "--label", u["label"], *est,
             *no_lead_flags(u["arm"]), task["brief"]]
     t0 = time.time()
@@ -792,10 +811,11 @@ def tier_fields(arm: str, hub: Path, task: dict) -> dict:
                 "estimate_files": p.get("estimate_files"), "n_proposals": len(props)}
     elif arm == "cheapest":
         # the script gives no --minutes / --files, so ccx sizes nothing (a run without a difficulty gets no tier
-        # plan: no policy_tier on its row); cheapest's rule is direct for every band, so that is the plan
+        # plan: no policy_tier on its row). The plan is the eval script's, from the tier's rule (direct for every
+        # band), not one ccx made: source eval-script, ccx_planned false
         r = runs[0] if runs else {}
-        plan = {"source": "tier", "tier": "cheapest", "band": r.get("band"), "mode": "direct", "sized": False,
-                "run_policy_tier": r.get("policy_tier")}
+        plan = {"source": "eval-script", "tier": "cheapest", "band": r.get("band"), "mode": "direct", "sized": False,
+                "ccx_planned": False, "run_policy_tier": r.get("policy_tier")}
     elif arm == "fast":
         plan = {"source": "tier", "tier": "fast", "band": None, "mode": "self"}
     else:
@@ -1469,6 +1489,8 @@ def tier_summary(rows: list[dict]) -> dict | None:
                         "construction"),
                     "route_sources": _count(routes) if routes else None,
                     "planned_modes": _count((r.get("tier_plan") or {}).get("mode") for r in rs),
+                    # who planned it: propose (ccx), tier (fast's rule), eval-script (cheapest: ccx planned nothing)
+                    "plan_sources": _count((r.get("tier_plan") or {}).get("source") for r in rs),
                     "actual_modes": _count(r.get("actual_mode") for r in rs),
                     "followed_plan": f"{sum(fol)}/{len(fol)}" if fol else None,
                     "check_passed_on_fail": f"{sum(bool(r['ccx_check_passed']) for r in fails)}/{len(fails)}"

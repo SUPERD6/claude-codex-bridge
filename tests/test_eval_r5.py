@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "eval"))
+import pytest  # noqa: E402
 import r5  # noqa: E402
 import tasks_r5  # noqa: E402
 
@@ -313,12 +314,13 @@ def test_tier_arms_are_opt_in_and_registered(monkeypatch):
     assert m == {"direct": " ".join(r5.CHEAPEST), "tier_picked": "cheapest"}
     assert r5.unit_models({**old, "arm": "direct"}, {}) == {"direct": " ".join(r5.DIRECT)}    # direct unchanged
     # cheapest is the shipped cheapest tier's script run, not direct under a new name: save's model pick (no
-    # explicit model, no --tradeoff so the hub's picked tier plans it), nobody reviews it
+    # explicit model; the explicit --tradeoff save wins over the hub's picked tier, so ccx plans nothing), nobody
+    # reviews it; its --check (the repository's suite) is added per task by direct_unit
     ch = r5.no_lead_flags("cheapest")
     assert ch == r5.CHEAPEST and r5.no_lead_flags("direct") == r5.DIRECT
     assert ch[ch.index("--review") + 1] == "off" and "--model" not in ch and "--effort" not in ch
     assert ch[ch.index("--tradeoff") + 1] == "save"                             # as propose's `next` has it
-    assert "--minutes" not in ch and "--check" not in ch                       # nobody sizes it; no hidden-test hint
+    assert "--minutes" not in ch and "--check" not in ch      # nobody sizes it; the suite check is per task (below)
     assert "--no-escalate" not in ch and "--no-fallback" not in ch
     assert r5.DIRECT[r5.DIRECT.index("--review") + 1] == "on" and "gpt-6-luna" in r5.DIRECT
     m = r5.unit_models({**old, "arm": "balanced", "lead_model": "opus", "lead_effort": "high"}, {})
@@ -402,7 +404,9 @@ def test_tier_fields_from_a_real_propose_in_a_fake_hub(tmp_path):
     (empty / "ccx" / "ledger.jsonl").write_text(json.dumps(
         {"run_id": "d1", "label": "L", "actual_mode": "direct"}) + "\n", encoding="utf-8")
     f = r5.tier_fields("cheapest", empty, small)
-    assert f["tier_plan"]["source"] == "tier" and f["tier_plan"]["mode"] == "direct"
+    # the eval script's plan, not ccx's (ccx plans nothing for an unsized run with an explicit --tradeoff)
+    assert f["tier_plan"]["source"] == "eval-script" and f["tier_plan"]["mode"] == "direct"
+    assert f["tier_plan"]["ccx_planned"] is False
     assert f["actual_mode"] == "direct" and f["may_be_wrong"] is True
     assert f["tier_plan"]["sized"] is False and f["tier_plan"]["run_policy_tier"] is None
     assert f["misband"] is None and f["followed_plan"] is None                  # no lead: nothing to follow
@@ -548,13 +552,41 @@ def _tiny_repo(path):
     return path
 
 
-def test_cheapest_unit_runs_the_shipped_cheapest_tier(tmp_path):
+def test_cheapest_check_is_the_repository_suite():
+    """The cheapest arm's --check is the whole existing suite, the same command for every task of a repository: it
+    names no task's test file (that would point at the hidden test), only the flaky nodes every task leaves out."""
+    import tasks_holdout
+    own = [t for t in tasks_r5.T]
+    checks = {r5.suite_check(t) for t in own}
+    assert len(checks) == 1
+    chk = checks.pop()
+    assert chk.startswith("python -m pytest -q tests") and "--deselect" in chk     # BG_RUN, flaky under load
+    rest = chk.replace(r5.SUITE, "")
+    hidden_files = {f for t in own for f in t["tests"]}
+    # only --deselect nodes follow the suite; a hidden file is named only as part of a node every task leaves out
+    assert all(x == "--deselect" or "::" in x for x in rest.split())
+    assert not any(f"{f} " in chk + " " for f in hidden_files)                     # no hidden file on its own
+    for t in tasks_holdout.T:
+        c = r5.suite_check(t)
+        if not t.get("repo"):
+            assert c == chk                                                        # this repository: one command
+        else:
+            assert c.startswith("python -m pytest -q tests") and not any(f in c for f in t["tests"])
+    hum = next(t for t in tasks_holdout.T if t.get("repo") == "humanize")
+    assert "--ignore=tests/test_benchmarks.py" in r5.suite_check(hum)
+
+
+@pytest.mark.parametrize("passes", [True, False])
+def test_cheapest_unit_runs_the_shipped_cheapest_tier(tmp_path, monkeypatch, passes):
     """The cheapest unit through ccx itself (fake CLIs): in a hub that picked cheapest, save's model pick (no explicit
     model, no fixed --minutes: the script sizes nothing, so the run has no tier plan and its route falls back to the
-    brief's keywords, as ccx2's run does), Codex, no review, no check; the row says direct, may be wrong. The direct
-    arm's command keeps its explicit model, --minutes 60 and review."""
+    brief's keywords, as ccx2's run does), Codex, no review, the repository's suite as its --check, taken as it is
+    (a failed ccx re-check climbs a rung, as save does); the row says direct, may be wrong, and ccx planned nothing.
+    The direct arm's command keeps its explicit model, --minutes 60 and review."""
     import json
     from types import SimpleNamespace
+    chk = f'python -c "raise SystemExit({0 if passes else 1})"'
+    monkeypatch.setattr(r5, "suite_check", lambda task: chk)
     env = _fake_env(tmp_path)
     hub = tmp_path / "hub"
     (hub / "ccx").mkdir(parents=True)
@@ -571,9 +603,14 @@ def test_cheapest_unit_runs_the_shipped_cheapest_tier(tmp_path):
     assert runs[0]["actual_mode"] == "direct" and runs[0]["rungs"][0].startswith("codex:")
     assert not row["verdicts"]                                                  # nobody reviewed it
     r5.bookkeeping(row, "cheapest", hub, tasks_r5.by_id(u["task"]))
-    assert "bookkeeping_error" not in row and row["ccx_check_passed"] is None   # no --check: nothing to read
+    assert "bookkeeping_error" not in row and row["ccx_check_passed"] is passes   # ccx's re-check, as it is
+    rec = r5.r2.record(hub, runs[0]["run_id"])
+    assert rec["check"]["cmd"] == chk
+    if not passes:                                    # save's climb on a failed ccx re-check fires
+        assert rec["attempts"][0]["kind"] == "check_failed" and len(rec["attempts"]) >= 2
     assert row["ccx_routes"][0]["source"] != "explicit" and row["ccx_routes"][0]["b"] is None
-    assert row["tier_plan"]["mode"] == "direct" and row["tier_plan"]["source"] == "tier"
+    assert row["tier_plan"]["mode"] == "direct" and row["tier_plan"]["source"] == "eval-script"
+    assert row["tier_plan"]["ccx_planned"] is False
     assert row["may_be_wrong"] and row["followed_plan"] is None and row["misband"] is None
 
 
