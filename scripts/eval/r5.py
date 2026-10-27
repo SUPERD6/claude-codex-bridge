@@ -12,6 +12,17 @@ so doing it takes many requests. Arms (the lead is a fresh headless Claude Code,
            default review, trust a passed check, no commit request); not in the default schedule
   builtin2 opt-in (--arms builtin2): builtin's Agent-tool hand-off with ccx2's brief and acceptance wording, word
            for word (the worker reports check / files_changed / diffstat / status); not in the default schedule
+  builtin2r opt-in (--arms builtin2r): builtin2 whose worker's own prompt also carries ccx's KEEP_TESTS and WIRING
+           rules (imported from ccx/prompts.py), so ccx2 vs builtin2r tells ccx apart from those rules (fairness C5)
+
+The lead is sonnet medium unless --lead-model / --lead-effort say otherwise; both are recorded in every row, in its
+fingerprint and in the done-key, and a summary shows another lead's units as their own arm (`ccx2@opus-high`).
+--budget counts the spend of this tag's rows only (plus --extra-spent), not the whole results file.
+
+The summary pairs every two arms on the units they share (tag, round, task): McNemar exact p (Holm over the pairs),
+task-level bootstrap 95% CIs for the cost-per-success and wall-median differences; per arm a Wilson CI, the right
+count per round and, for units that used ccx, the wall per phase (sub-agent attempts, checks, reviews, fix rounds,
+the lead waiting) from the ccx run records; with arms `balanced` and `save` both present, the tier decision rule.
 
 Every unit: the repository at the task commit's parent, with today's tests/conftest.py committed into it (old
 commits' tests may predate per-test hubs, #73), a fresh throwaway hub (CCX_HUB, as round 3). The hidden test is the
@@ -74,7 +85,9 @@ import r2  # noqa: E402
 import r3  # noqa: E402
 import r4  # noqa: E402
 import preflight as PF  # noqa: E402
+import seven_ab as S  # noqa: E402
 from common import ROOT, append_jsonl, archive_hub, ccx_verify, git, read_jsonl  # noqa: E402
+from ccx.prompts import KEEP_TESTS, WIRING  # noqa: E402
 import ext_repo  # noqa: E402
 import tasks_holdout  # noqa: E402
 import tasks_r5  # noqa: E402
@@ -165,9 +178,27 @@ HOW_BUILTIN2 = ("Do not edit files yourself: hand the implementation to your sub
                 "blocked), that command's result line (the check), the files it changed (files_changed) and "
                 "`git diff --shortstat` (diffstat). " + LEAN_BRIEF + " "
                 + LEAN_ACCEPT.replace("{send_back}", "another Agent call to the worker, saying what to fix"))
+# builtin2r (opt-in, `--arms builtin2r`): builtin2's lead wording, and a worker whose own prompt also carries the
+# rules every ccx sub-agent gets (ccx/prompts.py, imported, not retyped): keep existing tests, test through the
+# named entry point; and it is told to run the acceptance command (targeted tests while it works), as a ccx sub-agent
+# with --check is, instead of the whole suite. ccx2 vs builtin2r then differs by ccx alone, not by these rules
+# (fairness C5).
+# The base worker prompt's "run the tests with `python -m pytest -q`" (the whole suite) would contradict WIRING's
+# "run only the relevant test files, not the whole suite", so builtin2r's worker is told what a ccx sub-agent with
+# --check is (SELFCHECK_CMD, in short): run the acceptance command it is given, targeted tests while it works.
+WORKER_TESTS_BASE = "run the tests with `python -m pytest -q`"
+WORKER_TESTS_R = ("run the acceptance command you are given (while you work, only the targeted tests touching your "
+                  "change; the full acceptance command at most once, at the end)")
+assert WORKER_TESTS_BASE in r3.WORKER["worker"]["prompt"]
+WORKER_RULES = {"worker": {**r3.WORKER["worker"],
+                           "prompt": r3.WORKER["worker"]["prompt"].replace(WORKER_TESTS_BASE, WORKER_TESTS_R)
+                           + " Rules: " + KEEP_TESTS + " " + WIRING.rstrip()}}
 CCX_ARMS = ("ccx", "ccx2")
-BUILTIN_ARMS = ("builtin", "builtin2")
-OPT_IN_ARMS = ("ccx2", "builtin2")   # not in ARMS: the default schedule (and its done-keys for old tags) stays the same
+BUILTIN_ARMS = PF.BUILTIN_ARMS
+OPT_IN_ARMS = ("ccx2", "builtin2", "builtin2r")   # not in ARMS: the default schedule (and old tags' done-keys) stay
+DEFAULT_LEAD = (r3.LEAD_MODEL, r3.LEAD_EFFORT)
+# with both of these arms present the summary checks the tier decision rule (tier_rule)
+TIER_RULE_ARMS = ("balanced", "save")
 DIRECT = ["--to", "codex", "--model", "gpt-6-luna", "--effort", "low", "--review", "on", "--context", "off",
           "--no-escalate", "--no-fallback"]
 
@@ -347,7 +378,7 @@ def lead_how(arm: str, label: str) -> str:
         return HOW_CCX.format(ccx=r3.CCX_CMD, label=label)
     if arm == "ccx2":
         return HOW_CCX2.format(ccx=r3.CCX_CMD, label=label)
-    if arm == "builtin2":
+    if arm in ("builtin2", "builtin2r"):          # builtin2r: the same lead wording, the rules are in the worker
         return HOW_BUILTIN2
     return r3.HOW[arm]
 
@@ -355,6 +386,48 @@ def lead_how(arm: str, label: str) -> str:
 def lead_flags_arm(arm: str) -> str:
     """The round-3 arm whose lead command line (tools, agents, session file) this arm uses."""
     return "ccx" if arm in CCX_ARMS else "builtin" if arm in BUILTIN_ARMS else arm
+
+
+def worker_agents(arm: str) -> dict | None:
+    """The --agents definition for a builtin arm's lead (None: r3.WORKER, as before)."""
+    return WORKER_RULES if arm == "builtin2r" else None
+
+
+NO_LEAD_ARMS = ("direct",)      # ccx straight from the command line: no Claude lead, --lead-model changes nothing
+
+
+def has_lead(arm: str) -> bool:
+    return arm not in NO_LEAD_ARMS
+
+
+def lead_of(r: dict) -> tuple[str, str]:
+    """A unit's or row's lead (model, effort); rows from before --lead-model had the default. An arm without a lead
+    (direct) always counts as the default, whatever a row carries, so its units and rows keep one key, folder, label
+    and summary arm under any --lead-model (they are not re-run, and they pool and pair as one arm)."""
+    if not has_lead(r.get("arm") or ""):
+        return DEFAULT_LEAD
+    return (r.get("lead_model") or DEFAULT_LEAD[0], r.get("lead_effort") or DEFAULT_LEAD[1])
+
+
+def _lead_suffix(r: dict) -> str:
+    m, e = lead_of(r)
+    return "" if (m, e) == DEFAULT_LEAD else "@" + re.sub(r"[^\w.-]", "_", f"{m}-{e}")
+
+
+def arm_of(r: dict) -> str:
+    """The arm a summary counts a row under: its arm, plus its lead when not the default (`ccx2@opus-high`), so
+    units with different leads are never pooled or paired as one arm."""
+    return f"{r['arm']}{_lead_suffix(r)}"
+
+
+def done_key(r: dict) -> tuple:
+    """What makes a unit done: tag, round, task, arm and the lead (old rows: the default lead, so they still match)."""
+    return (r.get("tag"), r.get("round"), r.get("task"), r.get("arm"), *lead_of(r))
+
+
+def unit_key(u: dict) -> str:
+    """The unit's folder / stream name in the work dir (the old name for the default lead)."""
+    return f"{u['round']}-{u['task']}-{u['arm']}{_lead_suffix(u)}"
 
 
 def lead_unit(u: dict, a, work: Path, repo: Path, hub: Path, iso: PF.Unit | None = None, env: dict | None = None,
@@ -371,11 +444,12 @@ def lead_unit(u: dict, a, work: Path, repo: Path, hub: Path, iso: PF.Unit | None
     t0 = time.time()
     # ccx2 / builtin2 need the same lead flags as ccx / builtin (a session file; the Agent tool and worker); the
     # clean-room flags (no user settings, hooks, CLAUDE.md, auto-memory; deny rules) come from preflight
-    argv = r3.lead_argv(lead_flags_arm(u["arm"]), a.lead_budget) + (PF.lead_flags(iso) if iso else [])
+    model, effort = lead_of(u)
+    argv = r3.lead_argv(lead_flags_arm(u["arm"]), a.lead_budget, model, effort, worker_agents(u["arm"])) \
+        + (PF.lead_flags(iso) if iso else [])
     out, _err, rc, _left = PF.run(argv, input=prompt, cwd=repo, env=env, timeout=a.timeout, job=job)
     wall = round(time.time() - t0, 1)
-    key = f"{u['round']}-{u['task']}-{u['arm']}"
-    (work / f"{key}.stream.jsonl").write_text(out, encoding="utf-8")
+    (work / f"{unit_key(u)}.stream.jsonl").write_text(out, encoding="utf-8")
     fin = r3.last_result(out)
     lm = r3.lead_metrics(out)
     cost = r2.hub_cost(hub)
@@ -396,7 +470,80 @@ def lead_unit(u: dict, a, work: Path, repo: Path, hub: Path, iso: PF.Unit | None
     if is_ccx:
         row["context_attached"] = sum((hub / "ccx" / "runs" / str(rid) / "shared-context.md").exists()
                                       for rid in cost["run_ids"])
+        if cost["run_ids"]:
+            row["phases"] = phase_wall(hub, cost["run_ids"], wall)
     return row
+
+
+PHASES = ("sub_s", "check_s", "review_s", "fix_s", "overlap_s", "lead_wait_s", "lead_active_s")
+
+
+def phase_wall(hub: Path, run_ids: list, wall_s: float | None = None) -> dict:
+    """Where a unit's ccx time went, from its run records (run.json): the sub-agent's attempts (sub_s, n_attempts),
+    ccx's acceptance checks (check_s), the reviews (review_s: the `review:<id>` runs), the fix rounds after a review
+    (fix_s: a run with review_of, its attempts and its check) and, with the lead's wall, the lead waiting on ccx
+    (lead_wait_s, an estimate: ccx runs block the lead, or it waits with show --wait) and the rest (lead_active_s).
+    Checks count every run of ccx's check: the final one (record["check"]) and those of earlier rungs that failed
+    and climbed (an attempt's check_seconds). ccx runs a run's review while its final check runs, so lead_wait_s
+    counts that time once (overlap_s: the shorter of the two, per run with both) and is at most the wall. A review
+    started alongside an earlier rung's check and stopped when that check failed (a `review:<id>` run that is not
+    the linked one) overlaps those failed checks the same way. Records
+    that cannot be read are counted in `missing`."""
+    sub = check = review = fix = overlap = 0.0
+    n_att = n_rev = n_fix = missing = 0
+    ids, seen = list(dict.fromkeys(str(x) for x in run_ids)), set()
+    recs: dict[str, dict] = {}
+    while ids:
+        rid = ids.pop(0)
+        if rid in seen:
+            continue
+        seen.add(rid)
+        rec = r2.record(hub, rid)
+        if not rec:
+            missing += 1
+            continue
+        recs[rid] = rec
+        rv = (rec.get("review") or {}).get("run_id")
+        if rv and str(rv) not in seen:          # a review not in the ledger list is still counted
+            ids.append(str(rv))
+
+    def secs(rec: dict) -> float:
+        return sum(float(x.get("seconds") or 0) for x in rec.get("attempts") or [])
+
+    def is_review(rec: dict) -> bool:
+        return str(rec.get("label") or "").startswith("review:")
+
+    by_parent: dict[str, list[tuple[str, dict]]] = {}
+    for rid, rec in recs.items():
+        if is_review(rec):
+            by_parent.setdefault(str(rec["label"])[len("review:"):], []).append((rid, rec))
+
+    for rid, rec in recs.items():
+        if is_review(rec):
+            review, n_rev = review + secs(rec), n_rev + 1
+            continue
+        final = (rec.get("check") or {}).get("seconds")
+        early = sum(float(x.get("check_seconds") or 0) for x in rec.get("attempts") or [])
+        c = float(final or 0) + early
+        linked = str((rec.get("review") or {}).get("run_id"))
+        rv = recs.get(linked)
+        if final and rv and is_review(rv):      # the review ran alongside the final check
+            overlap += min(float(final), secs(rv))
+        # reviews stopped when an earlier rung's check failed ran alongside those checks
+        stopped = sum(secs(x) for xid, x in by_parent.get(str(rid), []) if xid != linked)
+        if early and stopped:
+            overlap += min(early, stopped)
+        if rec.get("review_of"):
+            fix, n_fix = fix + secs(rec) + c, n_fix + 1
+        else:
+            sub, check, n_att = sub + secs(rec), check + c, n_att + len(rec.get("attempts") or [])
+    out = {"sub_s": round(sub, 1), "check_s": round(check, 1), "review_s": round(review, 1), "fix_s": round(fix, 1),
+           "overlap_s": round(overlap, 1), "n_attempts": n_att, "n_reviews": n_rev, "n_fix_rounds": n_fix,
+           "missing": missing}
+    if wall_s is not None:
+        wait = min(float(wall_s), sub + check + review + fix - overlap)
+        out.update(lead_wait_s=round(wait, 1), lead_active_s=round(float(wall_s) - wait, 1))
+    return out
 
 
 def direct_unit(u: dict, a, repo: Path, hub: Path, env: dict | None = None, job: PF.Job | None = None) -> dict:
@@ -410,15 +557,18 @@ def direct_unit(u: dict, a, repo: Path, hub: Path, env: dict | None = None, job:
     res, err = r2.S._last_json(out), ("timeout" if rc == -9 else err[-400:])
     cost = r2.hub_cost(hub)
     rec = r2.record(hub, res.get("run_id"))
-    return {"rc": rc, "wall_s": round(time.time() - t0, 1), "usd": cost["usd"], "ccx_usd": cost["usd"],
-            "ccx_review_usd": cost["review_usd"], "ccx_run_ids": cost["run_ids"], "model": res.get("model"),
-            "status": res.get("status"), "ccx_ok": res.get("ok"),
-            "verdicts": [v.get("verdict") for v in (rec.get("first_review"), rec.get("review")) if v],
-            "stderr": err if rc else ""}
+    row = {"rc": rc, "wall_s": round(time.time() - t0, 1), "usd": cost["usd"], "ccx_usd": cost["usd"],
+           "ccx_review_usd": cost["review_usd"], "ccx_run_ids": cost["run_ids"], "model": res.get("model"),
+           "status": res.get("status"), "ccx_ok": res.get("ok"),
+           "verdicts": [v.get("verdict") for v in (rec.get("first_review"), rec.get("review")) if v],
+           "stderr": err if rc else ""}
+    if cost["run_ids"]:
+        row["phases"] = phase_wall(hub, cost["run_ids"])          # no lead: nothing waits
+    return row
 
 
 def unit_of(u: dict, a, work: Path) -> PF.Unit:
-    key = f"{u['round']}-{u['task']}-{u['arm']}"
+    key = unit_key(u)
     return PF.Unit(key=key, work=work, repo=work / key, hub=work / f"h-{key}", label=u["label"],
                    claude=a.claude_isolation, codex_home=Path(a.codex_home).expanduser() if a.codex_home else None,
                    dsh=a.dsh_home, agents=tuple(r3.WORKER), **ext_guard(by_id(u["task"]), a, work))
@@ -426,7 +576,10 @@ def unit_of(u: dict, a, work: Path) -> PF.Unit:
 
 def unit_models(u: dict, row: dict) -> dict:
     """The models this unit was meant to use, and the ones its streams and ledger show it did use."""
-    out = {"lead": r3.LEAD_MODEL, "lead_effort": r3.LEAD_EFFORT, "builtin_worker": r3.WORKER_MODEL}
+    model, effort = lead_of(u)
+    out = {"lead": model, "lead_effort": effort, "builtin_worker": r3.WORKER_MODEL}      # direct: replaced below
+    if u["arm"] == "builtin2r":
+        out["worker_rules"] = "KEEP_TESTS+WIRING"
     if u["arm"] == "direct":
         out = {"direct": " ".join(DIRECT)}
     seen = ((row.get("audit") or {}).get("init") or {}).get("model")
@@ -514,8 +667,20 @@ def schedule(rounds: int, seed: int, tasks: list[str], arms: list[str]) -> list[
     return out
 
 
-def spent(f: Path) -> float:
-    return round(sum(r.get("usd") or 0 for r in read_jsonl(f)), 4)
+def spent(f: Path, tag: str | None = None) -> float:
+    """What the rows of a results file cost (only those of `tag` when given)."""
+    return round(sum(r.get("usd") or 0 for r in read_jsonl(f) if tag is None or r.get("tag") == tag), 4)
+
+
+def budget_spent(f: Path, tag: str, extra: float = 0.0) -> float:
+    """What --budget is checked against: this tag's rows (earlier invocations of the same tag included, so going
+    on with a tag does not get a fresh budget) plus --extra-spent; other tags in the same file do not count."""
+    return round(spent(f, tag) + (extra or 0.0), 4)
+
+
+def spend_line(f: Path, tag: str, extra: float, run_usd: float) -> str:
+    """run (this invocation), tag (what the budget counts, with --extra-spent) and file totals."""
+    return (f"run=${run_usd:.3f} tag=${budget_spent(f, tag, extra):.3f} file=${spent(f):.3f}")
 
 
 def _py(python: str, code: str) -> str:
@@ -619,14 +784,16 @@ def cmd_run(a) -> int:
     bad = [x for x in arms if x not in (*ARMS, *OPT_IN_ARMS)]
     if bad:
         raise SystemExit(f"unknown arm(s): {', '.join(bad)} (known: {', '.join((*ARMS, *OPT_IN_ARMS))})")
-    done = {(r["tag"], r["round"], r["task"], r["arm"]) for r in read_jsonl(out)}
+    done = {done_key(r) for r in read_jsonl(out)}
+    lead = {"lead_model": a.lead_model or DEFAULT_LEAD[0], "lead_effort": a.lead_effort or DEFAULT_LEAD[1]}
     todo = []
     for u in schedule(a.rounds, a.seed, tasks, arms):
-        u = {**u, "tag": a.tag, "seed": a.seed, "taskset": a.taskset,
-             "label": f"eval-r5:{a.tag}:{u['round']}:{u['task']}:{u['arm']}"}
-        if (a.tag, u["round"], u["task"], u["arm"]) not in done:
+        u = {**u, "tag": a.tag, "seed": a.seed, "taskset": a.taskset, **(lead if has_lead(u["arm"]) else {})}
+        u["label"] = f"eval-r5:{a.tag}:{u['round']}:{u['task']}:{u['arm']}{_lead_suffix(u)}"
+        if done_key(u) not in done:
             todo.append(u)
-    print(f"work dir: {work}  results: {out}  units: {len(todo)}", flush=True)
+    print(f"work dir: {work}  results: {out}  units: {len(todo)}  lead: {lead['lead_model']} "
+          f"{lead['lead_effort']}", flush=True)
     if a.dry_run:
         for u in todo:
             print(f"[dry] {u['label']}")
@@ -646,6 +813,7 @@ def cmd_run(a) -> int:
         print("preflight failed: not starting (fix the above, or --force-unclean to run anyway; it is recorded)",
               flush=True)
         return 3
+    rep["lead"] = {"model": lead["lead_model"], "effort": lead["lead_effort"]}     # in every row's fingerprint
     work.mkdir(parents=True, exist_ok=True)
     (work / "preflight.json").write_text(json.dumps(rep, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"[preflight] {rep['result']}: commit {rep['commit'][:12]} cli {rep['cli']} codex {rep['codex']['mode']} "
@@ -655,13 +823,14 @@ def cmd_run(a) -> int:
     ours = [PF._norm(work), PF._norm(f"eval-r5:{a.tag}:")]
     watch = PF.Watch(ours).start()
     lock, stop = threading.Lock(), threading.Event()
+    run_usd = [0.0]                       # this invocation's own spend
 
     def one(u):
         with lock:
-            total = spent(out) + a.extra_spent
+            total = budget_spent(out, a.tag, a.extra_spent)
             if stop.is_set() or total >= a.budget:
                 if not stop.is_set():
-                    print(f"budget ${a.budget} reached (${total:.3f}): stopping", flush=True)
+                    print(f"budget ${a.budget} reached (tag {a.tag}: ${total:.3f}): stopping", flush=True)
                 stop.set()
                 return
         try:
@@ -686,11 +855,12 @@ def cmd_run(a) -> int:
             stop.set()
         with lock:
             append_jsonl(out, row)
+            run_usd[0] += row.get("usd") or 0
             print(f"r{u['round']} {u['task']:18} {u['arm']:8} ok={row.get('ok')} ${row.get('usd', 0):.4f} "
                   f"(lead ${row.get('lead_only_usd', 0) or 0:.4f}) req={row.get('lead_requests')} "
                   f"lead_tok={row.get('lead_tokens')} {row.get('wall_s')}s deleg={row.get('delegated')} "
-                  f"files={row.get('files_changed')} clean={row['env_clean']} total=${spent(out) + a.extra_spent:.3f}",
-                  flush=True)
+                  f"files={row.get('files_changed')} clean={row['env_clean']} "
+                  f"{spend_line(out, a.tag, a.extra_spent, run_usd[0])}", flush=True)
 
     # units of one task run one after another (arms in their shuffled order); --jobs tasks at a time
     groups: dict[tuple, list[dict]] = {}
@@ -701,6 +871,7 @@ def cmd_run(a) -> int:
             list(ex.map(lambda us: [one(u) for u in us], groups.values()))
     finally:
         watch.close()
+    print(f"spent: {spend_line(out, a.tag, a.extra_spent, run_usd[0])} (budget ${a.budget} counts tag)", flush=True)
     # the person's own state, by size and count only: the hub ledger must not have grown, no Claude session folder
     # named after this work dir may be left in the real ~/.claude
     rep["real_state_after"] = post = PF.real_state(PF.real_paths(), work)
@@ -723,18 +894,193 @@ def wall_stats(rs: list[dict]) -> dict:
             "wall_p75": w[-(-3 * len(w) // 4) - 1] if w else None}
 
 
+def round_key(rd) -> tuple:
+    """Rounds in numeric order (2 before 10), anything else after them by its text, a missing one last."""
+    return (rd is None, not isinstance(rd, int), rd if isinstance(rd, int) else 0, str(rd))
+
+
+def ok_rate(ps: list[tuple[dict, dict]]) -> float | None:
+    """The share of right rows (pairs of a row with itself, for task_boot)."""
+    return round(sum(bool(x.get("ok")) for x, _ in ps) / len(ps), 4) if ps else None
+
+
 def by_tag(rows: list[dict]) -> dict:
     """Per tag, per arm: wall_stats of its rows and of each round on its own, so different rounds (and the rounds
     of one tag) are never pooled without the split showing."""
     out: dict = {}
     for tag in sorted({str(r.get("tag")) for r in rows}):
         tr = [r for r in rows if str(r.get("tag")) == tag]
-        for arm in sorted({r["arm"] for r in tr}):
-            ar = [r for r in tr if r["arm"] == arm]
+        for arm in arm_order(arm_of(r) for r in tr):
+            ar = [r for r in tr if arm_of(r) == arm]
             rounds = {str(rd): wall_stats([r for r in ar if r.get("round") == rd])
-                      for rd in sorted({r.get("round") for r in ar}, key=lambda x: (x is None, str(x)))}
+                      for rd in sorted({r.get("round") for r in ar}, key=round_key)}
             out.setdefault(tag, {})[arm] = {**wall_stats(ar), "rounds": rounds}
     return out
+
+
+def med_p75(xs: list[float]) -> dict:
+    """Median (the upper middle, as wall_stats) and p75 (nearest rank) of some numbers."""
+    w = sorted(xs)
+    return {"med": w[len(w) // 2], "p75": w[-(-3 * len(w) // 4) - 1], "n": len(w)} if w else \
+        {"med": None, "p75": None, "n": 0}
+
+
+def arm_order(names) -> list[str]:
+    """Arms in a stable order: the default ones, the opt-in ones, then any other (another lead: `ccx@opus-high`)."""
+    known = [*ARMS, *OPT_IN_ARMS]
+    base = lambda x: x.split("@", 1)[0]  # noqa: E731
+    return sorted(set(names), key=lambda x: (known.index(base(x)) if base(x) in known else len(known), x))
+
+
+def pair_units(rows: list[dict], A: str, B: str) -> list[tuple[dict, dict]]:
+    """(A, B) rows of the same unit: tag, round, task (and rep, when rows have one); arms as arm_of names them."""
+    by: dict = {}
+    for r in rows:
+        if "error" not in r:
+            by.setdefault((str(r.get("tag")), r.get("round"), r.get("task"), r.get("rep")), {})[arm_of(r)] = r
+    return [(d[A], d[B]) for _, d in sorted(by.items(), key=lambda kv: tuple(str(x) for x in kv[0]))
+            if A in d and B in d]
+
+
+def task_boot(ps: list[tuple[dict, dict]], stat, n: int = 4000, seed: int = 7,
+              info: dict | None = None) -> tuple[float, float] | None:
+    """Bootstrap 95% CI of stat(pairs), resampling tasks (the independent unit; a task's rounds go together).
+    Resamples where the stat is undefined (None) are left out; `info`, when given, gets how many (dropped, of n)."""
+    by: dict = {}
+    for p in ps:
+        by.setdefault(p[0]["task"], []).append(p)
+    ts = sorted(by)
+    if info is not None:
+        info.update(n=0, dropped=0)
+    if len(ts) < 2:
+        return None
+    rnd = random.Random(seed)
+    vals = []
+    for _ in range(n):
+        v = stat([p for t in (rnd.choice(ts) for _ in ts) for p in by[t]])
+        if v is not None:
+            vals.append(v)
+    if info is not None:
+        info.update(n=n, dropped=n - len(vals))
+    vals.sort()
+    return (round(vals[int(0.025 * len(vals))], 4), round(vals[int(0.975 * len(vals)) - 1], 4)) if vals else None
+
+
+def _med(xs) -> float | None:
+    """The median as every wall_med of the summary takes it: the upper middle."""
+    w = sorted(xs)
+    return w[len(w) // 2] if w else None
+
+
+def cps_diff(ps: list[tuple[dict, dict]]) -> float | None:
+    """Cost per success of B minus that of A on these pairs (None when either has no success)."""
+    a, b = r3.cps([x for x, _ in ps]), r3.cps([y for _, y in ps])
+    return None if a is None or b is None else round(b - a, 5)
+
+
+def wall_med_diff(ps: list[tuple[dict, dict]]) -> float | None:
+    """Median wall (the upper middle, as wall_med) of B minus that of A on these pairs."""
+    if not ps:
+        return None
+    return round(_med([y.get("wall_s") or 0 for _, y in ps]) - _med([x.get("wall_s") or 0 for x, _ in ps]), 1)
+
+
+def task_sign(ps: list[tuple[dict, dict]]) -> tuple[int, int]:
+    """Per task (the independent unit), which arm was right more often over its rounds: (tasks where A was, tasks
+    where B was); ties are left out. Its exact sign test does not take a task's rounds as independent pairs."""
+    by: dict = {}
+    for x, y in ps:
+        d = by.setdefault(x["task"], [0, 0])
+        d[0] += bool(x.get("ok"))
+        d[1] += bool(y.get("ok"))
+    return sum(a > b for a, b in by.values()), sum(b > a for a, b in by.values())
+
+
+def compare_pair(ps: list[tuple[dict, dict]], A: str, B: str) -> dict:
+    """One arm pair on its shared units: right counts, McNemar exact p on the discordant units, the exact sign test
+    over tasks (task_sign_p: the one to read when a task has several rounds, which McNemar counts as independent
+    pairs), and B - A of cost per success and of the wall median with task-level bootstrap 95% CIs (resamples where
+    an arm has no success are left out of the cost one, and counted)."""
+    b = sum(bool(x.get("ok")) and not y.get("ok") for x, y in ps)
+    c = sum(bool(y.get("ok")) and not x.get("ok") for x, y in ps)
+    tb, tc = task_sign(ps)
+    n_tasks = len({x["task"] for x, _ in ps})
+    ci_info: dict = {}
+    out = {"arms": [A, B], "units": len(ps), "tasks": n_tasks,
+           "ok": {A: sum(bool(x.get("ok")) for x, _ in ps), B: sum(bool(y.get("ok")) for _, y in ps)},
+           "discordant": {f"only_{A}": b, f"only_{B}": c}, "mcnemar_p": S.mcnemar_p(b, c),
+           "task_sign": {f"more_{A}": tb, f"more_{B}": tc}, "task_sign_p": S.mcnemar_p(tb, tc),
+           "diff_is": f"{B} - {A}",
+           "cps": {A: r3.cps([x for x, _ in ps]), B: r3.cps([y for _, y in ps])},
+           "cps_diff": cps_diff(ps), "cps_diff_ci": task_boot(ps, cps_diff, info=ci_info),
+           "cps_diff_ci_dropped": ci_info.get("dropped", 0),
+           "wall_med_diff": wall_med_diff(ps), "wall_med_diff_ci": task_boot(ps, wall_med_diff)}
+    if len(ps) > n_tasks:
+        out["mcnemar_note"] = (f"{len(ps)} units from {n_tasks} tasks: McNemar takes a task's rounds as independent "
+                               "pairs (anti-conservative); task_sign_p does not")
+    if out["cps_diff"] is None:
+        none = [arm for arm, v in out["cps"].items() if v is None]
+        out["cps_diff_note"] = f"no cost per success: {', '.join(none)} has no success on these units"
+    elif ci_info.get("dropped"):
+        out["cps_diff_note"] = (f"{ci_info['dropped']} of {ci_info['n']} resamples had an arm without a success and "
+                                "were left out: the CI is conditional on both arms succeeding")
+    return out
+
+
+def paired_all(rows: list[dict]) -> dict:
+    """compare_pair for every two arms that share units, with Holm-adjusted McNemar and task sign p over those
+    pairs."""
+    arms = arm_order(arm_of(r) for r in rows if "error" not in r)
+    out = {}
+    for i, A in enumerate(arms):
+        for B in arms[i + 1:]:
+            ps = pair_units(rows, A, B)
+            if ps:
+                out[f"{A} vs {B}"] = compare_pair(ps, A, B)
+    for key in ("mcnemar_p", "task_sign_p"):
+        for k, (_p, adj) in S.holm({k: v[key] for k, v in out.items()}).items():
+            out[k][f"{key}_holm"] = adj
+    return out
+
+
+def tier_rule(rows: list[dict], bal: str = TIER_RULE_ARMS[0], save: str = TIER_RULE_ARMS[1]) -> dict | None:
+    """The tier decision rule on the units both arms share: `balanced` is worth it over `save` when it is right at
+    least as often, its wall median is at most 60% of save's and its cost per success at most 1.5x save's. Each
+    condition: pass / fail (n/a when a cost per success is missing); overall: fail when any condition fails, else n/a
+    when one cannot be told, else pass. The wall median is the upper middle, as wall_med. None unless both arms
+    have rows."""
+    ps = pair_units(rows, save, bal)
+    if not ps:
+        return None
+    s_ok, b_ok = sum(bool(x.get("ok")) for x, _ in ps), sum(bool(y.get("ok")) for _, y in ps)
+    s_w = _med([x.get("wall_s") or 0 for x, _ in ps])
+    b_w = _med([y.get("wall_s") or 0 for _, y in ps])
+    s_c, b_c = r3.cps([x for x, _ in ps]), r3.cps([y for _, y in ps])
+    pf = lambda v: "pass" if v else "fail"  # noqa: E731
+    cond = {"right": {"rule": f"{bal} right >= {save} right", "value": [b_ok, s_ok], "result": pf(b_ok >= s_ok)},
+            "wall": {"rule": f"{bal} wall median <= 60% of {save}'s", "value": [b_w, s_w],
+                     "result": pf(b_w <= 0.6 * s_w)},
+            "cps": {"rule": f"{bal} $/success <= 1.5x {save}'s", "value": [b_c, s_c],
+                    "result": "n/a" if b_c is None or s_c is None else pf(b_c <= 1.5 * s_c)}}
+    res = [c["result"] for c in cond.values()]
+    return {"units": len(ps), "conditions": cond,
+            "result": "fail" if "fail" in res else "n/a" if "n/a" in res else "pass"}
+
+
+def tier_rule_lines(tr: dict | None) -> list[str]:
+    """The tier decision rule as plain lines (cmd_summary prints them after the JSON, on stderr)."""
+    if not tr:
+        return []
+    return [f"tier rule ({tr['units']} shared units): {tr['result']}"] + \
+        [f"  {c['result']:4}  {c['rule']}: {c['value'][0]} vs {c['value'][1]}" for c in tr["conditions"].values()]
+
+
+def phase_stats(rs: list[dict]) -> dict | None:
+    """Median and p75 of each phase's wall (phase_wall) over the rows that carry one."""
+    ph = [r["phases"] for r in rs if r.get("phases")]
+    if not ph:
+        return None
+    return {k: med_p75([p[k] for p in ph if p.get(k) is not None]) for k in PHASES if any(k in p for p in ph)}
 
 
 def summarize(rows: list[dict]) -> dict:
@@ -743,27 +1089,42 @@ def summarize(rows: list[dict]) -> dict:
     tags = sorted({str(r.get("tag")) for r in rows})
     rows = [r for r in rows if "error" not in r]
     out = {}
-    for arm in (*ARMS, *OPT_IN_ARMS):
-        rs = [r for r in rows if r["arm"] == arm]
-        if not rs:
-            continue
+    for arm in arm_order(arm_of(r) for r in rows):
+        rs = [r for r in rows if arm_of(r) == arm]
         med = lambda k: sorted(r.get(k) or 0 for r in rs)[len(rs) // 2]  # noqa: E731
         ok = sum(bool(r.get("ok")) for r in rs)
         out[arm] = {"ok": ok, "n": len(rs), "usd": round(sum(r.get("usd") or 0 for r in rs), 4),
                     "cps": round(sum(r.get("usd") or 0 for r in rs) / ok, 4) if ok else None,
                     "lead_only_usd_med": med("lead_only_usd"), "lead_tokens_med": med("lead_tokens"),
                     "lead_requests_med": med("lead_requests"), "wall_med": med("wall_s"),
-                    **{k: v for k, v in wall_stats(rs).items() if k in ("wall_mean", "wall_p75")}}
+                    **{k: v for k, v in wall_stats(rs).items() if k in ("wall_mean", "wall_p75")},
+                    "wilson": S.wilson(ok, len(rs)),
+                    # Wilson takes every row as an independent trial; a task's rounds are not: this one resamples
+                    # tasks (task_boot), as the paired CIs do
+                    "ok_rate_ci_tasks": task_boot([(r, r) for r in rs], ok_rate),
+                    "ok_by_round": {str(rd): sum(bool(r.get("ok")) for r in rs if r.get("round") == rd)
+                                    for rd in sorted({r.get("round") for r in rs}, key=round_key)}}
+        n_tasks = len({r.get("task") for r in rs})
+        if len(rs) > n_tasks:
+            out[arm]["wilson_note"] = (f"{len(rs)} rows from {n_tasks} tasks: Wilson takes them as independent "
+                                       "(too narrow); see ok_rate_ci_tasks")
+        ph = phase_stats(rs)
+        if ph:
+            out[arm]["phases"] = ph
     res = {"arms": out, "by_tag": by_tag(rows), "unclean_rows": unclean, "env_unknown_rows": unknown, "tags": tags,
-           "long_style": r4.summarize_long([{**r, "arm": r["arm"]} for r in rows
-                                                         if r["arm"] in r4.LONG_ARMS])["paired"]}
+           "long_style": r4.summarize_long([{**r, "arm": arm_of(r)} for r in rows
+                                            if arm_of(r) in r4.LONG_ARMS])["paired"],
+           "paired": paired_all(rows)}
+    tr = tier_rule(rows)
+    if tr:
+        res["tier_rule"] = tr
     if any(r.get("ext") for r in rows):
         # per code base, with each external task's commit date (results are reported per repository and by date:
         # a fix from before a model's training cutoff may be remembered)
         by: dict = {}
         for r in rows:
             e = r.get("ext") or {}
-            cell = by.setdefault(e.get("repo") or "this repository", {}).setdefault(r["arm"], {"ok": 0, "n": 0})
+            cell = by.setdefault(e.get("repo") or "this repository", {}).setdefault(arm_of(r), {"ok": 0, "n": 0})
             cell["ok"] += bool(r.get("ok"))
             cell["n"] += 1
         res["by_repo"] = by
@@ -777,7 +1138,10 @@ def tagged(rows: list[dict], tag: str | None) -> list[dict]:
 
 
 def cmd_summary(a) -> int:
-    print(json.dumps(summarize(tagged(read_jsonl(results_file(a.taskset)), a.tag)), ensure_ascii=False, indent=1))
+    res = summarize(tagged(read_jsonl(results_file(a.taskset)), a.tag))
+    print(json.dumps(res, ensure_ascii=False, indent=1))
+    for line in tier_rule_lines(res.get("tier_rule")):       # stdout stays one JSON object
+        print(line, file=sys.stderr)
     return 0
 
 
@@ -786,7 +1150,7 @@ def cmd_export(a) -> int:
             "sub_usd", "by_model_usd", "ccx_usd", "ccx_review_usd", "ccx_agents", "lead_requests", "lead_tokens",
             "lead_output_tokens", "lead_tools", "lead_edits", "agent_calls", "ccx_runs", "ccx_resumes", "rework",
             "delegated", "context_attached", "files_changed", "diffstat", "model", "status", "verdicts", "error",
-            "env_clean", "fingerprint")
+            "env_clean", "fingerprint", "lead_model", "lead_effort", "phases")
     rows = tagged(read_jsonl(results_file(a.taskset)), a.tag)
     data = {"summary": summarize(rows),
             "rows": [r3.scrub({**{k: r[k] for k in keep if k in r},
@@ -809,8 +1173,12 @@ def parser() -> argparse.ArgumentParser:
                    help="r5 (default: the tasks the loop was tuned on) or holdout (unseen, for final claims)")
     r.add_argument("--tasks", default="", help="comma-separated ids from the task set (default: all of it)")
     r.add_argument("--arms", default="")
-    r.add_argument("--budget", type=float, default=3.0, help="stop before a new unit once the results reach $")
-    r.add_argument("--extra-spent", type=float, default=0.0)
+    r.add_argument("--budget", type=float, default=3.0,
+                   help="stop before a new unit once this tag's rows (plus --extra-spent) reach $")
+    r.add_argument("--extra-spent", type=float, default=0.0, help="$ spent elsewhere, counted against --budget")
+    r.add_argument("--lead-model", default="", help=f"the lead's Claude model (default: {DEFAULT_LEAD[0]}); "
+                   "recorded in every row and its done-key")
+    r.add_argument("--lead-effort", default="", help=f"the lead's effort (default: {DEFAULT_LEAD[1]})")
     r.add_argument("--jobs", type=int, default=2, help="tasks run at the same time")
     r.add_argument("--lead-budget", type=float, default=3.0, help="claude -p --max-budget-usd for one lead")
     r.add_argument("--out", default="")

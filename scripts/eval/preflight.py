@@ -85,6 +85,8 @@ TASKS_FILE = Path(__file__).resolve().parent / "tasks_r5.py"
 TIERS_FILE = ROOT / "config" / "tiers.toml"
 SETTING_SOURCES = "project,local"
 CODEX_ARMS = ("ccx", "ccx2", "direct")          # arms whose units start Codex (ccx routes to it)
+# arms whose lead hands the work to Claude Code's own Agent-tool worker (no Codex: no eval CODEX_HOME needed)
+BUILTIN_ARMS = ("builtin", "builtin2", "builtin2r")
 # Names a dedicated eval CODEX_HOME must not have: each would bring the person's rules, memory or tools back.
 # (skills/ is checked separately: Codex installs its own system skills in skills/.system by itself.)
 CODEX_FORBIDDEN = ("AGENTS.md", "AGENTS.override.md", "memories", "rules", "plugins", "hooks")
@@ -1288,6 +1290,8 @@ def fingerprint(rep: dict, u: Unit | None, env: dict | None, models: dict | None
           "python": rep.get("python"), "pytest": rep.get("pytest"), "os": rep.get("os"), "models": models or {},
           "codex_home_files": rep["codex"].get("files_sha256"), "models_cache": rep["codex"].get("models_cache_sha256"),
           "env_keys_sha256": env_keys_sha(env) if env else None}
+    if rep.get("lead"):                  # the run's lead model / effort (r5 --lead-model / --lead-effort)
+        fp["lead"] = rep["lead"]
     if u is not None:
         fp["isolation"] = {"claude": u.claude, "setting_sources": SETTING_SOURCES, "hooks": "disabled",
                            "auto_memory": "off", "codex_home": rep["codex"].get("mode"),

@@ -621,3 +621,40 @@ def test_run_unit_records_audit_leftovers_and_fingerprint_also_when_it_breaks(ma
     row = r5.run_unit(u, A, work)
     assert row["ok"] is False and "lead crashed" in row["error"]
     assert "leftovers" in row and row["fingerprint"]["preflight"] == "pass" and row["audit"]["clean"]
+
+
+def test_run_records_the_lead_model_and_keeps_leads_apart(machine, tmp_path, monkeypatch):
+    _stub_machine(monkeypatch)
+    seen = []
+
+    def fake_unit(u, a, work):
+        seen.append(u)
+        return {**u, "ok": True, "usd": 0.5, "wall_s": 1}
+    monkeypatch.setattr(r5, "run_unit", fake_unit)
+    out = tmp_path / "r.jsonl"
+    base = ["run", "--rounds", "1", "--tasks", r5.IDS[0], "--arms", "self", "--out", str(out), "--no-canary",
+            "--workdir", str(tmp_path / "w"), "--budget", "5"]
+    assert r5.main(base) == 0
+    assert r5.main(base + ["--lead-model", "opus", "--lead-effort", "high"]) == 0
+    assert r5.main(base + ["--lead-model", "opus", "--lead-effort", "high"]) == 0     # done: nothing runs again
+    assert r5.main(base) == 0
+    rows = [json.loads(x) for x in out.read_text(encoding="utf-8").splitlines()]
+    assert len(seen) == len(rows) == 2
+    assert [(r["lead_model"], r["lead_effort"]) for r in rows] == [("sonnet", "medium"), ("opus", "high")]
+    assert rows[0]["label"] == f"eval-r5:r5:1:{r5.IDS[0]}:self" and rows[1]["label"].endswith(":self@opus-high")
+    assert rows[0]["fingerprint"]["lead"] == {"model": "sonnet", "effort": "medium"}
+    assert rows[1]["fingerprint"]["lead"] == {"model": "opus", "effort": "high"}
+
+
+def test_budget_counts_this_tag_and_prints_totals(machine, tmp_path, monkeypatch, capsys):
+    calls = _stub_machine(monkeypatch)
+    out = tmp_path / "r.jsonl"
+    out.write_text(json.dumps({"tag": "other", "round": 1, "task": "x", "arm": "self", "usd": 100.0}) + "\n",
+                   encoding="utf-8")
+    base = ["run", "--rounds", "1", "--tasks", r5.IDS[0], "--arms", "self", "--out", str(out), "--no-canary",
+            "--workdir", str(tmp_path / "w"), "--budget", "5", "--tag", "mine"]
+    assert r5.main(base) == 0 and len(calls) == 1                   # the other tag's $100 does not stop it
+    text = capsys.readouterr().out
+    assert "run=$0.000 tag=$0.000 file=$100.000" in text and "spent: run=" in text
+    assert r5.main(base[:-2] + ["--tag", "mine2", "--extra-spent", "6"]) == 2 and len(calls) == 1
+    assert "budget $5.0 reached (tag mine2: $6.000)" in capsys.readouterr().out
