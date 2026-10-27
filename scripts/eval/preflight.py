@@ -84,7 +84,9 @@ from ccx.runners import find_bin  # noqa: E402
 TASKS_FILE = Path(__file__).resolve().parent / "tasks_r5.py"
 TIERS_FILE = ROOT / "config" / "tiers.toml"
 SETTING_SOURCES = "project,local"
-CODEX_ARMS = ("ccx", "ccx2", "direct")          # arms whose units start Codex (ccx routes to it)
+# arms whose units start Codex (ccx routes to it); r5's tier arms balanced / save may delegate through ccx and
+# cheapest runs ccx straight to Codex (r5.CHEAPEST; fast never delegates)
+CODEX_ARMS = ("ccx", "ccx2", "direct", "balanced", "save", "cheapest")
 # arms whose lead hands the work to Claude Code's own Agent-tool worker (no Codex: no eval CODEX_HOME needed)
 BUILTIN_ARMS = ("builtin", "builtin2", "builtin2r")
 # Names a dedicated eval CODEX_HOME must not have: each would bring the person's rules, memory or tools back.
