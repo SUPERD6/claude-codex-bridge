@@ -485,7 +485,9 @@ def phase_wall(hub: Path, run_ids: list, wall_s: float | None = None) -> dict:
     (lead_wait_s, an estimate: ccx runs block the lead, or it waits with show --wait) and the rest (lead_active_s).
     Checks count every run of ccx's check: the final one (record["check"]) and those of earlier rungs that failed
     and climbed (an attempt's check_seconds). ccx runs a run's review while its final check runs, so lead_wait_s
-    counts that time once (overlap_s: the shorter of the two, per run with both) and is at most the wall. Records
+    counts that time once (overlap_s: the shorter of the two, per run with both) and is at most the wall. A review
+    started alongside an earlier rung's check and stopped when that check failed (a `review:<id>` run that is not
+    the linked one) overlaps those failed checks the same way. Records
     that cannot be read are counted in `missing`."""
     sub = check = review = fix = overlap = 0.0
     n_att = n_rev = n_fix = missing = 0
@@ -511,15 +513,26 @@ def phase_wall(hub: Path, run_ids: list, wall_s: float | None = None) -> dict:
     def is_review(rec: dict) -> bool:
         return str(rec.get("label") or "").startswith("review:")
 
-    for rec in recs.values():
+    by_parent: dict[str, list[tuple[str, dict]]] = {}
+    for rid, rec in recs.items():
+        if is_review(rec):
+            by_parent.setdefault(str(rec["label"])[len("review:"):], []).append((rid, rec))
+
+    for rid, rec in recs.items():
         if is_review(rec):
             review, n_rev = review + secs(rec), n_rev + 1
             continue
         final = (rec.get("check") or {}).get("seconds")
-        c = float(final or 0) + sum(float(x.get("check_seconds") or 0) for x in rec.get("attempts") or [])
-        rv = recs.get(str((rec.get("review") or {}).get("run_id")))
+        early = sum(float(x.get("check_seconds") or 0) for x in rec.get("attempts") or [])
+        c = float(final or 0) + early
+        linked = str((rec.get("review") or {}).get("run_id"))
+        rv = recs.get(linked)
         if final and rv and is_review(rv):      # the review ran alongside the final check
             overlap += min(float(final), secs(rv))
+        # reviews stopped when an earlier rung's check failed ran alongside those checks
+        stopped = sum(secs(x) for xid, x in by_parent.get(str(rid), []) if xid != linked)
+        if early and stopped:
+            overlap += min(early, stopped)
         if rec.get("review_of"):
             fix, n_fix = fix + secs(rec) + c, n_fix + 1
         else:

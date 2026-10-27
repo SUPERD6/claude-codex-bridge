@@ -247,6 +247,14 @@ def test_phase_wall_from_run_records(tmp_path):
     _rec(hub, "v3", label="review:n1", attempts=[{"seconds": 6}])
     e = r5.phase_wall(hub, ["e1", "n1"], wall_s=100)
     assert e["check_s"] == 10.0 and e["overlap_s"] == 0.0 and e["lead_wait_s"] == 56.0
+    # a review stopped when the first rung's check failed ran alongside that check: counted once too
+    _rec(hub, "s1", label="L", attempts=[{"seconds": 100, "kind": "check_failed", "check_seconds": 60},
+                                         {"seconds": 100}], check={"seconds": 60}, review={"run_id": "rev2"})
+    _rec(hub, "rev1", label="review:s1", attempts=[{"seconds": 50}])
+    _rec(hub, "rev2", label="review:s1", attempts=[{"seconds": 50}])
+    s = r5.phase_wall(hub, ["s1", "rev1", "rev2"], wall_s=1000)
+    assert s["check_s"] == 120.0 and s["review_s"] == 100.0 and s["overlap_s"] == 100.0
+    assert s["lead_wait_s"] == 320.0
     rows = [_row("a", 1, "ccx2", True, 0.1, 100, phases=ph),
             _row("b", 1, "ccx2", True, 0.1, 100, phases={**ph, "sub_s": 10.0}), _row("c", 1, "ccx2", True, 0.1, 1)]
     st = r5.summarize(rows)["arms"]["ccx2"]["phases"]
