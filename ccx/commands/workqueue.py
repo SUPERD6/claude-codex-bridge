@@ -147,6 +147,7 @@ def _one(it: dict, root: Path, caller: str, p, cfg, warm: str | None = None, got
     """Route and run one queue item; write its outcome back. Never raises (a thread must report).
     warm: a lane's last run (ccx/lanes.py), whose session takes this item as a new task; got["rec"]: its record.
     worktree: a write item that runs beside other writers works in its own git worktree (as `ccx batch`)."""
+    rec = None
     try:
         if it.get("budget_usd") is not None and float(it.get("cost_usd") or 0) >= float(it["budget_usd"]):
             wq.update(root, it["id"], status="blocked", summary="its budget is used up")
@@ -204,8 +205,16 @@ def _one(it: dict, root: Path, caller: str, p, cfg, warm: str | None = None, got
     except Exception as e:  # noqa: BLE001
         why = f"{type(e).__name__}: {e}"[:300]
         row = {"id": it["id"], "status": "failed", "error": why}
+        ran = {}
+        if isinstance(rec, dict) and rec.get("run_id"):   # it failed after the run: keep the run and what it cost
+            ran = {"run": rec["run_id"], "agent": rec.get("to")}
+            try:
+                ran["cost_usd"] = round(float(it.get("cost_usd") or 0) + _cost(rec), 6)
+            except Exception:  # noqa: BLE001
+                pass
+            row["run"] = rec["run_id"]
         try:
-            wq.update(root, it["id"], status="failed", summary=why)
+            wq.update(root, it["id"], status="failed", summary=why, **ran)
         except Exception as e2:  # noqa: BLE001   writing the failure back failed too: still report, never raise
             row["not_recorded"] = f"{type(e2).__name__}: {e2}"[:300]
         return row

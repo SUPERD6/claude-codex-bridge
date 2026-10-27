@@ -31,47 +31,102 @@ def _file(root: Path) -> Path:
     return qdir(root) / "queue.jsonl"
 
 
+_WINDOWS = os.name == "nt"
+
+
+def _can_create(d: Path) -> bool:
+    """Can this process create a file in d at all? Tells a lock file that is busy (Windows "delete pending") from a
+    folder it may not write (read-only, an ACL), where waiting would never help."""
+    probe = d / f"queue.probe.{os.getpid()}.{time.monotonic_ns()}"
+    try:
+        os.close(os.open(probe, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
+    except PermissionError:
+        return False
+    except OSError:
+        return True
+    try:
+        probe.unlink()
+    except OSError:
+        pass
+    return True
+
+
+def _stale(lock: Path, timeout: float) -> bool:
+    """Is the lock older than any holder keeps it (a crashed writer's)? Judged by the lock file's own age, not by
+    how long this waiter has waited, so a lock another writer has just taken is never taken over."""
+    try:
+        return time.time() - lock.stat().st_mtime > timeout
+    except OSError:
+        return False                   # gone (try again) or cannot be read (delete pending): not stale
+
+
 @contextmanager
 def _lock(root: Path, timeout: float = 10.0):
-    qdir(root).mkdir(parents=True, exist_ok=True)
-    lock = qdir(root) / "queue.lock"
-    t0 = time.time()
+    """Hold the queue lock. Waits for a held one; takes over one older than timeout (a crashed writer's); gives up
+    after 2 * timeout in all (a lock that cannot be taken over, e.g. held open by a hung writer on Windows) with
+    PermissionError when the last attempt was denied, else RuntimeError. Never waits forever."""
+    d = qdir(root)
+    d.mkdir(parents=True, exist_ok=True)
+    lock = d / "queue.lock"
+    token = f"{os.getpid()}.{time.monotonic_ns()}.{id(lock)}".encode()
+    t0, probed = time.time(), False
     while True:
         try:
             fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
             break
         except (FileExistsError, PermissionError) as e:
-            # Windows: a lock file the last holder just unlinked stays "delete pending" for a moment, and creating it
-            # then is denied (PermissionError), not FileExistsError: the lock is busy, so wait as for a held one.
-            # Denied for far longer than any holder keeps it is a real permission problem: say so, don't spin
-            waited = time.time() - t0
-            if isinstance(e, PermissionError) and waited > 2 * timeout:
-                raise
-            if waited > timeout:                # a crashed writer left it: take it over
+            last = e
+            if isinstance(e, PermissionError):
+                # Windows: a lock file the last holder just unlinked stays "delete pending" for a moment, and creating
+                # it then is denied, not FileExistsError: busy, so wait. Anywhere else, or when no file at all can be
+                # created here, the denial is real and lasting: say so at once.
+                if not _WINDOWS:
+                    raise
+                if not probed:
+                    probed = True
+                    if not _can_create(d):
+                        raise
+            if _stale(lock, timeout):          # a crashed writer left it: take it over
                 try:
                     lock.unlink()
-                except (FileNotFoundError, PermissionError):
-                    pass
+                    continue
+                except FileNotFoundError:
+                    continue
+                except PermissionError as e2:  # held open (a hung writer, Windows): wait, up to the deadline
+                    last = e2
+            waited = time.time() - t0
+            if waited > 2 * timeout:
+                msg = f"queue lock {lock} still busy after {waited:.1f}s ({type(last).__name__}: {last})"
+                raise (PermissionError(msg) if isinstance(last, PermissionError) else RuntimeError(msg)) from last
             time.sleep(0.05)
     try:
+        try:
+            os.write(fd, token)                # whose lock it is: a release removes only its own
+        except OSError:
+            token = None                       # unmarked: release it unconditionally, as before
         yield
     finally:
         os.close(fd)
-        _unlink(lock)
+        _unlink(lock, token)
 
 
-def _unlink(lock: Path, tries: int = 20) -> None:
-    """Release the lock file. On Windows the unlink can be denied for a moment (another writer's create racing with
-    it, a virus scanner holding it open): retry briefly. Left behind, the next writer takes it over after its
-    timeout, so a release never fails the write it guarded."""
+def _unlink(lock: Path, token: bytes | None = None, tries: int = 20) -> None:
+    """Release the lock file, if it is still ours (token): one taken over from us belongs to the next writer now.
+    On Windows the unlink can be denied for a moment (another writer's create racing with it, a virus scanner
+    holding it open): retry briefly. Left behind, it is taken over once stale, so a release never fails the write
+    it guarded."""
     for _ in range(tries):
         try:
+            if token is not None and lock.read_bytes() != token:
+                return
             lock.unlink()
             return
         except FileNotFoundError:
             return
         except PermissionError:
             time.sleep(0.01)
+        except OSError:
+            return
 
 
 def _append(root: Path, ev: dict) -> None:
