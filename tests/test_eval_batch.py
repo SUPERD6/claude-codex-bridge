@@ -366,6 +366,8 @@ def test_what_counts_as_a_blocking_wait():
     bash = lambda c: BT.is_wait("Bash", {"command": c})  # noqa: E731
     assert bash('python "/r/ccx.py" run --tradeoff save --check "p" "brief"')
     assert not bash('python "/r/ccx.py" run --bg --worktree "brief"')
+    assert bash('python "/r/ccx.py" run --bg --wait 540 --check "p" "brief"')     # one call: blocks
+    assert bash('python "/r/ccx.py" resume r1 --bg --wait 540 "more"')
     assert bash('python "/r/ccx.py" batch /tmp/plan.json') and bash('python "/r/ccx.py" show r1 --wait')
     assert not bash('python "/r/ccx.py" q run --bg') and bash('python "/r/ccx.py" q run')
     assert not bash('python "/r/ccx.py" q add --plan /tmp/p.json') and not bash("git status")
