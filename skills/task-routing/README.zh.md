@@ -22,6 +22,30 @@ python scripts/task_routing.py route --files 3 --coupling cross --clarity goal -
 python scripts/task_routing.py record --rung codex:gpt-6.1-sol:medium --b 4 --ok 1
 ```
 
+## 档位（整个流程）
+
+`--tradeoff` 也是档位：决定每块活谁做。分档看主智能体的简报，加上 `--minutes` 和 `--files`（`ccx propose`，或
+`scripts/task_routing.py tier`）。文件数、分钟数、简报长度任一项达到某档就算该档；`--minutes` 和 `--files` 都没给时
+算大小拿不准。阈值是暂定值，在 ccx 的 `config/tiers.toml [policy.*]`。
+
+| 档 | 谁做 |
+|---|---|
+| `save` | 全部经 ccx 委派（`ccx2`）；主智能体按 check + 审查验收 |
+| `balanced` | 小、中自己做，大的交 `ccx2`；大小拿不准、状态机/续跑类自己做 |
+| `fast` | 全部自己做 |
+| `cheapest` | `direct`：交 ccx，主智能体不验收；要告诉用户结果可能做错 |
+
+只有用户自己能选档，而且是在设置里选：`ccx config set policy.picked <档>`（`none` = 关，出厂即关）。选了以后，
+`ccx propose`（不带 `--tradeoff`，或带同一档）等于预先授权按该档委派：返回 `authorized: true` 和 `worth_offering: true`；
+把它的 `say` 那句告诉用户，照它给的 `next` 跑（委派部分按 save 选模型），这次运行跳过随机 A/B 自己做。项目的自主级别
+（L0/L1）改文件前仍会停下；这次回答记成档位决定的，不算用户点了头。不要自己设 `policy.picked`。你传的 `--tradeoff`
+不授权任何事：只是选模型，照旧“先提议一句”（agent-delegate 第 0 节），A/B 和试验不变，档位结果只展示。用户在对话里说了
+档位，就是对该档要委派的那些块点了头：用普通的 `ccx run` 派（已获准的委派）。`cheapest` 经你跑仍要花你自己的轮次，
+只有脚本或 CI 直接调用 `ccx run` 才省掉主智能体。你自己发起的 `ccx run --tradeoff balanced|fast` 按该档选模型；
+`policy.picked` 只改谁做，不改选模型（不带 `--tradeoff` 的运行和以前一样选）。一次预先授权只管这个任务按你提议的大小跑一次：
+用同一个 id 再跑，或跑得比提议小，都会被拒绝。
+默认档仍是 `save`，等确认实验再定。
+
 ## 自动校准
 
 每次检查通过或失败后，记一次结果（ccx 会自动记）。参数会自动向真实情况靠拢：task-routing 校准成功率和花费，task-split 校准每个模型能做多长的任务。Claude 和 Codex 用的是同一个技能目录，所以学到的东西共用一份。价格表超过 30 天没更新会提醒，提醒后对照官方价格页更新。

@@ -23,17 +23,89 @@ def new(p: Paths, route: dict, text: str, lead_session: str | None) -> dict:
            "p": (opt.get("delegate") or {}).get("p", route.get("chain_p")),
            "lead_ctx_tokens": c.get("lead_ctx_tokens", sv.get("lead_ctx_tokens")),
            "lead_session": lead_session, "task": text[:200]}
+    tp = route.get("policy") or {}
+    if tp:                       # the whole-workflow tier: its size band, the estimate it used, the mode it planned
+        row.update(policy_tier=tp.get("tier"), band=tp.get("band"), planned_mode=tp.get("mode"),
+                   tier_explicit=bool(tp.get("explicit")), estimate_minutes=(tp.get("signals") or {}).get("minutes"),
+                   estimate_files=(tp.get("signals") or {}).get("files"))
+        # a tier the person picked decided this one: no offer, nobody is asked (left out of the H12 chain in stats)
+        if tp.get("explicit") and tp.get("mode") in ("ccx2", "direct"):
+            row["preauthorized"] = True
     ledger.append_event(p, row)
     return row
 
 
-def answer(p: Paths, proposal: str, yes: bool) -> dict:
+def get(p: Paths, proposal: str) -> dict | None:
+    """The proposal row, or None."""
     from . import ledger
-    if not any(r.get("type") == "proposal" and r.get("proposal") == proposal for r in ledger.rows(p)):
+    return next((r for r in ledger.rows(p) if r.get("type") == "proposal" and r.get("proposal") == proposal), None)
+
+
+_row = get
+
+
+def answered(p: Paths, proposal: str) -> bool:
+    """Has this proposal an answer yet (a yes or no, or the run of a pre-authorised one)?"""
+    from . import ledger
+    return any(r.get("type") == "proposal_answer" and r.get("proposal") == proposal for r in ledger.rows(p))
+
+
+def _claim_file(p: Paths, proposal: str):
+    return p.state / "proposals" / f"{proposal}.used"
+
+
+def claimed(p: Paths, proposal: str) -> bool:
+    """Has a run already taken this pre-authorised proposal (claim())?"""
+    return _claim_file(p, proposal).exists()
+
+
+def claim(p: Paths, proposal: str) -> bool:
+    """Take a pre-authorised proposal for one run, atomically: True for the first caller only. An exclusive file
+    create, so two runs started together (two `--bg` children, a `q run` refill and a manual run) cannot both pass
+    a read-then-write check of the ledger."""
+    import os
+    f = _claim_file(p, proposal)
+    f.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        fd = os.open(f, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        return False
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(f"{time.time()} {os.getpid()}\n")
+    return True
+
+
+def preauthorized(p: Paths, proposal: str) -> dict | None:
+    """The tier (as route["policy"]) when the person's picked tier pre-authorised this proposal, else None. Whether
+    a run may still use it (once, at its size) is ccx run's check."""
+    r = _row(p, proposal)
+    if not r or not r.get("preauthorized"):
+        return None
+    return {"tier": r.get("policy_tier"), "band": r.get("band"), "mode": r.get("planned_mode"), "explicit": True,
+            "signals": {"minutes": r.get("estimate_minutes"), "files": r.get("estimate_files")},
+            "from_proposal": proposal}
+
+
+def answer(p: Paths, proposal: str, yes: bool, source: str = "person") -> dict:
+    """source: "person" (a yes or no to the offer), "tier" (the run of a proposal the picked tier pre-authorised,
+    written when it starts) or "lead" (a proposal the picked tier planned self, sent out by the lead anyway)."""
+    from . import ledger
+    prop = _row(p, proposal)
+    if not prop:
         raise ValueError(f"no proposal {proposal!r} (`ccx propose` prints its id)")
-    row = {"type": "proposal_answer", "proposal": proposal, "yes": yes, "ts": time.time()}
+    # what actually happened: a no -> the lead does it itself; a yes -> ccx, unchecked when the tier planned direct
+    row = {"type": "proposal_answer", "proposal": proposal, "yes": yes, "ts": time.time(),
+           "actual_mode": ("direct" if prop.get("planned_mode") == "direct" else "ccx2") if yes else "self"}
+    if source != "person":
+        row["source"] = source
     ledger.append_event(p, row)
     return row
+
+
+def tier_decided(r: dict) -> bool:
+    """A proposal the person's picked tier decided (pre-authorised, or planned self): never offered to the person.
+    A picked tier whose plan failed (no planned_mode) fell back to offer-first and stays an offer."""
+    return bool(r.get("preauthorized") or (r.get("tier_explicit") and r.get("planned_mode") == "self"))
 
 
 def stats(p: Paths, days: float = 7.0, now: float | None = None) -> dict:
@@ -49,8 +121,12 @@ def stats(p: Paths, days: float = 7.0, now: float | None = None) -> dict:
     for r in rows:
         if r.get("type") == "verify" and r.get("run_id") in runs_by:
             verdicts[r["run_id"]] = r                                  # the last one wins
-    props = {r["proposal"]: r for r in rows if r.get("type") == "proposal" and float(r.get("ts") or 0) >= since}
-    answers = {r["proposal"]: r["yes"] for r in rows if r.get("type") == "proposal_answer" and r["proposal"] in props}
+    # the H12 chain counts offers only: a proposal a picked tier decided (preauthorized, or tier_explicit and
+    # planned self) was never put to the person
+    in_window = [r for r in rows if r.get("type") == "proposal" and float(r.get("ts") or 0) >= since]
+    props = {r["proposal"]: r for r in in_window if not tier_decided(r)}
+    answers = {r["proposal"]: r["yes"] for r in rows if r.get("type") == "proposal_answer" and r["proposal"] in props
+               and r.get("source", "person") == "person"}
     sent = [r for r in runs if r.get("proposal") in props]
     judged = [r for r in sent if r["run_id"] in verdicts and not verdicts[r["run_id"]].get("soft")]
 
@@ -63,7 +139,8 @@ def stats(p: Paths, days: float = 7.0, now: float | None = None) -> dict:
                           "declined": sum(not v for v in answers.values()),
                           "unanswered": len(props) - len(answers), "delegated": len({r["proposal"] for r in sent}),
                           "judged": len(judged), "held_up": sum(bool(verdicts[r["run_id"]].get("ok")) for r in judged),
-                          "chain_complete_share": share(len({r["proposal"] for r in judged}), len(props))},
+                          "chain_complete_share": share(len({r["proposal"] for r in judged}), len(props)),
+                          "tier_decided": len(in_window) - len(props)},
             "verdicts": {"real_runs": len(runs), "judged_by_lead_or_person": len(by_lead),
                          "probable_only": len(soft), "coverage": share(len(by_lead), len(runs)),
                          "coverage_incl_probable": share(len(by_lead) + len(soft), len(runs)),

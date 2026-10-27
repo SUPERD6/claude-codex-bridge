@@ -37,6 +37,21 @@ def _slim(record: dict) -> dict:
     for k in ("trial", "bucket", "no_ab", "proposal"):  # H11: which half of a formal comparison; H12: the offer
         if (record.get("route") or {}).get(k):
             slim[k] = record["route"][k]
+    tp = (record.get("route") or {}).get("policy") or {}
+    if tp:                       # the whole-workflow tier (task-routing tier_plan): band, estimate, planned mode
+        slim.update(policy_tier=tp.get("tier"), band=tp.get("band"), planned_mode=tp.get("mode"),
+                    tier_explicit=bool(tp.get("explicit")),
+                    estimate_minutes=(tp.get("signals") or {}).get("minutes"))
+        if tp.get("proposal_band"):          # a pre-authorised proposal's run: the band it was authorised for
+            slim["proposal_band"] = tp["proposal_band"]
+    # what actually happened (this is a ccx run, so never "self"): from a person or a script, or the run of a
+    # proposal the picked tier pre-authorised as direct (the lead takes the check result as it is), nobody re-checks
+    # it (direct); otherwise the lead accepts it (ccx2). planned_mode "self" with actual ccx2 = the run went out
+    # although the tier said self
+    unchecked = record.get("caller") in (None, "user") or (tp.get("from_proposal") and tp.get("mode") == "direct")
+    slim["actual_mode"] = "direct" if unchecked else "ccx2"
+    if record.get("resume_chain"):
+        slim["resume_chain"] = record["resume_chain"]     # follow-ups of the same task that led to this run
     ae = [a["ae_usd"] for a in record["attempts"] if a.get("ae_usd") is not None]
     slim["ae_usd"] = round(sum(ae), 6) if ae else None
     by: dict[str, float] = {}

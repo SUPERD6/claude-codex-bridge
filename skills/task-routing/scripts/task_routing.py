@@ -17,6 +17,7 @@ Usage:
                         [--agents codex,claude] [--tradeoff balanced] [--not-verifiable]
                         [--lead claude:opus:high --ctx-tokens 40000 --remaining-turns 10] [--explain]
   task_routing.py record --rung codex:gpt-6.1-sol:medium --b 4 --ok 1 [--cost-usd 0.12]
+  task_routing.py tier --tradeoff balanced --minutes 30 --files 2 "brief..."   self | ccx2 | direct for one task
   task_routing.py show
   task_routing.py rubric
   task_routing.py refresh [--if-stale]     public benchmark data, at most weekly (scripts/benchmarks.py)
@@ -28,6 +29,7 @@ import argparse
 import json
 import math
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -279,7 +281,8 @@ def refit(state: dict, min_n: int = 30) -> dict:
 
 # ---- total cost: money + the shadow price of subscription quota + time + risk, all in dollars ---------------------
 TOTAL = {"lambda_floor": 0.3, "lambda_from": 0.6, "lambda_over": 2.0,
-         "value_of_time": {"save": 0.005, "balanced": 0.02, "fast": 0.10},          # $ per minute of waiting
+         "value_of_time": {"save": 0.005, "balanced": 0.02, "fast": 0.10,           # $ per minute of waiting
+                           "cheapest": 0.005},
          "failure_cost": {"low": 0.5, "visible": 3.0, "critical": 20.0},            # $ for a wrong result shipped
          "minutes_per_attempt": {"low": 1.5, "medium": 3.0, "high": 6.0, "xhigh": 10.0, "max": 15.0,
                                  "default": 4.0},
@@ -437,6 +440,8 @@ def mark_unavailable(state: dict, agent: str, model: str, cli: str | None = None
 def tradeoff_params(pri: dict, tradeoff) -> dict:
     """Named preset (save | balanced | fast) or a knob 0..1 (0 = cheapest, 1 = fastest/safest).
     Knob -> tau = 0.70 + 0.20*k (success target), cascade while k < 0.75. balanced == 0.5."""
+    if tradeoff == "cheapest" and "cheapest" not in pri["tradeoff"]:
+        tradeoff = "save"                  # the whole-workflow tier "cheapest" picks models like save
     if isinstance(tradeoff, str) and tradeoff in pri["tradeoff"]:
         return pri["tradeoff"][tradeoff]
     try:
@@ -661,6 +666,122 @@ def three_way(b: float, pri: dict, state: dict, lead: str, delegate_agents: list
             "value_of_time_per_min": vot, "failure_cost": fail_cost}
 
 
+# ------------------------------------------------------------------ whole-workflow tiers
+# A tier is what the person trades: save (cheapest that stays right), balanced, fast, cheapest (no lead acceptance:
+# may be wrong). The tier decides, per task, who does it: the lead itself ("self"), a ccx run the lead accepts
+# ("ccx2", models picked like `save`), or a ccx run nobody re-checks ("direct"). Sizing uses the lead's brief plus its
+# --minutes / --files estimate. Thresholds are provisional (read off round 5), so they live in config:
+# ccx's config/tiers.toml [policy.*] overrides DEFAULT_POLICY key by key.
+TIERS = ("save", "balanced", "fast", "cheapest")
+MODES = ("self", "ccx2", "direct")
+DEFAULT_POLICY = {
+    "bands": {"large_files": 3, "large_minutes": 45, "large_words": 180,
+              "medium_files": 2, "medium_minutes": 15, "medium_words": 80,
+              "cjk_chars_per_word": 2.5,          # Chinese brief: characters / 2.5 count as words (not calibrated)
+              "lead_ctx_large": 150000,           # balanced: a medium task goes to ccx2 once the lead's context is this big
+              "knob": [0.34, 0.67],               # knob 0..1: below the first -> save, below the second -> balanced, else fast
+              "hard_words": ["state machine", "state-machine", "resume", "kill", "restart", "crash", "race",
+                             "状态机", "续跑", "恢复", "中断", "杀掉"]},
+    "save": {"small": "ccx2", "medium": "ccx2", "large": "ccx2", "uncertain": "ccx2", "hard": "ccx2"},
+    "balanced": {"small": "self", "medium": "self", "large": "ccx2", "uncertain": "self", "hard": "self",
+                 "medium_big_ctx": "ccx2"},
+    "fast": {"small": "self", "medium": "self", "large": "self", "uncertain": "self", "hard": "self"},
+    "cheapest": {"small": "direct", "medium": "direct", "large": "direct", "uncertain": "direct", "hard": "direct"},
+}
+
+
+def merged_policy(policy: dict | None = None) -> dict:
+    out = {k: dict(v) for k, v in DEFAULT_POLICY.items()}
+    for k, v in (policy or {}).items():
+        if isinstance(v, dict):
+            out.setdefault(k, {}).update(v)
+    return out
+
+
+def tier_name(tradeoff, policy: dict | None = None) -> str:
+    """save | balanced | fast | cheapest; a knob 0..1 maps onto save / balanced / fast at the configured cut points."""
+    if isinstance(tradeoff, str) and tradeoff in TIERS:
+        return tradeoff
+    lo, hi = merged_policy(policy)["bands"]["knob"]
+    try:
+        k = min(1.0, max(0.0, float(tradeoff)))
+    except (TypeError, ValueError):
+        raise ValueError(f"tier must be one of {', '.join(TIERS)} or a number 0..1, got {tradeoff!r}")
+    return "save" if k < lo else "balanced" if k < hi else "fast"
+
+
+def brief_words(text: str, cjk_per_word: float = 2.5) -> float:
+    """Words in a brief; CJK characters count 1/cjk_per_word of a word each."""
+    cjk = sum(1 for ch in text or "" if "㐀" <= ch <= "鿿" or "豈" <= ch <= "﫿")
+    latin = len("".join(ch if not ("㐀" <= ch <= "鿿" or "豈" <= ch <= "﫿") else " "
+                        for ch in text or "").split())
+    return round(latin + cjk / max(cjk_per_word, 0.1), 1)
+
+
+def names_word(text: str, word: str) -> bool:
+    """Does `text` name `word`? Latin words match whole (case-insensitive, "skill" is not "kill", "traceback" is not
+    "race"); a word with CJK characters matches as written (Chinese has no spaces between words)."""
+    w = (word or "").strip().lower()
+    if not w:
+        return False
+    if any("㐀" <= ch <= "鿿" or "豈" <= ch <= "﫿" for ch in w):
+        return w in (text or "").lower()
+    # plain English endings count ("resumed", "crashes", "killing", "racing"); a longer word does not ("skills" is
+    # still not "kill": the start is a word boundary)
+    stem = re.escape(w[:-1]) + "(?:e|es|ed|ing)" if w.endswith("e") else re.escape(w) + "(?:s|es|ed|ing)?"
+    return re.search(r"(?<![a-z0-9_])" + stem + r"(?![a-z0-9_])", (text or "").lower()) is not None
+
+
+def size_band(brief: str = "", minutes: float | None = None, files: int = 0, policy: dict | None = None) -> dict:
+    """small / medium / large from the lead's estimate: any one signal (files, minutes, brief words) reaching a band
+    is enough. uncertain = no --minutes and no --files (the brief's length alone); hard = the brief names a
+    state-machine/resume-type mechanism (whole words: "skill" does not name "kill"; CJK words as written)."""
+    bd = merged_policy(policy)["bands"]
+    words = brief_words(brief, float(bd["cjk_chars_per_word"]))
+
+    def band_of(x, kind):
+        return "large" if x >= bd[f"large_{kind}"] else "medium" if x >= bd[f"medium_{kind}"] else "small"
+    votes = {"words": band_of(words, "words")}
+    if minutes:
+        votes["minutes"] = band_of(float(minutes), "minutes")
+    if files:
+        votes["files"] = band_of(int(files), "files")
+    order = ("small", "medium", "large")
+    band = max(votes.values(), key=order.index)
+    uncertain = "minutes" not in votes and "files" not in votes
+    hard = [w for w in bd.get("hard_words") or [] if names_word(brief, w)]
+    return {"band": band, "uncertain": uncertain, "hard": hard, "votes": votes,
+            "signals": {"words": words, "minutes": minutes, "files": files or 0}}
+
+
+def tier_plan(tradeoff, brief: str = "", minutes: float | None = None, files: int = 0, lead_ctx: int = 0,
+              policy: dict | None = None) -> dict:
+    """The whole-workflow decision for one task under a tier: mode self | ccx2 | direct, and why."""
+    pol = merged_policy(policy)
+    tier = tier_name(tradeoff, policy)
+    rules = pol.get(tier) or DEFAULT_POLICY[tier]
+    sz = size_band(brief, minutes, files, policy)
+    band = sz["band"]
+    if sz["hard"] and "hard" in rules:
+        mode, why = rules["hard"], f"state-machine/resume-type task ({', '.join(sz['hard'][:3])})"
+    elif sz["uncertain"] and "uncertain" in rules:
+        mode, why = rules["uncertain"], "size uncertain (give --minutes and --files)"
+    elif (band == "medium" and "medium_big_ctx" in rules
+          and lead_ctx >= int(pol["bands"]["lead_ctx_large"])):
+        mode, why = rules["medium_big_ctx"], f"medium task, your context is large ({lead_ctx} tokens)"
+    else:
+        mode, why = rules.get(band, "self"), f"{band} task"
+    if mode not in MODES:
+        raise ValueError(f"policy.{tier}: unknown mode {mode!r} (one of {', '.join(MODES)})")
+    out = {"tier": tier, "band": band, "uncertain": sz["uncertain"], "hard": sz["hard"], "mode": mode,
+           "why": f"{tier}: {why} -> {mode}", "signals": sz["signals"], "provisional": True}
+    if mode in ("ccx2", "direct"):
+        out["rung_tradeoff"] = "save"           # the delegated part picks its model like save
+    if mode == "direct":
+        out["may_be_wrong"] = True              # nobody re-checks the result: label it so
+    return out
+
+
 def record(rung: str, b: float, ok: bool, pri: dict, state: dict, cost_usd: float | None = None,
            seconds: float | None = None) -> dict:
     pri = with_benchmarks(pri, "code")     # offsets are learned on top of the benchmark-informed base
@@ -729,6 +850,12 @@ def main(argv=None) -> int:
     rec.add_argument("--b", type=float, required=True)
     rec.add_argument("--ok", type=int, choices=[0, 1], required=True)
     rec.add_argument("--cost-usd", type=float)
+    ti = sub.add_parser("tier", help="whole-workflow tier: self, ccx2 (delegate, lead accepts) or direct for one task")
+    ti.add_argument("--tradeoff", default="balanced", help="save | balanced | fast | cheapest, or a knob 0..1")
+    ti.add_argument("--minutes", type=float, help="how long a skilled engineer would need")
+    ti.add_argument("--files", type=int, default=0, help="source files the task touches")
+    ti.add_argument("--lead-ctx", type=int, default=0, help="tokens your conversation re-reads each request")
+    ti.add_argument("brief", nargs="*", help="the brief you would hand over")
     sub.add_parser("show")
     sub.add_parser("rubric")
     sub.add_parser("refit", help="suggest rubric weights from recorded outcomes (advice only)")
@@ -755,6 +882,10 @@ def main(argv=None) -> int:
         print(json.dumps({"cache": str(bench_path()), "age_days": b.age_days(bench_path()), **b.summary(d)}
                          if d else {"cache": str(bench_path()), "empty": "run: task_routing.py refresh"},
                          indent=2, ensure_ascii=False))
+        return 0
+    if a.cmd == "tier":
+        print(json.dumps(tier_plan(a.tradeoff, " ".join(a.brief), a.minutes, a.files, a.lead_ctx),
+                         ensure_ascii=False))
         return 0
     pri = load_priors()
     state = load_state()

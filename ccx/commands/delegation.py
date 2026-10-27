@@ -18,7 +18,8 @@ from ..delegate import Request, compact, recap, run, verify
 from ..runners import find_bin
 from ..workspace import missing_test_paths
 from .common import (_brief, _caller, _out, _routing_args, _spec_from_args, _target, find_continuable,
-    apply_mode, find_seat, installed_agents, lead_session_id, parse_quota, provider_agents, resolve)
+    apply_mode, find_seat, installed_agents, lead_session_id, parse_quota, picked_tier, provider_agents, resolve,
+    tier_policy)
 from .install import tier_spec_safe
 from ..subagents import parse_spec as subagents_spec
 
@@ -98,6 +99,60 @@ def _bg_not_delegated(p, a, route: dict, caller: str) -> None:
     ledger.write_record(p.runs / rid, rec)
 
 
+def _bg_refused(p, a, caller: str, error: str) -> None:
+    """The detached half of `ccx run --bg` refused before any sub-agent starts (a pre-authorised proposal that is
+    used up, sized smaller, or lapsed): write a finished record so `ccx show <id> --wait` ends at once instead of
+    waiting out its timeout. Only for that detached process; a foreground refusal stays an error."""
+    rid = os.environ.get("CCX_RUN_ID")
+    if not rid or not (p.runs / rid / "bg.log").exists() or (p.runs / rid / "run.json").exists():
+        return
+    rec = {"run_id": rid, "ts": time.time(), "state": "finished", "ok": False, "kind": "refused",
+           "to": getattr(a, "to", None) or "-", "tier": getattr(a, "tier", None) or "-", "mode": None,
+           "caller": caller, "route": {"proposal": getattr(a, "proposal", None)},
+           "cwd": str(Path(a.cwd or os.getcwd()).resolve()), "label": getattr(a, "label", None) or "",
+           "attempts": [], "error": error, "proposal": getattr(a, "proposal", None),
+           "ephemeral": True,                       # no session, no spend: not a piece of work in stats or the ui
+           "result": {"status": "refused", "summary": error,
+                      "next_step": "run `ccx propose` again for this task, then run it with the new id"}}
+    ledger.write_record(p.runs / rid, rec)
+
+
+_BANDS = ("small", "medium", "large")
+
+
+def _preauth_for_run(p, cfg: dict, proposal: str, spec: dict) -> dict | None:
+    """The tier (as route["policy"]) when the person's picked tier pre-authorised `proposal` and this run may use
+    it, else None. A pre-authorisation covers one run of that task: refused when the setting changed since, when a
+    run already used it, or when this run is sized smaller than the proposal (its band would not have been sent out
+    by the tier), and when the tier would not send this run's own brief out (its hard or uncertain rules plan it
+    self). The returned policy keeps the proposal's tier and planned mode, with this run's band and estimate.
+    Being used is claimed atomically when the run starts (proposals.claim), not here."""
+    from .. import proposals
+    pre = proposals.preauthorized(p, proposal)
+    if not pre:
+        return None
+    if pre.get("tier") != picked_tier(cfg):
+        raise ValueError(f"proposal {proposal} was pre-authorised by tier {pre.get('tier')}, which the "
+                         "person's settings no longer pick (policy.picked): run `ccx propose` again and offer it")
+    if proposals.answered(p, proposal) or proposals.claimed(p, proposal):
+        raise ValueError(f"proposal {proposal} was pre-authorised for one run, which has already used it: run "
+                         "`ccx propose` again for this task")
+    own = tier_policy(p, cfg, {**spec, "files": int(spec.get("files") or 0)}, pre["tier"]) or {}
+    if own.get("band") in _BANDS and pre.get("band") in _BANDS:
+        if _BANDS.index(own["band"]) < _BANDS.index(pre["band"]):
+            raise ValueError(f"proposal {proposal} was pre-authorised for a {pre['band']} task, but this run is "
+                             f"sized {own['band']} (its --minutes / --files / brief): pass the estimate you proposed "
+                             "with, or `ccx propose` this task on its own")
+        pre = {**pre, "proposal_band": pre["band"], "band": own["band"], "signals": own.get("signals") or {}}
+    if own.get("error") or (own.get("mode") and own["mode"] not in ("ccx2", "direct")):
+        # re-plan this run's own brief: the tier's hard / uncertain rules apply to what is sent, not only its size
+        why = own.get("error") or own.get("why") or ""
+        raise ValueError(f"proposal {proposal} was pre-authorised by tier {pre['tier']}, but that tier plans this "
+                         f"run's own task as {own.get('mode') or 'unplannable'}" + (f" ({why})" if why else "") +
+                         ": a pre-authorisation covers the task it was proposed for; `ccx propose` this brief")
+    return pre
+
+
 def cmd_run(a) -> int:
     p = paths()
     cfg = load_config(p)
@@ -117,17 +172,40 @@ def cmd_run(a) -> int:
     if a.bg and not a.brief and not a.brief_file:
         raise ValueError("--bg needs the task as text or --brief-file (stdin is not passed on)")
     if a.bg and not auto:
+        if a.proposal:
+            # refuse a used-up, smaller or lapsed pre-authorisation here, before detaching: the detached child's
+            # refusal would leave `ccx show <id> --wait` waiting (it checks again, and records a refusal, below)
+            _preauth_for_run(p, cfg, a.proposal, _spec_from_args(a, _brief(a)))
         _out(_background(sys.argv[1:], p))
         return 0
     text = _brief(a)
     caller = _caller(a.caller)
     spec = _spec_from_args(a, text)
+    preauth, tier_self = None, False
+    if a.proposal:
+        from .. import proposals
+        try:
+            preauth = _preauth_for_run(p, cfg, a.proposal, spec)   # a tier the person picked, not a yes to it
+        except ValueError as e:
+            _bg_refused(p, a, caller, str(e))
+            raise
+        if preauth:
+            spec["tier_preauth"] = True          # the tier decided who does it: no random A/B self-run, no trial
+        else:
+            # a proposal the picked tier planned "self" was never offered: sending it out is the lead's own call
+            tier_self = proposals.tier_decided(proposals.get(p, a.proposal) or {})
     mode = apply_mode(spec)                      # before routing: start-up cost depends on read/write
     kw, route = resolve(spec, caller, p, cfg)
     route["mode"] = mode
-    if a.proposal:                               # the person said yes to an offer (H12)
-        from .. import proposals
-        proposals.answer(p, a.proposal, True)
+    if a.proposal:
+        if preauth:
+            # the run row keeps the proposal's tier and planned mode, with this run's own band and estimate. Its
+            # answer (source "tier") is written only when the run really starts, below
+            route["policy"] = preauth
+        else:
+            # the person said yes to an offer (H12, written here as before); a tier-planned "self" sent out anyway
+            # is the lead's (source "lead": not a yes in proposals.stats)
+            proposals.answer(p, a.proposal, True, source="lead" if tier_self else "person")
         route["proposal"] = a.proposal
     if kw is None:
         _bg_not_delegated(p, a, route, caller)
@@ -139,7 +217,10 @@ def cmd_run(a) -> int:
                 **{k: route[k] for k in ("rung", "p", "expected_usd") if route.get(k) is not None},
                 **({"check": a.check} if a.check else {}), **({"budget_usd": a.budget} if a.budget else {}),
                 **({"project": proj["name"]} if proj else {})}
-        stop = autonomy.gate(auto, mode["mode"], bool(a.approved or a.proposal), plan)
+        # a yes to an offer is the person's approval; a tier pre-authorisation, or a proposal the tier planned self
+        # (never offered), is not (L0/L1 still ask)
+        stop = autonomy.gate(auto, mode["mode"], bool(a.approved or (a.proposal and not preauth and not tier_self)),
+                             plan)
         if stop:
             _out(stop)
             return 0
@@ -169,6 +250,16 @@ def cmd_run(a) -> int:
                   namecheck=getattr(a, "namecheck", None),
                   subagents="off" if a.no_subagents else subagents_spec(a.subagents), budget_usd=a.budget,
                   parallel=True if a.parallel else None, share_context=a.context, **kw)
+    if preauth:
+        # the run of a proposal the picked tier pre-authorised starts now: only now is it used (once), and only now
+        # did it go out (actual_mode). Source "tier": not counted as a yes in proposals.stats. The claim is atomic:
+        # of two runs started together, only one gets it
+        if not proposals.claim(p, a.proposal):
+            err = (f"proposal {a.proposal} was pre-authorised for one run, which has already used it: run "
+                   "`ccx propose` again for this task")
+            _bg_refused(p, a, caller, err)
+            raise ValueError(err)
+        proposals.answer(p, a.proposal, True, source="tier")
     rec = run(req, p)
     res = compact(rec)
     if prev:
@@ -563,6 +654,11 @@ def _route(a) -> dict:
                 lead_ctx = context.lead_now(lead_agent, lead_session_id(lead_agent))
                 src = "none" if lead_ctx is None else "lead_session"
             lead_ctx = lead_ctx or 0
+            if route.get("policy") and lead_ctx:           # balanced: a big lead context sends medium tasks out
+                tp = tier_policy(p, cfg, {**spec, "files": a.files, "lead_ctx": lead_ctx},
+                                 route["policy"].get("tier") or route["tradeoff"])
+                if tp:
+                    route["policy"] = tp
             route["self_vs_delegate"] = learn.self_vs_delegate(p, route["b"], a.lead, route["rung"], ctx,
                                                                a.turns_left, route["tradeoff"], lead_ctx)
             route["self_vs_delegate"].update(ctx_tokens=ctx, lead_ctx_tokens=lead_ctx, ctx_source=src)
@@ -606,18 +702,52 @@ def cmd_propose(a) -> int:
     lead_agent = a.lead.split(":")[0]
     row = proposals.new(p, route, " ".join(a.text or []), lead_session_id(lead_agent))
     c = route.get("choice") or route.get("self_vs_delegate") or {}
-    worth = (c.get("recommend") == "delegate")
+    tp = route.get("policy") or {}
     def usd(x):
         return "?" if x is None else (f"${x:.4f}" if x < 0.01 else f"${x:.2f}")
     odds = "odds unknown" if row["p"] is None else f"about {row['p']:.0%} likely to work"
-    _out({"proposal": row["proposal"], "worth_offering": worth, "recommend": c.get("recommend"),
-          "why": c.get("why"), "self_usd": row["self_usd"], "delegate_usd": row["delegate_usd"], "p": row["p"],
-          "lead_ctx_tokens": row["lead_ctx_tokens"], "ctx_source": c.get("ctx_source"),
-          "say": (f"This looks delegable: about {usd(row['delegate_usd'])} delegated vs {usd(row['self_usd'])} "
-                  f"if I do it here, {odds}. Delegate it?") if worth else None,
-          "next": (f"on yes: ccx run --proposal {row['proposal']} ... (no --no-ab), then ccx verify <run_id>; "
-                   f"on no: ccx propose --no {row['proposal']}") if worth else
-                  "not worth offering: do it yourself, nothing to ask"})
+    out = {"proposal": row["proposal"]}
+    if tp.get("explicit") and tp.get("mode"):
+        # the person picked this tier in their settings (policy.picked): it pre-authorises what the tier delegates
+        # (docs/DECISIONS.md, tiers). worth_offering agrees with authorized: true when the tier delegates (a skill
+        # copy that predates `authorized` then asks with `say`, the conservative side), false when it says self
+        mode = tp["mode"]
+        out.update(worth_offering=mode != "self", authorized=mode != "self", recommend=mode, why=tp["why"])
+        if mode != "self":
+            out["say"] = (f"Your picked tier {tp['tier']} delegates this: about {usd(row['delegate_usd'])} delegated "
+                          f"vs {usd(row['self_usd'])} here, {odds}.")
+        if mode == "self":
+            out["next"] = f"tier {tp['tier']}: do it yourself, nothing to ask"
+        else:
+            # the delegated part picks its model like save; the proposal row keeps the tier
+            out["next"] = (f"tier {tp['tier']} pre-authorises this: ccx run --tradeoff save "
+                           + ("--review off " if mode == "direct" else "")
+                           + f"--proposal {row['proposal']} --minutes ... --files ... [--check \"CMD\"] \"<brief>\""
+                           + (", then take its --check result as it is (no review, no acceptance by you) and tell "
+                              "the person the result may be wrong. Run through you, your own turns are still paid: "
+                              "only a script or CI calling ccx run itself skips the lead's cost"
+                              if mode == "direct" else
+                              ", then accept by its check + review (on review_failed, its hint)"))
+            if mode == "direct":
+                out["may_be_wrong"] = True
+    else:
+        worth = (c.get("recommend") == "delegate")
+        out.update(worth_offering=worth, recommend=c.get("recommend"), why=c.get("why"),
+                   say=(f"This looks delegable: about {usd(row['delegate_usd'])} delegated vs {usd(row['self_usd'])} "
+                        f"if I do it here, {odds}. Delegate it?") if worth else None,
+                   next=(f"on yes: ccx run --proposal {row['proposal']} ... (no --no-ab), then ccx verify <run_id>; "
+                         f"on no: ccx propose --no {row['proposal']}") if worth else
+                   "not worth offering: do it yourself, nothing to ask")
+    out.update(self_usd=row["self_usd"], delegate_usd=row["delegate_usd"], p=row["p"],
+               lead_ctx_tokens=row["lead_ctx_tokens"], ctx_source=c.get("ctx_source"))
+    if tp:
+        out["tier"] = {k: tp.get(k) for k in ("tier", "band", "mode", "uncertain", "hard", "explicit", "provisional",
+                                              "error") if k in tp}
+        if not tp.get("explicit"):
+            out["tier"]["note"] = "informational: no tier picked, the offer-first rule above applies"
+        elif not tp.get("mode"):
+            out["tier"]["note"] = "the tier could not be planned: the offer-first rule above applies"
+    _out(out)
     return 0
 
 

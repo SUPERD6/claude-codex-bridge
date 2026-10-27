@@ -63,6 +63,7 @@ class Request:
     provider: str | None = None     # e.g. deepseek: same agent CLI, another model API
     mcp: bool | None = None         # Claude sub-agent: load MCP tool definitions (default from config)
     continued: bool = False         # resume_run is a finished earlier task: reuse its session for a NEW task
+    side_message: bool = False      # resume_run's session answers a board message: not a follow-up of its task
     fork_lead: str | None = None    # Claude lead session id: the sub-agent starts as a fork of it (same tool only)
     ephemeral: bool = False         # one-shot (ask/selftest): nothing saved to the tools' session history
     keep_session: bool = False      # ephemeral for ccx, but the tool keeps its session (a discuss turn resumed once)
@@ -474,6 +475,9 @@ def run(req: Request, p: Paths) -> dict:
         "provider": req.provider, "lead_session": req.lead_session, "continued": cont,
         "first_rung": plan[0]["rung"],
         "continue_depth": (int(prev.get("continue_depth", 0)) + 1) if cont else 0,
+        # follow-ups of the same task in a row (ccx resume, review fix rounds, resuming an interrupted run); a
+        # continued session (ccx run auto-continue, --seat) or a board message answered in its session is not: 0
+        "resume_chain": (int(prev.get("resume_chain", 0)) + 1) if prev and not cont and not req.side_message else 0,
         "forked_from_lead": bool(req.fork_lead), "ephemeral": req.ephemeral,
         "mode_source": req.mode_source, "mode_why": req.mode_why, "check_cmd": req.check, "risk": req.risk,
         "namecheck_mode": req.namecheck,

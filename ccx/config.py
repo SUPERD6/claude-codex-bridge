@@ -218,7 +218,10 @@ _bool.__name__ = "true/false"
 
 
 SETTINGS = {   # key -> (type, help). Only these can be set with `ccx config set`.
-    "defaults.tradeoff": (str, "save | balanced | fast, or a knob 0..1 (0 = cheapest, 1 = fastest)"),
+    "defaults.tradeoff": (str, "tier: save | balanced | fast | cheapest, or a knob 0..1 (0 = cheapest, 1 = fastest)"),
+    "policy.picked": (str, "save | balanced | fast | cheapest | none: the tier YOU pick for all work in this hub. It "
+                           "pre-authorises what that tier delegates (`ccx propose` says authorized: true; project "
+                           "autonomy L0/L1 still asks before edits). none (shipped) = offer first, as before"),
     "defaults.ab_self_rate": (float, "share of routed tasks the lead does itself to measure savings (0 = off)"),
     "defaults.max_escalations": (int, "stronger rungs to try after a verified failure"),
     "defaults.max_parallel": (int, "parallel sub-agents in ccx batch"),
@@ -269,10 +272,14 @@ def set_setting(p: Paths, key: str, raw: str) -> dict:
     if key not in SETTINGS:
         raise ValueError(f"unknown setting {key!r}; known: {', '.join(SETTINGS)}")
     typ = SETTINGS[key][0]
-    if key == "defaults.tradeoff" and raw not in ("save", "balanced", "fast"):
+    if key == "defaults.tradeoff" and raw not in ("save", "balanced", "fast", "cheapest"):
         k = float(raw)
         if not 0 <= k <= 1:
             raise ValueError("tradeoff knob must be between 0 and 1")
+    if key == "policy.picked":
+        if raw not in ("save", "balanced", "fast", "cheapest", "none", "off", ""):
+            raise ValueError("policy.picked must be save, balanced, fast, cheapest or none")
+        raw = "" if raw in ("none", "off") else raw
     if key == "sessions.archive" and raw not in ("after_run", "hours", "off"):
         raise ValueError("sessions.archive must be after_run, hours or off")
     if key == "autonomy.level" and raw not in ("L0", "L1", "L2"):

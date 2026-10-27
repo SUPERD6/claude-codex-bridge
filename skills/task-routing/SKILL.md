@@ -39,6 +39,35 @@ subscription quota predictions. Inspect `calibration`, `stale`, and `new_models_
 unverified priors must stay labelled as such. Verify current official prices only when using
 stale prices to make a cost decision, not for every ordinary task.
 
+## Tiers (whole workflow)
+
+`--tradeoff` is also the tier: who does each task, sized from your brief plus `--minutes` and `--files`
+(`ccx propose`, or `scripts/task_routing.py tier`). Any one of files, minutes or brief length reaching a band is
+enough; with neither `--minutes` nor `--files` the size counts as uncertain. Thresholds are provisional
+(`config/tiers.toml [policy.*]` in ccx).
+
+| Tier | Who does it |
+|---|---|
+| `save` | everything delegated through ccx (`ccx2`); you accept by check + review |
+| `balanced` | small/medium yourself, large to `ccx2`; uncertain size and state-machine/resume-type tasks yourself |
+| `fast` | everything yourself |
+| `cheapest` | `direct`: ccx with no acceptance by you; tell the person the result may be wrong |
+
+Only the person picks a tier, in their own settings: `ccx config set policy.picked <tier>` (`none` = off,
+shipped). Then `ccx propose` (with no `--tradeoff`, or that same tier) pre-authorises what the tier delegates:
+`authorized: true` with `worth_offering: true`; tell the person its `say` line and run its `next` (it picks the
+delegated part's models like save), whose run skips the random A/B self-run. A project's autonomy level (L0/L1)
+still stops before edits, and the answer is logged as the tier's, not as the person's yes. Never set
+`policy.picked` yourself. A `--tradeoff` you pass authorises nothing: it is a model pick, the offer-first rule
+stays (agent-delegate section 0), A/B and trials are unchanged, and the tier plan is only shown. If the person
+names a tier in the conversation, that is their say for the pieces it delegates: run those with an ordinary
+`ccx run` (an approved handoff). `cheapest` run through you still costs your own turns; only a script or CI calling
+`ccx run` itself skips the lead. A `ccx run --tradeoff balanced|fast` you start yourself picks that tier's models;
+`policy.picked` changes who does a task, not the models (a run without `--tradeoff` picks them as before). A
+pre-authorised proposal covers one run of that task at the size you proposed: a second run with its id, or a
+smaller one, is refused.
+The default tier stays `save` until a confirmation run decides.
+
 ## Act within the task's scope
 
 Use the estimate alongside checkability, startup/handoff cost and actual availability.
