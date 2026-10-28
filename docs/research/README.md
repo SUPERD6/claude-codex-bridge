@@ -21,7 +21,7 @@ not proof. Scrubbed data is in [data/](data/).
 | 2026-10-25 | Round 3: ccx versus Claude Code's built-in sub-agent on harder tasks | All arms 20/20; doing it yourself is cheapest; ccx cuts the lead's tokens but is slower | [round 3](2026-10-25-r3.md) ([plan](2026-10-25-r3-plan.md)) |
 | 2026-10-25 | Do warm lanes (continuing a session per piece) save? | About 40 % cheaper than a fresh session per piece, but slower and still dearer than one run; stays off | [warm lanes](2026-10-25-warm-lanes.md) |
 | 2026-10-26 | Round 4: where do cheap models fail; does delegating save in a long lead session? | Hardly fail (ceiling); in a long session doing it yourself is cheapest | [round 4](2026-10-26-r4.md) |
-| 2026-10-26 | Round 5: large real tasks, does delegating save, is it more right? | First run: no; after the fixes ccx2 39/40 at $0.116–0.131 per success (dev set) | [round 5](2026-10-26-r5.md) ([plan](2026-10-26-r5-plan.md)) |
+| 2026-10-26 | Round 5: large real tasks, does delegating save, is it more right? | First run: no; after the fixes ccx2 39/40 over r5e+r5f (76/80 over r5e–r5h), $0.116–0.135 per success (dev set) | [round 5](2026-10-26-r5.md) ([plan](2026-10-26-r5-plan.md)) |
 | 2026-10-27 | Batch / pipeline: several changes at once, scored on the merged tree | Plan only, nothing measured yet | [batch plan](2026-10-27-batch-plan.md) |
 | 2026-10-28 | Offline experiments C1–C6 on the round-5 records | namecheck 0 false alarms; most other candidates dropped or still need paid runs | [offline experiments](offline-experiments.md) |
 | 2026-10-28 | Did ccx keep its own obligations in round 5 (r5e–r5h)? | Right answers hid harness problems: 76/76 right ccx2 units failed at least one criterion | [harness audit](2026-10-28-harness-audit.md) |

@@ -22,10 +22,15 @@ change the four numbers above.
 |---|---|---|---|---|
 | r5h | ccx2 (ccx as the agent-delegate skill teaches it) | 19/20 | $0.135 | 236 s |
 
-For comparison, the first run in the report: the lead doing it itself 19/20, $0.211, 94 s; the built-in sub-agent
-19/20, $0.155, 278 s. The report's §7 table stops at r5f; the r5h row uses its definitions (total spend of the 20
-units / units right; plain median of the 20 walls) on the same results file, and r5h is covered by the
-[harness audit](research/2026-10-28-harness-audit.md).
+The four ccx2 runs after the fixes (r5e–r5h) were 19, 20, 18 and 19 out of 20, at $0.116–0.135 per success; r5h is
+not the best of them. For comparison, from earlier runs on older ccx (the lead doing it itself was not re-run after
+the first run): the lead doing it itself 19/20, $0.211, 94 s, and the built-in sub-agent 19/20, $0.155, 278 s (both
+first run); the built-in sub-agent with the same lean recipe (builtin2, r5d) 17/20, **$0.114**, 276 s, cheaper per
+success than r5h ccx2. Right answers also hid harness problems: the
+[harness audit](research/2026-10-28-harness-audit.md) found that every right ccx2 unit in r5e–r5h (76/76) failed at
+least one harness criterion, none of the 80 passed all of them, and the harness macro was 0.67. The report's §7 table
+stops at r5f; the r5h row uses its definitions (total spend of the 20 units / units right; plain median of the 20
+walls) on the same results file.
 
 ## Measured (2026-10-24, ccx 0.4.0)
 
