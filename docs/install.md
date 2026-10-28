@@ -116,6 +116,7 @@ ccx ask "question"                    # quick read-only second opinion from the 
 ccx archive [--apply] | --restore <run>   # archive finished sub-sessions (automatic once a result is final;
                                           # sessions.archive = after_run | hours | off)
 ccx batch plan.json                   # independent tasks in parallel; parallel writers get separate worktrees
+                                      # (with uncommitted changes they share the folder: commit first)
 ccx q add "title" --brief "..." [--dep q1] [--check CMD] [--minutes 30] [--budget 1]   # the project's work queue
 ccx q run | resume | tree | done q3 --ok 1   # run every ready piece in parallel; a piece too big splits itself
 ccx q add --plan plan.json            # a whole plan: {"tasks": ...} or task-split's {"pieces": ...} (depends_on, files)
