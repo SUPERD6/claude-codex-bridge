@@ -782,6 +782,7 @@ def _route(a) -> dict:
         mode = apply_mode(spec)
         kw, route = resolve(spec, _caller(None), p, cfg)
         route["mode"] = mode            # recommended read/write and why; routing priced the start-up with it
+        _lead_by_task(cfg, route, a)
         if a.lead and route.get("rung"):
             ctx = a.ctx_tokens
             for f in a.ctx_files or []:        # rough: 4 bytes per token
@@ -825,6 +826,19 @@ def _route(a) -> dict:
         if t.get(ag):
             out[ag] = t[ag]
     return out
+
+
+def _lead_by_task(cfg: dict, route: dict, a) -> None:
+    """lead.model_by_task (opt-in, default off): the model for a NEW lead conversation on this task and for the lead's
+    own built-in sub-agent, from the same b. Advice only; a running conversation keeps its model."""
+    from .. import leadmodel
+    agent = a.lead.split(":")[0] if getattr(a, "lead", None) else _caller(None)
+    lm = leadmodel.pick(cfg, agent, route.get("b"), getattr(a, "risk", None))
+    if lm:
+        route["new_lead"] = {**lm, "note": "for a new conversation on this task; never switch a running one"}
+        bm = leadmodel.builtin_model(lm)
+        if bm:
+            route["builtin_model"] = bm         # Claude Code's Agent tool `model` for your own sub-agent
 
 
 def cmd_propose(a) -> int:
@@ -881,6 +895,12 @@ def cmd_propose(a) -> int:
                    next=(f"on yes: ccx run --proposal {row['proposal']} ... (no --no-ab), then ccx verify <run_id>; "
                          f"on no: ccx propose --no {row['proposal']}") if worth else
                    "not worth offering: do it yourself, nothing to ask")
+    if route.get("new_lead"):
+        from .. import leadmodel
+        leadmodel.record(p, route["new_lead"], "propose", {"proposal": row["proposal"]})
+        out["new_lead"] = route["new_lead"]
+        if route.get("builtin_model"):
+            out["builtin_model"] = route["builtin_model"]
     out.update(self_usd=row["self_usd"], delegate_usd=row["delegate_usd"], p=row["p"],
                lead_ctx_tokens=row["lead_ctx_tokens"], ctx_source=c.get("ctx_source"))
     if tp:
