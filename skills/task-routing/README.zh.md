@@ -46,6 +46,8 @@ python scripts/task_routing.py record --rung codex:gpt-6.1-sol:medium --b 4 --ok
 用同一个 id 再跑，或跑得比提议小，都会被拒绝。
 默认档仍是 `save`，等确认实验再定。
 
+**按任务选主智能体模型**（用户执行 `ccx config set lead.model_by_task on` 才开，默认关）：正在跑的对话不换模型（换了缓存作废）。用同一个难度 b，`ccx route` / `ccx propose` 多给 `new_lead`（新对话用的模型：b 不超过 `easy_max_b` 用 `[lead_by_task]` 的便宜模型，否则用你的）和 `builtin_model`（你自带子智能体用的）；`ccx fresh` / `ccx handoff` 带 `--minutes` 时照它选。
+
 ## 自动校准
 
 每次检查通过或失败后，记一次结果（ccx 会自动记）。参数会自动向真实情况靠拢：task-routing 校准成功率和花费，task-split 校准每个模型能做多长的任务。Claude 和 Codex 用的是同一个技能目录，所以学到的东西共用一份。价格表超过 30 天没更新会提醒，提醒后对照官方价格页更新。

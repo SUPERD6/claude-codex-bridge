@@ -22,7 +22,7 @@
 2. **派得省**（第 5 轮评测，2026-10-26：大任务上用 ccx 的主智能体请求数中位 8 次，用自带子智能体 6 次，多出来的就是下面这些习惯）：
    - **简报 = 用户原话照抄**（尤其接口、名字、精确字符串、数字）+ 你已经知道的文件路径 + 验收命令。不要转述接口（“第一个匹配的提示”被改写成“最早的位置”，结果做错）；不要为了写简报先读代码库或 README/STATUS/文档，子智能体自己读（还会读 `.ccx/context.md`），花的是便宜模型。复用已有 `.ccx/context.md`；只有上下文维护属于本次授权时才更新它。格式见 `references/brief-template.md`。
    - **大活或多文件：一次调用** `ccx run ... --bg --wait 540`，shell 工具超时设 600000 毫秒（Claude Code 的 Bash 上限是 10 分钟；Codex 或 DeepSeek 当主智能体时，把 `--wait` 设成比自己的工具调用超时少一分钟左右）。它立刻（在 stderr）打印 run_id，同一次调用里给出最终结果，和普通 `ccx run` 一样。到时还在跑：`ccx show <run_id> --wait`，显示还在跑就再调一次。还在跑的运行不要 `ccx resume`。不要把 ccx 输出接到 `tail`/`head`。
-   - **自己的子智能体和 ccx 同时干活**：你自带子智能体做的块和 ccx 做的块绝不同时写同一批文件；ccx 的写任务和你自己的写任务并行时，用 `--worktree` 或走 `ccx q run`（不然它的 undo 快照、diff 和验收会把它们的改动算进去）。
+   - **自己的子智能体和 ccx 同时干活**：你自带子智能体做的块和 ccx 做的块绝不同时写同一批文件；ccx 的写任务和你自己的写任务并行时，用 `--worktree` 或走 `ccx q run`（不然它的 undo 快照、diff 和验收会把它们的改动算进去）。它们的模型用 ccx 给的（`builtin` 选择的 `how`，或 `ccx route` 的 `builtin_model`），填进 Claude Code Agent 工具的 `model`（sonnet / opus / haiku / fable，Claude Code 2.1.309）；没给就不填（跟你同一个模型）。
    - **几块已获授权的活**：先用 task-split `check` 排计划；改同一个文件的块合成一块或你自己做，绝不并行（干净的 git 检出里，`q run` 让并行的写任务各用一个 worktree；否则都在当前检出里跑）。每块 `ccx q add "<标题>" --brief "..." --check "..."`（有先后用 `--dep <id>`），再 `ccx q run --bg`。自己的块从短到长做，不要碰排队块的文件（它的 undo 快照和验收会把你的改动算进去）。`ccx q ls` 里正在跑的块的 run id 是 `live`：`ccx show <live ids> --any --wait` 谁先结束先交回谁。验收看 check+review 再扫一眼 diff，最后跑所有块验收命令的并集。`waiting` / `unmerged` 下的块是在 worktree 里做的：合并列出的分支，再 `ccx q done <id> --ok 1`，然后重新 `ccx q run`；`dep_blocked` 的块在等一个失败的块（见 `references/three-way.md`）。`last_run` 是 `stopped: backpressure`（额度/登录）时，在额度恢复前不再开新活。
    - **`--review` 保持默认（auto）**；只有高风险或用户能直接看到的改动（以及需要审查通过的 L2 自动合并）才 `--review on` / `--risk visible`。
    - **不要让子智能体提交**（Codex 沙盒禁止写 `.git`）；你验收后自己提交。
@@ -38,6 +38,6 @@
    - `review` 是独立审查：`pass` 或 `issues`（带文件:行）。ccx 自己会跑一轮修改（`show --wait` 会等它）；之后的 `needs_lead` 由你决定，`review_failed` 见下一条。`kind` 只按最终结果判断：打印出结果的 `ccx run ... --bg --wait`，或 `ccx show <run_id> --wait`（两者都会等修改轮；不带 `--wait` 的 `show` 可能在修改轮开始前看到第一条记录，这时续跑会和修改轮撞上）。`--wait` 之后仍是 `review_issues`，说明修改轮没跑成（没有可续的会话，或没能启动）：自己改，或重新派。
    - `review_failed`（修改轮之后审查仍不过）：对着 diff 逐条核对 `[must]` 项，属实的自己修，不属实的放下；不要为此 `ccx resume`。
    - 然后 `ccx verify <run_id> --ok 1|0 [--reason unfinished|wrong|overreach|other]`：校准路由（给了 `--minutes` 还校准拆分），并把 checkpoint 的这一步标成完成。没人判断的运行，12 小时后验收或自查通过、审查也通过会记成“大概率对”；`ccx undo --apply` 撤回的等你判，加 `--wrong` 同时记成“错”。只要真的看过，就记一下。
-5. **换主智能体**：用户说“交接给 X”时，自己还能写就 `ccx handoff --by <你> --to X "…"`；原主智能体写不了（额度用完、崩了、窗口关了）就 `ccx handoff --from-transcript <原主智能体> --to X`。接手方先核对其中的说法。自己的对话太长、下一块又是新活时：先问用户，再 `ccx fresh`（用本对话的记录写交接，新对话开局就能看到）。
+5. **换主智能体**：用户说“交接给 X”时，自己还能写就 `ccx handoff --by <你> --to X "…"`；原主智能体写不了（额度用完、崩了、窗口关了）就 `ccx handoff --from-transcript <原主智能体> --to X`。接手方先核对其中的说法。自己的对话太长、下一块又是新活时：先问用户，再 `ccx fresh`（用本对话的记录写交接，新对话开局就能看到）。给下一块活加 `--minutes`：用户开了 `lead.model_by_task` 时，`ccx fresh` / `ccx handoff` 按难度给新主对话选模型。正在跑的对话永远不换模型。
 6. **记忆**：只有记忆维护已获授权时，才用 `ccx mem add` 保存必要的长期事实（`--project` 写进本项目 `.ccx/` 的日志；`ccx project status` 看这一层）；委派任务本身不授权写入记忆。
 7. **代价高的决定**（难撤回、涉及安全或钱、用户说很重要）：像第 0 步一样先一句话提议 `ccx discuss`（`--dry-run` 给出参与者、最多几次调用、估价和各自用的模型；不带 `--confirmed` 只给估价，不会真跑），用户同意才 `ccx discuss --confirmed "问题"`；结果只是建议，用户可在 `ccx ui` 看讨论过程。

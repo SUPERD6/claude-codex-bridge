@@ -50,7 +50,7 @@ ccx run --project <名字> --minutes <n> --tradeoff save --review on --check "CM
 - 已结束的运行用 `ccx archive --older-than 1 --apply` 归档（不确定会动哪些就先不加 `--apply` 看一遍）；客户端有自己的会话列表时，自己开的会话在它的活合并后归档。
 - 汇报一两句：现在什么成立了、在哪里（分支、PR、文件）、花了多少、哪些**没验证**。不讲过程。
 
-其他工具：`ccx ui`（本机实时页面：谁在做什么、什么在等用户）、`ccx say` / `ccx board` / `ccx peek`（给本项目其他打开的会话留言、看它们在做什么）、`ccx intake pull`（取回用户在自己私有仓库里以 issue 提的任务；`ccx intake ask` / `done` 会以用户身份在这些 issue 上留评论，属于往本机以外发消息，按第 6 节先问用户）、`ccx stats` / `ccx report`（花费和节省）。
+其他工具：`ccx ui`（本机实时页面：谁在做什么、什么在等用户）、`ccx say` / `ccx board` / `ccx peek`（给本项目其他打开的会话留言、看它们在做什么）、`ccx intake pull`（取回用户在自己私有仓库里以 issue 提的任务；`ccx intake ask` / `done` 会以用户身份在这些 issue 上留评论，属于往本机以外发消息，按第 6 节先问用户）、`ccx stats` / `ccx report`（花费和节省）。要给某块活新开主对话：`ccx fresh` / `ccx handoff` 加 `--minutes`（用户开了 `lead.model_by_task` 时按难度选模型）；自带子智能体的模型见 agent-delegate 第 2 节。
 
 ## 6. 自动档位，以及始终要问用户的事
 
