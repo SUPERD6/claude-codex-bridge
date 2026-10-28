@@ -192,8 +192,8 @@ class TestLockRetries(unittest.TestCase):
         with wq._lock(self.root, timeout=0.2):                         # left behind: taken over once stale
             pass
 
-    def test_threads_never_lose_a_write(self):
-        errs, n, t = [], 150, 6            # exercises the delete-pending race on Windows; plain contention elsewhere
+    def _many_threads(self, n, t):
+        errs = []
 
         def work():
             for _ in range(n):
@@ -210,6 +210,16 @@ class TestLockRetries(unittest.TestCase):
         lines = (wq.qdir(self.root) / "queue.jsonl").read_text(encoding="utf-8").splitlines()
         self.assertEqual(len(lines), n * t)
 
+    def test_threads_never_lose_a_write(self):
+        # threads of one process take turns in-process first: this covers that path (fairness, no starvation)
+        self._many_threads(150, 6)
+
+    def test_threads_meeting_only_at_the_lock_file_never_lose_a_write(self):
+        # each call its own in-process lock: the threads meet at the file, as processes do, and on Windows hit the
+        # "delete pending" create race under thread contention
+        with mock.patch("ccx.queue._local_lock", lambda lock: wq._Turns()):
+            self._many_threads(60, 4)
+
     def test_processes_never_lose_a_write(self):
         # writers in separate processes meet only at the lock file (threads of one process take turns in-process)
         n, procs = 60, 4
@@ -224,17 +234,17 @@ class TestLockRetries(unittest.TestCase):
         self.assertEqual(len(lines), n * procs)
         self.assertFalse(self.lock.exists())
 
-    def test_busy_lock_that_keeps_changing_hands_is_waited_for(self):
-        # CI windows 3.12: a writer gave up after 2 * timeout in all while the others kept writing. The deadline
-        # counts from the last time the lock changed hands, so only a lock that stays the same one fails
+    def _churn(self, seconds):
+        """Other writers (as other processes would): a new lock file every 20 ms, each a new holder with its own
+        token, never absent; removed after `seconds`. -> (thread, stop event)."""
         d = wq.qdir(self.root)
-        d.mkdir(parents=True)
+        d.mkdir(parents=True, exist_ok=True)
         self.lock.write_bytes(b"0")
-        stop, churn = threading.Event(), 1.0           # 5 * timeout: well past the old 2 * timeout limit
+        stop = threading.Event()
 
-        def other_writers():                           # a new lock file every 20 ms (a new holder), never absent
+        def other_writers():
             i, t = 0, time.time()
-            while time.time() - t < churn:
+            while time.time() - t < seconds:
                 i += 1
                 tmp = d / f"next.{i}"
                 tmp.write_bytes(str(i).encode())
@@ -249,11 +259,56 @@ class TestLockRetries(unittest.TestCase):
         th = threading.Thread(target=other_writers, daemon=True)
         th.start()
         self.addCleanup(th.join)
-        t = time.time()
-        with wq._lock(self.root, timeout=0.2):
-            pass
+        return th, stop
+
+    def test_busy_lock_that_keeps_changing_hands_is_waited_for(self):
+        # CI windows 3.12: a writer gave up after 2 * timeout in all while the others kept writing. The deadline
+        # counts from the last time the lock changed hands, so only a lock that stays the same one fails. Never
+        # stale here: a loaded runner pausing the churn must not turn this into a takeover test
+        churn = 2.5                                    # 5 * timeout: well past the old 2 * timeout limit
+        with mock.patch("ccx.queue._stale", return_value=False):
+            _, stop = self._churn(churn)
+            t = time.time()
+            with wq._lock(self.root, timeout=0.5):
+                pass
         self.assertTrue(stop.is_set())
         self.assertGreaterEqual(time.time() - t, churn - 0.1)
+
+    def test_long_wait_in_process_does_not_eat_the_file_deadline(self):
+        # a thread that queued behind its siblings for more than 2 * timeout, then met another process's lock file,
+        # failed on its first poll: the file deadline counted from before the in-process wait
+        timeout, queued, churn = 0.5, 1.5, 2.5
+        turns = wq._local_lock(self.lock)
+        held = threading.Event()
+
+        def siblings():                                # the in-process lock changing hands for `queued` seconds
+            with turns.lock:
+                held.set()
+                t = time.time()
+                while time.time() - t < queued:
+                    turns.n += 1
+                    time.sleep(0.05)
+        with mock.patch("ccx.queue._stale", return_value=False):
+            _, stop = self._churn(churn)
+            sib = threading.Thread(target=siblings, daemon=True)
+            sib.start()
+            self.addCleanup(sib.join)
+            held.wait(5)
+            t = time.time()
+            with wq._lock(self.root, timeout=timeout):
+                pass
+        self.assertTrue(stop.is_set())
+        self.assertGreaterEqual(time.time() - t, churn - 0.2)
+
+    def test_thread_hung_holding_the_lock_fails_the_others_after_2x_timeout(self):
+        turns = wq._local_lock(self.lock)
+        turns.lock.acquire()
+        self.addCleanup(turns.lock.release)
+        t = time.time()
+        with self.assertRaises(RuntimeError):
+            with wq._lock(self.root, timeout=0.2):
+                pass
+        self.assertLess(time.time() - t, 3)            # not MAX_WAIT_FACTOR * timeout (6 s)
 
     def test_probe_names_differ_within_one_clock_tick(self):
         # monotonic_ns is ~15 ms coarse on Windows before 3.13: two threads probing in one tick shared a name, and

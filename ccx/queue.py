@@ -78,24 +78,48 @@ def _stale(lock: Path, timeout: float, seen: dict | None = None) -> bool:
     return now - seen["since"] > timeout
 
 
-_LOCAL: dict[str, threading.Lock] = {}     # one per queue folder: this process's threads take turns on it first
+class _Turns:
+    """This process's threads take turns on one queue folder's lock file through this; n counts the turns taken, so
+    a waiter sees whether the lock is changing hands or one holder has hung."""
+
+    def __init__(self):
+        self.lock, self.n = threading.Lock(), 0
+
+
+_LOCAL: dict[str, _Turns] = {}     # one per queue folder
 _LOCAL_GUARD = threading.Lock()
 
 
-def _local_lock(lock: Path) -> threading.Lock:
+def _local_lock(lock: Path) -> _Turns:
     key = os.path.normcase(os.path.abspath(lock))
     with _LOCAL_GUARD:
-        return _LOCAL.setdefault(key, threading.Lock())
+        return _LOCAL.setdefault(key, _Turns())
+
+
+def _wait_turn(turns: _Turns, lock: Path, timeout: float, t0: float) -> None:
+    """Take this process's turn: the same deadline rules as the file (2 * timeout since the last time a turn was
+    taken, MAX_WAIT_FACTOR * timeout in all), so a thread that hangs holding the lock stalls the others no longer than
+    a hung holder in another process would."""
+    seen, progress = turns.n, t0
+    while not turns.lock.acquire(timeout=min(0.1, timeout)):
+        now = time.time()
+        if turns.n != seen:
+            seen, progress = turns.n, now
+        if now - progress > 2 * timeout or now - t0 > MAX_WAIT_FACTOR * timeout:
+            raise RuntimeError(f"queue lock {lock} still busy in this process after {now - t0:.1f}s")
+    turns.n += 1
 
 
 def _holder(lock: Path):
-    """Which lock file this is (not how old): a new holder creates a new file, so this changes when the lock changed
-    hands; touching or rewriting the same file does not change it. None when there is none to look at."""
+    """Which lock file this is (not how old): a new holder creates a new file and writes its own token into it, so
+    this changes when the lock changed hands; touching the same file does not. The token matters where a freed inode
+    number is reused at once and there is no birth time (Linux ext4/tmpfs). None when there is none to look at."""
     try:
         st = lock.stat()
+        body = lock.read_bytes()[:200]
     except OSError:
         return None
-    return st.st_ino, getattr(st, "st_birthtime_ns", None)
+    return st.st_ino, getattr(st, "st_birthtime_ns", None), body
 
 
 @contextmanager
@@ -103,22 +127,25 @@ def _lock(root: Path, timeout: float = 10.0):
     """Hold the queue lock. Waits for a held one; takes over one older than timeout (a crashed writer's); gives up
     when the lock has not changed hands for 2 * timeout (a lock that cannot be taken over, e.g. held open by a hung
     writer on Windows) with PermissionError when the last attempt was denied, else RuntimeError; and after
-    MAX_WAIT_FACTOR * timeout in all. Never waits forever, and never fails only because other writers kept it busy.
+    MAX_WAIT_FACTOR * timeout in all (the in-process wait below included). Never waits forever, and below that cap
+    never fails only because other writers kept it busy.
 
     Threads of this process first take turns on an in-process lock, so they never poll against each other for the
     file (polling is unfair: a writer that just released takes it again before a sleeping waiter wakes; CI windows
-    3.12 saw a thread wait out the old 2 * timeout in all while others wrote). Other processes still meet at the
-    file; a waiter's deadline restarts whenever it sees the lock file change hands."""
+    3.12 saw a thread wait out the old 2 * timeout in all while others wrote). That wait has the same rules: it fails
+    after 2 * timeout without a turn changing hands (a thread hung holding the lock). Other processes still meet at
+    the file; there the 2 * timeout counts from when this thread got its turn, and restarts whenever it sees the lock
+    file change hands."""
     d = qdir(root)
     d.mkdir(parents=True, exist_ok=True)
     lock = d / "queue.lock"
     token = f"{os.getpid()}.{threading.get_ident()}.{uuid.uuid4().hex}".encode()
     t0 = time.time()
-    local = _local_lock(lock)
-    if not local.acquire(timeout=MAX_WAIT_FACTOR * timeout):
-        raise RuntimeError(f"queue lock {lock} still busy in this process after {time.time() - t0:.1f}s")
+    turns = _local_lock(lock)
+    _wait_turn(turns, lock, timeout, t0)
+    local = turns.lock
     try:
-        fd = _take(lock, d, timeout, t0)
+        fd = _take(lock, d, timeout, t0, start=time.time())    # the file's deadline counts from here, not t0
     except BaseException:
         local.release()
         raise
@@ -139,9 +166,11 @@ def _lock(root: Path, timeout: float = 10.0):
 MAX_WAIT_FACTOR = 30            # a waiter that keeps seeing progress still gives up after this many timeouts
 
 
-def _take(lock: Path, d: Path, timeout: float, t0: float) -> int:
-    """Create the lock file (O_EXCL) -> its fd; the waiting and takeover rules of _lock."""
-    probed, seen, holder, progress, pause = False, {}, None, t0, 0.002
+def _take(lock: Path, d: Path, timeout: float, t0: float, start: float | None = None) -> int:
+    """Create the lock file (O_EXCL) -> its fd; the waiting and takeover rules of _lock. The 2 * timeout deadline
+    counts from start (when this thread got its in-process turn) or the last change of hands; t0 is only for the
+    MAX_WAIT_FACTOR * timeout cap on the whole wait."""
+    probed, seen, holder, progress, pause = False, {}, None, (t0 if start is None else start), 0.002
     while True:
         try:
             return os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
