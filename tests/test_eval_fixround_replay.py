@@ -176,7 +176,8 @@ def test_reason_buckets_and_issue_kinds():
 
 
 def test_r5_summary_keeps_tags_and_rounds_apart_with_mean_and_p75():
-    rows = [{"tag": tag, "round": rd, "task": "a", "arm": "ccx2", "ok": True, "usd": 0.1, "wall_s": w}
+    rows = [{"tag": tag, "round": rd, "task": "a", "arm": "ccx2", "ok": True, "usd": 0.1, "wall_s": w,
+             "env_clean": True}
             for tag, rd, w in (("t1", 1, 100), ("t1", 1, 200), ("t1", 2, 300), ("t1", 2, 400), ("t2", 1, 1000))]
     s = r5.summarize(rows)
     t1 = s["by_tag"]["t1"]["ccx2"]
