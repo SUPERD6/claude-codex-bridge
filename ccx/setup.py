@@ -29,7 +29,7 @@ class Wizard:
         print(text, flush=True)
 
     def step(self, n: int, title: str) -> None:
-        self.say(f"\n[{n}/6] {title}")
+        self.say(f"\n[{n}/{STEPS}] {title}")
 
     def ask(self, question: str, default: bool = False) -> bool:
         if self.yes:

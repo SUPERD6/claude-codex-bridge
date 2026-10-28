@@ -127,7 +127,11 @@ def parse_claude(stdout: str, stderr: str, rc: int, _last: Path | None = None) -
         out.result = data.get("structured_output") or _json_from_text(str(data.get("result", "")))
         out.raw_text = str(data.get("result", ""))
         if data.get("is_error"):
-            out.error = out.raw_text or data.get("subtype")
+            # errors[] carries the real cause, e.g. "No conversation found with session ID: ..." on a resume
+            # (hub run 20261024-213453-6292 showed only error_during_execution)
+            errs = data.get("errors") or []
+            errs = "; ".join(str(e) for e in (errs if isinstance(errs, list) else [errs]) if e)
+            out.error = "; ".join(x for x in (out.raw_text or data.get("subtype"), errs) if x) or None
     joined = (stderr + " " + (out.error or "")).lower()
     out.auth_problem = any(h in joined for h in AUTH_HINTS) and out.result is None
     out.ok = rc == 0 and out.result is not None and not (isinstance(data, dict) and data.get("is_error"))

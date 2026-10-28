@@ -136,7 +136,7 @@ A printed result with a `run_id` means that delegation ran: do not send the same
   (H11, 2026-10-24: a lead that re-ran it saved nothing by delegating). Run tests or read the full diff yourself
   only when the check failed, was absent or `weak` (that command has passed wrong work here before), or the status
   is partial/blocked.
-- `check_broken` = the check tested nothing: `ccx resume <run_id> --check "..."`. The task names an entry point
+- `check_broken` = the check tested nothing: `ccx resume <run_id> "what to test" --check "..."`. The task names an entry point
   (a command, a CLI) and no test runs it as a real process: resume once asking for one.
 - `no_changes` = a write run said done/partial but changed nothing (no edit, no commit; its check ran on the
   unchanged tree; `ccx q` marks the piece failed, so its dependents wait): accept only if the task was already
