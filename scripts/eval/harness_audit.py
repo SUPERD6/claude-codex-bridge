@@ -7,7 +7,7 @@ the unit left on disk; an optional LLM rubric (off by default) adds a few judgem
 written for ccx's obligations (not the paper's list), and each one says pass / fail / not_exercised with the file
 that shows it.
 
-A unit is what scripts/eval/r5.py leaves in its work dir (r5*/r6* layout):
+A unit is what scripts/eval/r5.py leaves in its work dir (the r5* layout):
 
   <work>/<key>/                     the unit's repository (final state)
   <work>/<key>.stream.jsonl         the lead's stream-json (arms with a lead)
@@ -17,11 +17,14 @@ A unit is what scripts/eval/r5.py leaves in its work dir (r5*/r6* layout):
                                     shared-context.md, undo.json, final.lock, stop.request
   results.jsonl row                 tag, round, task, arm, ok (hidden tests), ccx_usd, leftovers ...
 
-The key is `<round>-<task>-<arm>`; the tag of a work dir is its folder name unless --tag says otherwise.
+The key is r5.unit_key (`<round>-<task>-<arm>`, plus `@<lead>` for a non-default lead and `@ccx-home`); the arm is
+r5.arm_of; the tag of a work dir is its folder name unless --tag says otherwise. Hold-out units (a fresh repository
+per unit) are removed by r5's clean-up (preflight.after_unit keep_repo=False): they can only be audited while they
+exist; r5 records their [must] categories in the row before the clean-up.
 
-Mechanism chains (CHAINS) link a harness criterion to an agent-layer condition. For a unit that came out wrong the
-report lists the chains whose harness criterion failed and whose agent condition holds: activated, never a proven
-cause.
+Mechanism chains (CHAINS) link a harness criterion to an agent-layer condition. Only for a unit that came out wrong
+are the chains whose harness criterion failed and whose agent condition holds listed (`chains`): activated, never a
+proven cause. In other units the same pairs are kept apart as `co_occurring`, not as an attribution.
 
 Also the record-only [must] telemetry (backlog build item 11): every `[must]` of a review is given categories from
 its file:line references and the unit's diff (in-diff / out-of-diff / exception-only / test-only). Nothing in ccx
@@ -56,7 +59,11 @@ CREDENTIAL = re.compile(r"[\\/]\.ssh[\\/]|[\\/]\.aws[\\/]|[\\/]\.gnupg[\\/]|auth
                         r"\.pypirc\b|\bid_(rsa|ed25519|ecdsa)\b|(^|[\\/\s\"'])\.env(\.\w+)?([\s\"']|$)|"
                         r"\bcredentials(\.json)?\b|API_KEY=|_TOKEN=", re.I)
 PRIVATE_CONTEXT = re.compile(r"[\\/]memories[\\/]|[\\/]\.codex[\\/]|[\\/]\.claude[\\/]|[\\/]\.gemini[\\/]|"
-                             r"\$env:CODEX_HOME|\$CODEX_HOME|%CODEX_HOME%", re.I)
+                             r"\$env:CODEX_HOME(?!\s*=(?!=))|\$CODEX_HOME(?!\s*=(?!=))|%CODEX_HOME%", re.I)
+# a command that points CODEX_HOME somewhere itself (a test's own temp home): its mentions of the variable are that
+# home, not the person's, so only a literal private path in it counts
+SETS_CODEX_HOME = re.compile(r"\$env:CODEX_HOME\s*=(?!=)|(?:^|[;&|\s])(?:export\s+|set\s+\"?)?CODEX_HOME=", re.I)
+CODEX_HOME_VAR = re.compile(r"\$env:CODEX_HOME|\$\{?CODEX_HOME\}?|%CODEX_HOME%", re.I)
 # a ccx call as a command of its own (start of the line, after ; or &&, or a PowerShell -Command), not a grep for it
 NESTED_CCX = re.compile(r"(?:^|;|&&|-Command\s+['\"])\s*(?:python\S*\s+(?:-\S+\s+)*)?['\"]?(?:\S*[\\/])?ccx(?:\.py)?"
                         r"['\"]?\s+(?:run|resume|q|batch|ask|way)\b")
@@ -141,7 +148,10 @@ class Unit:
 
     @property
     def arm(self) -> str:
-        return str((self.row or {}).get("arm") or self.key.rsplit("-", 1)[-1])
+        if (self.row or {}).get("arm"):
+            return arm_of(self.row)
+        head, at, tail = self.key.partition("@")          # no row: `<round>-<task>-<arm>[@lead][@ccx-home]`
+        return head.rsplit("-", 1)[-1] + at + tail
 
     def rel(self, p: Path) -> str:
         """An evidence path: the tag's folder name, then the path inside it."""
@@ -182,9 +192,24 @@ def load_unit(work: Path, key: str, tag: str, row: dict | None = None) -> Unit:
                 archived=_jsonl(hub / "ccx" / "archived.jsonl"))
 
 
+def _r5():
+    """scripts/eval/r5.py, imported when first needed (it imports this module at its top)."""
+    here = str(Path(__file__).resolve().parent)
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    import r5
+    return r5
+
+
 def unit_key(row: dict) -> str:
-    """Same as r5.unit_key for rows of the default lead (the r5* layout); a row's own `key` wins."""
-    return str(row.get("key") or f"{row['round']}-{row['task']}-{row['arm']}")
+    """r5.unit_key: the unit's folder name, with the lead suffix and `@ccx-home` when the row has them; a row's own
+    `key` wins."""
+    return str(row.get("key") or _r5().unit_key(row))
+
+
+def arm_of(row: dict) -> str:
+    """r5.arm_of: the arm a summary counts a row under (`ccx2@ccx-home`, `ccx2@opus-high`, ...)."""
+    return _r5().arm_of(row)
 
 
 def discover(work: Path, tag: str | None, rows: list[dict]) -> list[Unit]:
@@ -388,6 +413,8 @@ def c_private_context(u: Unit) -> Result:
                 continue
             ex = True
             for s in [c["cmd"] for c in commands(evs)] + file_reads(evs):
+                if SETS_CODEX_HOME.search(s):
+                    s = CODEX_HOME_VAR.sub("CODEX_HOME", s)
                 m = PRIVATE_CONTEXT.search(s)
                 if m and not (cwd and cwd.lower() in s.lower() and not re.search(r"[\\/]memories[\\/]", s, re.I)):
                     fails.append((u.rel(r.dir / f"events.{i}.log"), f"{r.id}: {s[max(0, m.start() - 60):m.end() + 40]!r}"))
@@ -550,7 +577,9 @@ def c_budget(u: Unit) -> Result:
 
 
 def c_depth_guard(u: Unit) -> Result:
-    """A sub-agent did not start ccx runs of its own (CCX_DEPTH guard): no run in the hub from an unexpected caller."""
+    """A sub-agent did not start ccx runs of its own (CCX_DEPTH guard): no run in the hub from an unexpected caller.
+    Blind spot: run.json does not record CCX_DEPTH or a parent run, so a nested run whose caller is the lead's own
+    vendor (a Claude sub-agent under a Claude lead) passes; whether it was exercised rests on the command scan."""
     leads = {str(r.get("caller")) for r in u.ledger_runs() if r.get("lead_session")} | {"user", "ccx-review"}
     if not any(r.get("lead_session") for r in u.ledger_runs()):
         leads |= {"claude", "codex", "deepseek", "gemini"} if u.stream else set()
@@ -574,9 +603,13 @@ def c_no_leftovers(u: Unit) -> Result:
     for r in u.runs.values():
         if r.rec.get("state") == "running":
             fails.append((u.rel(r.dir / "run.json"), f"{r.id}: still 'running'"))
+    # the row's process audit (preflight.after_unit): processes / ports the unit left, ones that could not be killed,
+    # extra git worktrees. `stale_locks` is not used: it counts every final.lock in the hub (read above instead).
     lo = (u.row or {}).get("leftovers")
     if isinstance(lo, dict):
-        bad = {k: v for k, v in lo.items() if v and k in ("processes", "killed", "locks", "orphans")}
+        bad = {k: lo[k] for k in ("procs", "ports", "unkilled") if lo.get(k)}
+        if isinstance(lo.get("worktrees"), int) and lo["worktrees"] > 0:
+            bad["worktrees"] = lo["worktrees"]
         if bad:
             fails.append(("results.jsonl", f"leftovers {json.dumps(bad)[:160]}"))
     return _res(fails, bool(u.runs))
@@ -817,7 +850,8 @@ CRITERIA: list[tuple[str, str, str, object]] = [
     ("gov.read_runs_no_writes", "Governance", "read-mode runs (reviews) edited nothing", c_read_runs_no_writes),
     ("gov.no_credential_paths", "Governance", "no sub-agent touched credential paths", c_no_credentials),
     ("gov.budget_caps", "Governance", "a run's own sub-agents stayed within the cap or it stopped over_budget", c_budget),
-    ("gov.depth_guard", "Governance", "no ccx run started from inside a sub-agent", c_depth_guard),
+    ("gov.depth_guard", "Governance", "no ccx run started from inside a sub-agent (by caller; a nested "
+     "run under the lead's own vendor is not told apart)", c_depth_guard),
     ("life.no_leftovers", "Lifecycle", "no stray locks, running state or leftover processes", c_no_leftovers),
     ("life.undo_snapshot", "Lifecycle", "every write run (fix rounds and resumes included) has undo.json", c_undo),
     ("life.resume_continuity", "Lifecycle", "a resume goes on in the continued run's session", c_resume_continuity),
@@ -860,7 +894,7 @@ CHAINS = [
     {"id": "M6", "harness": "ver.review_when_weak", "agent": "agent.hidden_fail",
      "condition": "weak evidence went without a review verdict and the work came out wrong"},
     {"id": "M7", "harness": "ver.claim_matches_hidden", "agent": "agent.hidden_fail",
-     "condition": "ccx reported the work right (false pass) and the lead accepted it"},
+     "condition": "ccx reported the work right (a false pass) and the work came out wrong"},
     {"id": "M8", "harness": "exe.kind_consistent", "agent": "agent.hidden_fail",
      "condition": "an inconsistent kind steered the lead wrong"},
     {"id": "M9", "harness": "ctx.shared_context_delivered", "agent": "agent.hidden_fail",
@@ -873,10 +907,14 @@ CHAINS = [
 # ------------------------------------------------------------------------------------------------ [must] telemetry
 
 def is_test_file(f: str) -> bool:
+    """A test by its folder (tests/, test/, __tests__/, spec/) or its name: test_x, x_test.y, x.test.y, x.spec.y,
+    x_spec.y, conftest.py, CamelCase FooTest.java. Not a bare `test` suffix (latest.py, contest.py are code)."""
+    orig = f.replace("\\", "/").lstrip("./").rsplit("/", 1)[-1]
     f = f.replace("\\", "/").lstrip("./").lower()
     name = f.rsplit("/", 1)[-1]
     return (bool(re.search(r"(^|/)(tests?|__tests__|spec)/", f)) or name.startswith("test_")
-            or bool(re.search(r"(_test|\.test|\.spec|test)\.\w+$", name)))
+            or name == "conftest.py" or bool(re.search(r"(_test|\.test|\.spec|_spec)\.\w+$", name))
+            or bool(re.search(r"[a-z0-9]Tests?\.\w+$", orig)))
 
 
 def must_refs(text: str) -> list[tuple[str, int | None, int | None]]:
@@ -941,9 +979,11 @@ def _git(repo: Path, *args: str) -> tuple[int, str]:
         return 1, ""
 
 
-def repo_diff(repo: Path, base: str | None = None) -> dict[str, set[int]] | None:
+def repo_diff(repo: Path, base: str | None = None, tree: str | None = None,
+              untracked: list[str] | None = None) -> dict[str, set[int]] | None:
     """The unit's change from its start (or `base`) to the final tree, committed or not, read-only: new untracked
-    files count as wholly changed. None when there is no repository."""
+    files count as wholly changed. With `tree` (a run's end state, undo.json `after.tree`) the change up to that
+    tree instead, and `untracked` the files new by then. None when there is no repository or git cannot answer."""
     if not (repo / ".git").exists():
         return None
     if not base:
@@ -951,11 +991,14 @@ def repo_diff(repo: Path, base: str | None = None) -> dict[str, set[int]] | None
         if rc or not out.split():
             return None
         base = out.split()[0]
-    rc, diff = _git(repo, "diff", "-U0", base, "--", ".", ":(exclude).ccx")
+    rc, diff = _git(repo, "diff", "-U0", base, *([tree] if tree else []), "--", ".", ":(exclude).ccx")
     if rc:
         return None
     lines = diff_lines(diff)
-    _, others = _git(repo, "ls-files", "--others", "--exclude-standard")
+    if tree:
+        others = "\n".join(untracked or [])
+    else:
+        _, others = _git(repo, "ls-files", "--others", "--exclude-standard")
     for f in others.splitlines():
         if f and not f.startswith(".ccx/"):
             lines[f] = {0}                  # whole file: any line of it is in the diff
@@ -1005,9 +1048,31 @@ def _chain_base(hub: Path, rec: dict) -> str | None:
     return None
 
 
+def _reviewed_diff(hub: Path, repo: Path, rid: str, cache: dict) -> tuple[dict[str, set[int]] | None, str]:
+    """The diff the review of run `rid` saw, and its basis: `review_tree` when the run's undo.json records how the
+    run left the tree (`after`, written after its review), base to that tree; else `final_tree` (base to the unit's
+    final state: a [must] whose line a later fix round edited then counts as in-diff, a bias toward in-diff for the
+    items that were fixed)."""
+    rec = _json(hub / "ccx" / "runs" / rid / "run.json") or {"run_id": rid}
+    base = _chain_base(hub, rec)
+    after = (_json(hub / "ccx" / "runs" / rid / "undo.json").get("after") or {})
+    tree = after.get("tree") if isinstance(after, dict) else None
+    if tree and base:
+        k = (base, tree)
+        if k not in cache:
+            snap = _json(hub / "ccx" / "runs" / rid / "undo.json")
+            new = sorted(set(after.get("untracked") or []) - set(snap.get("untracked") or []))
+            cache[k] = repo_diff(repo, base, tree=tree, untracked=new)
+        if cache[k] is not None:
+            return cache[k], "review_tree"
+    if base not in cache:
+        cache[base] = repo_diff(repo, base)
+    return cache[base], "final_tree"
+
+
 def unit_must_categories(hub: Path, repo: Path, run_ids: list | None = None) -> list[dict]:
-    """Every [must] of the reviews of a unit's runs (first review and final review), with its categories. Read-only;
-    the diff is the final tree's (a later fix round may have changed the lines a [must] named: an approximation)."""
+    """Every [must] of the reviews of a unit's runs (first review and final review), with its categories. Read-only.
+    The diff is the one the review saw when the run recorded its end tree, else the final tree's (`diff_basis`)."""
     rd = hub / "ccx" / "runs"
     ids = sorted(str(x) for x in run_ids) if run_ids else ([d.name for d in sorted(rd.iterdir())] if rd.is_dir() else [])
     cache: dict = {}
@@ -1016,18 +1081,19 @@ def unit_must_categories(hub: Path, repo: Path, run_ids: list | None = None) -> 
         rec = _json(rd / rid / "run.json")
         if not rec or str(rec.get("label") or "").startswith("review:"):
             continue
-        base = _chain_base(hub, rec)
-        if base not in cache:
-            cache[base] = repo_diff(repo, base)
         for which in ("first_review", "review"):
             rv = rec.get(which) or {}
+            # first_review is the review of the run this fix round fixes (`review_of`): that run's end tree
+            reviewed = str(rec.get("review_of") or rid) if which == "first_review" else rid
             for i, issue in enumerate(rv.get("issues") or []):
                 issue = str(issue)
                 if not issue.lstrip().lower().startswith("[must]") or issue in seen:
                     continue
                 seen.add(issue)
+                lines, basis = _reviewed_diff(hub, repo, reviewed, cache)
                 out.append({"run_id": rid, "review": which, "review_run": rv.get("run_id"), "i": i,
-                            "verdict": rv.get("verdict"), "fixed_by": None, **must_categories(issue, cache[base])})
+                            "verdict": rv.get("verdict"), "fixed_by": None, "diff_basis": basis,
+                            **must_categories(issue, lines)})
     fix = {}
     for rid in ids:
         rec = _json(rd / rid / "run.json")
@@ -1048,8 +1114,10 @@ def must_summary(units: list[Unit]) -> dict:
             hit = [m for m in items if c in m["categories"] or (c == "no-ref" and m["scope"] == "no-ref")]
             if not hit:
                 continue
-            cell = out.setdefault(c, {"items": 0, "units": 0, "units_right": 0, "units_wrong": 0})
+            cell = out.setdefault(c, {"items": 0, "units": 0, "units_right": 0, "units_wrong": 0,
+                                      "items_final_tree": 0})
             cell["items"] += len(hit)
+            cell["items_final_tree"] += sum(m.get("diff_basis") == "final_tree" for m in hit)
             cell["units"] += 1
             cell["units_right" if ok else "units_wrong"] += 1 if ok is not None else 0
     return out
@@ -1078,12 +1146,14 @@ def audit_unit(u: Unit, skip: tuple | list | set = ()) -> dict:
     harness = round(sum(v == PASS for v in ex) / len(ex), 4) if ex else None
     agent_ok = (u.row or {}).get("ok")
     agent = {k: bool(f(u)) for k, f in AGENT.items()}
-    chains = [c["id"] for c in CHAINS if crit[c["harness"]]["status"] == FAIL and agent.get(c["agent"])]
+    both = [c["id"] for c in CHAINS if crit[c["harness"]]["status"] == FAIL and agent.get(c["agent"])]
+    # chains are an attribution view of wrong units only; in other units the same pair is kept as co-occurrence
+    chains = both if agent_ok is False else []
     return {"tag": u.tag, "key": u.key, "arm": u.arm, "task": (u.row or {}).get("task"),
             "agent_ok": agent_ok, "agent": agent, "n_runs": len(u.runs),
             "harness_score": harness, "harness_ok": (all(v == PASS for v in ex) if ex else None),
             "components": comps, "criteria": crit,
-            "chains": chains,
+            "chains": chains, "co_occurring": [] if agent_ok is False else both,
             "attribution": "activated chains, not proven causes"}
 
 
@@ -1103,9 +1173,12 @@ def summarize(results: list[dict]) -> dict:
             st = [r["criteria"][cid]["status"] for r in rs]
             crit[cid] = {PASS: st.count(PASS), FAIL: st.count(FAIL), NA: st.count(NA)}
         chains: dict[str, int] = {}
+        co: dict[str, int] = {}
         for r in rs:
             for c in r["chains"]:
                 chains[c] = chains.get(c, 0) + 1
+            for c in r.get("co_occurring") or []:
+                co[c] = co.get(c, 0) + 1
         out[arm] = {
             "units": len(rs), "agent_right": sum(r["agent_ok"] is True for r in known), "agent_known": len(known),
             "harness_scored": len(scored),
@@ -1114,7 +1187,7 @@ def summarize(results: list[dict]) -> dict:
             "success_but_harness_fail": sum(r["harness_ok"] is False for r in succ),
             "success_scored": len(succ),
             "component_fail_units": comp_fail, "component_exercised_units": comp_ex,
-            "criteria": crit, "chains_activated": chains,
+            "criteria": crit, "chains_activated": chains, "chains_co_occurring_not_wrong": co,
             "wrong_units": [{"key": f"{r['tag']}/{r['key']}", "chains": r["chains"]} for r in rs if r["agent_ok"] is False],
         }
     return out
@@ -1240,6 +1313,11 @@ def _rows(f: str | None) -> list[dict]:
 
 
 def cmd_audit(a) -> int:
+    known = {c for c, *_ in CRITERIA}
+    bad = [x for x in a.skip or () if x not in known]
+    if bad:
+        print(f"unknown criterion for --skip: {', '.join(bad)} (known: {', '.join(sorted(known))})", file=sys.stderr)
+        return 2
     rows = _rows(a.results)
     units: list[Unit] = []
     for w in a.work:
@@ -1272,7 +1350,7 @@ def parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(prog="harness_audit.py", description=__doc__.split("\n\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     au = sub.add_parser("audit", help="score every unit of one or more work dirs")
-    au.add_argument("work", nargs="+", help="work dirs (r5*/r6* layout); the tag is the folder name")
+    au.add_argument("work", nargs="+", help="work dirs (r5* layout); the tag is the folder name")
     au.add_argument("--results", help="results.jsonl with the units' rows (hidden-test outcome)")
     au.add_argument("--tag", help="the tag of a single work dir, when it is not the folder name")
     au.add_argument("--arm", action="append", help="only these arms")
