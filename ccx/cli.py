@@ -63,6 +63,21 @@ def build_parser() -> argparse.ArgumentParser:
     return ap
 
 
+def parse(argv: list[str]) -> argparse.Namespace:
+    """parse_args, except that words left over after an option join the brief. `ccx resume R --check X "fix"` and
+    `ccx run do --check pytest it` stopped with "unrecognized arguments": argparse fills a `nargs="*"` brief only
+    once. A leftover that starts with '-' is still a mistyped option and exits 2, as does any leftover for a
+    command without a brief."""
+    ap = build_parser()
+    a, rest = ap.parse_known_args(argv)
+    if rest:
+        if isinstance(getattr(a, "brief", None), list) and not any(r.startswith("-") for r in rest):
+            a.brief += rest
+        else:
+            ap.error(f"unrecognized arguments: {' '.join(rest)}")
+    return a
+
+
 def main(argv: list[str] | None = None) -> int:
     for s in (sys.stdout, sys.stderr):
         try:
@@ -70,7 +85,7 @@ def main(argv: list[str] | None = None) -> int:
         except Exception:
             pass
     argv = sys.argv[1:] if argv is None else argv
-    a = build_parser().parse_args(argv)
+    a = parse(argv)
     try:
         if name := hooktimeout.hook_name(argv):          # L4: a slow hook prints nothing instead of holding the turn
             from .config import paths
