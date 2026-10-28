@@ -138,6 +138,45 @@ class TestReason(unittest.TestCase):
         self.assertEqual(review.verdict({"summary": "no idea", "open_questions": ["something"]})["verdict"], "unclear")
         self.assertEqual(review.verdict({"summary": "REVIEW: passing thoughts"})["verdict"], "unclear")
 
+    def test_long_issue_kept_whole_for_the_fix_round(self):
+        # r5: ~2 in 3 [must] items were cut at 300 characters before the fix brief; the cut part held the fix
+        long = "[must] a.py:3 — " + "map blocked to split; " * 30 + "and add a test for the split status"
+        self.assertGreater(len(long), 600)
+        v = review.verdict({"summary": "REVIEW: issues", "open_questions": [long, "[must] b.py:1 — short"]})
+        self.assertEqual(v["issues"], [long[:300], "[must] b.py:1 — short"])        # the lead's short form
+        self.assertEqual(v["issues_full"], [long, "[must] b.py:1 — short"])
+        huge = "[must] " + "y" * 3000
+        v = review.verdict({"summary": "REVIEW: issues", "open_questions": [huge] * 10})
+        self.assertEqual((len(v["issues_full"]), {len(x) for x in v["issues_full"]}), (8, {review.ISSUE_FULL_CHARS}))
+        short = review.verdict({"summary": "REVIEW: issues", "open_questions": ["[must] a"]})
+        self.assertNotIn("issues_full", short)
+        s = "REVIEW: issues " + "z" * 900
+        v = review.verdict({"summary": s})
+        self.assertEqual((len(v["summary"]), v["summary_full"]), (400, s))
+
+    def test_review_line_inside_an_item(self):
+        # #154 replay, r5f:1: no REVIEW line in the summary, the first item began "REVIEW: issues" + a [must]
+        for items in (["REVIEW: issues [must] a.py:3 — off by one"],
+                      ["REVIEW: issues\n[must] a.py:3 — off by one\n[must] b.py:1 — no test"],
+                      ["**REVIEW: issues**", "[must] a.py:3 — off by one"]):
+            v = review.verdict({"summary": "checked the change", "open_questions": items})
+            self.assertEqual((v["verdict"], v["format"]), ("issues", "lenient"), items)
+            self.assertTrue(v["issues"][0].startswith("[must] a.py:3"), v)
+        two = review.verdict({"summary": "checked", "open_questions": [
+            "REVIEW: issues\n[must] a.py:3 — off by one\n[must] b.py:1 — no test"]})
+        self.assertEqual(len(two["issues"]), 2)
+        v = review.verdict({"summary": "checked", "open_questions": ["REVIEW: issues", "the loop is off by one"]})
+        self.assertEqual((v["verdict"], v["issues"]), ("issues", ["the loop is off by one"]))
+        self.assertEqual(review.verdict({"summary": "checked", "open_questions": ["REVIEW: pass"]})["verdict"], "pass")
+        # verdicts the summary already decides are unchanged: the item's line is not read then
+        same = [({"summary": "REVIEW: pass", "open_questions": ["REVIEW: issues [must] x"]}, "pass"),
+                ({"summary": "REVIEW: issues", "open_questions": ["REVIEW: pass", "[note] style"]}, "pass"),
+                ({"summary": "REVIEW: issues", "open_questions": ["[must] a"]}, "issues"),
+                ({"summary": "no idea", "open_questions": ["something"]}, "unclear"),
+                ({"summary": "checked", "open_questions": ["REVIEW: pass", "something odd"]}, "unclear")]
+        for res, want in same:
+            self.assertEqual(review.verdict(res)["verdict"], want, res)
+
     def test_brief_rubric_traces_the_normal_path(self):
         b = review.brief("r1", "task", "did it", "+x", 100)
         self.assertIn("fails on its normal path, even silently", b)
@@ -299,8 +338,8 @@ class TestReviewRun(Env):
         subprocess.run([*g, "add", "a.py"], cwd=self.work, check=True)
         subprocess.run([*g, "commit", "-qm", "init"], cwd=self.work, check=True)
 
-    def go(self, *extra, review_seq="pass"):
-        env = {"FAKE_WRITE": f"{self.work / 'a.py'}=x = 2\n", "FAKE_REVIEW": review_seq}
+    def go(self, *extra, review_seq="pass", env_extra=None):
+        env = {"FAKE_WRITE": f"{self.work / 'a.py'}=x = 2\n", "FAKE_REVIEW": review_seq, **(env_extra or {})}
         r = self.ccx("run", "--to", "codex", "--model", "gpt-6-luna", "--effort", "low", "--mode", "write",
                      "--no-fallback", *extra, "change x to 2 in a.py", env=env)
         self.assertEqual(r.returncode in (0, 2), True, r.stderr)
@@ -357,7 +396,8 @@ class TestReviewRun(Env):
         self.go("--check", "exit 0")
         rev = self.reviews()[0]["prompt"]
         self.assertIn(prompts.REVIEW_FINISH, rev)
-        self.assertIn("Permission: " + prompts.REVIEW_PERMISSION, rev)
+        self.assertIn("Permission: " + prompts.REVIEW_PERMISSION_CLAUDE, rev)      # a Claude reviewer: its own words
+        self.assertNotIn("cat / Get-Content", rev)             # its allow-list refuses those (#7)
         for builder_text in ("The acceptance check is", "run the relevant tests"):
             self.assertNotIn(builder_text, rev)
         self.assertIn("cannot run commands", rev)
@@ -448,6 +488,34 @@ class TestReviewRun(Env):
         task = rv[1]["prompt"].split("## The task it was given", 1)[1].split("## What it says it did", 1)[0]
         self.assertIn("change x to 2 in a.py", task)
         self.assertNotIn("off by one", task)
+
+    def test_long_must_reaches_the_fix_brief_whole(self):
+        # r5: the fix brief got each [must] cut at 300 characters; the cut part held the fix the reviewer asked for
+        must = ('[must] a.py:1 - "set x to 2" - ' +          # ASCII: an env var carries it to the fake reviewer
+"the value is right but the loop maps blocked wrongly; " * 10
+                + "map blocked to split and add a test for the split status (TAIL-MARK)")
+        self.assertGreater(len(must), 600)
+        env = {"FAKE_WRITE": f"{self.work / 'a.py'}=x = 2\n", "FAKE_REVIEW": "issues,pass", "FAKE_REVIEW_MUST": must}
+        r = self.ccx("run", "--to", "codex", "--model", "gpt-6-luna", "--effort", "low", "--mode", "write",
+                     "--no-fallback", "--review", "on", "change x to 2 in a.py", env=env)
+        out = json.loads(r.stdout)
+        fix = [c for c in self.calls() if c["agent"] == "codex" and c["argv"][:2] == ["exec", "resume"]]
+        self.assertTrue(fix, self.calls())
+        self.assertIn("- " + must + "\n", fix[-1]["prompt"])
+        self.assertEqual(out["review"]["first_round"]["issues"][0], must[:300])   # the lead reads the short form
+
+    def test_claude_reviewer_permission_denials_are_counted(self):
+        # the denials Claude's result reports are kept per attempt (run.json) and summed in the ledger
+        from ccx.config import Paths
+        out = self.go("--check", "exit 0", env_extra={"FAKE_DENIALS": "2"})
+        p = Paths(self.hub)
+        rows = [json.loads(x) for x in p.ledger.read_text(encoding="utf-8").splitlines()]
+        reviews = [x for x in rows if (x.get("label") or "").startswith("review:")]
+        self.assertEqual([x.get("permission_denials") for x in reviews], [2], rows)
+        rec = json.loads((p.runs / reviews[0]["run_id"] / "run.json").read_text(encoding="utf-8"))
+        self.assertEqual(rec["attempts"][-1]["permission_denials"], 2)
+        builds = [x for x in rows if x.get("run_id") == out["run_id"]]
+        self.assertTrue(builds and all("permission_denials" not in x for x in builds))   # Codex reports none
 
     def test_still_failing_after_fix(self):
         out = self.go("--review", "on", review_seq="issues")

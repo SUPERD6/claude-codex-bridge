@@ -601,6 +601,7 @@ def test_cheapest_unit_runs_the_shipped_cheapest_tier(tmp_path, monkeypatch, pas
     chk = f'python -c "raise SystemExit({0 if passes else 1})"'
     monkeypatch.setattr(r5, "suite_check", lambda task: chk)
     env = _fake_env(tmp_path)
+    env["FAKE_TOUCH"] = "1"            # the builder changes something (a run that changes nothing is no_changes)
     hub = tmp_path / "hub"
     (hub / "ccx").mkdir(parents=True)
     env["CCX_HUB"] = str(hub)

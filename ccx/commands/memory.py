@@ -6,8 +6,8 @@ import sys
 
 from pathlib import Path
 
-from .. import learn, memory
-from ..config import AGENTS, DELEGATE_AGENTS, data_dir, paths
+from .. import leadmodel, learn, memory
+from ..config import AGENTS, DELEGATE_AGENTS, data_dir, load_config, paths
 from ..agents import leads
 from .common import _caller, _out, hook_text
 
@@ -44,6 +44,15 @@ def cmd_handoff(a) -> int:
                      *[x for n in a.next for x in ("--step", n)]])
         out["task"] = buf.getvalue().strip()
         out["next"] = f"in {a.to}: the session start shows this handoff; continue with ccx task resume {out['task']}"
+    if a.to != "any":
+        # the handing-off lead (`by`) gave --minutes: its estimating bias adjusts b, as in its own `ccx route`
+        lm = leadmodel.for_new_lead(paths(), load_config(), a.to, a, "handoff", {"handoff": out.get("handoff")},
+                                    estimator=by)
+        if lm:          # advice for the incoming lead's NEW conversation; a running one keeps its model
+            out["lead_model"] = lm
+            flag = " ".join(leadmodel.start_argv(lm))
+            out["start"] = (f"start the new {a.to} conversation with {flag}" if flag else
+                            f"start the new {a.to} conversation on the model it normally runs on")
     if not text:
         out["note"] = f"empty template written: fill in {out['handoff']} before switching"
     _out(out)
@@ -84,10 +93,16 @@ def cmd_fresh(a) -> int:
     # one before it starts, and .ccx/handoff.md is updated only while it is ccx's unedited copy (a hand-written one
     # is kept as it is).
     prompt = FRESH_PROMPT.format(file=Path(out["handoff"]).relative_to(root).as_posix())
-    cmd = [*bin_argv(agent), prompt]              # both CLIs take the first prompt as an argument
+    # lead.model_by_task (opt-in, default off): the new conversation's model from --minutes / --b / --risk
+    lm = leadmodel.for_new_lead(paths(), load_config(), agent, a, "fresh", {"handoff": out["handoff"]})
+    flag = leadmodel.start_argv(lm)              # easy band only; the hard band keeps the tool's own model
+    cmd = [*bin_argv(agent), *flag, prompt]       # both CLIs take the first prompt as an argument
+    shown = " ".join([agent, *flag])
     out.update(from_transcript=str(src[0]),
                next=f"open a new {agent} conversation in {root}: its start shows the handoff. In a terminal: "
-                    f"{agent} \"{prompt}\"" + ("" if a.launch else " (or ccx fresh --launch)"))
+                    f"{shown} \"{prompt}\"" + ("" if a.launch else " (or ccx fresh --launch)"))
+    if lm:
+        out["lead_model"] = lm
     if a.launch:
         if not sys.stdin.isatty():
             out["launch"] = "skipped: not in a terminal"
@@ -440,6 +455,7 @@ def register(sub) -> None:
     fr.add_argument("--no-model", action="store_true", help="code only, never a routed sub-agent reading the file")
     fr.add_argument("--max-chars", type=int, help="size cap (default about one page)")
     fr.add_argument("--launch", action="store_true", help="in a terminal: start the new conversation now")
+    leadmodel.add_args(fr)
     fr.set_defaults(fn=cmd_fresh)
     ho = sub.add_parser("handoff", help="pass the baton to the other lead (what's done, decisions, next)")
     ho.add_argument("text", nargs="*", help="the handoff text (or --file); empty = write the template")
@@ -455,6 +471,7 @@ def register(sub) -> None:
     ho.add_argument("--no-model", action="store_true", help="with --from-transcript: code only; when the code "
                     "can't read the session file's format, don't fall back to a routed sub-agent reading it")
     ho.add_argument("--max-chars", type=int, help="with --from-transcript: size cap (default about one page)")
+    leadmodel.add_args(ho, short_b=False)     # --b would take over the --b abbreviation of --by
     ho.set_defaults(fn=cmd_handoff)
     m = sub.add_parser("mem", help="shared incremental memory")
     msub = m.add_subparsers(dest="mem_cmd", required=True)

@@ -74,7 +74,10 @@ sub-agent. The extra requests came from the habits below.
   JSON object, and a pipe on a long run hits your shell's timeout.
 - **Your own sub-agents next to ccx:** pieces done by your built-in sub-agents and pieces done through ccx never
   write the same files at the same time; a ccx writer running beside your own writers goes in `--worktree` or
-  through `ccx q run` (its undo snapshot, diff and check would otherwise take in their edits).
+  through `ccx q run` (its undo snapshot, diff and check would otherwise take in their edits). Their model: the
+  one ccx names as Claude Code's Agent tool `model` (sonnet | opus | haiku | fable, Claude Code 2.1.309): a
+  `builtin` choice's `how` first; `builtin_model` from `ccx route` only when there is no such choice; neither:
+  omit it (they inherit yours).
 - **Several authorized pieces:** plan with task-split `check`; pieces sharing a file go to one piece or to you,
   never in parallel (`q run` gives parallel writers in a clean git checkout their own worktree; otherwise they
   share this checkout). `ccx q add "<title>" --brief "..." --check "..."`
@@ -138,6 +141,10 @@ A printed result with a `run_id` means that delegation ran: do not send the same
   is partial/blocked.
 - `check_broken` = the check tested nothing: `ccx resume <run_id> "what to test" --check "..."`. The task names an entry point
   (a command, a CLI) and no test runs it as a real process: resume once asking for one.
+- `no_changes` = a write run said done/partial but changed nothing (no edit, no commit; its check ran on the
+  unchanged tree; `ccx q` marks the piece failed, so its dependents wait): accept only if the task was already
+  met, else resume it. `base` on a `--worktree` run: it
+  started from HEAD without your uncommitted changes, so its check did not test them.
 - `verification: not-run` = unverified — say so.
 - A `review` field is the independent review: `pass` (its notes are optional reading) or `issues` with
   `file:line`. ccx runs one fix round itself (`show --wait` follows it); after that, `needs_lead` is
@@ -165,7 +172,8 @@ window closed) → `ccx handoff --from-transcript <old lead> --to <X>`: built fr
 takes over checks its claims (files exist, tests pass) before trusting them.
 Your own conversation got long (the per-turn hint says so) and the next piece is new work: ask the person, then
 `ccx fresh` — the handoff comes from this conversation's file and a new conversation of the same tool here starts
-with it.
+with it. Give `--minutes` for the next work: with `lead.model_by_task` on (the person's setting) `ccx fresh` and
+`ccx handoff` start the new lead on a model by difficulty. Never switch a running conversation's model.
 
 ## 6. Memory
 
