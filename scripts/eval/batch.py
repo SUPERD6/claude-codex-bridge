@@ -496,6 +496,7 @@ def run_timed(argv: list[str], *, cwd: Path, env: dict, timeout: float, input: s
 
 WAIT_BASH = (re.compile(r"\bshow\b[^\n;&|]*--wait"), re.compile(r"ccx(\.py)?[\"']?\s+batch\b"))
 FG_CCX = re.compile(r"ccx(\.py)?[\"']?\s+(run|resume|q\s+run)\b([^\n;&|]*)")
+QUOTED = re.compile(r"\"[^\"]*\"|'[^']*'")          # quoted text: a brief or --check command, not flags
 CONFLICT = re.compile(r"^CONFLICT \(", re.M)        # one line per conflicted file ("Automatic merge failed" follows)
 MERGE_CMD = re.compile(r"\bgit\s+(merge|cherry-pick|rebase|am)\b")
 QUOTA_KINDS = ("quota", "rate_limit", "auth")
@@ -512,9 +513,13 @@ def is_wait(name: str, inp: dict) -> bool:
     cmd = str((inp or {}).get("command", ""))
     if any(p.search(cmd) for p in WAIT_BASH):
         return True
-    # `--bg --wait N` (one call, #147) blocks like a foreground run; plain `--bg` returns at once
-    return any("--bg" not in m.group(3) or re.search(r"(?<![\w-])--wait\b", m.group(3))
-               for m in FG_CCX.finditer(cmd))
+    # `--bg --wait N` (one call, #147) blocks like a foreground run; plain `--bg` returns at once. Flags are read
+    # with quoted text (the brief, a --check command) blanked, so a brief that mentions --wait or --bg is not one.
+    for m in FG_CCX.finditer(cmd):
+        flags = QUOTED.sub('""', m.group(3))
+        if not re.search(r"(?<![\w-])--bg\b", flags) or re.search(r"(?<![\w-])--wait\b", flags):
+            return True
+    return False
 
 
 def _text(content) -> str:

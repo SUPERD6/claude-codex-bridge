@@ -197,7 +197,7 @@ def handoff(root: Path, by: str, to: str, text: str) -> dict:
         copied_from_history = False
         if match:
             copied_from_history = any(p.read_text(encoding="utf-8", errors="replace") == current
-                                      for p in hist.glob("*.md"))
+                                      for p in hist.glob("*.md") if not p.stem.endswith(_EDITED))
         if not copied_from_history:
             latest_skipped = "hand-written .ccx/handoff.md kept"
     if latest_skipped is None:
@@ -217,8 +217,11 @@ _HEAD = re.compile(r"<!-- ccx:handoff from=(\S+) to=(\S+) ts=(\S+) -->")
 def _adopt_legacy_latest(root: Path, hist: Path) -> None:
     """A .ccx/handoff.md that ccx wrote before handoffs/ existed has no copy there, so the "unedited ccx copy"
     test would call it hand-written and never update it again. While handoffs/ is still empty and handoff.md
-    starts with ccx's header, copy it there once, byte for byte (nothing is lost even if the person edited it);
-    it then counts as ccx's copy. Whoever was already shown it as handoff.md stays marked as having seen it."""
+    starts with ccx's header, copy it there once, byte for byte, so the session start still finds it. If it was
+    changed after ccx wrote it (modified more than a few seconds after its header's time), the copy is named
+    `...-edited.md`, which never counts as ccx's copy: the edited handoff.md is kept, as any hand-written one.
+    Otherwise the copy counts as ccx's and handoff.md is updated. Whoever was already shown it as handoff.md stays
+    marked as having seen it."""
     f = root / ".ccx" / "handoff.md"
     if not f.exists() or any(hist.glob("*.md")):
         return
@@ -227,6 +230,8 @@ def _adopt_legacy_latest(root: Path, hist: Path) -> None:
     if not m:
         return
     name = f"{m.group(3).replace(':', '')}-{m.group(1)}-to-{m.group(2)}"
+    if _edited_since(f, m.group(3)):
+        name += _EDITED
     dest = hist / (re.sub(r"[^\w.-]", "-", name) + ".md")
     dest.write_bytes(raw)
     seen = _seen(root)
@@ -237,6 +242,20 @@ def _adopt_legacy_latest(root: Path, hist: Path) -> None:
             changed = True
     if changed:
         (root / ".ccx" / "handoff.seen.json").write_text(json.dumps(seen), encoding="utf-8")
+
+
+_EDITED = "-edited"
+_WRITE_SLACK = 5.0     # seconds between the header's timestamp and ccx's own write of the file
+
+
+def _edited_since(f: Path, ts: str) -> bool:
+    """Whether a ccx handoff file was modified after ccx wrote it. ccx writes it within a second of the header's
+    local timestamp; an unreadable timestamp counts as edited (the safe side: the file is kept, not replaced)."""
+    try:
+        written = time.mktime(time.strptime(ts, "%Y-%m-%dT%H:%M:%S"))
+    except (ValueError, OverflowError):
+        return True
+    return f.stat().st_mtime - written > _WRITE_SLACK
 
 
 def _for_me(m: re.Match | None, me: str) -> bool:

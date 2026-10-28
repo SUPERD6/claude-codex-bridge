@@ -1,8 +1,10 @@
 """E8: a handoff assembled by code from the outgoing lead's session file (fake transcripts, no real CLIs)."""
 import json
+import os
 import re
 import subprocess
 import sys
+import time
 import unittest
 from pathlib import Path
 
@@ -275,6 +277,8 @@ class TestFresh(Env):
         latest = d / "handoff.md"
         old = b"<!-- ccx:handoff from=codex to=claude ts=2026-01-02T03:04:05 -->\n# Handoff\n\nold notes\n"
         latest.write_bytes(old)
+        written = time.mktime(time.strptime("2026-01-02T03:04:06", "%Y-%m-%dT%H:%M:%S"))
+        os.utime(latest, (written, written))          # as ccx left it: written in the header's second
         (d / "handoff.seen.json").write_text(json.dumps({"claude": ["handoff.md"]}), encoding="utf-8")
         out = project.handoff(self.work, "claude", "codex", "new")
         self.assertNotIn("latest_skipped", out)
@@ -283,6 +287,24 @@ class TestFresh(Env):
         self.assertEqual(kept.read_bytes(), old)
         self.assertIn(kept.name, json.loads((d / "handoff.seen.json").read_text(encoding="utf-8"))["claude"])
         self.assertEqual(project.pending_handoffs(self.work, "claude"), [])   # already shown as handoff.md
+
+    def test_edited_legacy_ccx_latest_is_adopted_but_never_replaced(self):
+        """A pre-history ccx handoff.md the person edited later keeps its place; its copy never counts as ccx's."""
+        from ccx import project
+        d = self.work / ".ccx"
+        d.mkdir(parents=True, exist_ok=True)
+        latest = d / "handoff.md"
+        edited = b"<!-- ccx:handoff from=codex to=claude ts=2026-01-02T03:04:05 -->\n# Handoff\n\nmy edits\n"
+        latest.write_bytes(edited)                   # modified now, long after the header's time
+        for n in ("new", "newer"):
+            out = project.handoff(self.work, "claude", "codex", n)
+            self.assertEqual(out["latest_skipped"], "hand-written .ccx/handoff.md kept")
+            self.assertEqual(out["latest"], out["handoff"])
+            self.assertEqual(latest.read_bytes(), edited)
+        kept = d / "handoffs" / "2026-01-02T030405-codex-to-claude-edited.md"
+        self.assertEqual(kept.read_bytes(), edited)
+        shown = project.pending_handoffs(self.work, "claude")
+        self.assertEqual([f.name for f, _, _ in shown], [kept.name])   # still shown once at session start
 
     def test_handwritten_latest_without_header_is_not_adopted(self):
         from ccx import project
