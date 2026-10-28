@@ -75,7 +75,9 @@ Other tools: `ccx ui` (a live page of who works on what, what waits for the pers
 `ccx peek` (talk to or read the other open sessions here), `ccx intake pull` (takes tasks the person filed as issues in
 their private repository; `ccx intake ask` / `done` comment on those issues as the person, which is sending outside
 this machine: section 6),
-`ccx stats` / `ccx report` (spend and savings).
+`ccx stats` / `ccx report` (spend and savings). A piece for a new lead conversation: `ccx fresh` / `ccx handoff`
+with `--minutes` (by-difficulty model when the person turned on `lead.model_by_task`); your own built-in
+sub-agents' model: agent-delegate section 2.
 
 ## 6. Autonomy level, and what always goes to the person
 

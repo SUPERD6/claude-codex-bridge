@@ -266,8 +266,13 @@ SETTINGS = {   # key -> (type, help). Only these can be set with `ccx config set
                            "most N sub-sessions, one after another (0 = off: every piece its own session)"),
     "lanes.max_tokens": (int, "a warm lane starts a new session after a piece that used this many tokens (the session has grown long)"),
     "lanes.max_blocks": (int, "a warm lane starts a new session after this many pieces"),
-    "lead.claude": (str, "model the Claude lead runs on (for savings estimates), e.g. opus"),
+    "lead.claude": (str, "model the Claude lead runs on (for savings estimates; with lead.model_by_task also the "
+                           "strong lead's name, which passes no --model), e.g. opus"),
     "lead.codex": (str, "model the Codex lead runs on, e.g. gpt-6.1-sol"),
+    "lead.model_by_task": (_bool, "true | false: when ccx starts or recommends a NEW lead conversation (ccx fresh, "
+                                  "ccx handoff, route/propose `new_lead`), pick its model from the task's difficulty: "
+                                  "[lead_by_task] easy model up to easy_max_b, else the lead's own (default false; a "
+                                  "running conversation never switches model)"),
     "sessions.archive": (str, "after_run | hours | off: archive a sub-agent session as soon as its result is "
                               "final (default), only after auto_archive_hours, or never by itself"),
     "sessions.auto_archive_hours": (float, "archive finished sub-agent sessions after N hours (0 = off)"),
