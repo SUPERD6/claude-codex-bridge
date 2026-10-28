@@ -1,6 +1,6 @@
 # Measured
 
-English · [中文](measured.zh.md) · back to the [README](../README.md)
+English · [中文](measured.zh.md) · back to the [README](../README.md) · all [research reports](research/README.md)
 
 ## Behind the README's four numbers
 
@@ -10,6 +10,22 @@ English · [中文](measured.zh.md) · back to the [README](../README.md)
 | More accurate | first try right 36/36 vs 7/36 (McNemar p ≈ 4e-9) | same A/B | same; on the neutral task both arms were 6/6 |
 | Split the work | the lead made one request fewer on every task, 21/21 | [seven-cores A/B](research/2026-10-24-seven-cores-ab.md) §2.2 | total spend about even (ratio 1.02), 3.3× tokens, ~23 s slower; a short headless lead |
 | Share | project note followed: 9/9 right vs 0/9 (McNemar p = 0.004, Holm 0.016) | [seven-cores A/B](research/2026-10-24-seven-cores-ab.md) §2.1 | 3 tasks × 3; hub memory through start hooks not tested |
+
+## Round 5: large real tasks (2026-10-26/27, dev set)
+
+Ten real changes from this repository × 2, a sonnet-medium lead, hidden tests; details and every arm in the
+[round-5 report](research/2026-10-26-r5.md). **Dev set, signal only**: the tasks were also used while fixing ccx,
+and this run came before the clean-environment checks ([r5 plan §8](research/2026-10-26-r5-plan.md)). It does not
+change the four numbers above.
+
+| Run | Arm | Right | Cost per success | Wall, median |
+|---|---|---|---|---|
+| r5h | ccx2 (ccx as the agent-delegate skill teaches it) | 19/20 | $0.135 | 236 s |
+
+For comparison, the first run in the report: the lead doing it itself 19/20, $0.211, 94 s; the built-in sub-agent
+19/20, $0.155, 278 s. The report's §7 table stops at r5f; the r5h row uses its definitions (total spend of the 20
+units / units right; plain median of the 20 walls) on the same results file, and r5h is covered by the
+[harness audit](research/2026-10-28-harness-audit.md).
 
 ## Measured (2026-10-24, ccx 0.4.0)
 
