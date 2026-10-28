@@ -457,6 +457,79 @@ class TestReviewRun(Env):
         self.assertNotIn("last resort", out["hint"])
         self.assertEqual(len(self.reviews()), 2)
 
+    def test_fix_rereview_full_by_default(self):
+        # [review] fix_rereview defaults to "full": the fix round's review is the plain brief and no end.json is kept
+        from ccx.config import Paths
+        out = self.go("--review", "on", review_seq="issues,pass")
+        self.assertEqual(out["review"]["verdict"], "pass")
+        second = self.reviews()[1]["prompt"]
+        self.assertNotIn("The problems the first review found", second)
+        self.assertNotIn("review of the fix round", second)
+        self.assertNotIn("rereview", out["review"])
+        self.assertFalse(list(Paths(self.hub).runs.glob("*/end.json")))
+
+    def test_fix_rereview_focus_shows_the_fix_and_keeps_undo(self):
+        from ccx.config import Paths
+        runs = Paths(self.hub).runs
+        (self.hub / "ccx").mkdir(parents=True, exist_ok=True)
+        (self.hub / "ccx" / "tiers.toml").write_text('[review]\nfix_rereview = "focus"\n', encoding="utf-8")
+        new = self.work / "b.py"
+        env = {"FAKE_WRITE": f"{self.work / 'a.py'}=x = 2\n;{new}=y = 1\n",
+               "FAKE_WRITE_RESUMED": f"{self.work / 'a.py'}=x = 3\n;{new}=y = 5\n", "FAKE_REVIEW": "issues,pass"}
+        r = self.ccx("run", "--to", "codex", "--model", "gpt-6-luna", "--effort", "low", "--mode", "write",
+                     "--no-fallback", "--review", "on", "change x to 2 in a.py", env=env)
+        self.assertIn(r.returncode, (0, 2), r.stderr)
+        out = json.loads(r.stdout)
+        self.assertEqual(out["review"]["verdict"], "pass", out)
+        self.assertEqual(out["review"].get("rereview"), None)          # compact() keeps only its own keys
+        fix_rec = json.loads((runs / out["run_id"] / "run.json").read_text(encoding="utf-8"))
+        self.assertEqual(fix_rec["review"]["rereview"], "focus")
+        first_id = out["fixed_after_review_of"]
+        rv = self.reviews()
+        self.assertNotIn("The problems the first review found", rv[0]["prompt"])   # the first review is unchanged
+        second = rv[1]["prompt"]
+        whole, _, rest = second.partition("## The problems the first review found")
+        self.assertIn("-x = 1", whole)                                     # the whole change is still there
+        self.assertIn("+x = 3", whole)
+        issues, _, fix = rest.partition("## The fix alone")
+        self.assertIn("1. [must] a.py:3", issues)
+        self.assertIn("off by one in the loop", issues)
+        fix = fix.split("## Checks", 1)[0]
+        self.assertIn("-x = 2", fix)                                       # only what the fix round changed
+        self.assertIn("+x = 3", fix)
+        self.assertIn("-y = 1", fix)                                       # a new file the first run made, too
+        self.assertIn("+y = 5", fix)
+        self.assertNotIn("-x = 1", fix)
+        self.assertIn("review of the fix round", second.split("## Answer", 1)[1])
+        # end.json is a file of its own: the undo snapshots are as before, and `ccx undo` of the fix round still
+        # puts back the tree from before the whole chain (b.py moved aside, a.py back to x = 1)
+        self.assertTrue((runs / first_id / "end.json").exists())
+        snap1 = json.loads((runs / first_id / "undo.json").read_text(encoding="utf-8"))
+        snap2 = json.loads((runs / out["run_id"] / "undo.json").read_text(encoding="utf-8"))
+        self.assertNotIn("tree", snap1)
+        self.assertEqual(snap1["base"], snap2["base"])
+        self.assertEqual(snap2["chain_from"], first_id)
+        u = self.ccx("undo", out["run_id"], "--apply")
+        self.assertEqual(u.returncode, 0, u.stderr)
+        self.assertEqual((self.work / "a.py").read_text(encoding="utf-8"), "x = 1\n")
+        self.assertFalse(new.exists())
+        st = subprocess.run(["git", "status", "--porcelain"], cwd=self.work, capture_output=True, text=True).stdout
+        self.assertNotIn("a.py", st)
+
+    def test_focus_brief_falls_back_to_the_fix_alone_past_the_cap(self):
+        diff = "--- a/a.py\n+++ b/a.py\n@@ -1 +1 @@\n-x = 1\n+x = 2\n" + "+pad\n" * 50
+        text = review.brief("r1", "task", "did it", diff, 120, focus={"issues": ["[must] a.py:1 — wrong"],
+                                                                       "delta": "+x = 3\n"})
+        self.assertNotIn("+pad", text)
+        self.assertIn("the fix alone is shown below", text)
+        self.assertIn("+x = 3", text)
+        self.assertIn("1. [must] a.py:1 — wrong", text)
+        plain = review.brief("r1", "task", "did it", diff, 12000)
+        self.assertEqual(plain, review.brief("r1", "task", "did it", diff, 12000, focus=None))
+        self.assertEqual(review.fix_rereview({}), "full")
+        self.assertEqual(review.fix_rereview({"fix_rereview": "FOCUS"}), "focus")
+        self.assertEqual(review.fix_rereview({"fix_rereview": "delta"}), "full")
+
     def test_resume_after_a_fix_run_reviews_and_undoes_the_whole_chain(self):
         # a fix run had no undo.json: resuming it reviewed an empty diff (--review on did nothing) and
         # `ccx undo FIX` said there was no snapshot. Now a resume or fix round inherits its chain's snapshot.
