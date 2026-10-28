@@ -136,6 +136,7 @@ from common import ROOT, append_jsonl, archive_hub, ccx_verify, git, read_jsonl 
 from ccx.prompts import KEEP_TESTS, WIRING  # noqa: E402
 import ext_repo  # noqa: E402
 import r5_timeline as TL  # noqa: E402
+import harness_audit as HA  # noqa: E402
 import tasks_holdout  # noqa: E402
 import tasks_r5  # noqa: E402
 
@@ -934,6 +935,17 @@ def bookkeeping(row: dict, arm: str, hub: Path, task: dict) -> None:
         row["bookkeeping_error"] = f"{type(e).__name__}: {e}"[:400]
 
 
+def must_telemetry(row: dict, hub: Path, repo: Path) -> None:
+    """Record-only (backlog build item 11): every [must] of the unit's reviews with its categories (in-diff /
+    out-of-diff / exception-only / test-only, harness_audit.must_categories), read before the hub is removed. Changes
+    nothing in ccx or in how the unit is scored; an error is kept in the row."""
+    try:
+        if row.get("ccx_run_ids"):
+            row["must_categories"] = HA.unit_must_categories(hub, repo, row["ccx_run_ids"])
+    except Exception as e:  # noqa: BLE001 — telemetry only
+        row["must_categories_error"] = f"{type(e).__name__}: {e}"[:300]
+
+
 def unit_of(u: dict, a, work: Path) -> PF.Unit:
     key = unit_key(u)
     return PF.Unit(key=key, work=work, repo=work / key, hub=work / f"h-{key}", label=u["label"],
@@ -993,6 +1005,7 @@ def run_unit(u: dict, a, work: Path) -> dict:
                    lead_unit(u, a, work, repo, hub, iso, env, job))
         row.update(changed(repo))
         bookkeeping(row, u["arm"], hub, task)
+        must_telemetry(row, hub, repo)
         sc = score(repo, task, work, job, **({"python": ext_python(a), "source": xkw["source"]} if xkw else {}))
         row.update({**u, "ok": sc["ok"], "pytest": sc["pytest"], "hub": hinfo})
         for rid in row.get("ccx_run_ids") or []:
