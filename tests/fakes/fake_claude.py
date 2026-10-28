@@ -81,8 +81,12 @@ if "[ccx review" in prompt:   # F1 reviewer: FAKE_REVIEW="issues,pass" = the ans
     open(cf, "w").write(str(n + 1))
     v = seq[min(n, len(seq) - 1)]
     res.update(status="done", summary=f"REVIEW: {v}",
-               open_questions=["[must] a.py:3 — off by one in the loop"] if v == "issues" else [])
+               open_questions=[os.environ.get("FAKE_REVIEW_MUST") or "[must] a.py:3 — off by one in the loop"]
+               if v == "issues" else [])
+denials = [{"tool_name": "Bash", "tool_use_id": f"t{i}", "tool_input": {"command": "cat a.py"}}
+           for i in range(int(os.environ.get("FAKE_DENIALS") or 0))]     # FAKE_DENIALS: tool calls refused
 print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "session_id": sid,
+                  **({"permission_denials": denials} if os.environ.get("FAKE_DENIALS") else {}),
                   "result": json.dumps(res), "structured_output": res, "total_cost_usd": 0.0123,
                   "usage": {"input_tokens": 10, "cache_creation_input_tokens": 900,
                             "cache_read_input_tokens": 3000, "output_tokens": 200}}))
