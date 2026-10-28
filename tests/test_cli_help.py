@@ -37,11 +37,10 @@ import pytest  # noqa: E402
 
 @pytest.mark.parametrize("argv, brief", [
     (["resume", "R", "--check", "X", "fix it"], ["fix it"]),
-    (["resume", "R", "fix", "--check", "X", "more"], ["fix", "more"]),
     (["resume", "R", "fix it", "--check", "X"], ["fix it"]),
-    (["run", "do", "--check", "pytest", "it"], ["do", "it"]),
     (["run", "--check", "pytest", "--to", "codex", "do", "it"], ["do", "it"]),
-    (["run", "--check", "pytest", "do", "--mode", "read", "it", "now"], ["do", "it", "now"]),
+    (["run", "--check", "pytest -q", "do", "--mode", "read", "it", "now"], ["do", "it", "now"]),
+    (["run", "--check=pytest -q", "do", "it"], ["do", "it"]),
     (["ask", "--to", "codex", "why", "--from", "claude", "is it slow"], ["why", "is it slow"]),
 ])
 def test_a_brief_around_the_options_is_kept_in_order(argv, brief):
@@ -49,6 +48,8 @@ def test_a_brief_around_the_options_is_kept_in_order(argv, brief):
     assert a.brief == brief
     if "--check" in argv:
         assert a.check == argv[argv.index("--check") + 1]
+    if "--check=pytest -q" in argv:
+        assert a.check == "pytest -q"
 
 
 @pytest.mark.parametrize("argv", [
@@ -61,6 +62,23 @@ def test_unknown_options_and_stray_words_still_exit_2(argv, capsys):
         cli.parse(argv)
     assert e.value.code == 2
     assert "unrecognized arguments" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("argv, word", [   # a bare word after a free-text value is its 2nd word: never shorten a check
+    (["run", "fix it", "--check", "pytest", "tests/test_x.py"], "tests/test_x.py"),
+    (["resume", "R", "--check", "make", "test"], "test"),
+    (["resume", "R", "fix", "--check", "X", "more"], "more"),
+    (["run", "do", "--check", "pytest", "it"], "it"),
+    (["run", "--check", "pytest", "tests/x.py"], "tests/x.py"),      # argparse itself would make it the brief
+    (["run", "do", "--check=pytest", "it"], "it"),
+    (["run", "do", "--label", "a", "b"], "b"),
+])
+def test_a_bare_word_after_a_one_value_option_exits_2(argv, word, capsys):
+    with pytest.raises(SystemExit) as e:
+        cli.parse(argv)
+    assert e.value.code == 2
+    err = capsys.readouterr().err
+    assert repr(word) in err and "Quote a value of several words" in err
 
 
 def test_a_mistyped_option_exits_2_as_a_real_process():

@@ -703,3 +703,13 @@ def test_parse_claude_keeps_errors_list():
     assert "error_during_execution" in oc.error and "No conversation found with session ID: s" in oc.error
     plain = parse_claude(json.dumps({"type": "result", "subtype": "error", "is_error": True, "result": "boom"}), "", 1)
     assert plain.error == "boom"                       # no errors[]: as before
+
+
+def test_session_gone_reads_only_the_final_cause():
+    from ccx.commands.delegation import _session_gone
+    gone = "error_during_execution: No conversation found with session ID: s"
+    assert _session_gone({"error": gone, "attempts": [{"error": gone}]})
+    assert _session_gone({"error": None, "attempts": [{"error": gone}]})
+    # resumed, fell back to a fresh rung, then failed its check: that hint stays, no --new advice
+    assert not _session_gone({"error": "check failed", "attempts": [{"error": gone}, {"error": "check failed"}]})
+    assert not _session_gone({"error": None, "attempts": [{"error": gone}, {"error": None}]})

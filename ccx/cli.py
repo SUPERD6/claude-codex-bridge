@@ -65,17 +65,46 @@ def build_parser() -> argparse.ArgumentParser:
 
 def parse(argv: list[str]) -> argparse.Namespace:
     """parse_args, except that words left over after an option join the brief. `ccx resume R --check X "fix"` and
-    `ccx run do --check pytest it` stopped with "unrecognized arguments": argparse fills a `nargs="*"` brief only
-    once. A leftover that starts with '-' is still a mistyped option and exits 2, as does any leftover for a
-    command without a brief."""
+    `ccx run --check pytest --to codex do it` stopped with "unrecognized arguments": argparse fills a `nargs="*"`
+    brief only once. A leftover that starts with '-' is still a mistyped option and exits 2, as does any leftover for
+    a command without a brief. A bare brief word right after a free-text option's value exits 2 too: in
+    `--check make test` or `--label a b` it is the value's second word, and taking it as brief would quietly shorten
+    the check."""
     ap = build_parser()
     a, rest = ap.parse_known_args(argv)
-    if rest:
-        if isinstance(getattr(a, "brief", None), list) and not any(r.startswith("-") for r in rest):
-            a.brief += rest
-        else:
-            ap.error(f"unrecognized arguments: {' '.join(rest)}")
+    if rest and not (isinstance(getattr(a, "brief", None), list) and not any(r.startswith("-") for r in rest)):
+        ap.error(f"unrecognized arguments: {' '.join(rest)}")
+    if isinstance(getattr(a, "brief", None), list):
+        # leftovers: after any free-text option; words argparse itself put in the brief: after --check only (the
+        # acceptance gate), so that a one-word brief such as `--provider deepseek x` keeps working
+        hit = _split_value(ap, a.cmd, argv, rest) or _split_value(ap, a.cmd, argv, a.brief, only={"--check"})
+        a.brief += rest
+        if hit:
+            opt, word = hit
+            ap.error(f"{word!r} right after {opt}'s value: {opt} takes one value. Quote a value of several words "
+                     f"({opt} \"make test\"), or put the brief before the options")
     return a
+
+
+def _split_value(ap: argparse.ArgumentParser, cmd: str, argv: list[str], brief: list[str],
+                 only: set[str] | None = None) -> tuple[str, str] | None:
+    """(option, word) when a bare brief word comes right after the value of a free-text option (one value, no
+    choices, not a number), else None. A brief word or a value with a space was quoted, so neither runs on."""
+    sub = next(x for x in ap._actions if isinstance(x, argparse._SubParsersAction)).choices[cmd]
+    free = {o for act in sub._actions for o in act.option_strings
+            if act.nargs is None and act.choices is None and act.type not in (int, float) and (not only or o in only)}
+    words = {w for w in brief if " " not in w.strip()}
+    for i, tok in enumerate(argv):
+        if tok == "--":
+            break
+        if tok not in words or tok.startswith("-") or i < 1:
+            continue
+        prev = argv[i - 1]
+        if "=" in prev and prev.split("=", 1)[0] in free and " " not in prev:
+            return prev.split("=", 1)[0], tok
+        if i >= 2 and argv[i - 2] in free and not prev.startswith("-") and " " not in prev:
+            return argv[i - 2], tok
+    return None
 
 
 def main(argv: list[str] | None = None) -> int:

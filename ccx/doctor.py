@@ -260,6 +260,11 @@ def doctor(p: Paths) -> bool:
     except Exception as e:  # noqa: BLE001
         add("tiers.toml", "FAIL", str(e))
     add("ccx config", *config_row(p))
+    try:                                   # a broken layout.toml: keep the table, skip the rows that read it
+        lay = p.layout
+    except ValueError as e:
+        lay = None
+        add("hub layout", "FAIL", str(e))
 
     from .agents import all_adapters
     for ad in all_adapters():
@@ -307,7 +312,9 @@ def doctor(p: Paths) -> bool:
         hv = _json.loads(vf.read_text(encoding="utf-8")).get("hub_format")
         add("hub format", "ok" if hv == HUB_FORMAT else "WARN",
             f"{hv}" + ("" if hv == HUB_FORMAT else f" (this ccx writes {HUB_FORMAT}: run `ccx init` to migrate)"))
-    if p.memory_index.exists():
+    if lay is None:
+        pass                               # the snapshot's path is in the layout: its FAIL row says why
+    elif p.memory_index.exists():
         size = p.memory_index.stat().st_size
         if p.snapshot_external:
             # the user's own shared rules file: its size is theirs to decide; ccx only folds its journal into it
@@ -321,12 +328,14 @@ def doctor(p: Paths) -> bool:
     else:
         add("memory snapshot", "FAIL", "run `ccx init`")
 
-    lay = p.layout
-    add("hub layout", "ok", f"snapshot={lay['snapshot']} ({lay['snapshot_mode']})"
-        + (f", external sync: {lay['external_sync']}" if lay.get("external_sync") else ""))
+    if lay is not None:
+        add("hub layout", "ok", f"snapshot={lay['snapshot']} ({lay['snapshot_mode']})"
+            + (f", external sync: {lay['external_sync']}" if lay.get("external_sync") else ""))
     add("routing prior", *routing_prior(p))
     add("tier policy", *tier_policy_check(p))
-    if p.snapshot_external:
+    if lay is None:
+        pass
+    elif lay["snapshot_mode"] == "external":
         add("snapshot wiring", "ok (external)", "the tools load the snapshot themselves; ccx writes no blocks")
     else:
         cm = claude_home() / "CLAUDE.md"
