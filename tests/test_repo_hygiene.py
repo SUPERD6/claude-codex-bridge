@@ -78,9 +78,12 @@ def test_no_personal_paths_in_tracked_files():
     assert not found, "personal machine paths in tracked files (use <you> or a placeholder):\n" + "\n".join(found)
 
 
+_N = "jdoe42"      # spelled through a variable so this file does not trip its own scan
+
+
 @pytest.mark.parametrize("text", [
-    "C:\\Users\\jdoe42\\proj", "D:/Users/jdoe42/x", "//c/Users/jdoe42/.codex", "/c/Users/jdoe42/x",
-    "see /home/jdoe42/.config", "cd /Users/jdoe42/code",
+    f"C:\\Users\\{_N}\\proj", f"D:/Users/{_N}/x", f"//c/Users/{_N}/.codex", f"/c/Users/{_N}/x",
+    f"see /home/{_N}/.config", f"cd /Users/{_N}/code",
 ])
 def test_detects_home_folders(text):
     assert find_personal_paths(text)
