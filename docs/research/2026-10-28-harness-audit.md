@@ -19,8 +19,9 @@ failed; local paths and notes left out).
   says pass / fail / not_exercised, with the file that shows it. A component fails when any of its exercised criteria
   fails; a unit's harness score is the share of its exercised components that pass (macro).
 - **Mechanism chains**: a small table "harness criterion → agent condition" (e.g. lead-only lines in the shared
-  context → the builder stopped early). For a unit, the chains whose harness criterion failed and whose agent
-  condition holds are listed as *activated*. That is a possible mechanism, never a proven cause.
+  context → the builder stopped early). Only for a unit that came out wrong, the chains whose harness criterion
+  failed and whose agent condition holds are listed as *activated*. That is a possible mechanism, never a proven
+  cause. In units that came out right the same pairs are counted apart as co-occurrence (§5), not attributed.
 - **LLM rubric**: three judgement items (prompt carries lead-only instructions; review verdict grounded in what it
   checked; summary contradicted by its check), off by default, on the cheapest model (haiku), with `--dry-run`
   giving the cost first. **Not run for this report** (dry run: 506 calls, about $1.42).
@@ -40,16 +41,18 @@ failed; local paths and notes left out).
 | Arm | Units | Agent layer (hidden tests right) | Harness macro | All components pass | Task success but ≥ 1 harness fail |
 |---|---|---|---|---|---|
 | ccx2 | 80 | 76/80 | 0.67 | 0/80 | **76/76** |
-| direct | 20 | 18/20 | 0.75 | 3/20 | 15/18 |
+| direct | 20 | 18/20 | 0.76 | 3/20 | 15/18 |
 | builtin | 20 | 17/20 | — | — | not exercised (no ccx runs) |
 
-Same, with the two criteria the **eval environment** caused rather than ccx left out (`--skip ctx.no_lead_only_lines
---skip ctx.no_private_context`; see §3):
+Two other views (see §3 for who caused what):
 
-| Arm | Harness macro | All components pass | Task success but harness fail |
+| View | Left out | ccx2: macro / all pass / success but harness fail | direct |
 |---|---|---|---|
-| ccx2 | 0.80 | 20/80 | 56/76 |
-| direct | 0.76 | 3/20 | 15/18 |
+| Without the criterion the **eval environment** caused | `ctx.no_private_context` (the eval's real CODEX_HOME) | 0.67 / 0/80 / 76/76 | 0.76 / 3/20 / 15/18 |
+| Also without a **ccx defect fixed since these runs** | + `ctx.no_lead_only_lines` (fixed in #149; not environmental) | 0.80 / 20/80 / 56/76 | 0.76 / 3/20 / 15/18 |
+
+The second view is not a cleaner measure of these runs: the lead-only lines did reach every ccx2 builder. It only
+shows what is left once the one failure every ccx2 unit shares is set aside.
 
 The paper's 31% (task success despite a harness failure) is not comparable: different criteria, harnesses, tasks.
 What carries over is the shape: right answers hide harness problems. Per tag, ccx2's harness macro was flat
@@ -61,7 +64,7 @@ What carries over is the shape: right answers hide harness problems. Per tag, cc
 |---|---|---|---|
 | ctx.no_lead_only_lines | 80/80 | — | every ccx2 builder got "Do not edit files yourself: hand the implementation to a sub-agent through ccx" from the person's message in its shared context |
 | ctx.no_false_start | 5/80 | 0/20 | 5 Codex builder runs stopped blocked/partial in 7–9 s without a file: 3 on "use sub-agents" vs "do not hand on", 2 on the shared context / workspace |
-| ctx.no_private_context | 27/80 | 1/20 | 30 Codex builder runs read the person's Codex memory file outside the workspace (its own instructions told it to) |
+| ctx.no_private_context | 27/80 | 0/20 | 28 Codex builder runs read the person's Codex memory file outside the workspace (its own instructions told it to); 2 direct runs that only set CODEX_HOME to a test's own temp home are not counted |
 | life.undo_snapshot | 50/80 | 12/20 | 82 write runs without their own undo.json: all 51 fix rounds and all 31 resumes (`ccx undo <their id>` refused) |
 | tool.check_ran | 5/80 | — | 5 checks with pytest exit 4 (a test file that does not exist); ccx reported them `check_broken`, as intended |
 | tool.no_permission_denials | 37/68 | 14/20 | 65 of 142 Claude review runs were refused Bash ("don't ask" mode) and reviewed by reading only |
@@ -71,7 +74,8 @@ Passed everywhere they were exercised: run states and final.lock, kind consisten
 inside the workspace, reviews editing nothing, no credential paths, the sub-agent budget cap (Codex children priced
 from the routing priors), ledger rows and $ (attempts, reviews, results-row total), events logs, run ids, resume in
 the same session, archiving, stop requests, ccx re-running the check after "done", weak evidence reviewed.
-Not exercised in this data: the depth guard (no sub-agent called ccx), worktrees, timeouts, leftover processes
+Not exercised in this data: the depth guard (no sub-agent command called ccx; the rule tells nested runs apart by
+caller only, so a nested run under the lead's own vendor would pass it), worktrees, timeouts, leftover processes
 (the r5e–r5h rows predate the per-unit process audit).
 
 **Wrong units and activated chains** (activated, not proven):
@@ -87,7 +91,8 @@ Not exercised in this data: the depth guard (no sub-agent called ccx), worktrees
 | r5f builtin × 3 | — | no ccx runs to audit |
 
 All four wrong ccx2 units ended with ccx saying ok (M7). That is the most useful line here: when ccx2 was wrong,
-ccx's own verdict did not warn the lead. Two of the four also started with a false start.
+ccx's own final verdict gave the lead no warning (whether the lead then checked further is not read here). Two of
+the four also started with a false start.
 
 ## 3. What is ccx's, what is the eval's, what is already fixed
 
@@ -106,7 +111,8 @@ So a re-run on today's ccx should show Context and Lifecycle much better; that i
 ## 4. [must] categories (record-only, backlog build item 11)
 
 Every `[must]` of a review is given categories from all its file:line references and the unit's diff: **in-diff**
-(every reference within 3 lines of a changed line), **out-of-diff** (at least one reference outside the diff),
+(every reference within 3 lines of a changed line; a reference without a line number counts as in-diff when its
+file has any change, and a new untracked file counts as changed throughout), **out-of-diff** (at least one reference outside the diff),
 **exception-only** (it says swallowed/silent explicitly: 吞 / 静默 / swallow; a bare "except" or "silent" does not
 count), **test-only** (every file it names is a test). Nothing in ccx changes; `r5.py` now stores the same fields in
 every new row (`must_categories`), so the hold-out runs can measure rescue rates per category later.
@@ -122,6 +128,15 @@ every new row (`must_categories`), so the hold-out runs can measure rescue rates
 which category rescues units: that needs the first review's outcome per category and a hold-out set, as the item
 says.
 
+**The diff here is the final tree's, and that is biased.** These runs did not record the tree each review saw, so
+every item above was placed against the unit's final state (`diff_basis: final_tree` for every item). When a fix
+round edited the line an out-of-diff [must] named, that line is in the final diff, so the item counts as in-diff:
+the [must]s that got fixed drift from out-of-diff to in-diff, which skews exactly the per-category rescue rate the
+record is for. Runs of today's ccx record how each write run left the tree (undo.json `after`, written after its
+review); for those the script uses that tree (`diff_basis: review_tree`: a run's `review` against its own end tree,
+a fix round's `first_review` against the end tree of the run it fixes). Hold-out units are deleted by r5's
+clean-up, so r5 stores these categories in their rows before that; they cannot be audited from disk afterwards.
+
 ## 5. Caveats
 
 - **Development data.** r5e–r5h are the units ccx was tuned on, before the clean room; n = 80 ccx2, 20 direct,
@@ -129,10 +144,12 @@ says.
 - **Our criteria.** Written by this project for its own obligations, adapted from the paper's components, not its
   criteria or tasks; thresholds (20 s false start, 3-line in-diff tolerance, the private-path patterns) are choices.
   A criterion can be wrong; every failure lists its evidence file so it can be checked by hand.
-- **Approximations.** The [must] diff is the final tree's, not the one the review saw (a later fix round may have
-  moved lines). Writes are read from the edit tools' events; a shell redirect or a Codex child session's edits are
+- **Approximations.** The [must] diff is the final tree's for these rows (biased toward in-diff for fixed items,
+  §4). Writes are read from the edit tools' events; a shell redirect or a Codex child session's edits are
   not seen. The budget check covers Codex child sessions only. Leftover processes could not be checked for these rows.
-- **Mechanism chains are hypotheses.** An activated chain says two things co-occurred in a wrong unit.
+- **Mechanism chains are hypotheses.** An activated chain says two things co-occurred in a wrong unit. The same
+  pairs also co-occur in units that came out right (ccx2: M4 in 36, M1 in 3; direct: M4 in 13), which is why they
+  are not causes; the JSON keeps those apart (`chains_co_occurring_not_wrong`).
 - **builtin** has no ccx runs, so its harness layer is not measured here at all; this is not a comparison of
   harnesses.
 - The LLM rubric was not run.
@@ -141,6 +158,7 @@ How to reproduce:
 
 ```
 python scripts/eval/harness_audit.py audit <work>/r5e <work>/r5f <work>/r5g <work>/r5h --results .ccx/eval/r5/results.jsonl --json audit.json
-python scripts/eval/harness_audit.py audit ... --skip ctx.no_lead_only_lines --skip ctx.no_private_context
+python scripts/eval/harness_audit.py audit ... --skip ctx.no_private_context
+python scripts/eval/harness_audit.py audit ... --skip ctx.no_private_context --skip ctx.no_lead_only_lines
 python scripts/eval/harness_audit.py audit ... --llm-rubric --dry-run
 ```

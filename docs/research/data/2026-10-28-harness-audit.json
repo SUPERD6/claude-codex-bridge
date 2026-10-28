@@ -60,7 +60,7 @@
   {
    "id": "gov.depth_guard",
    "component": "Governance",
-   "what": "no ccx run started from inside a sub-agent"
+   "what": "no ccx run started from inside a sub-agent (by caller; a nested run under the lead's own vendor is not told apart)"
   },
   {
    "id": "life.no_leftovers",
@@ -184,7 +184,7 @@
    "id": "M7",
    "harness": "ver.claim_matches_hidden",
    "agent": "agent.hidden_fail",
-   "condition": "ccx reported the work right (false pass) and the lead accepted it"
+   "condition": "ccx reported the work right (a false pass) and the work came out wrong"
   },
   {
    "id": "M8",
@@ -376,6 +376,7 @@
     }
    },
    "chains_activated": {},
+   "chains_co_occurring_not_wrong": {},
    "wrong_units": [
     {
      "key": "r5f/1-q-resume-session-builtin",
@@ -561,11 +562,15 @@
     }
    },
    "chains_activated": {
-    "M4": 37,
-    "M1": 5,
+    "M1": 2,
     "M2": 2,
+    "M4": 1,
     "M5": 1,
     "M7": 4
+   },
+   "chains_co_occurring_not_wrong": {
+    "M4": 36,
+    "M1": 3
    },
    "wrong_units": [
     {
@@ -605,12 +610,12 @@
    "agent_right": 18,
    "agent_known": 20,
    "harness_scored": 20,
-   "harness_macro_mean": 0.75,
+   "harness_macro_mean": 0.7571,
    "harness_all_pass": 3,
    "success_but_harness_fail": 15,
    "success_scored": 18,
    "component_fail_units": {
-    "Context": 1,
+    "Context": 0,
     "Execution": 0,
     "Governance": 0,
     "Lifecycle": 12,
@@ -644,8 +649,8 @@
      "not_exercised": 0
     },
     "ctx.no_private_context": {
-     "pass": 19,
-     "fail": 1,
+     "pass": 20,
+     "fail": 0,
      "not_exercised": 0
     },
     "exe.run_state_final": {
@@ -770,9 +775,12 @@
     }
    },
    "chains_activated": {
-    "M4": 14,
+    "M4": 1,
     "M5": 1,
     "M7": 1
+   },
+   "chains_co_occurring_not_wrong": {
+    "M4": 13
    },
    "wrong_units": [
     {
@@ -791,6 +799,604 @@
   }
  },
  "summary_without_env_criteria": {
+  "skipped": [
+   "ctx.no_private_context"
+  ],
+  "summary": {
+   "builtin": {
+    "units": 20,
+    "agent_right": 17,
+    "agent_known": 20,
+    "harness_scored": 0,
+    "harness_macro_mean": null,
+    "harness_all_pass": 0,
+    "success_but_harness_fail": 0,
+    "success_scored": 0,
+    "component_fail_units": {
+     "Context": 0,
+     "Execution": 0,
+     "Governance": 0,
+     "Lifecycle": 0,
+     "Observability": 0,
+     "Tools": 0,
+     "Verification": 0
+    },
+    "component_exercised_units": {
+     "Context": 0,
+     "Execution": 0,
+     "Governance": 0,
+     "Lifecycle": 0,
+     "Observability": 0,
+     "Tools": 0,
+     "Verification": 0
+    },
+    "criteria": {
+     "ctx.shared_context_delivered": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "ctx.no_lead_only_lines": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "ctx.no_false_start": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "ctx.no_private_context": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "exe.run_state_final": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "exe.failures_truthful": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "exe.kind_consistent": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "gov.writes_in_workspace": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "gov.read_runs_no_writes": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "gov.no_credential_paths": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "gov.budget_caps": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "gov.depth_guard": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "life.no_leftovers": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "life.undo_snapshot": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "life.resume_continuity": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "life.archive_after_final": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "life.stop_honored": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "obs.ledger_row": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "obs.ledger_usd": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "obs.events_logs": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "obs.run_id_unique": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "tool.check_ran": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "tool.sandbox_recovered": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "tool.no_permission_denials": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "tool.errors_recovered": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "ver.check_after_done": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "ver.review_when_weak": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "ver.claim_matches_hidden": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     }
+    },
+    "chains_activated": {},
+    "chains_co_occurring_not_wrong": {},
+    "wrong_units": [
+     {
+      "key": "r5f/1-q-resume-session-builtin",
+      "chains": []
+     },
+     {
+      "key": "r5f/2-q-resume-session-builtin",
+      "chains": []
+     },
+     {
+      "key": "r5f/2-quota-stop-log-builtin",
+      "chains": []
+     }
+    ]
+   },
+   "ccx2": {
+    "units": 80,
+    "agent_right": 76,
+    "agent_known": 80,
+    "harness_scored": 80,
+    "harness_macro_mean": 0.6678,
+    "harness_all_pass": 0,
+    "success_but_harness_fail": 76,
+    "success_scored": 76,
+    "component_fail_units": {
+     "Context": 80,
+     "Execution": 0,
+     "Governance": 0,
+     "Lifecycle": 50,
+     "Observability": 0,
+     "Tools": 41,
+     "Verification": 15
+    },
+    "component_exercised_units": {
+     "Context": 80,
+     "Execution": 80,
+     "Governance": 80,
+     "Lifecycle": 80,
+     "Observability": 80,
+     "Tools": 80,
+     "Verification": 80
+    },
+    "criteria": {
+     "ctx.shared_context_delivered": {
+      "pass": 80,
+      "fail": 0,
+      "not_exercised": 0
+     },
+     "ctx.no_lead_only_lines": {
+      "pass": 0,
+      "fail": 80,
+      "not_exercised": 0
+     },
+     "ctx.no_false_start": {
+      "pass": 75,
+      "fail": 5,
+      "not_exercised": 0
+     },
+     "ctx.no_private_context": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 80
+     },
+     "exe.run_state_final": {
+      "pass": 80,
+      "fail": 0,
+      "not_exercised": 0
+     },
+     "exe.failures_truthful": {
+      "pass": 4,
+      "fail": 0,
+      "not_exercised": 76
+     },
+     "exe.kind_consistent": {
+      "pass": 80,
+      "fail": 0,
+      "not_exercised": 0
+     },
+     "gov.writes_in_workspace": {
+      "pass": 76,
+      "fail": 0,
+      "not_exercised": 4
+     },
+     "gov.read_runs_no_writes": {
+      "pass": 69,
+      "fail": 0,
+      "not_exercised": 11
+     },
+     "gov.no_credential_paths": {
+      "pass": 80,
+      "fail": 0,
+      "not_exercised": 0
+     },
+     "gov.budget_caps": {
+      "pass": 21,
+      "fail": 0,
+      "not_exercised": 59
+     },
+     "gov.depth_guard": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 80
+     },
+     "life.no_leftovers": {
+      "pass": 80,
+      "fail": 0,
+      "not_exercised": 0
+     },
+     "life.undo_snapshot": {
+      "pass": 30,
+      "fail": 50,
+      "not_exercised": 0
+     },
+     "life.resume_continuity": {
+      "pass": 50,
+      "fail": 0,
+      "not_exercised": 30
+     },
+     "life.archive_after_final": {
+      "pass": 80,
+      "fail": 0,
+      "not_exercised": 0
+     },
+     "life.stop_honored": {
+      "pass": 4,
+      "fail": 0,
+      "not_exercised": 76
+     },
+     "obs.ledger_row": {
+      "pass": 80,
+      "fail": 0,
+      "not_exercised": 0
+     },
+     "obs.ledger_usd": {
+      "pass": 80,
+      "fail": 0,
+      "not_exercised": 0
+     },
+     "obs.events_logs": {
+      "pass": 80,
+      "fail": 0,
+      "not_exercised": 0
+     },
+     "obs.run_id_unique": {
+      "pass": 80,
+      "fail": 0,
+      "not_exercised": 0
+     },
+     "tool.check_ran": {
+      "pass": 75,
+      "fail": 5,
+      "not_exercised": 0
+     },
+     "tool.sandbox_recovered": {
+      "pass": 7,
+      "fail": 0,
+      "not_exercised": 73
+     },
+     "tool.no_permission_denials": {
+      "pass": 31,
+      "fail": 37,
+      "not_exercised": 12
+     },
+     "tool.errors_recovered": {
+      "pass": 14,
+      "fail": 0,
+      "not_exercised": 66
+     },
+     "ver.check_after_done": {
+      "pass": 74,
+      "fail": 0,
+      "not_exercised": 6
+     },
+     "ver.review_when_weak": {
+      "pass": 22,
+      "fail": 0,
+      "not_exercised": 58
+     },
+     "ver.claim_matches_hidden": {
+      "pass": 65,
+      "fail": 15,
+      "not_exercised": 0
+     }
+    },
+    "chains_activated": {
+     "M1": 2,
+     "M2": 2,
+     "M4": 1,
+     "M5": 1,
+     "M7": 4
+    },
+    "chains_co_occurring_not_wrong": {
+     "M4": 36,
+     "M1": 3
+    },
+    "wrong_units": [
+     {
+      "key": "r5e/2-quota-stop-log-ccx2",
+      "chains": [
+       "M1",
+       "M2",
+       "M4",
+       "M5",
+       "M7"
+      ]
+     },
+     {
+      "key": "r5g/1-mem-report-ccx2",
+      "chains": [
+       "M7"
+      ]
+     },
+     {
+      "key": "r5g/2-q-resume-session-ccx2",
+      "chains": [
+       "M7"
+      ]
+     },
+     {
+      "key": "r5h/1-q-killed-spend-ccx2",
+      "chains": [
+       "M1",
+       "M2",
+       "M7"
+      ]
+     }
+    ]
+   },
+   "direct": {
+    "units": 20,
+    "agent_right": 18,
+    "agent_known": 20,
+    "harness_scored": 20,
+    "harness_macro_mean": 0.7571,
+    "harness_all_pass": 3,
+    "success_but_harness_fail": 15,
+    "success_scored": 18,
+    "component_fail_units": {
+     "Context": 0,
+     "Execution": 0,
+     "Governance": 0,
+     "Lifecycle": 12,
+     "Observability": 0,
+     "Tools": 14,
+     "Verification": 8
+    },
+    "component_exercised_units": {
+     "Context": 20,
+     "Execution": 20,
+     "Governance": 20,
+     "Lifecycle": 20,
+     "Observability": 20,
+     "Tools": 20,
+     "Verification": 20
+    },
+    "criteria": {
+     "ctx.shared_context_delivered": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "ctx.no_lead_only_lines": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "ctx.no_false_start": {
+      "pass": 20,
+      "fail": 0,
+      "not_exercised": 0
+     },
+     "ctx.no_private_context": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "exe.run_state_final": {
+      "pass": 20,
+      "fail": 0,
+      "not_exercised": 0
+     },
+     "exe.failures_truthful": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "exe.kind_consistent": {
+      "pass": 20,
+      "fail": 0,
+      "not_exercised": 0
+     },
+     "gov.writes_in_workspace": {
+      "pass": 20,
+      "fail": 0,
+      "not_exercised": 0
+     },
+     "gov.read_runs_no_writes": {
+      "pass": 20,
+      "fail": 0,
+      "not_exercised": 0
+     },
+     "gov.no_credential_paths": {
+      "pass": 20,
+      "fail": 0,
+      "not_exercised": 0
+     },
+     "gov.budget_caps": {
+      "pass": 8,
+      "fail": 0,
+      "not_exercised": 12
+     },
+     "gov.depth_guard": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "life.no_leftovers": {
+      "pass": 20,
+      "fail": 0,
+      "not_exercised": 0
+     },
+     "life.undo_snapshot": {
+      "pass": 8,
+      "fail": 12,
+      "not_exercised": 0
+     },
+     "life.resume_continuity": {
+      "pass": 12,
+      "fail": 0,
+      "not_exercised": 8
+     },
+     "life.archive_after_final": {
+      "pass": 20,
+      "fail": 0,
+      "not_exercised": 0
+     },
+     "life.stop_honored": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "obs.ledger_row": {
+      "pass": 20,
+      "fail": 0,
+      "not_exercised": 0
+     },
+     "obs.ledger_usd": {
+      "pass": 20,
+      "fail": 0,
+      "not_exercised": 0
+     },
+     "obs.events_logs": {
+      "pass": 20,
+      "fail": 0,
+      "not_exercised": 0
+     },
+     "obs.run_id_unique": {
+      "pass": 20,
+      "fail": 0,
+      "not_exercised": 0
+     },
+     "tool.check_ran": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "tool.sandbox_recovered": {
+      "pass": 1,
+      "fail": 0,
+      "not_exercised": 19
+     },
+     "tool.no_permission_denials": {
+      "pass": 6,
+      "fail": 14,
+      "not_exercised": 0
+     },
+     "tool.errors_recovered": {
+      "pass": 5,
+      "fail": 0,
+      "not_exercised": 15
+     },
+     "ver.check_after_done": {
+      "pass": 0,
+      "fail": 0,
+      "not_exercised": 20
+     },
+     "ver.review_when_weak": {
+      "pass": 17,
+      "fail": 0,
+      "not_exercised": 3
+     },
+     "ver.claim_matches_hidden": {
+      "pass": 12,
+      "fail": 8,
+      "not_exercised": 0
+     }
+    },
+    "chains_activated": {
+     "M4": 1,
+     "M5": 1,
+     "M7": 1
+    },
+    "chains_co_occurring_not_wrong": {
+     "M4": 13
+    },
+    "wrong_units": [
+     {
+      "key": "r5e/1-q-resume-session-direct",
+      "chains": []
+     },
+     {
+      "key": "r5e/2-quota-stop-log-direct",
+      "chains": [
+       "M4",
+       "M5",
+       "M7"
+      ]
+     }
+    ]
+   }
+  }
+ },
+ "summary_without_env_and_fixed_criteria": {
   "skipped": [
    "ctx.no_lead_only_lines",
    "ctx.no_private_context"
@@ -966,6 +1572,7 @@
      }
     },
     "chains_activated": {},
+    "chains_co_occurring_not_wrong": {},
     "wrong_units": [
      {
       "key": "r5f/1-q-resume-session-builtin",
@@ -1151,10 +1758,13 @@
      }
     },
     "chains_activated": {
-     "M4": 37,
      "M2": 2,
+     "M4": 1,
      "M5": 1,
      "M7": 4
+    },
+    "chains_co_occurring_not_wrong": {
+     "M4": 36
     },
     "wrong_units": [
      {
@@ -1357,9 +1967,12 @@
      }
     },
     "chains_activated": {
-     "M4": 14,
+     "M4": 1,
      "M5": 1,
      "M7": 1
+    },
+    "chains_co_occurring_not_wrong": {
+     "M4": 13
     },
     "wrong_units": [
      {
@@ -1376,32 +1989,37 @@
      }
     ]
    }
-  }
+  },
+  "note": "also leaves out ctx.no_lead_only_lines, a ccx defect fixed in #149 (not environmental)"
  },
  "must_categories": {
   "out-of-diff": {
    "items": 43,
    "units": 34,
    "units_right": 31,
-   "units_wrong": 3
+   "units_wrong": 3,
+   "items_final_tree": 43
   },
   "in-diff": {
    "items": 50,
    "units": 35,
    "units_right": 30,
-   "units_wrong": 5
+   "units_wrong": 5,
+   "items_final_tree": 50
   },
   "exception-only": {
    "items": 8,
    "units": 7,
    "units_right": 6,
-   "units_wrong": 1
+   "units_wrong": 1,
+   "items_final_tree": 8
   },
   "test-only": {
    "items": 4,
    "units": 4,
    "units_right": 4,
-   "units_wrong": 0
+   "units_wrong": 0,
+   "items_final_tree": 4
   }
  },
  "units": [
@@ -1426,7 +2044,8 @@
     "ctx.no_private_context",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -1447,7 +2066,8 @@
     "Verification": "pass"
    },
    "failed": [],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5e",
@@ -1471,7 +2091,8 @@
     "life.undo_snapshot",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -1495,7 +2116,8 @@
     "life.undo_snapshot",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -1520,7 +2142,8 @@
     "life.undo_snapshot",
     "tool.check_ran"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5e",
@@ -1541,7 +2164,8 @@
    "failed": [
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -1567,7 +2191,8 @@
     "life.undo_snapshot",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -1592,7 +2217,8 @@
     "tool.no_permission_denials",
     "ver.claim_matches_hidden"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -1616,7 +2242,8 @@
     "ctx.no_lead_only_lines",
     "life.undo_snapshot"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5e",
@@ -1639,7 +2266,8 @@
     "tool.no_permission_denials",
     "ver.claim_matches_hidden"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -1664,7 +2292,8 @@
     "ctx.no_private_context",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -1689,7 +2318,8 @@
     "tool.no_permission_denials",
     "ver.claim_matches_hidden"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -1715,7 +2345,8 @@
     "life.undo_snapshot",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -1740,7 +2371,8 @@
     "tool.no_permission_denials",
     "ver.claim_matches_hidden"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -1765,7 +2397,8 @@
     "ctx.no_private_context",
     "life.undo_snapshot"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5e",
@@ -1786,7 +2419,8 @@
    "failed": [
     "life.undo_snapshot"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5e",
@@ -1810,7 +2444,8 @@
     "ctx.no_private_context",
     "life.undo_snapshot"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M1"
    ]
   },
@@ -1819,10 +2454,10 @@
    "key": "1-quota-stop-log-direct",
    "arm": "direct",
    "agent_ok": true,
-   "harness_score": 0.5714,
+   "harness_score": 0.7143,
    "harness_ok": false,
    "components": {
-    "Context": "fail",
+    "Context": "pass",
     "Execution": "pass",
     "Governance": "pass",
     "Lifecycle": "fail",
@@ -1831,11 +2466,11 @@
     "Verification": "pass"
    },
    "failed": [
-    "ctx.no_private_context",
     "life.undo_snapshot",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -1858,7 +2493,8 @@
    "failed": [
     "ctx.no_lead_only_lines"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5e",
@@ -1877,7 +2513,8 @@
     "Verification": "pass"
    },
    "failed": [],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5e",
@@ -1899,7 +2536,8 @@
     "ctx.no_lead_only_lines",
     "ctx.no_private_context"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5e",
@@ -1920,7 +2558,8 @@
    "failed": [
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -1946,7 +2585,8 @@
     "life.undo_snapshot",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -1970,7 +2610,8 @@
     "life.undo_snapshot",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -1994,7 +2635,8 @@
     "ctx.no_lead_only_lines",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -2015,7 +2657,8 @@
     "Verification": "pass"
    },
    "failed": [],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5e",
@@ -2037,7 +2680,8 @@
     "ctx.no_lead_only_lines",
     "ctx.no_private_context"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5e",
@@ -2058,7 +2702,8 @@
    "failed": [
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -2083,7 +2728,8 @@
     "life.undo_snapshot",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -2106,7 +2752,8 @@
    "failed": [
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -2131,7 +2778,8 @@
     "ctx.no_private_context",
     "life.undo_snapshot"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5e",
@@ -2153,7 +2801,8 @@
     "life.undo_snapshot",
     "ver.claim_matches_hidden"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5e",
@@ -2176,7 +2825,8 @@
     "life.undo_snapshot",
     "ver.claim_matches_hidden"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5e",
@@ -2199,7 +2849,8 @@
     "tool.no_permission_denials",
     "ver.claim_matches_hidden"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -2224,7 +2875,8 @@
     "life.undo_snapshot",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -2248,7 +2900,8 @@
     "life.undo_snapshot",
     "ver.claim_matches_hidden"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5e",
@@ -2279,7 +2932,8 @@
     "M4",
     "M5",
     "M7"
-   ]
+   ],
+   "co_occurring": []
   },
   {
    "tag": "r5e",
@@ -2306,7 +2960,8 @@
     "M4",
     "M5",
     "M7"
-   ]
+   ],
+   "co_occurring": []
   },
   {
    "tag": "r5e",
@@ -2328,7 +2983,8 @@
     "ctx.no_lead_only_lines",
     "ctx.no_private_context"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5e",
@@ -2349,7 +3005,8 @@
    "failed": [
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -2370,7 +3027,8 @@
     "Verification": "not_exercised"
    },
    "failed": [],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5f",
@@ -2391,7 +3049,8 @@
    "failed": [
     "ctx.no_lead_only_lines"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5f",
@@ -2410,7 +3069,8 @@
     "Verification": "not_exercised"
    },
    "failed": [],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5f",
@@ -2434,7 +3094,8 @@
     "life.undo_snapshot",
     "tool.check_ran"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5f",
@@ -2453,7 +3114,8 @@
     "Verification": "not_exercised"
    },
    "failed": [],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5f",
@@ -2477,7 +3139,8 @@
     "tool.check_ran",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -2498,7 +3161,8 @@
     "Verification": "not_exercised"
    },
    "failed": [],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5f",
@@ -2521,7 +3185,8 @@
     "life.undo_snapshot",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -2542,7 +3207,8 @@
     "Verification": "not_exercised"
    },
    "failed": [],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5f",
@@ -2564,7 +3230,8 @@
     "ctx.no_lead_only_lines",
     "ctx.no_private_context"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5f",
@@ -2583,7 +3250,8 @@
     "Verification": "not_exercised"
    },
    "failed": [],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5f",
@@ -2606,7 +3274,8 @@
     "ctx.no_private_context",
     "life.undo_snapshot"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5f",
@@ -2625,7 +3294,8 @@
     "Verification": "not_exercised"
    },
    "failed": [],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5f",
@@ -2648,7 +3318,8 @@
     "tool.no_permission_denials",
     "ver.claim_matches_hidden"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -2669,7 +3340,8 @@
     "Verification": "not_exercised"
    },
    "failed": [],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5f",
@@ -2692,7 +3364,8 @@
     "life.undo_snapshot",
     "ver.claim_matches_hidden"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5f",
@@ -2711,7 +3384,8 @@
     "Verification": "not_exercised"
    },
    "failed": [],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5f",
@@ -2734,7 +3408,8 @@
     "life.undo_snapshot",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -2755,7 +3430,8 @@
     "Verification": "not_exercised"
    },
    "failed": [],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5f",
@@ -2776,7 +3452,8 @@
    "failed": [
     "ctx.no_lead_only_lines"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5f",
@@ -2795,7 +3472,8 @@
     "Verification": "not_exercised"
    },
    "failed": [],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5f",
@@ -2816,7 +3494,8 @@
    "failed": [
     "ctx.no_lead_only_lines"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5f",
@@ -2835,7 +3514,8 @@
     "Verification": "not_exercised"
    },
    "failed": [],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5f",
@@ -2859,7 +3539,8 @@
     "life.undo_snapshot",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -2880,7 +3561,8 @@
     "Verification": "not_exercised"
    },
    "failed": [],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5f",
@@ -2904,7 +3586,8 @@
     "life.undo_snapshot",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -2925,7 +3608,8 @@
     "Verification": "not_exercised"
    },
    "failed": [],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5f",
@@ -2947,7 +3631,8 @@
     "ctx.no_lead_only_lines",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -2968,7 +3653,8 @@
     "Verification": "not_exercised"
    },
    "failed": [],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5f",
@@ -2991,7 +3677,8 @@
     "life.undo_snapshot",
     "ver.claim_matches_hidden"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5f",
@@ -3010,7 +3697,8 @@
     "Verification": "not_exercised"
    },
    "failed": [],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5f",
@@ -3035,7 +3723,8 @@
     "tool.no_permission_denials",
     "ver.claim_matches_hidden"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -3056,7 +3745,8 @@
     "Verification": "not_exercised"
    },
    "failed": [],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5f",
@@ -3081,7 +3771,8 @@
     "life.undo_snapshot",
     "ver.claim_matches_hidden"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M1"
    ]
   },
@@ -3102,7 +3793,8 @@
     "Verification": "not_exercised"
    },
    "failed": [],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5f",
@@ -3123,7 +3815,8 @@
    "failed": [
     "ctx.no_lead_only_lines"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5f",
@@ -3142,7 +3835,8 @@
     "Verification": "not_exercised"
    },
    "failed": [],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5f",
@@ -3165,7 +3859,8 @@
     "life.undo_snapshot",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -3186,7 +3881,8 @@
     "Verification": "not_exercised"
    },
    "failed": [],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5f",
@@ -3207,7 +3903,8 @@
    "failed": [
     "ctx.no_lead_only_lines"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5g",
@@ -3228,7 +3925,8 @@
    "failed": [
     "ctx.no_lead_only_lines"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5g",
@@ -3251,7 +3949,8 @@
     "life.undo_snapshot",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -3274,7 +3973,8 @@
    "failed": [
     "ctx.no_lead_only_lines"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5g",
@@ -3295,7 +3995,8 @@
    "failed": [
     "ctx.no_lead_only_lines"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5g",
@@ -3320,7 +4021,8 @@
    ],
    "chains": [
     "M7"
-   ]
+   ],
+   "co_occurring": []
   },
   {
    "tag": "r5g",
@@ -3344,7 +4046,8 @@
     "life.undo_snapshot",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -3371,7 +4074,8 @@
     "tool.check_ran",
     "ver.claim_matches_hidden"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5g",
@@ -3393,7 +4097,8 @@
     "ctx.no_lead_only_lines",
     "life.undo_snapshot"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5g",
@@ -3416,7 +4121,8 @@
     "life.undo_snapshot",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -3440,7 +4146,8 @@
     "ctx.no_lead_only_lines",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -3463,7 +4170,8 @@
    "failed": [
     "ctx.no_lead_only_lines"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5g",
@@ -3485,7 +4193,8 @@
     "ctx.no_lead_only_lines",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -3510,7 +4219,8 @@
     "life.undo_snapshot",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -3534,7 +4244,8 @@
     "ctx.no_lead_only_lines",
     "ctx.no_private_context"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5g",
@@ -3557,7 +4268,8 @@
     "life.undo_snapshot",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -3582,7 +4294,8 @@
     "life.undo_snapshot",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -3609,7 +4322,8 @@
     "tool.no_permission_denials",
     "ver.claim_matches_hidden"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -3636,7 +4350,8 @@
    ],
    "chains": [
     "M7"
-   ]
+   ],
+   "co_occurring": []
   },
   {
    "tag": "r5g",
@@ -3658,7 +4373,8 @@
     "ctx.no_lead_only_lines",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -3682,7 +4398,8 @@
     "ctx.no_lead_only_lines",
     "life.undo_snapshot"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5h",
@@ -3703,7 +4420,8 @@
    "failed": [
     "ctx.no_lead_only_lines"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5h",
@@ -3727,7 +4445,8 @@
     "tool.no_permission_denials",
     "ver.claim_matches_hidden"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -3751,7 +4470,8 @@
     "ctx.no_lead_only_lines",
     "life.undo_snapshot"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5h",
@@ -3772,7 +4492,8 @@
    "failed": [
     "ctx.no_lead_only_lines"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5h",
@@ -3796,7 +4517,8 @@
     "life.undo_snapshot",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -3821,7 +4543,8 @@
     "tool.check_ran",
     "ver.claim_matches_hidden"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5h",
@@ -3849,7 +4572,8 @@
     "M1",
     "M2",
     "M7"
-   ]
+   ],
+   "co_occurring": []
   },
   {
    "tag": "r5h",
@@ -3871,7 +4595,8 @@
     "ctx.no_lead_only_lines",
     "life.undo_snapshot"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5h",
@@ -3894,7 +4619,8 @@
     "ctx.no_private_context",
     "life.undo_snapshot"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5h",
@@ -3915,7 +4641,8 @@
    "failed": [
     "ctx.no_lead_only_lines"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5h",
@@ -3936,7 +4663,8 @@
    "failed": [
     "ctx.no_lead_only_lines"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5h",
@@ -3959,7 +4687,8 @@
     "life.undo_snapshot",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -3983,7 +4712,8 @@
     "ctx.no_lead_only_lines",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -4006,7 +4736,8 @@
    "failed": [
     "ctx.no_lead_only_lines"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5h",
@@ -4030,7 +4761,8 @@
     "life.undo_snapshot",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -4055,7 +4787,8 @@
     "ctx.no_private_context",
     "life.undo_snapshot"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   },
   {
    "tag": "r5h",
@@ -4079,7 +4812,8 @@
     "tool.no_permission_denials",
     "ver.claim_matches_hidden"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -4104,7 +4838,8 @@
     "life.undo_snapshot",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M4"
    ]
   },
@@ -4130,7 +4865,8 @@
     "life.undo_snapshot",
     "tool.no_permission_denials"
    ],
-   "chains": [
+   "chains": [],
+   "co_occurring": [
     "M1",
     "M4"
    ]
@@ -4155,7 +4891,8 @@
     "ctx.no_lead_only_lines",
     "life.undo_snapshot"
    ],
-   "chains": []
+   "chains": [],
+   "co_occurring": []
   }
  ]
 }
