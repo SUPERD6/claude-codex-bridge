@@ -658,3 +658,148 @@ def test_budget_counts_this_tag_and_prints_totals(machine, tmp_path, monkeypatch
     assert "run=$0.000 tag=$0.000 file=$100.000" in text and "spent: run=" in text
     assert r5.main(base[:-2] + ["--tag", "mine2", "--extra-spent", "6"]) == 2 and len(calls) == 1
     assert "budget $5.0 reached (tag mine2: $6.000)" in capsys.readouterr().out
+
+
+# ------------------------------------------------------------------ R7: ccx-home, a lead home with ccx's install only
+
+def test_ccx_home_holds_ccx_install_and_nothing_else(machine):
+    from ccx import sync
+    u = PF.Unit(key="1-t-self", work=machine["work"], repo=machine["repo"], hub=machine["work"] / "h-1-t-self",
+                codex_home=machine["codex"], claude="ccx-home", ccx_home=True)
+    (u.hub / "ccx").mkdir(parents=True)
+    env = PF.prepare(u)
+    home = u.claude_dir
+    assert env["CLAUDE_CONFIG_DIR"] == str(home) and home == u.x / "claude-config"
+    assert sorted(p.name for p in home.iterdir()) == ["CLAUDE.md", "settings.json", "skills"]   # no login file
+    md = (home / "CLAUDE.md").read_text(encoding="utf-8")
+    assert md.startswith(sync.BEGIN.format(id="memory")) and md.rstrip().endswith(sync.END.format(id="memory"))
+    assert u.hub.as_posix() in md and "agent-delegate" in md
+    data = json.loads((home / "settings.json").read_text(encoding="utf-8"))
+    assert sorted(data) == ["hooks"] and sorted(data["hooks"]) == ["SessionStart", "UserPromptSubmit"]
+    assert sorted(sync.drop_claude_hooks(data)) == ["SessionStart", "UserPromptSubmit"] and data == {}  # ccx's own
+    assert sorted(p.name for p in (home / "skills").iterdir()) == PF.ccx_skill_names()
+    assert "agent-delegate" in PF.ccx_skill_names() and (home / "skills" / "agent-delegate" / "SKILL.md").exists()
+    # the lead loads its home's settings (ccx's hooks) and CLAUDE.md; its sub-agents keep hooks off and skip both
+    flags = PF.lead_flags(u)
+    assert flags == ["--setting-sources", "user,project,local", "--settings", str(u.lead_settings_file)]
+    lead = json.loads(u.lead_settings_file.read_text(encoding="utf-8"))
+    sub = json.loads(u.settings_file.read_text(encoding="utf-8"))
+    assert "disableAllHooks" not in lead and sub["disableAllHooks"] is True
+    assert (home / "CLAUDE.md").as_posix() in sub["claudeMdExcludes"]
+    assert (home / "CLAUDE.md").as_posix() not in lead["claudeMdExcludes"]
+    assert lead["permissions"] == sub["permissions"] and lead["autoMemoryEnabled"] is False
+    assert env["CCX_CLAUDE_SETTINGS"] == str(u.settings_file) and env["CCX_CLAUDE_SETTING_SOURCES"] == "project,local"
+    fp = PF.fingerprint(REP, u, env)["isolation"]
+    assert fp["claude_home"] == "ccx" and fp["lead_hooks"] == ["SessionStart", "UserPromptSubmit"]
+    assert str(machine["home"]) not in json.dumps(fp)
+    plain = PF.Unit(key="k2", work=machine["work"], repo=machine["repo"], hub=machine["work"] / "h-k2",
+                    claude="ccx-home")
+    PF.prepare(plain)                                    # an arm that does not use ccx: a fresh, empty home
+    assert list(plain.claude_dir.iterdir()) == [] and PF.lead_flags(plain)[1] == "project,local"
+    assert PF.fingerprint(REP, plain, {})["isolation"]["claude_home"] == "fresh"
+    with pytest.raises(ValueError):
+        PF.prepare(PF.Unit(key="k3", work=machine["work"], repo=machine["repo"], hub=machine["work"] / "h-k3",
+                           ccx_home=True))                # ccx's install never goes into the person's own home
+
+
+def test_ccx_home_lead_runs_ccx_hooks_and_still_sees_nothing_personal(machine):
+    u = PF.Unit(key="1-t-self", work=machine["work"], repo=machine["repo"], hub=machine["work"] / "h-1-t-self",
+                codex_home=machine["codex"], claude="ccx-home", ccx_home=True)
+    (u.hub / "ccx").mkdir(parents=True)
+    env = PF.prepare(u)
+    home = machine["home"]
+    env["FAKE_READ"] = os.pathsep.join(str(p) for p in (home / ".claude" / "CLAUDE.md", machine["hub"] / "memory" /
+                                                        "MEMORY.md", home / ".codex" / "AGENTS.md"))
+    out = _lead(env, machine["repo"], PF.lead_flags(u))
+    assert json.loads(out.strip().splitlines()[-1])["result"] == "PROJECT-ONLY KIWI-7"
+    assert any('"hook_started"' in ln for ln in out.splitlines())                   # ccx's hooks ran
+    a = PF.audit(u, out)
+    assert a["clean"] and a["init"]["hooks_ran"] == ["SessionStart"]
+    # the same stream from a unit without ccx's home is not clean: hooks must not run there
+    flags = PF.Unit(key="1-t-self", work=machine["work"], repo=machine["repo"], hub=u.hub, codex_home=machine["codex"])
+    assert "hook ran: SessionStart" in PF.audit(flags, out)["problems"]
+
+
+def test_check_init_allows_only_ccx_skills_and_hooks_in_a_ccx_home(tmp_path):
+    def init(**kw):
+        base = {"type": "system", "subtype": "init", "model": "m", "mcp_servers": [], "skills": [],
+                "slash_commands": [], "output_style": "default", "agents": ["claude"], "plugins": []}
+        return json.dumps({**base, **kw})
+    ok = {"ok_skills": {"agent-delegate", "task-routing"}, "ok_hooks": PF.CCX_HOOK_EVENTS}
+    hook = json.dumps({"type": "system", "subtype": "hook_started", "hook_name": "SessionStart:startup"})
+    probs, info = PF.check_init(hook + "\n" + init(skills=["agent-delegate", "relayline:task-routing"],
+                                                   slash_commands=["/agent-delegate", "/compact"]), [], **ok)
+    assert probs == [] and info["skills"] == ["agent-delegate", "task-routing"] and info["slash_commands"] == 2
+    assert info["hooks_ran"] == ["SessionStart:startup"]
+    # a skill lead also lists Claude Code's own bundled skills: a name no skill folder outside the unit's home has
+    # is one of those (recorded); one the person's home or the repository has on disk, or a plugin's, is not
+    mine = tmp_path / "home-skills"
+    (mine / "mine").mkdir(parents=True)
+    ok = {**ok, "skill_dirs": [mine, tmp_path / "repo" / ".claude" / "skills"]}
+    probs, info = PF.check_init(init(skills=["agent-delegate", "simplify", "update-config"]), [], **ok)
+    assert probs == [] and info["bundled_skills"] == ["simplify", "update-config"]
+    assert info["skills"] == ["agent-delegate"]
+    probs, _ = PF.check_init(init(skills=["agent-delegate", "mine"]), [], **ok)
+    assert probs == ["skills loaded: 1 not ccx's: ['mine']"]
+    # a name not on Claude Code's bundled list (CLAUDE_BUNDLED_SKILLS) is not taken for one, even off disk
+    probs, info = PF.check_init(init(skills=["agent-delegate", "simplify", "brand-new"]), [], **ok)
+    assert probs == ["skills loaded: 1 not ccx's: ['brand-new']"] and info["bundled_skills"] == ["simplify"]
+    probs, info = PF.check_init(init(skills=["agent-delegate", "someplugin:helper"]), [], **ok)
+    assert probs == ["skills loaded: 1 not ccx's: ['helper']"] and "bundled_skills" not in info
+    other = json.dumps({"type": "system", "subtype": "hook_started", "hook_name": "PreToolUse:Bash"})
+    assert PF.check_init(other, [], **ok)[0] == ["hook ran: PreToolUse:Bash"]
+    assert PF.check_init(hook + "\n" + init(skills=["agent-delegate"]), [])[0] == [
+        "hook ran: SessionStart:startup", "skills loaded: 1"]                   # elsewhere: both are problems
+
+
+def test_skill_canary_runs_the_skill_lead_in_a_ccx_home(machine, monkeypatch):
+    """The skill arm's own command line (Skill tool, no --disable-slash-commands) in a ccx home: Claude Code's
+    bundled skills are recorded, ccx's agent-delegate must be there, a skill on disk elsewhere fails it."""
+    monkeypatch.setenv("CCX_CLAUDE_BIN", str(FAKE))
+    kw = {"claude": "ccx-home", "codex_home": machine["codex"], "dsh": "unit"}
+    ok = PF.skill_canary(machine["work"], kw)
+    assert ok["ok"], ok["problems"]
+    assert ok["init"]["bundled_skills"] == ["simplify", "update-config"] and "agent-delegate" in ok["init"]["skills"]
+    assert ok["init"]["hooks_ran"] == ["SessionStart"] and not (machine["work"] / "canary").exists()
+    # the person's real Claude home has a skill of a name the lead lists: not taken for a bundled one
+    mine = Path(PF.real_paths()["claude_home"]) / "skills" / "simplify"
+    mine.mkdir(parents=True, exist_ok=True)
+    try:
+        bad = PF.skill_canary(machine["work"], kw)
+    finally:
+        PF.rmtree(mine)
+    assert not bad["ok"] and any("not ccx's: ['simplify']" in p for p in bad["problems"])
+    monkeypatch.setattr(PF, "ccx_skill_names", lambda: ["task-routing"])
+    gone = PF.skill_canary(machine["work"], kw)
+    assert any("agent-delegate skill was not loaded" in p for p in gone["problems"])
+
+
+def test_run_checks_adds_the_skill_canary_only_for_a_skill_arm_in_a_ccx_home(machine, tmp_path, monkeypatch):
+    _stub_machine(monkeypatch)
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "x")
+    ran = []
+    monkeypatch.setattr(PF, "canary", lambda w, kw: {"ok": True, "problems": [], "init": {}})
+    monkeypatch.setattr(PF, "skill_canary", lambda w, kw: ran.append(kw) or
+                        {"ok": True, "problems": [], "init": {"bundled_skills": ["simplify"]}})
+    monkeypatch.setattr(PF, "CODEX_ARMS", ())                 # no Codex on this stub machine: not what is tested
+    rep = PF.run_checks(PF.Options(work=tmp_path / "a", arms=["ccx2"], claude="ccx-home", canary=True))
+    assert ran == [] and "skill_canary" not in rep and rep["ok"], rep["problems"]
+    rep = PF.run_checks(PF.Options(work=tmp_path / "b", arms=["ccx2-skill"], claude="ccx-home", canary=True))
+    assert len(ran) == 1 and rep["skill_canary"] == "pass" and rep["ok"], rep["problems"]
+    fp = PF.fingerprint(rep, None, None)
+    assert fp["skill_canary"] == "pass" and fp["bundled_skills"] == ["simplify"]
+    assert "simplify" in fp["bundled_skills_allowed"]
+
+
+def test_fresh_homes_need_a_token_the_person_sets(machine, tmp_path, monkeypatch):
+    _stub_machine(monkeypatch)
+    monkeypatch.delenv("CLAUDE_CODE_OAUTH_TOKEN", raising=False)
+    for mode in ("config-dir", "ccx-home"):
+        rep = PF.run_checks(PF.Options(work=tmp_path / mode, arms=["self"], claude=mode))
+        msg = [p for p in rep["problems"] if "CLAUDE_CODE_OAUTH_TOKEN" in p]
+        assert not rep["ok"] and msg and f"--claude-isolation {mode}" in msg[0]
+        assert "never reads or copies your credentials" in msg[0] and "claude setup-token" in msg[0]
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "x")                     # set by the person; only its name is read
+    assert PF.run_checks(PF.Options(work=tmp_path / "w3", arms=["self"], claude="ccx-home"))["ok"]
+    ap = PF.parser()
+    assert ap.parse_args(["--workdir", "w", "--claude-isolation", "ccx-home"]).claude_isolation == "ccx-home"

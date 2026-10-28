@@ -17,7 +17,15 @@ What it guarantees, by mechanism (command-line flags, environment, settings file
                             CCX_CLAUDE_SETTING_SOURCES / CCX_CLAUDE_SETTINGS / CCX_CLAUDE_NO_SKILLS (opt-in knobs in
                             ccx/agents/claude.py). `--claude-isolation config-dir` goes further: CLAUDE_CONFIG_DIR is
                             a fresh folder per unit (needs CLAUDE_CODE_OAUTH_TOKEN, which the person exports; it is
-                            passed through by name and never read). Codex: a dedicated eval CODEX_HOME the person
+                            passed through by name and never read). `--claude-isolation ccx-home` (R7) is config-dir
+                            whose folder, for the arms whose lead uses ccx, holds only what `ccx sync` installs for
+                            Claude: CLAUDE.md with nothing but ccx's marked memory block, settings.json with nothing
+                            but ccx's SessionStart / UserPromptSubmit hooks, and ccx's bundled skills (copied from
+                            this checkout). That lead loads user settings from it (`--setting-sources
+                            user,project,local`) and a settings file without disableAllHooks, so those hooks run;
+                            its ccx sub-agents keep hooks off and that CLAUDE.md excluded. No credential is copied
+                            in: the login is the person's CLAUDE_CODE_OAUTH_TOKEN, by name, as with config-dir.
+                            Codex: a dedicated eval CODEX_HOME the person
                             logged in to once (`--codex-home`), and CCX_CODEX_ISOLATE=1 (--ignore-user-config,
                             --ignore-rules, memories off on every Codex run).
   E2 no leftovers           every process a unit starts runs in a Windows Job Object (started suspended, so nothing
@@ -84,11 +92,31 @@ from ccx.runners import find_bin  # noqa: E402
 TASKS_FILE = Path(__file__).resolve().parent / "tasks_r5.py"
 TIERS_FILE = ROOT / "config" / "tiers.toml"
 SETTING_SOURCES = "project,local"
+# ccx-home (R7): the lead also loads user settings, i.e. its own fresh home's settings.json (ccx's hooks only).
+# Checked against `claude --help` of Claude Code 2.1.309: --setting-sources takes user, project, local;
+# --disable-slash-commands disables all skills (so a skill lead must not get it); `claude setup-token` makes the
+# long-lived token a fresh CLAUDE_CONFIG_DIR logs in with (CLAUDE_CODE_OAUTH_TOKEN).
+LEAD_SETTING_SOURCES = "user,project,local"
+FRESH_HOMES = ("config-dir", "ccx-home")
+CCX_HOOK_EVENTS = ("SessionStart", "UserPromptSubmit")
 # arms whose units start Codex (ccx routes to it); r5's tier arms balanced / save may delegate through ccx and
 # cheapest runs ccx straight to Codex (r5.CHEAPEST; fast never delegates)
-CODEX_ARMS = ("ccx", "ccx2", "direct", "balanced", "save", "cheapest")
+CODEX_ARMS = ("ccx", "ccx2", "ccx2-skill", "direct", "balanced", "save", "cheapest")
 # arms whose lead hands the work to Claude Code's own Agent-tool worker (no Codex: no eval CODEX_HOME needed)
 BUILTIN_ARMS = ("builtin", "builtin2", "builtin2r")
+# arms whose lead loads skills (no --disable-slash-commands; needs --claude-isolation ccx-home; r5.SKILL_ARMS)
+SKILL_ARMS = ("ccx2-skill",)
+# folders an organisation's managed settings could put skills in (names only: a skill of that name there is
+# never taken for one of Claude Code's own bundled skills)
+MANAGED_SKILL_DIRS = (Path("C:/Program Files/ClaudeCode/.claude/skills"),
+                      Path("/Library/Application Support/ClaudeCode/.claude/skills"),
+                      Path("/etc/claude-code/.claude/skills"))
+# Claude Code's own bundled skills a skill lead (no --disable-slash-commands) may list, allowed by name: the ones a
+# Claude Code 2.1.308 session listed. Not yet checked against a fresh-home `claude -p`: the skill canary does that
+# before a round, and a name missing here fails it (never passes silently). Recorded per run (`bundled_skills`).
+CLAUDE_BUNDLED_SKILLS = frozenset({
+    "update-config", "keybindings-help", "simplify", "fewer-permission-prompts", "loop", "schedule", "claude-api",
+    "init", "security-review", "code-review", "run", "plugin-authoring", "workflow-authoring"})
 # Names a dedicated eval CODEX_HOME must not have: each would bring the person's rules, memory or tools back.
 # (skills/ is checked separately: Codex installs its own system skills in skills/.system by itself.)
 CODEX_FORBIDDEN = ("AGENTS.md", "AGENTS.override.md", "memories", "rules", "plugins", "hooks")
@@ -222,7 +250,8 @@ class Unit:
     repo: Path
     hub: Path
     label: str = ""
-    claude: str = "flags"                 # flags | config-dir
+    claude: str = "flags"                 # flags | config-dir | ccx-home
+    ccx_home: bool = False                # ccx-home mode and an arm whose lead uses ccx: its home gets ccx's install
     codex_home: Path | None = None        # the dedicated eval CODEX_HOME (None: the real one, recorded as such)
     dsh: str = "unit"                     # unit (fresh DSH_HOME per unit) | real
     agents: tuple = ()                    # agents the eval itself defines (--agents), allowed in the init event
@@ -248,8 +277,17 @@ class Unit:
         return self.x / "agent-home"
 
     @property
+    def fresh_home(self) -> bool:
+        """A Claude home of the unit's own (CLAUDE_CONFIG_DIR in its x- folder), not the person's."""
+        return self.claude in FRESH_HOMES
+
+    @property
+    def lead_settings_file(self) -> Path:
+        return self.x / "claude-lead-settings.json"
+
+    @property
     def claude_dir(self) -> Path:
-        return self.x / "claude-config" if self.claude == "config-dir" else self.real["claude_home"]
+        return self.x / "claude-config" if self.fresh_home else self.real["claude_home"]
 
     def markers(self) -> list[str]:
         """Strings that name this unit in a process's command line."""
@@ -283,7 +321,7 @@ def forbidden(u: Unit) -> list[Path]:
     dedicated eval CODEX_HOME that overlaps one of them is refused by check_codex_home, never un-denied here."""
     r = u.real
     out = [r["home_codex"], r["codex_home"], r["ccx_home"], r["hub"], r["dsh_home"], r["agents_home"]]
-    if u.claude == "config-dir":
+    if u.fresh_home:
         out += [r["home_claude"], r["claude_home"]]
     if not _inside(u.work, r["root"]):
         out.append(r["root"])
@@ -327,13 +365,72 @@ def claude_settings(u: Unit, extra_deny: list[str] = ()) -> dict:
             excludes += [p.as_posix(), _rule_path(p)[1:]]
     # whatever spelling Claude matches the absolute path in: the user-level files by their tail
     excludes += [f"**/{home.name}/.claude/CLAUDE.md", f"**/{home.name}/.claude/rules/**"]
+    if u.ccx_home:              # ccx sub-agents read this file: the lead's ccx block is not theirs
+        p = Path(u.claude_dir) / "CLAUDE.md"
+        excludes += [p.as_posix(), _rule_path(p)[1:]]
     return {"disableAllHooks": True, "hooks": {}, "autoMemoryEnabled": False,
             "claudeMdExcludes": sorted(set(excludes)), "permissions": {"deny": sorted(set(deny))}}
 
 
+def lead_settings(u: Unit, extra_deny: list[str] = ()) -> dict:
+    """The ccx-home lead's settings: the same deny rules, excludes and auto-memory off, but hooks not disabled (its
+    home's settings.json holds ccx's hooks only) and its home's CLAUDE.md (ccx's block only) not excluded."""
+    s = claude_settings(u, extra_deny)
+    own = {Path(u.claude_dir, "CLAUDE.md").as_posix(), _rule_path(Path(u.claude_dir, "CLAUDE.md"))[1:]}
+    s["claudeMdExcludes"] = [x for x in s["claudeMdExcludes"] if x not in own]
+    s.pop("disableAllHooks", None)
+    s.pop("hooks", None)
+    return s
+
+
 def lead_flags(u: Unit) -> list[str]:
-    """Extra flags for a headless Claude lead (ccx sub-agents get the same through prepare's environment)."""
+    """Extra flags for a headless Claude lead (ccx sub-agents get the same through prepare's environment). A
+    ccx-home lead also loads user settings: they are its own home's, which hold ccx's hooks and nothing else."""
+    if u.ccx_home:
+        return ["--setting-sources", LEAD_SETTING_SOURCES, "--settings", str(u.lead_settings_file)]
     return ["--setting-sources", SETTING_SOURCES, "--settings", str(u.settings_file)]
+
+
+# ------------------------------------------------------------------ R7: a lead home with ccx's install and nothing else
+
+def ccx_home_hooks() -> dict:
+    """settings.json as `ccx sync` writes ccx's Claude hooks into an empty one (ccx/sync.py sync_hooks): SessionStart
+    `ccx mem delta --as claude` and UserPromptSubmit `ccx turn --as claude`. ccx's own drop_claude_hooks recognises
+    both as its own (tested), so this cannot drift from what sync writes without a test noticing."""
+    from ccx import sync
+    return {"hooks": {
+        "SessionStart": [{"matcher": "startup|resume|clear|compact",
+                          "hooks": [{"type": "command", "command": sync.ccx_command("mem", "delta", "--as", "claude"),
+                                     "timeout": 15}]}],
+        "UserPromptSubmit": [{"hooks": [{"type": "command", "command": sync.ccx_command("turn", "--as", "claude"),
+                                         "timeout": 10}]}]}}
+
+
+def ccx_skill_names() -> list[str]:
+    """ccx's bundled skills (this checkout's skills/: a folder with SKILL.md)."""
+    from ccx.config import data_dir
+    root = data_dir("skills")
+    return sorted(d.name for d in root.iterdir() if d.is_dir() and (d / "SKILL.md").exists()) if root.is_dir() else []
+
+
+def install_ccx_home(u: Unit) -> dict:
+    """Fill the unit's fresh Claude home with ccx's install for Claude and nothing else: CLAUDE.md holding only
+    ccx's marked memory block for the unit's hub (sync.claude_memory_block, as `ccx sync` writes it), settings.json
+    holding only ccx's hooks, and a copy of each bundled skill (a copy, not a link: the checkout itself is denied to
+    the unit's agents). No login or credential is written: the lead logs in with the person's
+    CLAUDE_CODE_OAUTH_TOKEN, passed by name. Returns what was installed (for the fingerprint)."""
+    from ccx import sync
+    from ccx.config import Paths, data_dir
+    home = Path(u.claude_dir)
+    home.mkdir(parents=True, exist_ok=True)
+    (home / "CLAUDE.md").write_text(sync.upsert_block("", "memory", sync.claude_memory_block(Paths(u.hub))),
+                                    encoding="utf-8")
+    (home / "settings.json").write_text(json.dumps(ccx_home_hooks(), ensure_ascii=False, indent=2) + "\n",
+                                        encoding="utf-8")
+    names = ccx_skill_names()
+    for n in names:
+        shutil.copytree(data_dir("skills") / n, home / "skills" / n, dirs_exist_ok=True)
+    return {"claude_md": "ccx memory block", "hooks": sorted(ccx_home_hooks()["hooks"]), "skills": names}
 
 
 def _git_bash() -> str | None:
@@ -362,11 +459,16 @@ def prepare(u: Unit, extra_deny: list[str] = ()) -> dict:
     rmtree(u.x)
     for d in claude_session_dirs(u):
         rmtree(d)
-    for sub in ("tmp", "dsh-home", "agent-home") + (("claude-config",) if u.claude == "config-dir" else ()):
+    for sub in ("tmp", "dsh-home", "agent-home") + (("claude-config",) if u.fresh_home else ()):
         (u.x / sub).mkdir(parents=True, exist_ok=True)
     (u.x / "gitconfig").write_text("[user]\n\tname = eval\n\temail = eval@example.invalid\n"
                                    "[init]\n\tdefaultBranch = master\n", encoding="utf-8")
     u.settings_file.write_text(json.dumps(claude_settings(u, extra_deny), indent=1), encoding="utf-8")
+    if u.ccx_home:
+        if not u.fresh_home:
+            raise ValueError("a ccx home needs --claude-isolation ccx-home")
+        u.lead_settings_file.write_text(json.dumps(lead_settings(u, extra_deny), indent=1), encoding="utf-8")
+        install_ccx_home(u)
     env = base_env()
     env["PATH"] = str(Path(sys.executable).parent) + os.pathsep + env.get("PATH", "")
     if "CLAUDE_CODE_GIT_BASH_PATH" not in env and _git_bash():
@@ -384,7 +486,7 @@ def prepare(u: Unit, extra_deny: list[str] = ()) -> dict:
         "CODEX_SQLITE_HOME": str(u.codex_home or u.real["codex_home"]),
         "DSH_HOME": str(u.x / "dsh-home" if u.dsh == "unit" else u.real["dsh_home"]),
     })
-    if u.claude == "config-dir":
+    if u.fresh_home:
         env["CLAUDE_CONFIG_DIR"] = str(u.x / "claude-config")
     return env
 
@@ -756,26 +858,56 @@ def _builtin_plugin(p) -> bool:
     return str(p.get("source") or "").endswith("@builtin") or p.get("path") == "builtin"
 
 
-def check_init(text: str, allowed: list[Path], prefixes: list[str] = (), agents: set[str] = frozenset()
-               ) -> tuple[list[str], dict]:
+def check_init(text: str, allowed: list[Path], prefixes: list[str] = (), agents: set[str] = frozenset(),
+               ok_skills: set[str] = frozenset(), ok_hooks: tuple[str, ...] = (),
+               skill_dirs: list[Path] = (),
+               bundled_ok: frozenset[str] = CLAUDE_BUNDLED_SKILLS) -> tuple[list[str], dict]:
     """Problems in a Claude stream's start: hooks that ran, MCP servers, skills, slash commands, an output style,
     non-builtin plugins or agents, memory paths outside the unit (`allowed` folders; `prefixes`: folder-name prefixes
     paths of the unit's own <claude home>/projects/<folder>, one ending in "-" a prefix). Also returns the init
-    fields worth recording."""
+    fields worth recording. ccx-home: `ok_skills` (ccx's bundled skills) may be loaded, with the slash commands they
+    bring (recorded), and hooks of the `ok_hooks` events may run (recorded). A skill lead (no
+    --disable-slash-commands) also lists Claude Code's own bundled skills (update-config, simplify, ...): with
+    `ok_skills`, a skill that is not ccx's, has no plugin prefix, is named in `bundled_ok` (CLAUDE_BUNDLED_SKILLS, an
+    allow-list by name) and has no folder of its name in `skill_dirs` (every place outside the unit's own home, which
+    holds ccx's only, a skill on disk could come from: the person's Claude home, the repository's and its parents'
+    .claude/skills, managed folders) is taken for one of those, allowed and recorded (`bundled_skills`); any other
+    skill, a bundled one not on the list included, is still a problem (the skill canary says so before a round)."""
     probs, info = [], {}
+    ran: list[str] = []
     roots = [_norm(p) for p in allowed]
     ok_agents = BUILTIN_AGENTS | set(agents)
     for ev in _events(text):
         if ev.get("type") == "system" and str(ev.get("subtype", "")).startswith("hook_"):
-            probs.append(f"hook ran: {ev.get('hook_name') or ev.get('subtype')}")
+            name = str(ev.get("hook_name") or ev.get("hook_event") or ev.get("subtype"))
+            if ok_hooks and name.split(":", 1)[0] in ok_hooks:
+                ran.append(name)
+            else:
+                probs.append(f"hook ran: {name}")
         if ev.get("type") == "system" and ev.get("subtype") == "init":
             info = {k: ev.get(k) for k in ("model", "claude_code_version", "apiKeySource", "session_id") if k in ev}
             if ev.get("mcp_servers"):
                 probs.append(f"mcp servers loaded: {len(ev['mcp_servers'])}")
-            if ev.get("skills"):
-                probs.append(f"skills loaded: {len(ev['skills'])}")
+            raw = [str((x.get("name") if isinstance(x, dict) else x) or "") for x in ev.get("skills") or []]
+            ccx = [_skill_name(x) for x in raw if _skill_name(x) in ok_skills]
+            other = [_skill_name(x) for x in raw if _skill_name(x) not in ok_skills]
+            if ok_skills:
+                on_disk = lambda n: any((Path(d) / n).exists() for d in skill_dirs)  # noqa: E731
+                bundled = sorted({_skill_name(x) for x in raw if _skill_name(x) not in ok_skills and ":" not in x
+                                  and _skill_name(x) in bundled_ok and not on_disk(_skill_name(x))})
+                other = [_skill_name(x) for x in raw if _skill_name(x) not in ok_skills
+                         and not (":" not in x and _skill_name(x) in bundled)]
+                if bundled:
+                    info["bundled_skills"] = bundled
+            if other:
+                probs.append(f"skills loaded: {len(other)}" + (f" not ccx's: {other[:5]}" if ok_skills else ""))
+            if ccx:
+                info["skills"] = ccx
             if ev.get("slash_commands"):
-                probs.append(f"slash commands loaded: {len(ev['slash_commands'])}")
+                if ok_skills:          # a lead allowed skills gets the commands that come with them: recorded
+                    info["slash_commands"] = len(ev["slash_commands"])
+                else:
+                    probs.append(f"slash commands loaded: {len(ev['slash_commands'])}")
             if ev.get("output_style") not in (None, "", "default"):
                 probs.append(f"output style: {ev.get('output_style')}")
             plugins = ev.get("plugins") or []
@@ -795,7 +927,30 @@ def check_init(text: str, allowed: list[Path], prefixes: list[str] = (), agents:
                           for pf in (_norm(x) for x in prefixes))
                 if not own:
                     probs.append("memory path outside the unit")
+    if ran:
+        info["hooks_ran"] = sorted(set(ran))
     return sorted(set(probs)), info
+
+
+def foreign_skill_dirs(u: Unit) -> list[Path]:
+    """Skill folders outside the unit's own Claude home a lead's skill could come from (check_init's `skill_dirs`):
+    the person's real Claude home(s), .claude/skills of the repository, its ccx worktrees and every parent folder,
+    and the managed settings folders."""
+    out = [Path(u.real["claude_home"]) / "skills", Path(u.real["home_claude"]) / "skills"]
+    for base in (u.repo, u.worktrees):
+        out += [p / ".claude" / "skills" for p in (Path(base), *Path(base).parents)]
+    out += list(MANAGED_SKILL_DIRS)
+    uniq: list[Path] = []
+    for p in out:
+        if p not in uniq:
+            uniq.append(p)
+    return uniq
+
+
+def _skill_name(x) -> str:
+    """A skill as an init event lists it (a name, or a dict with one), without a plugin prefix (`relayline:x`)."""
+    name = str((x.get("name") if isinstance(x, dict) else x) or "")
+    return name.rsplit(":", 1)[-1]
 
 
 def tool_inputs(text: str) -> list[str]:
@@ -869,9 +1024,11 @@ def path_hits(inputs: list[str], u: Unit) -> list[str]:
 
 def audit(u: Unit, stream: str) -> dict:
     """The unit's lead stream and every ccx sub-agent log in its hub."""
-    allowed = [u.x, u.repo, u.hub, u.worktrees] + ([u.claude_dir] if u.claude == "config-dir" else [])
+    allowed = [u.x, u.repo, u.hub, u.worktrees] + ([u.claude_dir] if u.fresh_home else [])
     pre = u.own_project_dirs()
-    probs, info = check_init(stream, allowed, pre, set(u.agents)) if stream else ([], {})
+    ok = {"ok_skills": set(ccx_skill_names()), "ok_hooks": CCX_HOOK_EVENTS, "skill_dirs": foreign_skill_dirs(u)} \
+        if u.ccx_home else {}
+    probs, info = check_init(stream, allowed, pre, set(u.agents), **ok) if stream else ([], {})
     inputs = tool_inputs(stream)
     sids = session_ids(stream)
     runs = u.hub / "ccx" / "runs"
@@ -1188,7 +1345,7 @@ def canary(work: Path, u_kw: dict, timeout: int = 300) -> dict:
     before = snapshot()
     job = Job()
     out, err, rc, _left = run(argv, cwd=repo, env=env, timeout=timeout, input=prompt, job=job)
-    probs, info = check_init(out, [u.x, u.repo, u.hub] + ([u.claude_dir] if u.claude == "config-dir" else []),
+    probs, info = check_init(out, [u.x, u.repo, u.hub] + ([u.claude_dir] if u.fresh_home else []),
                              u.own_project_dirs())
     answer = ""
     for ev in _events(out):
@@ -1205,6 +1362,43 @@ def canary(work: Path, u_kw: dict, timeout: int = 300) -> dict:
     after_unit(u, before, job, session_ids(out), keep_repo=False)
     rmtree(d)
     return {"ok": not probs, "problems": probs, "init": info}
+
+
+def skill_canary(work: Path, u_kw: dict, timeout: int = 300) -> dict:
+    """One tiny real skill lead (R7, ccx2-skill) in a ccx home, with the command line a skill lead gets (no
+    --disable-slash-commands, the Skill tool): its init event must pass the audit a real skill lead's does (ccx's
+    skills and hooks, Claude Code's own bundled skills recorded, nothing else) and must list ccx's agent-delegate.
+    Its init (skills, bundled_skills, slash commands) goes into the preflight report, so the bundled skills a run
+    allowed are on record. Costs one cheap request (haiku, --max-budget-usd 0.05)."""
+    d = work / "canary"
+    rmtree(d)
+    repo = d / "repo"
+    repo.mkdir(parents=True)
+    (repo / "AGENTS.md").write_text("A canary project.\n", encoding="utf-8")
+    u = Unit(key="canary", work=d, repo=repo, hub=d / "hub", ccx_home=True, **u_kw)
+    (u.hub / "ccx").mkdir(parents=True)
+    env = prepare(u)
+    b = find_bin("claude")
+    if not b:
+        return {"ok": False, "problems": ["claude CLI not found"]}
+    argv = [*([sys.executable, b] if b.endswith(".py") else [b]), "-p", "--output-format", "stream-json", "--verbose",
+            "--model", "haiku", "--effort", "low", "--tools", "Read,Skill", "--permission-mode", "dontAsk",
+            "--strict-mcp-config", "--exclude-dynamic-system-prompt-sections",
+            "--no-session-persistence", "--max-budget-usd", "0.05", *lead_flags(u)]
+    before = snapshot()
+    job = Job()
+    out, err, rc, _left = run(argv, cwd=repo, env=env, timeout=timeout, input="Reply with exactly OK.", job=job)
+    probs, info = check_init(out, [u.x, u.repo, u.hub, u.claude_dir], u.own_project_dirs(),
+                             ok_skills=set(ccx_skill_names()), ok_hooks=CCX_HOOK_EVENTS,
+                             skill_dirs=foreign_skill_dirs(u))
+    if rc:
+        probs.append(f"skill canary lead failed rc={rc}: {err[-160:]}")
+    if "agent-delegate" not in (info.get("skills") or []):
+        probs.append("skill canary: ccx's agent-delegate skill was not loaded (the skill arm would test nothing)")
+    after_unit(u, before, job, session_ids(out), keep_repo=False)
+    rmtree(d)
+    return {"ok": not probs, "problems": [f"skill canary: {p}" if not p.startswith("skill canary") else p
+                                          for p in probs], "init": info}
 
 
 @dataclass
@@ -1247,9 +1441,10 @@ def run_checks(o: Options) -> dict:
         probs.append("claude --version failed: the leads cannot start")
     if need_codex and (not versions.get("codex") or str(versions["codex"]).startswith("error")):
         probs.append("codex --version failed")
-    if o.claude == "config-dir" and "CLAUDE_CODE_OAUTH_TOKEN" not in os.environ:     # name only
-        probs.append("--claude-isolation config-dir needs CLAUDE_CODE_OAUTH_TOKEN (run `claude setup-token` and "
-                     "export it yourself); a fresh CLAUDE_CONFIG_DIR has no login")
+    if o.claude in FRESH_HOMES and "CLAUDE_CODE_OAUTH_TOKEN" not in os.environ:     # name only
+        probs.append(f"--claude-isolation {o.claude} needs CLAUDE_CODE_OAUTH_TOKEN: a fresh CLAUDE_CONFIG_DIR has no "
+                     "login, and the eval never reads or copies your credentials. Run `claude setup-token` and "
+                     "export the token yourself, then start again")
     if o.dsh == "real" and versions.get("dsh") and (real["dsh_home"] / "AGENTS.md").exists():
         probs.append("--dsh-home real: dsh would load the real DSH_HOME/AGENTS.md")
     # only a run that is about to start, on a quiet machine, may clean the work dir or write the Codex config
@@ -1271,6 +1466,16 @@ def run_checks(o: Options) -> dict:
             if not o.start:
                 rmtree(cw)
         probs += can["problems"]
+    scan = None
+    if o.canary and not probs and o.claude == "ccx-home" and any(a in SKILL_ARMS for a in o.arms):
+        # the skill lead's own command line in a ccx home: the plain canary above runs neither
+        cw = o.work if o.start else Path(tempfile.mkdtemp(prefix="ccx-canary-"))
+        try:
+            scan = skill_canary(cw, {"claude": o.claude, "codex_home": o.codex_home, "dsh": o.dsh})
+        finally:
+            if not o.start:
+                rmtree(cw)
+        probs += scan["problems"]
     rep = {"ok": not probs, "problems": probs, "commit": cs["commit"], "dirty": bool(cs["dirty"]),
            "tasks_file": Path(o.tasks_file).name,
            "tasks_sha256": (sha256_file(o.tasks_file) or "")[:16], "tiers_sha256": (sha256_file(TIERS_FILE) or "")[:16],
@@ -1279,6 +1484,9 @@ def run_checks(o: Options) -> dict:
            "canary_init": (can or {}).get("init"), "cleaned": cleaned, "real_state": real_state(real, o.work),
            "force_unclean": o.force_unclean, "codex_home": str(o.codex_home) if o.codex_home else None,
            "python": platform.python_version(), "pytest": _pkg_version("pytest"), "os": platform.platform()}
+    if scan is not None:
+        rep["skill_canary"] = "pass" if scan["ok"] else "fail"
+        rep["skill_canary_init"] = scan.get("init")
     rep["result"] = "pass" if rep["ok"] else ("forced" if o.force_unclean else "fail")
     return rep
 
@@ -1294,8 +1502,17 @@ def fingerprint(rep: dict, u: Unit | None, env: dict | None, models: dict | None
           "env_keys_sha256": env_keys_sha(env) if env else None}
     if rep.get("lead"):                  # the run's lead model / effort (r5 --lead-model / --lead-effort)
         fp["lead"] = rep["lead"]
+    if rep.get("pinned_commit"):         # the one commit this tag (round) runs on (r5 pin_check)
+        fp["pinned_commit"] = rep["pinned_commit"]
+    if rep.get("skill_canary"):          # the skill lead's canary, and Claude Code's bundled skills it saw
+        fp["skill_canary"] = rep["skill_canary"]
+        fp["bundled_skills"] = (rep.get("skill_canary_init") or {}).get("bundled_skills")
+        fp["bundled_skills_allowed"] = sorted(CLAUDE_BUNDLED_SKILLS)   # the allow-list by name the audit used
     if u is not None:
         fp["isolation"] = {"claude": u.claude, "setting_sources": SETTING_SOURCES, "hooks": "disabled",
+                           **({"claude_home": "ccx", "lead_setting_sources": LEAD_SETTING_SOURCES,
+                               "lead_hooks": list(CCX_HOOK_EVENTS), "skills": ccx_skill_names()} if u.ccx_home else
+                              {"claude_home": "fresh" if u.fresh_home else "real"}),
                            "auto_memory": "off", "codex_home": rep["codex"].get("mode"),
                            "codex_isolate": env.get("CCX_CODEX_ISOLATE") == "1", "agent_home": "unit",
                            "dsh_home": u.dsh, "dsh_login": any((Path(env.get("DSH_HOME", "")) / n).exists()
@@ -1378,9 +1595,11 @@ def parser() -> argparse.ArgumentParser:
 
 
 def add_options(ap: argparse.ArgumentParser) -> None:
-    ap.add_argument("--claude-isolation", choices=("flags", "config-dir"), default="flags",
+    ap.add_argument("--claude-isolation", choices=("flags", *FRESH_HOMES), default="flags",
                     help="flags: setting sources, settings and deny rules (login stays in the real ~/.claude); "
-                         "config-dir: a fresh CLAUDE_CONFIG_DIR per unit (needs CLAUDE_CODE_OAUTH_TOKEN)")
+                         "config-dir: a fresh CLAUDE_CONFIG_DIR per unit; ccx-home: the same, holding only ccx's "
+                         "marked block, hooks and skills for the leads that use ccx (the ccx2-skill arm needs it). "
+                         "Both need CLAUDE_CODE_OAUTH_TOKEN, which you export yourself (`claude setup-token`)")
     ap.add_argument("--codex-home", default=os.environ.get("CCX_EVAL_CODEX_HOME", ""),
                     help="a dedicated CODEX_HOME you logged in to once (default: $CCX_EVAL_CODEX_HOME)")
     ap.add_argument("--dsh-home", choices=("unit", "real"), default="unit",

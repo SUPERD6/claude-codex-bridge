@@ -127,6 +127,14 @@ init = {"type": "system", "subtype": "init", "session_id": sid, "model": "fake",
         "agents": ["claude", "Explore", "general-purpose", "Plan", "statusline-setup"], "slash_commands": [],
         "output_style": "default", "claude_code_version": "2.1.309"}
 init["memory_paths"] = memory_paths
+if "--disable-slash-commands" not in argv and "Skill" in (opt("--tools") or "").split(","):
+    # a skill lead: skills load, Claude Code's own bundled ones (FAKE_BUNDLED_SKILLS), the config dir's and the
+    # project's (a lead without the Skill tool lists none here, as the older tests expect)
+    found = [x for x in (os.environ.get("FAKE_BUNDLED_SKILLS", "simplify,update-config")).split(",") if x]
+    for d in (cfg / "skills", Path.cwd() / ".claude" / "skills"):
+        found += sorted(p.name for p in d.iterdir() if (p / "SKILL.md").exists()) if d.is_dir() else []
+    init["skills"] = found
+    init["slash_commands"] = ["/" + x for x in found]
 answer = ("OTHER: " + ", ".join(seen)) if seen else f"PROJECT-ONLY {word}".strip()
 for ev in [*events, init,
            {"type": "assistant", "message": {"id": "m1", "content": [{"type": "text", "text": answer}],

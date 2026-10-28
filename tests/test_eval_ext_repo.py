@@ -252,8 +252,8 @@ def test_scoring_puts_back_the_test_setup(registered, tmp_path):
 
 
 def test_summary_reports_per_repository():
-    rows = [{"arm": "self", "ok": True, "task": "a", "ext": {"repo": "fakepkg", "date": "2018-01-01"}},
-            {"arm": "self", "ok": False, "task": "b"}]
+    rows = [{"arm": "self", "ok": True, "task": "a", "ext": {"repo": "fakepkg", "date": "2018-01-01"},
+             "env_clean": True}, {"arm": "self", "ok": False, "task": "b", "env_clean": True}]
     s = r5.summarize(rows)
     assert s["by_repo"] == {"fakepkg": {"self": {"ok": 1, "n": 1}}, "this repository": {"self": {"ok": 0, "n": 1}}}
     assert s["ext_dates"] == {"a": "2018-01-01"}
