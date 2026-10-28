@@ -217,10 +217,16 @@ def one(job_file: Path) -> None:
     from ccx.delegate import Request, run                               # noqa: E402
     b, tree = job["brief"], Path(job["tree"])
     kw = {"cwd": tree} if job["variant"] == "new" else {}
-    text = review.brief(job["run_id"], b["task"], b["summary"], b["diff"], job["max_chars"], b["check"], **kw)
+    if job.get("text"):                 # a brief given whole (offline experiments C4/C6 build their own)
+        text = job["text"]
+    else:
+        text = review.brief(job["run_id"], b["task"], b["summary"], b["diff"], job["max_chars"], b["check"], **kw)
+        for anchor, add in job.get("insert") or []:          # an extra rule put in front of an anchor text
+            text = text.replace(anchor, add + anchor, 1)
     p = Paths(Path(job["hub"]))
     t0 = time.time()
-    rec = run(Request(to="claude", model="haiku", effort="low", tier="auto", mode="read", cwd=tree, brief=text,
+    rec = run(Request(to="claude", model=job.get("model") or "haiku", effort=job.get("effort") or "low",
+                      tier="auto", mode="read", cwd=tree, brief=text,
                       caller="ccx-review", escalate=False, fallback=False, review="off", allow_subagents=False,
                       ephemeral=True, label=f"replay:{job['case']}:{job['variant']}"), p)
     wall = time.time() - t0
@@ -232,7 +238,8 @@ def one(job_file: Path) -> None:
                       "output_tokens": (a.get("usage") or {}).get("output_tokens"), "usage": a.get("usage"),
                       "usd": sum(x.get("cost_usd") or 0 for x in rec.get("attempts") or []), "tool_uses": tools,
                       "brief_chars": len(text), "summary": ((rec.get("result") or {}).get("summary") or "")[:300],
-                      "musts": musts(rec.get("result")), "same_as_recorded": text == job.get("recorded")}))
+                      "musts": musts(rec.get("result")), "same_as_recorded": text == job.get("recorded"),
+                      "items": [str(x) for x in ((rec.get("result") or {}).get("open_questions") or [])]}))
 
 
 # ---- the driver ----
@@ -258,7 +265,8 @@ def prepare_case(c: dict, work: Path) -> dict:
                          "usd": a.get("cost_usd"), "musts": musts(rec.get("result"))}}
 
 
-def run_job(c: dict, variant: str, rep: int, roots: dict, work: Path, timeout: int) -> dict:
+def run_job(c: dict, variant: str, rep: int, roots: dict, work: Path, timeout: int, extra: dict | None = None) -> dict:
+    """One review in its own clean-room process. `extra` goes into the job as is (text, insert, model, effort)."""
     sys.path.insert(0, str(HERE))
     import preflight as PF
     key = f"{re.sub(r'[^A-Za-z0-9]+', '-', c['id'])}-{variant}-{rep}"
@@ -267,7 +275,7 @@ def run_job(c: dict, variant: str, rep: int, roots: dict, work: Path, timeout: i
     u = PF.Unit(key=key, work=work, repo=Path(c["tree"]), hub=hub)
     env = PF.prepare(u)
     job = {"root": str(roots[variant]), "variant": variant, "brief": c["brief"], "tree": c["tree"], "hub": str(hub),
-           "run_id": c["run_id"], "max_chars": 12000, "case": c["id"], "recorded": c["recorded_text"]}
+           "run_id": c["run_id"], "max_chars": 12000, "case": c["id"], "recorded": c["recorded_text"], **(extra or {})}
     jf = work / "jobs" / f"{key}.json"
     jf.parent.mkdir(parents=True, exist_ok=True)
     jf.write_text(json.dumps(job), encoding="utf-8")
@@ -280,7 +288,7 @@ def run_job(c: dict, variant: str, rep: int, roots: dict, work: Path, timeout: i
     except (subprocess.TimeoutExpired, ValueError) as x:
         out = {"ok": False, "error": f"{type(x).__name__}: {x}"[:500]}
     out.update({"case": c["id"], "known": c.get("known"), "variant": variant, "rep": rep})
-    if c.get("known"):
+    if c.get("known") in KNOWN:
         test = KNOWN[c["known"]][3]
         out["found"] = any(test(m) for m in out.get("musts") or [])
     return out
