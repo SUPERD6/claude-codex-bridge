@@ -69,6 +69,12 @@ pre-authorised proposal covers one run of that task at the size you proposed: a 
 smaller one, is refused.
 The default tier stays `save` until a confirmation run decides.
 
+**Lead model by task** (off unless the person runs `ccx config set lead.model_by_task on`): a running
+conversation keeps its model (switching drops its cache). From the same b, `ccx route` / `ccx propose` add
+`new_lead` (a new conversation's model: `[lead_by_task]` easy model up to `easy_max_b`, else yours: start it on
+the model you normally run) and, only when `choice` did not recommend a built-in sub-agent, `builtin_model` (a
+fallback for your built-in sub-agent, easy band only); `ccx fresh` / `ccx handoff` take `--minutes` and use it.
+
 ## Act within the task's scope
 
 Use the estimate alongside checkability, startup/handoff cost and actual availability.

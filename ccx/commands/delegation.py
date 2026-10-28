@@ -826,6 +826,7 @@ def _route(a) -> dict:
             if choice:
                 choice.update(lead_ctx_tokens=lead_ctx, ctx_source=src)
                 route["choice"] = choice      # self / built-in sub-agent / ccx: see the agent-delegate skill
+        _lead_by_task(cfg, route, a)    # after `choice`: its built-in pick wins over builtin_model
         return route
     r = router.classify(" ".join(a.text), a.files)
     t = cfg["tiers"][r.tier]
@@ -836,6 +837,23 @@ def _route(a) -> dict:
         if t.get(ag):
             out[ag] = t[ag]
     return out
+
+
+def _lead_by_task(cfg: dict, route: dict, a) -> None:
+    """lead.model_by_task (opt-in, default off): the model for a NEW lead conversation on this task and for the lead's
+    own built-in sub-agent, from the same b. Advice only; a running conversation keeps its model. `builtin_model` is
+    only a fallback: when the calibrated `choice` recommends a built-in sub-agent, its `how` names that rung's model
+    (one source; `ccx verify --builtin <rung>` then matches the model used) and builtin_model is left out."""
+    from .. import leadmodel
+    agent = a.lead.split(":")[0] if getattr(a, "lead", None) else _caller(None)
+    lm = leadmodel.pick(cfg, agent, route.get("b"), getattr(a, "risk", None))
+    if lm:
+        note = ("for a new conversation on this task; never switch a running one" +
+                ("" if lm["band"] == "easy" else "; the strong lead: start it on the model it normally runs on"))
+        route["new_lead"] = {**lm, "note": note}
+        bm = None if (route.get("choice") or {}).get("recommend") == "builtin" else leadmodel.builtin_model(lm)
+        if bm:
+            route["builtin_model"] = bm         # Claude Code's Agent tool `model` for your own sub-agent
 
 
 def cmd_propose(a) -> int:
@@ -892,6 +910,12 @@ def cmd_propose(a) -> int:
                    next=(f"on yes: ccx run --proposal {row['proposal']} ... (no --no-ab), then ccx verify <run_id>; "
                          f"on no: ccx propose --no {row['proposal']}") if worth else
                    "not worth offering: do it yourself, nothing to ask")
+    if route.get("new_lead"):
+        from .. import leadmodel
+        leadmodel.record(p, route["new_lead"], "propose", {"proposal": row["proposal"]})
+        out["new_lead"] = route["new_lead"]
+        if route.get("builtin_model"):
+            out["builtin_model"] = route["builtin_model"]
     out.update(self_usd=row["self_usd"], delegate_usd=row["delegate_usd"], p=row["p"],
                lead_ctx_tokens=row["lead_ctx_tokens"], ctx_source=c.get("ctx_source"))
     if tp:
