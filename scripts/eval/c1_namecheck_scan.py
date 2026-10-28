@@ -203,21 +203,27 @@ def bare_sources(bare: Path, rev: str = "HEAD") -> dict[str, bytes]:
 
 # ---------------------------------------------------------------- the trees reviewers saw (before fix rounds)
 
-def reviewed_trees(base: Path, tags, work: Path):
+def reviewed_trees(base: Path, tags, work: Path, skipped: list | None = None):
     """(where, tree) of every recorded review whose brief holds the whole diff: the tree the reviewer saw, rebuilt
     as review_replay.py does (the unit's start commit + the brief's diff). Fix rounds overwrite this state, so a
-    bug a review caught is only here, not in the final tree."""
+    bug a review caught is only here, not in the final tree. A review whose tree cannot be scanned is appended to
+    `skipped` as {"where", "why"} (it shrinks the denominator, so the report states it)."""
+    skipped = [] if skipped is None else skipped
     import review_replay as RR
     for tag in tags:
         for d in RR.review_dirs(base, [tag]):
             try:
                 b = RR.parse_brief((d / "brief.md").read_text(encoding="utf-8"))
-            except (OSError, ValueError):
-                continue
-            snap = RR.build_run(d.parent, oc.load(d / "run.json"))
-            if b["cut"] or not snap or not b["diff"].strip():
+            except (OSError, ValueError) as e:
+                skipped.append({"where": f"{tag}/{d.parents[2].name.removeprefix('h-')}/{d.name}",
+                                "why": f"brief: {type(e).__name__}"})
                 continue
             unit = d.parents[2].name.removeprefix("h-")
+            snap = RR.build_run(d.parent, oc.load(d / "run.json"))
+            why = "diff cut" if b["cut"] else "no undo snapshot" if not snap else "empty diff" if not b["diff"].strip() else ""
+            if why:
+                skipped.append({"where": f"{tag}/{unit}/{d.name}", "why": why})
+                continue
             tree = work / f"{tag}-{unit}-{d.name}"
             if not tree.exists():
                 try:
@@ -225,6 +231,7 @@ def reviewed_trees(base: Path, tags, work: Path):
                 except (OSError, ValueError, KeyError) as e:      # a diff touching a scratch path that is gone
                     shutil.rmtree(tree, ignore_errors=True)
                     print(f"  (skip reviewed tree {tag}/{unit}/{d.name}: {type(e).__name__})", file=sys.stderr)
+                    skipped.append({"where": f"{tag}/{unit}/{d.name}", "why": f"rebuild: {type(e).__name__}: {getattr(e, 'strerror', None) or e}"[:200]})
                     continue
             yield f"{tag}/{unit}@review:{d.name}", tree
 
@@ -283,8 +290,10 @@ def main(argv: list[str] | None = None) -> dict:
     if a.reviewed:
         work = Path(a.reviewed)
         work.mkdir(parents=True, exist_ok=True)
-        for where, tree in reviewed_trees(base, a.tags, work):
-            report["reviewed_trees"] = report.get("reviewed_trees", 0) + 1
+        report["reviewed_skipped"] = []
+        report["reviewed_trees"] = 0
+        for where, tree in reviewed_trees(base, a.tags, work, report["reviewed_skipped"]):
+            report["reviewed_trees"] += 1
             for h in scan_changes(tree)["hits"]:
                 lb, why = label(where.split("@")[0], h, labels)
                 report["changes"].append({"where": where, "kind": "reviewed", **h, "label": lb, "why": why})
@@ -309,7 +318,9 @@ def main(argv: list[str] | None = None) -> dict:
 
     report["totals"] = {"changes": tally(report["changes"]), "whole": tally(report["whole"])}
     print(f"units scanned (changes since start): {report['units']} round, {report['holdout_units']} hold-out, "
-          f"{report.get('reviewed_trees', 0)} reviewed trees")
+          f"{report.get('reviewed_trees', 0)} reviewed trees, {len(report.get('reviewed_skipped') or [])} skipped")
+    for sk in report.get("reviewed_skipped") or []:
+        print(f"  skipped reviewed tree {sk['where']}: {sk['why']}")
     for part in ("changes", "whole"):
         print(f"{part}: {report['totals'][part]}")
         for r in report[part]:

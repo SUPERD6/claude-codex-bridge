@@ -8,8 +8,10 @@ followed by the first reviewer's [must] items and the question "keep or drop eac
 tree the first reviewer saw (rebuilt as fixround_replay.py does), in the round-5 clean room, with --model/--effort
 (default sonnet medium) through review_replay.py's runner.
 
-Gate (improvement plan, C4): every fail->pass round must keep at least one [must] (10/10 rescues kept); what it
-would save is the pass->pass rounds where every [must] is dropped (no fix round would start).
+Gate (improvement plan, C4): every fail->pass round must keep at least one [must] (10/10 rescues kept; 9/9 here,
+the 10th had no [must] items); what it would save is the pass->pass rounds where every [must] is dropped (no fix
+round would start). A rescue the filter did not judge (failed, unparsed, skipped, or cut by --budget) counts as
+not kept: the gate is over every planned rescue, never over the parsed subset.
 
   python scripts/eval/c4_must_filter.py --rows fixreplay-rows.json --dry-run      # rounds, prompt sizes, $ estimate
   python scripts/eval/c4_must_filter.py --rows ... --budget 1.0 --out c4.json     # spends money
@@ -75,7 +77,7 @@ def plan(rows: list[dict], model: str) -> dict:
         musts = [x for x in r["issues"] if str(x).lstrip().lower().startswith("[must]")] or r["issues"]
         text = review_text(Path(r["hub"]), r["run"])
         if not text:
-            skipped.append(r["run"])
+            skipped.append({"run": r["run"], "outcome": r["outcome"]})
             continue
         b = filter_brief(text, musts)
         jobs.append({"run": r["run"], "label": r.get("label"), "outcome": r["outcome"], "musts": len(musts),
@@ -85,20 +87,34 @@ def plan(rows: list[dict], model: str) -> dict:
             "est_usd": round(sum(j["usd"] for j in jobs), 2), "jobs": jobs}
 
 
-def gate(results: list[dict]) -> dict:
-    """Rescues kept (fail->pass rounds with at least one keep) and wasted rounds saved (pass->pass, all dropped)."""
-    out = {"rescues": 0, "rescues_kept": 0, "wasted": 0, "wasted_dropped": 0, "unparsed": 0}
+def gate(results: list[dict], planned: list[dict] | None = None) -> dict:
+    """Rescues kept (fail->pass rounds with at least one keep) and wasted rounds saved (pass->pass, all dropped).
+
+    The denominator is every planned round (`planned`: [{run, outcome}], the plan's jobs plus the rounds it had to
+    skip), not only the ones that came back parsed: a rescue whose filter review failed, timed out, was not parsed,
+    lost its tree or never ran (budget) is `rescues_unjudged` and counts as NOT kept, so the gate cannot pass on a
+    parsed subset. Without `planned` the results themselves are the plan."""
+    out = {"rescues": 0, "rescues_kept": 0, "rescues_unjudged": 0, "wasted": 0, "wasted_dropped": 0,
+           "unparsed": 0}
+    left: dict[str, list[dict]] = {}
     for r in results:
-        d = decisions(r.get("items") or [])
+        left.setdefault(str(r.get("run")), []).append(r)
+    for pl in (results if planned is None else planned):
+        got = left.get(str(pl.get("run"))) or []
+        r = (got.pop(0) if got else None) if planned is not None else pl
+        judged = r is not None and r.get("ok") is not False and not r.get("skip")
+        d = decisions((r or {}).get("items") or []) if judged else []
         if not d:
             out["unparsed"] += 1
-            continue
-        if r["outcome"] == "fail->pass":
+        if pl.get("outcome") == "fail->pass":
             out["rescues"] += 1
-            out["rescues_kept"] += "keep" in [x.lower() for x in d]
-        elif r["outcome"] == "pass->pass":
+            if not d:
+                out["rescues_unjudged"] += 1
+            else:
+                out["rescues_kept"] += "keep" in d
+        elif pl.get("outcome") == "pass->pass" and d:
             out["wasted"] += 1
-            out["wasted_dropped"] += all(x.lower() == "drop" for x in d)
+            out["wasted_dropped"] += all(x == "drop" for x in d)
     out["passes_gate"] = out["rescues"] > 0 and out["rescues_kept"] == out["rescues"]
     return out
 
@@ -149,7 +165,8 @@ def main(argv: list[str] | None = None) -> dict:
     if p["est_usd"] > a.budget:
         raise SystemExit(f"estimate ${p['est_usd']} is over --budget ${a.budget}")
     results = run(p, a.budget, a.effort, Path(a.work or tempfile.mkdtemp(prefix="c4-")).resolve(), a.timeout)
-    out = {**show, "gate": gate(results), "results": results}
+    planned = [{"run": j["run"], "outcome": j["outcome"]} for j in p["jobs"]] + p["skipped"]
+    out = {**show, "gate": gate(results, planned), "results": results}
     print(json.dumps(out["gate"]))
     if a.out:
         Path(a.out).write_text(json.dumps(out, indent=1, ensure_ascii=False), encoding="utf-8")

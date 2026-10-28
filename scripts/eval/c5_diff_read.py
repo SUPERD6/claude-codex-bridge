@@ -117,7 +117,7 @@ def main(argv: list[str] | None = None) -> dict:
     ap.add_argument("--tags", default=",".join(oc.TAGS), type=lambda x: [t for t in x.split(",") if t])
     ap.add_argument("--json", default="")
     a = ap.parse_args(argv)
-    rows = unit_rows(Path(a.records) if a.records else oc.temp_root(), oc.results(Path(a.results), a.tags), a.tags)
+    rows = unit_rows(Path(a.records) if a.records else oc.temp_root(), oc.results_or_exit(Path(a.results), a.tags), a.tags)
     t = table(rows)
     print(json.dumps(t, indent=1))
     for r in rows:

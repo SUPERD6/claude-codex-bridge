@@ -129,6 +129,31 @@ def test_c3_classify_codex_log(tmp_path):
     assert C3.classify(cmd, [], -1) == "none"
 
 
+def test_c3_exact_means_the_whole_statement(tmp_path):
+    cmd = "python -m pytest -q tests/test_a.py"
+    ps = '"C:\\\\WINDOWS\\\\System32\\\\WindowsPowerShell\\\\v1.0\\\\powershell.exe" -Command '
+
+    def one(c, code=0, out=""):
+        log = codex_log(tmp_path / "x.log", [{"type": "file_change"},
+                                             {"type": "command_execution", "command": c, "exit_code": code,
+                                              "aggregated_output": out}])
+        return C3.classify(cmd, *C3.builder_commands(log))
+
+    # narrower (one test id, -k) or wider (more files): not ccx's command
+    assert one(ps + f"'{cmd}::TestA::test_one'") == "other_pass"
+    assert one(ps + f"'{cmd} -k one'") == "other_pass"
+    assert one(ps + f"'{cmd} tests/test_b.py'") == "other_pass"
+    assert one(ps + f"'{cmd}'") == "exact_pass"
+    # compound: the exit code is the last statement's, so the pytest summary decides
+    assert one(ps + f"'{cmd}; git status --short'", 0, "F.\n1 failed, 1 passed in 0.1s\n M a.py\n") == "exact_fail"
+    assert one(ps + f"'git diff; {cmd}'", 1, "no tests ran in 0.00s\nERROR: file or directory not found\n") \
+        == "exact_fail"
+    assert one(ps + f"'{cmd} && git diff --check'", 1, "..\n2 passed in 0.1s\nwhitespace\n") == "exact_pass"
+    # two test runs in one command: their output cannot be told apart
+    assert one(ps + f"'{cmd}; python -m pytest -q tests/test_b.py'", 0, "1 passed\n2 passed\n") == "exact_unclear"
+    assert C3.statements("a 'x; y' && b || c; d | e") == ["a 'x; y'", "b", "c", "d", "e"]
+
+
 def test_c3_classify_claude_stream(tmp_path):
     log = jsonl(tmp_path / "c.log", [
         {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": "w", "name": "Edit", "input": {}}]}},
@@ -198,6 +223,16 @@ def test_c5_unit_rows_and_table(tmp_path):
     assert 0 < t["p_strict"] <= 1
 
 
+def test_c5_and_c2_stop_on_missing_or_empty_results(tmp_path):
+    import pytest
+    for main, extra in ((C5.main, []), (C2.main, ["plan"])):
+        with pytest.raises(SystemExit, match="not found"):
+            main(extra + ["--records", str(tmp_path), "--results", str(tmp_path / "none.jsonl")])
+        f = jsonl(tmp_path / "other.jsonl", [{"tag": "r5x", "label": "eval-r5:r5x:1:t:ccx2", "ok": True}])
+        with pytest.raises(SystemExit, match="no scored rows"):
+            main(extra + ["--records", str(tmp_path), "--results", str(f), "--tags", "r5e"])
+
+
 # ------------------------------------------------------------------ C4
 
 def test_c4_brief_decisions_and_gate(tmp_path):
@@ -209,9 +244,27 @@ def test_c4_brief_decisions_and_gate(tmp_path):
                  {"outcome": "pass->pass", "items": ["[drop] y", "[drop] z"]},
                  {"outcome": "pass->pass", "items": ["[keep] y"]},
                  {"outcome": "fail->fail", "items": []}])
-    assert g == {"rescues": 1, "rescues_kept": 1, "wasted": 2, "wasted_dropped": 1, "unparsed": 1,
-                 "passes_gate": True}
+    assert g == {"rescues": 1, "rescues_kept": 1, "rescues_unjudged": 0, "wasted": 2, "wasted_dropped": 1,
+                 "unparsed": 1, "passes_gate": True}
     assert not C4.gate([{"outcome": "fail->pass", "items": ["[drop] x"]}])["passes_gate"]
+
+
+def test_c4_gate_counts_unjudged_rescues_as_not_kept():
+    planned = [{"run": "a", "outcome": "fail->pass"}, {"run": "b", "outcome": "fail->pass"},
+               {"run": "c", "outcome": "fail->pass"}, {"run": "d", "outcome": "fail->pass"},
+               {"run": "e", "outcome": "pass->pass"}]
+    results = [{"run": "a", "outcome": "fail->pass", "ok": True, "items": ["[keep] x"]},
+               {"run": "b", "outcome": "fail->pass", "ok": True, "items": ["no verdict lines"]},   # unparsed
+               {"run": "c", "outcome": "fail->pass", "ok": False, "items": []},                    # review failed
+               {"run": "e", "outcome": "pass->pass", "ok": True, "items": ["[drop] y"]}]           # d: budget cut
+    g = C4.gate(results, planned)
+    assert g["rescues"] == 4 and g["rescues_kept"] == 1 and g["rescues_unjudged"] == 3
+    assert g["wasted"] == 1 and g["wasted_dropped"] == 1 and not g["passes_gate"]
+    # every planned rescue judged and kept: passes; a skipped tree is not judged
+    ok = [{"run": x, "outcome": "fail->pass", "items": ["[keep] x"]} for x in "abcd"]
+    assert C4.gate(ok, planned[:4])["passes_gate"]
+    ok[3]["skip"] = "tree"
+    assert not C4.gate(ok, planned[:4])["passes_gate"]
 
 
 def test_c4_plan_dry_run(tmp_path):
@@ -250,6 +303,15 @@ def test_c2_plan_and_score(tmp_path):
     assert not s["passes_gate"]
 
 
+def test_c2_notes_injected(tmp_path):
+    d = tmp_path / "ccx" / "runs" / "r1"
+    d.mkdir(parents=True)
+    (d / "prompt.md").write_text("Task\nbrief only\n", encoding="utf-8")
+    assert not C2.notes_injected(tmp_path)
+    (d / "prompt.md").write_text("Task\n" + C2.NOTES_HEAD + " (facts):\n- #1 x\n", encoding="utf-8")
+    assert C2.notes_injected(tmp_path)
+
+
 def test_c2_run_accept_outside_repo(tmp_path):
     tree = repo(tmp_path / "tree", {"mod_c2.py": "def f():\n    return 2\n"})
     t = tmp_path / "accept_x.py"
@@ -269,9 +331,50 @@ def test_c6_matcher_and_score():
                    "usd": 0.02}])
     assert s == {"base": {"n": 1, "must": 0, "any": 1, "usd": 0.02}, "rule": {"n": 1, "must": 1, "any": 1, "usd": 0.01}}
     assert C6.ANCHOR in (Path(__file__).resolve().parents[1] / "ccx" / "review.py").read_text(encoding="utf-8")
+    # a rule row whose rule was not inserted is not scored as the rule arm
+    s2 = C6.score([{"variant": "rule", "ok": True, "inserted": False, "musts": [], "items": [], "usd": 0.01}])
+    assert s2["rule"]["n"] == 0
+
+
+def test_replay_insert_rules_reports_a_missing_anchor():
+    import review_replay as RR
+    text, missing = RR.insert_rules("a. B c.", [["B", "R "], ["Z", "Q "]])
+    assert text == "a. R B c." and missing == ["Z"]
 
 
 def test_c6_dry_run_spends_nothing(tmp_path, monkeypatch):
     monkeypatch.setenv("CCX_REPLAY_RECORDS", str(tmp_path))
     out = C6.main(["--dry-run", "--reps", "2"])
     assert out["reviews"] == 4 and out["exists"] is False and out["est_usd"] <= 0.5
+
+
+# ------------------------------------------------------------------ C1 skipped reviewed trees, B1 pre-count
+
+def test_c1_reviewed_trees_records_skips(tmp_path):
+    d = tmp_path / "r5c" / "h-1-t-ccx2" / "ccx" / "runs" / "rv"
+    d.mkdir(parents=True)
+    (d / "run.json").write_text(json.dumps({"run_id": "rv", "caller": "ccx-review", "label": "review:b"}), "utf-8")
+    (d / "brief.md").write_text("not a review brief", encoding="utf-8")
+    skipped = []
+    assert list(C1.reviewed_trees(tmp_path, ["r5c"], tmp_path / "w", skipped)) == []
+    assert skipped == [{"where": "r5c/1-t-ccx2/rv", "why": "brief: ValueError"}]
+
+
+def test_b1_codes_and_sole_share(tmp_path):
+    import b1_skip_count as B1
+    assert B1.code("asked") == "asked" and B1.code("137 changed code lines") == "lines"
+    assert B1.code("the sub-agent is unsure") == "unsure"
+    assert B1.code("the tests it runs don't touch ccx/ui.py") == "tests_miss_change"
+    assert B1.code("the acceptance command `x` runs no tests") == "check_no_tests"
+    # unsure with claimed files that do not match the diff: a later trigger still fires, not sole
+    rec = {"result": {"files_changed": ["b.py"]}, "check": {"cmd": "pytest -q"}}
+    assert B1.later_trigger(rec, "+++ b/a.py\n", None) == "files_mismatch"
+    assert B1.later_trigger({"result": {"files_changed": ["a.py"]}}, "+++ b/a.py\n", None) == "no_check"
+    assert B1.later_trigger({**rec, "result": {"files_changed": ["a.py"]}}, "+++ b/a.py\n", None) == "unknown"
+    rows = [{"fix_round": False, "code": c, "later": lt, "usd": 0.01} for c, lt in
+            (("asked", None), ("lines", None), ("tests_miss_change", None), ("unsure", None),
+             ("unsure", "tests_miss_change"))]
+    s = B1.summarize(rows)["first"]
+    assert s["reviews"] == 5 and s["auto_reviews"] == 4
+    assert s["sole"] == {"tests_miss_change": 1, "unsure": 1, "unsure_unknown": 0}
+    assert s["sole_share"] == 0.4 and s["unsure_sole_share"] == 0.2

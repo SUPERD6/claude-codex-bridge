@@ -82,6 +82,17 @@ def results(f: Path, tags=TAGS) -> dict[str, dict]:
     return out
 
 
+def results_or_exit(f: Path, tags=TAGS) -> dict[str, dict]:
+    """results() for a script's main: a missing file or no scored row for `tags` stops with a clear message
+    instead of an all-zero table (the default path is .ccx/eval/r5/ of the checkout, absent in a fresh worktree)."""
+    if not Path(f).is_file():
+        raise SystemExit(f"results file not found: {f} (pass --results <results.jsonl>)")
+    out = results(f, tags)
+    if not out:
+        raise SystemExit(f"no scored rows for tags {','.join(tags)} in {f}")
+    return out
+
+
 def hub_runs(hub: Path) -> dict[str, dict]:
     """run id -> run.json of one unit's hub (unreadable files skipped)."""
     out = {}

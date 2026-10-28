@@ -209,6 +209,18 @@ def old_ccx(ref: str, work: Path) -> Path:
 
 # ---- one review, in its own process: python review_replay.py one <job.json> ----
 
+def insert_rules(text: str, inserts) -> tuple[str, list[str]]:
+    """Each extra rule put in front of its anchor text (first occurrence); the anchors not found are returned, so
+    the caller can fail the job instead of running the brief without the rule."""
+    missing = []
+    for anchor, add in inserts:
+        if anchor not in text:
+            missing.append(anchor)
+            continue
+        text = text.replace(anchor, add + anchor, 1)
+    return text, missing
+
+
 def one(job_file: Path) -> None:
     job = load(job_file)
     sys.path.insert(0, job["root"])
@@ -221,8 +233,11 @@ def one(job_file: Path) -> None:
         text = job["text"]
     else:
         text = review.brief(job["run_id"], b["task"], b["summary"], b["diff"], job["max_chars"], b["check"], **kw)
-        for anchor, add in job.get("insert") or []:          # an extra rule put in front of an anchor text
-            text = text.replace(anchor, add + anchor, 1)
+        text, missing = insert_rules(text, job.get("insert") or [])
+        if missing:            # the brief's wording moved: running it would silently be the arm without the rule
+            print(json.dumps({"ok": False, "error": f"insert anchor not in the brief: {missing[0][:80]!r}",
+                              "inserted": False, "usd": 0, "musts": [], "items": []}))
+            return
     p = Paths(Path(job["hub"]))
     t0 = time.time()
     rec = run(Request(to="claude", model=job.get("model") or "haiku", effort=job.get("effort") or "low",
@@ -237,7 +252,7 @@ def one(job_file: Path) -> None:
     print(json.dumps({"ok": rec.get("ok"), "error": rec.get("error"), "seconds": a.get("seconds"), "wall": round(wall, 1),
                       "output_tokens": (a.get("usage") or {}).get("output_tokens"), "usage": a.get("usage"),
                       "usd": sum(x.get("cost_usd") or 0 for x in rec.get("attempts") or []), "tool_uses": tools,
-                      "brief_chars": len(text), "summary": ((rec.get("result") or {}).get("summary") or "")[:300],
+                      "brief_chars": len(text), "inserted": bool(job.get("insert")), "summary": ((rec.get("result") or {}).get("summary") or "")[:300],
                       "musts": musts(rec.get("result")), "same_as_recorded": text == job.get("recorded"),
                       "items": [str(x) for x in ((rec.get("result") or {}).get("open_questions") or [])]}))
 

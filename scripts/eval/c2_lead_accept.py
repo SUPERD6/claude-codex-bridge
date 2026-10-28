@@ -8,7 +8,9 @@ Three steps:
             the $ estimate of writing them
   generate  (paid) one fresh lead per task (claude --model, through `ccx run --mode write` in a scratch git folder
             holding only BRIEF.md: no repository, so it can only test the behaviour the brief states) writes
-            accept_<task>.py; files land in --tests
+            accept_<task>.py; files land in --tests. Each session runs in the round-5 clean room (preflight.prepare:
+            its own empty hub, no user CLAUDE.md, skills, MCP or auto-memory), so ccx injects no shared notes into
+            its brief; a file whose brief did carry notes (`shared_notes`) is not kept
   score     (free) runs every accept_<task>.py against every recorded unit of that task: the archived final tree,
             with the cwd outside the repository (a temp folder) and CCX_REPO=<tree> on PYTHONPATH, real processes
             (no mocking of kill); a wrong unit that fails = caught, a right unit that fails = false alarm
@@ -88,6 +90,25 @@ def score(us: list[dict], tests: Path, runner=run_accept) -> dict:
             "passes_gate": caught >= 2 and bool(right) and alarms / len(right) <= 0.03, "rows": rows}
 
 
+NOTES_HEAD = "Shared notes that may bear on this task"      # ccx/delegate.py _brief_notes (I6)
+
+
+def clean_env(task: str, work: Path) -> tuple[dict, Path, Path]:
+    """(environment, scratch repo, hub) of one test-writing session in the round-5 clean room (preflight.prepare):
+    allow-listed environment, a fresh empty hub (no shared notes, ledger or memory of the person's), no user
+    settings, CLAUDE.md, skills or auto-memory for Claude. The writer must know only BRIEF.md."""
+    import preflight as PF
+    d, hub = work / task, work / "hubs" / task
+    d.mkdir(parents=True, exist_ok=True)
+    hub.mkdir(parents=True, exist_ok=True)
+    return PF.prepare(PF.Unit(key=f"c2-{task}", work=work, repo=d, hub=hub)), d, hub
+
+
+def notes_injected(hub: Path) -> bool:
+    """Did any brief ccx wrote in this hub carry shared notes? (Must be False for a brief-only writer.)"""
+    return any(NOTES_HEAD in f.read_text(encoding="utf-8", errors="replace") for f in hub.rglob("runs/*/prompt.md"))
+
+
 def generate(tasks: list[str], tests: Path, model: str, budget: float, work: Path) -> list[dict]:  # pragma: no cover
     import r5
     tests.mkdir(parents=True, exist_ok=True)
@@ -95,23 +116,24 @@ def generate(tasks: list[str], tests: Path, model: str, budget: float, work: Pat
     for t in tasks:
         if spent + EST_USD.get(model, 0.12) > budget:
             break
-        d = work / t
-        d.mkdir(parents=True, exist_ok=True)
+        env, d, hub = clean_env(t, work)
         (d / "BRIEF.md").write_text(r5.by_id(t)["brief"] + "\n", encoding="utf-8")
-        subprocess.run(["git", "init", "-q"], cwd=d)
+        subprocess.run(["git", "init", "-q"], cwd=d, env=env)
         r = subprocess.run([sys.executable, str(ROOT / "ccx.py"), "run", "--to", "claude", "--model", model,
                             "--mode", "write", "--no-ab", "--review", "off", "--label", f"c2-accept:{t}",
-                            WRITE.format(task=t)], cwd=d, capture_output=True, text=True, encoding="utf-8",
-                           errors="replace", timeout=1200)
+                            WRITE.format(task=t)], cwd=d, env=env, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=1200)
         try:
             rec = json.loads(r.stdout[r.stdout.find("{"):])
         except ValueError:
             rec = {}
         spent += float(rec.get("cost_usd") or rec.get("usd") or EST_USD.get(model, 0.12))
         f = d / f"accept_{t}.py"
-        if f.exists():
+        leaked = notes_injected(hub)
+        if f.exists() and not leaked:
             (tests / f.name).write_bytes(f.read_bytes())
-        out.append({"task": t, "written": f.exists(), "spent": round(spent, 4)})
+        out.append({"task": t, "written": f.exists(), "shared_notes": leaked, "kept": f.exists() and not leaked,
+                    "spent": round(spent, 4)})
     return out
 
 
@@ -129,7 +151,7 @@ def main(argv: list[str] | None = None) -> dict:
     ap.add_argument("--json", default="")
     a = ap.parse_args(argv)
     base = Path(a.records) if a.records else oc.temp_root()
-    us = units(base, oc.results(Path(a.results), a.tags), a.arm, a.tags)
+    us = units(base, oc.results_or_exit(Path(a.results), a.tags), a.arm, a.tags)
     p = plan(us, a.model)
     if a.step == "plan" or a.dry_run:
         print(json.dumps(p))

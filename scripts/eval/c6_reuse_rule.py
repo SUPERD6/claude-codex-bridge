@@ -40,7 +40,8 @@ def found(item: str) -> bool:
 def score(results: list[dict]) -> dict:
     out = {}
     for v in ("base", "rule"):
-        rs = [r for r in results if r.get("variant") == v and r.get("ok")]
+        rs = [r for r in results if r.get("variant") == v and r.get("ok")
+              and (v != "rule" or r.get("inserted", True))]          # a rule row without the rule is no rule row
         out[v] = {"n": len(rs), "must": sum(any(found(x) for x in r.get("musts") or []) for r in rs),
                   "any": sum(any(found(x) for x in r.get("items") or []) for r in rs),
                   "usd": round(sum(r.get("usd") or 0 for r in rs), 4)}

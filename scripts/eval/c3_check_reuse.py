@@ -3,10 +3,18 @@
 Offline, no model calls. For every recorded write run that had a `--check` (r5c..r5h hubs, review children left
 out), read the builder's last attempt (events.<N>.log) and find the commands it ran after its last file edit:
 
-  exact_pass   it ran ccx's check command (same text up to quotes and spaces) and it exited 0
+  exact_pass   it ran ccx's check command as a whole statement (same text up to quotes and spaces, after the
+               shell wrapper `powershell -Command '...'` / `bash -lc '...'` is taken off and the command is split
+               on ; && || and new lines) and it passed
   exact_fail   it ran it and it failed
-  other_pass   it ran some other test command (pytest/unittest/npm test ...) that exited 0, not ccx's command
+  exact_unclear it ran it inside a compound command whose output does not say how that statement ended
+  other_pass   it ran some other test command (pytest/unittest/npm test ..., a narrower `file::test` or a wider
+               set of files included) that exited 0, not ccx's command
   none         it ran no test after its last edit
+
+Passed/failed: when the check is the whole command, its exit code (Claude Code: the tool result's is_error); in
+a compound command the exit code is the last statement's, so the outcome is read from the output instead, and
+only when the compound runs no other test command and the output has exactly one pytest summary line.
 
 and compares that with ccx's own check result (run.json `check.passed`):
 
@@ -50,7 +58,8 @@ def builder_commands(log: Path) -> tuple[list[dict], int]:
             if it.get("type") == "file_change":
                 last_write = i
             elif it.get("type") == "command_execution":
-                cmds.append({"i": i, "cmd": it.get("command") or "", "ok": it.get("exit_code") == 0})
+                cmds.append({"i": i, "cmd": it.get("command") or "", "ok": it.get("exit_code") == 0,
+                             "out": it.get("aggregated_output") or ""})
             continue
         msg = e.get("message") or {}
         for c in msg.get("content") or [] if isinstance(msg.get("content"), list) else []:
@@ -60,20 +69,84 @@ def builder_commands(log: Path) -> tuple[list[dict], int]:
                 if c.get("name") in WRITE_TOOLS:
                     last_write = i
                 elif c.get("name") == "Bash":
-                    row = {"i": i, "cmd": (c.get("input") or {}).get("command") or "", "ok": True}
+                    row = {"i": i, "cmd": (c.get("input") or {}).get("command") or "", "ok": True, "out": ""}
                     cmds.append(row)
                     claude[c.get("id")] = row
             elif e.get("type") == "user" and c.get("type") == "tool_result" and c.get("tool_use_id") in claude:
                 claude[c["tool_use_id"]]["ok"] = not c.get("is_error")
+                t = c.get("content")
+                if isinstance(t, list):
+                    t = "\n".join(x.get("text", "") for x in t if isinstance(x, dict))
+                claude[c["tool_use_id"]]["out"] = str(t or "")
     return cmds, last_write
+
+
+WRAPPER = re.compile(r"""^\s*["']?[^"']*?\b(?:powershell|pwsh|bash|sh|zsh|cmd)(?:\.exe)?["']?"""
+                     r"""(?:\s+-(?:NoProfile|NonInteractive|NoLogo|ExecutionPolicy\s+\S+))*"""
+                     r"""\s+(?:-Command|-c|-lc|/c|/C)\s+(?P<inner>.*)$""", re.I | re.S)
+SUMMARY = re.compile(r"^=*\s*(?:\d+ (?:passed|failed|errors?|skipped|deselected|xfailed|xpassed)[^\n]*"
+                     r"| ?no tests ran[^\n]*)$", re.M)
+
+
+def unwrap(cmd: str) -> str:
+    """The command a shell wrapper runs (`powershell -Command '...'`, `bash -lc "..."`), outer quotes removed."""
+    m = WRAPPER.match(cmd)
+    if not m:
+        return cmd
+    inner = m["inner"].strip()
+    if len(inner) >= 2 and inner[0] == inner[-1] and inner[0] in "'\"":
+        inner = inner[1:-1]
+    return inner
+
+
+def statements(cmd: str) -> list[str]:
+    """The statements of one shell command line, split on ; && || | and new lines outside quotes."""
+    out, cur, q, k = [], "", "", 0
+    while k < len(cmd):
+        ch = cmd[k]
+        if q:
+            q = "" if ch == q else q
+            cur += ch
+        elif ch in "'\"":
+            q, cur = ch, cur + ch
+        elif cmd.startswith(("&&", "||"), k):
+            out.append(cur)
+            cur, k = "", k + 1
+        elif ch in ";|\n":
+            out.append(cur)
+            cur = ""
+        else:
+            cur += ch
+        k += 1
+    out.append(cur)
+    return [x.strip() for x in out if x.strip()]
+
+
+def outcome(check_cmd: str, c: dict) -> bool | None:
+    """Did ccx's check, run by the builder as one statement of `c`, pass? None when the command does not run it
+    as a whole statement or its outcome cannot be told."""
+    want = norm(check_cmd)
+    parts = [norm(x) for x in statements(unwrap(c["cmd"]))]
+    if not want or want not in parts:
+        return None
+    if len(parts) == 1:
+        return c["ok"]
+    if sum(bool(TEST_WORDS.search(x)) for x in parts) > 1:     # several test runs: their output is mixed
+        return None
+    lines = SUMMARY.findall(c.get("out") or "")
+    if len(lines) != 1:
+        return None
+    line = lines[0]
+    return "passed" in line and not re.search(r"\b(failed|errors?)\b", line)
 
 
 def classify(check_cmd: str, cmds: list[dict], last_write: int) -> str:
     after = [c for c in cmds if c["i"] > last_write]
     want = norm(check_cmd)
-    exact = [c for c in after if want and want in norm(c["cmd"])]
+    exact = [c for c in after if want and want in [norm(x) for x in statements(unwrap(c["cmd"]))]]
     if exact:
-        return "exact_pass" if exact[-1]["ok"] else "exact_fail"
+        ok = outcome(check_cmd, exact[-1])
+        return "exact_unclear" if ok is None else "exact_pass" if ok else "exact_fail"
     if any(c["ok"] and TEST_WORDS.search(c["cmd"]) for c in after):
         return "other_pass"
     return "none"
@@ -116,7 +189,7 @@ def summarize(rows: list[dict]) -> dict:
         return {"n": len(s), "median": oc.median(s), "sum": round(sum(s), 1)}
     out = {"runs": len(rows), "builder": {}, "match": sum(r["agree"] == "match" for r in rows),
            "mismatch": sum(r["agree"] == "mismatch" for r in rows)}
-    for k in ("exact_pass", "exact_fail", "other_pass", "none", "nolog"):
+    for k in ("exact_pass", "exact_fail", "exact_unclear", "other_pass", "none", "nolog"):
         out["builder"][k] = sum(r["builder"] == k for r in rows)
     out["check_seconds_no_review"] = secs([r for r in rows if not r["review"]])
     out["check_seconds_with_review"] = secs([r for r in rows if r["review"]])
