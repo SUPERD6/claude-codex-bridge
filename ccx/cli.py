@@ -9,8 +9,9 @@ import textwrap
 from . import __version__, commands, hooktimeout
 from .commands.common import _out
 
-DESCRIPTION = ("A cost-saving team of AI coding agents: Claude Code, Codex and DeepSeek hand work to each other, "
-               "sharing memory and working context.")
+DESCRIPTION = ("A team of AI coding agents: Claude Code, Codex and DeepSeek hand work to each other as lead or "
+               "sub-agent, sharing memory and working context, and route each piece to the cheapest agent likely "
+               "to finish it.")
 
 # `ccx -h` lists commands by what they are for; every command stays callable, the last group is names only.
 GROUPS = (

@@ -24,6 +24,7 @@ def test_help_shows_every_command_and_the_new_description():
     for n in _commands():
         assert f" {n}" in text, n
     assert "DeepSeek" in text and "Claude Code <-> Codex bridge" not in text
+    assert "cost-saving" not in text            # not an unconditional promise; docs/measured.md has the numbers
     assert text.startswith("usage: ccx [-h] [--version] <command> ...")
 
 

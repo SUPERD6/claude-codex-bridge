@@ -56,7 +56,7 @@ You need Python 3.11+ and the `claude` and `codex` CLIs, logged in; DeepSeek (`d
 | DeepSeek (`dsh`, or through Claude Code; as a sub-agent also through Codex) | yes | yes |
 | Gemini CLI; Kimi, GLM, Qwen, OpenRouter through Claude Code | no | adapted, not run for real |
 
-All "yes" cells ran for real on one Windows machine; macOS and Linux run in CI only. This is v0.4, work in progress:
+All "yes" cells ran for real on one Windows machine; macOS and Linux run in CI only. This is v0.5, work in progress:
 what is verified and how is in [docs/STATUS.md](docs/STATUS.md).
 
 ## More
