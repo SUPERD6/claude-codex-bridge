@@ -692,6 +692,32 @@ class TestReviewRun(Env):
         self.assertNotIn("[ccx review", builder["prompt"])
         self.assertNotIn("promptCacheTtl", settings(builder))                        # a builder keeps the default
 
+    def test_final_review_issues_is_not_ok_and_exits_2(self):
+        # a final review_issues (no fix round ran, e.g. no session to resume): the [must] problems stand unfixed, so
+        # the result is not ok and `ccx run` exits 2 (it exited 0 before)
+        import contextlib
+        import os
+        from unittest import mock
+        import io
+        from ccx import cli, delegate
+        rec = {"run_id": "20991231-100000-aaaa", "to": "codex", "tier": "T2", "ok": True, "state": "finished",
+               "kind": "review_issues", "session_id": None, "mode": "write", "cwd": str(self.work),
+               "result": {"status": "done", "summary": "did it"}, "review": {"verdict": "issues",
+                                                                             "issues": ["[must] a.py:1 bug"]},
+               "attempts": [{"agent": "codex", "model": "gpt-6-luna", "effort": "low", "usage4": {}, "seconds": 1,
+                             "ok": True}]}
+        self.assertFalse(delegate.compact(rec)["ok"])
+        cwd, buf = os.getcwd(), io.StringIO()
+        os.chdir(self.work)
+        try:                                           # back before tearDown removes the folder (Windows)
+            with mock.patch("ccx.commands.delegation.run", return_value=rec), contextlib.redirect_stdout(buf):
+                code = cli.main(["run", "--from", "claude", "--to", "codex", "--model", "gpt-6-luna", "--effort",
+                                 "low", "--mode", "write", "--no-fallback", "change x to 2 in a.py"])
+        finally:
+            os.chdir(cwd)
+        out = json.loads(buf.getvalue())
+        self.assertEqual((out["kind"], out["ok"], code), ("review_issues", False, 2), out)
+
     def test_edited_tests_flagged_without_a_review(self):
         # backlog 0a: a changed pre-existing test is shown for every write run, also with --review off
         g = ["git", "-c", "user.name=t", "-c", "user.email=t@t"]

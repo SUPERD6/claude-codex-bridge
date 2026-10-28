@@ -147,7 +147,7 @@ A printed result with a `run_id` means that delegation ran: do not send the same
   `file:line`. ccx runs one fix round itself (`show --wait` follows it); after that, `needs_lead` is
   your call and `review_failed` is below. Judge `kind` only from a final result: `ccx run ... --bg --wait` that
   printed one, or `ccx show <run_id>` (it follows the fix round, with or without `--wait`; `fix_round: starting`
-  means one is about to start: `ccx show <run_id> --wait`, don't resume). `review_issues` there means no fix round
+  or `finishing` means it is not final yet: `ccx show <run_id> --wait`, don't resume). `review_issues` there means no fix round
   ran (no session to resume, or it failed to start): fix it yourself or dispatch it again. After a fix round
   `cost_chain` is what the whole chain cost (tokens, $).
 - `review_failed` (the fix round did not satisfy the review): check each `[must]` item against the diff; fix
