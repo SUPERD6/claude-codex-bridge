@@ -6,7 +6,7 @@ Each step is judged by files, records and the ledger, not by what an agent says:
   stop      a background run stopped with `ccx stop`: state stopped, its tokens counted, one ledger row; then
             `ccx resume` continues the same session
   undo      `ccx undo <run> --apply` puts every file back
-  handoff   `ccx handoff` writes .ccx/handoff.md; the receiving start hook (`ccx mem delta`) shows it, and a model
+  handoff   `ccx handoff` writes its file under .ccx/handoffs/ (the path it prints); the receiving start hook (`ccx mem delta`) shows it, and a model
             given what that hook shows names the next task
   review    a write run with `--review on`: another vendor's model reviews the diff   (needs a 2nd vendor: --agents all)
   reverse   the other direction, Codex lead -> Claude sub-agent (haiku low)           (needs Claude: --agents all)
@@ -144,10 +144,12 @@ class Preflight:
 
     def handoff(self) -> dict:
         repo = self.state.get("repo") or make_repo(by_id("slugify"), self.work / "handoff")
-        rc, _, err = self.ccx("handoff", "--by", "claude", "--to", "codex",
+        rc, out, err = self.ccx("handoff", "--by", "claude", "--to", "codex",
                               "Done: slugify works. Decided: keep it in textutil.py. "
                               "Next: write a test for strings that are only punctuation.", cwd=repo)
-        doc = repo / ".ccx" / "handoff.md"
+        # the handoff's own file under .ccx/handoffs/ (.ccx/handoff.md is only updated while it is ccx's copy)
+        doc = Path(out["handoff"]) if out.get("handoff") else None
+        written = bool(doc and doc.exists() and "punctuation" in doc.read_text(encoding="utf-8", errors="replace"))
         # what the receiving lead is shown: Codex's start hook runs `ccx mem delta --as codex` (ccx/sync.py)
         try:
             shown = subprocess.run([*CCX, "mem", "delta", "--as", "codex"], cwd=repo, capture_output=True, text=True,
@@ -165,7 +167,7 @@ class Preflight:
         said = " ".join([r.get("summary") or "", r.get("next_step") or "", *map(str, r.get("open_questions") or [])])
         # the answer may come in the person's language (a live run answered in Chinese, from the user's Codex rules)
         named = any(w in said.lower() for w in ("punctuation", "标点"))
-        return {"ok": doc.exists() and in_hook and named, "written": doc.exists(),
+        return {"ok": written and in_hook and named, "written": written,
                 "in_start_hook": in_hook, "said": said[:200], "run_id": res.get("run_id"),
                 "err": (err or err2)[-300:] if rc or rc2 not in (0, 2) else ""}
 

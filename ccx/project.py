@@ -181,6 +181,7 @@ def handoff(root: Path, by: str, to: str, text: str) -> dict:
     doc = f"<!-- ccx:handoff from={by} to={to} ts={ts} -->\n# Handoff {by} -> {to} ({ts})\n\n{body}\n"
     hist = root / ".ccx" / "handoffs"
     hist.mkdir(parents=True, exist_ok=True)
+    _adopt_legacy_latest(root, hist)
     stem = f"{ts.replace(':', '')}-{by}-to-{to}"
     own = hist / f"{stem}.md"
     n = 1
@@ -211,6 +212,31 @@ def handoff(root: Path, by: str, to: str, text: str) -> dict:
 
 
 _HEAD = re.compile(r"<!-- ccx:handoff from=(\S+) to=(\S+) ts=(\S+) -->")
+
+
+def _adopt_legacy_latest(root: Path, hist: Path) -> None:
+    """A .ccx/handoff.md that ccx wrote before handoffs/ existed has no copy there, so the "unedited ccx copy"
+    test would call it hand-written and never update it again. While handoffs/ is still empty and handoff.md
+    starts with ccx's header, copy it there once, byte for byte (nothing is lost even if the person edited it);
+    it then counts as ccx's copy. Whoever was already shown it as handoff.md stays marked as having seen it."""
+    f = root / ".ccx" / "handoff.md"
+    if not f.exists() or any(hist.glob("*.md")):
+        return
+    raw = f.read_bytes()
+    m = _HEAD.match(raw.decode("utf-8", errors="replace"))
+    if not m:
+        return
+    name = f"{m.group(3).replace(':', '')}-{m.group(1)}-to-{m.group(2)}"
+    dest = hist / (re.sub(r"[^\w.-]", "-", name) + ".md")
+    dest.write_bytes(raw)
+    seen = _seen(root)
+    changed = False
+    for names in seen.values():
+        if isinstance(names, list) and f.name in names and dest.name not in names:
+            names.append(dest.name)
+            changed = True
+    if changed:
+        (root / ".ccx" / "handoff.seen.json").write_text(json.dumps(seen), encoding="utf-8")
 
 
 def _for_me(m: re.Match | None, me: str) -> bool:

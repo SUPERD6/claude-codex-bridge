@@ -267,6 +267,32 @@ class TestFresh(Env):
         self.assertNotEqual(first["handoff"], second["handoff"])
         self.assertNotIn("latest_skipped", second)
 
+    def test_legacy_ccx_latest_without_history_is_kept_and_updated(self):
+        """A handoff.md ccx wrote before handoffs/ existed is adopted into handoffs/ once, then updated."""
+        from ccx import project
+        d = self.work / ".ccx"
+        d.mkdir(parents=True, exist_ok=True)
+        latest = d / "handoff.md"
+        old = b"<!-- ccx:handoff from=codex to=claude ts=2026-01-02T03:04:05 -->\n# Handoff\n\nold notes\n"
+        latest.write_bytes(old)
+        (d / "handoff.seen.json").write_text(json.dumps({"claude": ["handoff.md"]}), encoding="utf-8")
+        out = project.handoff(self.work, "claude", "codex", "new")
+        self.assertNotIn("latest_skipped", out)
+        self.assertEqual(latest.read_text(encoding="utf-8"), Path(out["handoff"]).read_text(encoding="utf-8"))
+        kept = d / "handoffs" / "2026-01-02T030405-codex-to-claude.md"
+        self.assertEqual(kept.read_bytes(), old)
+        self.assertIn(kept.name, json.loads((d / "handoff.seen.json").read_text(encoding="utf-8"))["claude"])
+        self.assertEqual(project.pending_handoffs(self.work, "claude"), [])   # already shown as handoff.md
+
+    def test_handwritten_latest_without_header_is_not_adopted(self):
+        from ccx import project
+        latest = self.work / ".ccx" / "handoff.md"
+        latest.parent.mkdir(parents=True, exist_ok=True)
+        latest.write_text("my own notes\n", encoding="utf-8")
+        out = project.handoff(self.work, "claude", "codex", "new")
+        self.assertEqual(out["latest_skipped"], "hand-written .ccx/handoff.md kept")
+        self.assertEqual(len(list((self.work / ".ccx" / "handoffs").glob("*.md"))), 1)
+
     def test_hint_points_at_fresh(self):
         from ccx import context
         self.assertIn("ccx fresh", context.advice({"agent": "claude", "turns": 40, "last_turn_tokens": 300_000,
