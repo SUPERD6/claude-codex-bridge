@@ -481,8 +481,10 @@ class TestSetupWizard(AdapterEnv):
         hub = self.hub.parent / "newhub"
         r = self.ccx("setup", "--yes", "--hub", str(hub), env={"CCX_HUB": ""})
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        for n in range(1, 7):
-            self.assertIn(f"[{n}/6]", r.stdout)
+        for n in range(1, 8):                     # STEPS = 7: the counter said [n/6] for seven steps
+            self.assertIn(f"[{n}/7]", r.stdout)
+        self.assertNotIn("/6]", r.stdout)
+        self.assertNotIn("not valid TOML", r.stderr)          # the hub it saved reads back
         self.assertTrue((hub / "ccx").is_dir())
         self.assertIn("mem delta", (self.home_claude / "settings.json").read_text(encoding="utf-8"))
         self.assertIn("ccx:begin hooks", (self.home_codex / "config.toml").read_text(encoding="utf-8"))
@@ -636,8 +638,39 @@ def test_codex_gets_the_windows_shell_note(tmp_path, monkeypatch):
                              resume_id="s1")
     assert new.stdin.startswith(WINDOWS_SHELL) == (os.name == "nt")
     assert new.stdin.endswith("do x")
-    assert again.stdin == "more"                    # the session already has it
+    assert WINDOWS_SHELL not in again.stdin         # the session already has it
+    assert again.stdin.endswith("more")
     assert "-Encoding UTF8" in WINDOWS_SHELL
+
+
+def test_windows_shell_note_matches_powershell_5_1(monkeypatch):
+    """Round 5: `python -c` lost its inner quotes, `pytest tests/*.py` found nothing, `&&` and double-quoted rg
+    patterns failed. The note must not recommend python -c any more."""
+    import ccx.agents.codex as cx
+    note = cx.WINDOWS_SHELL
+    assert "use `python -c`" not in note and "not `python -c`" in note
+    assert "`;`" in note and "`&&` does not work" in note
+    assert "does not expand `*`" in note
+    assert "temporary .py file" in note and "here-strings" in note
+    assert "rg patterns in single quotes" in note
+    assert "Get-Content -Encoding UTF8" in note                 # the UTF-8 line stays
+
+
+def test_codex_exec_note_on_every_system_and_on_resume(tmp_path, monkeypatch):
+    """Round 5: 85% of exec_command calls printed only r.output; pytest outlived the 30 s yield, its session_id was
+    lost and the same tests were started again. The note goes to fresh exec and exec resume, on any system."""
+    from pathlib import Path
+    import ccx.agents.codex as cx
+    monkeypatch.setenv("CCX_CODEX_BIN", str(Path(__file__).parent / "fakes" / "fake_codex.py"))
+    new = cx.codex_invocation(model="m", effort="low", perm=[], cwd=tmp_path, prompt="do x", run_dir=tmp_path)
+    again = cx.codex_invocation(model="m", effort="low", perm=[], cwd=tmp_path, prompt="more", run_dir=tmp_path,
+                                resume_id="s1")
+    for inv, tail in ((new, "do x"), (again, "more")):
+        assert cx.EXEC_NOTE in inv.stdin and inv.stdin.endswith(tail)
+    assert again.stdin == cx.EXEC_NOTE + "more"          # not tied to the Windows note
+    for words in ("text(JSON.stringify(r))", "exit_code", "session_id", "write_stdin({session_id, chars: ''})",
+                  "do not start the same command again"):
+        assert words in cx.EXEC_NOTE
 
 
 def test_rules_do_not_forbid_the_sub_agents_a_task_asks_for():
@@ -646,3 +679,37 @@ def test_rules_do_not_forbid_the_sub_agents_a_task_asks_for():
     from ccx.prompts import PROMPT
     assert "do not delegate to other agents" not in PROMPT
     assert "your own sub-agents are fine when this task asks for them" in PROMPT
+
+
+class TestClaudeSessionGone(AdapterEnv):
+    def test_errors_reach_run_json_and_resume_says_use_new(self):
+        """hub run 20261024-213453-6292: a resume whose session was gone showed only error_during_execution."""
+        out = self.j("run", "--from", "codex", "--to", "claude", "--tier", "T2", "--mode", "read", "--no-fallback",
+                     "look at x")
+        r = self.ccx("resume", out["run_id"], "--no-escalate", "one more thing", env={"FAKE_STATUS_CLAUDE": "gone"})
+        res = json.loads(r.stdout)
+        self.assertFalse(res["ok"], r.stdout)
+        self.assertIn("ccx run --new", res.get("hint", ""), r.stdout)
+        errs = [x.get("error") or "" for x in self.rec(res["run_id"])["attempts"]]
+        self.assertTrue(any("No conversation found with session ID" in e for e in errs), errs)
+
+
+def test_parse_claude_keeps_errors_list():
+    from ccx.agents.claude import parse_claude
+    line = json.dumps({"type": "result", "subtype": "error_during_execution", "is_error": True, "session_id": "s",
+                       "errors": ["No conversation found with session ID: s"]})
+    oc = parse_claude(line, "", 1)
+    assert not oc.ok
+    assert "error_during_execution" in oc.error and "No conversation found with session ID: s" in oc.error
+    plain = parse_claude(json.dumps({"type": "result", "subtype": "error", "is_error": True, "result": "boom"}), "", 1)
+    assert plain.error == "boom"                       # no errors[]: as before
+
+
+def test_session_gone_reads_only_the_final_cause():
+    from ccx.commands.delegation import _session_gone
+    gone = "error_during_execution: No conversation found with session ID: s"
+    assert _session_gone({"error": gone, "attempts": [{"error": gone}]})
+    assert _session_gone({"error": None, "attempts": [{"error": gone}]})
+    # resumed, fell back to a fresh rung, then failed its check: that hint stays, no --new advice
+    assert not _session_gone({"error": "check failed", "attempts": [{"error": gone}, {"error": "check failed"}]})
+    assert not _session_gone({"error": None, "attempts": [{"error": gone}, {"error": None}]})

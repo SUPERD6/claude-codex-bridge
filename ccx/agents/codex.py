@@ -48,6 +48,7 @@ def codex_invocation(*, model: str, effort: str, perm: list[str], cwd: Path, pro
         # opt-in (an evaluation's clean room): no execpolicy .rules files and no Codex memories, whatever the
         # effort (codex-cli 0.164.0 exec --help: --ignore-rules, -c key=value; also on `exec resume`)
         common += ["--ignore-rules", *ISOLATE_SETTINGS]
+    prompt = EXEC_NOTE + prompt                  # every system, fresh exec and exec resume alike
     if resume_id:
         argv = [*bin_argv("codex"), "exec", "resume", resume_id, *common, "-"]
     else:
@@ -57,13 +58,27 @@ def codex_invocation(*, model: str, effort: str, perm: list[str], cwd: Path, pro
     return Invocation(argv, prompt, cwd, last)
 
 
+# Codex's exec_command returns {output, exit_code?, session_id?}; a command still running when the yield ends
+# (Windows: at most 30 s) has no exit_code and is continued with write_stdin({session_id, chars:""}) (tool names and
+# fields checked in codex-cli 0.164.0 rollouts, 2026-10-28). Round 5: 85% of exec_command calls printed only
+# r.output, so 31 pytest runs in 21/161 sessions lost the id and 21 of 26 identical re-runs followed such a loss;
+# where the id was printed, 171/173 continued correctly with write_stdin.
+EXEC_NOTE = ("[ccx note: commands] When you run a command with exec_command, print the whole result "
+             "(text(JSON.stringify(r))) or at least its exit_code and session_id, not only r.output. No exit_code "
+             "means the command is still running: continue it with write_stdin({session_id, chars: ''}) and do not "
+             "start the same command again.\n\n")
+
 # Codex runs its commands in Windows PowerShell 5.1 (checked on codex-cli 0.164). Round 5: `Get-Content` without
 # -Encoding read a UTF-8 file as the ANSI code page, its Chinese turned to mojibake, the patch context never matched,
-# a bash heredoc then failed in PowerShell, and the run gave up after 42 s.
+# a bash heredoc then failed in PowerShell, and the run gave up after 42 s. Round 5 again: about 10 of 92 `python -c`
+# calls hit SyntaxError (PowerShell 5.1 strips inner double quotes), 6-9 pytest calls with a `*` got "not found",
+# rg with a double-quoted pattern failed 9 times, `&&` once; here-strings failed more often still.
 WINDOWS_SHELL = ("[ccx note: Windows] Your shell is Windows PowerShell 5.1. Files are UTF-8: read them with "
                  "`Get-Content -Encoding UTF8 <file>` (plain Get-Content shows non-ASCII text garbled although the file "
-                 "is fine) or with Python. Bash syntax such as heredocs (<<'EOF') does not work here: write a .py file "
-                 "or use `python -c` instead.\n\n")
+                 "is fine) or with Python. Chain commands with `;` (`&&` does not work here). PowerShell does not expand "
+                 "`*` for python or pytest: name the files. Python with quotes, non-ASCII text or several statements "
+                 "goes into a temporary .py file that you run; not `python -c`, heredocs (<<'EOF') or here-strings. "
+                 "Put rg patterns in single quotes.\n\n")
 
 
 def parse_codex(stdout: str, stderr: str, rc: int, last_file: Path | None) -> Outcome:

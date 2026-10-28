@@ -640,9 +640,20 @@ def cmd_resume(a) -> int:
                     next_step=f"wait for the run named in the error, then `ccx resume {a.run_id}` again")
         raise
     res = compact(rec)
+    if not res["ok"] and _session_gone(rec):     # after compact's hint (check failed, cap...), not instead of it
+        gone = (f"the sub-session of {a.run_id} is gone (\"No conversation found\"), so it cannot be resumed: "
+                "send the task again as a fresh run with `ccx run --new ...`")
+        res["hint"] = f"{res['hint']} Also: {gone}" if res.get("hint") else gone
     res["recap"] = recap(rec, res)
     _out(res)
     return 0 if res["ok"] else 2
+
+
+def _session_gone(rec: dict) -> bool:
+    """Claude Code's errors[] says "No conversation found" when the session to resume no longer exists. Only the
+    final cause counts: the run's error, else its last attempt's (an earlier attempt that fell back does not)."""
+    last = (rec.get("attempts") or [{}])[-1]
+    return "no conversation found" in str(rec.get("error") or last.get("error") or "").lower()
 
 
 def cmd_stop(a) -> int:
