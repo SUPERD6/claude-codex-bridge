@@ -5,7 +5,9 @@ A unit's time is split from two sources it already leaves behind:
 
   ccx's run records (<hub>/ccx/runs/<id>/run.json, read while the unit's hub still exists)
       role `sub`     a sub-agent attempt; reason: the first attempt of a run, a climb (after which kind: a failed
-                     check, blocked, failed, ...), a retry on the same rung, or a run the lead sent back (resume)
+                     check, blocked, failed, ...), a retry on the same rung, or a run the lead sent back (resume);
+                     also a builtin arm's Agent-tool worker (reason `built-in worker`, from the lead's stream: its
+                     $ and tokens, not its seconds, which the stream does not split from the lead's)
       role `check`   ccx's acceptance check; reason: the run's final check, or an earlier rung's that failed
       role `review`  the independent review run
       role `fix`     a fix round after a review (its attempts and its check)
@@ -57,13 +59,19 @@ def lead_stream(text: str) -> dict:
     built-in sub-agent messages left out, each message id once), its tokens per class, the API seconds, total
     seconds and $ of its result event, and the skills it loaded with the Skill tool."""
     msgs: dict = {}
+    worker: dict = {}
     skills: list[str] = []
     calls: set = set()
     fin: dict = {}
     for ev in _events(text):
         if ev.get("type") == "result":
             fin = ev
-        if ev.get("type") != "assistant" or ev.get("parent_tool_use_id") is not None:
+        if ev.get("type") != "assistant":
+            continue
+        if ev.get("parent_tool_use_id") is not None:     # a built-in (Agent-tool) worker's message
+            wm = ev.get("message") or {}
+            if wm.get("id"):
+                worker[wm["id"]] = wm.get("usage") or {}
             continue
         m = ev.get("message") or {}
         if m.get("id"):
@@ -74,7 +82,9 @@ def lead_stream(text: str) -> dict:
                 calls.add(key)          # a message's events repeat its id; each call once
                 skills.append(str((c.get("input") or {}).get("skill") or (c.get("input") or {}).get("name") or ""))
     usage = {k: sum(int(u.get(k, 0) or 0) for u in msgs.values()) for k in LEAD_TOKEN_KEYS}
+    wtok = sum(int(u.get(k, 0) or 0) for u in worker.values() for k in LEAD_TOKEN_KEYS)
     return {"requests": len(msgs), "usage": usage, "tokens": sum(usage.values()),
+            "worker_requests": len(worker), "worker_tokens": wtok,
             "api_s": round(float(fin.get("duration_api_ms") or 0) / 1000, 1) if fin else None,
             "duration_s": round(float(fin.get("duration_ms") or 0) / 1000, 1) if fin else None,
             "usd": round(float(fin.get("total_cost_usd") or 0), 6) if fin else None, "skills": skills}
@@ -142,16 +152,24 @@ def run_parts(hub: Path, run_ids: list) -> tuple[dict, int]:
 
 
 def unit_timeline(hub: Path | None, run_ids: list, stream: str = "", wall_s: float | None = None,
-                  phases: dict | None = None) -> dict:
+                  phases: dict | None = None, worker_usd: float | None = None) -> dict:
     """One unit's timeline: parts per role and reason, the lead's own split (when it has a stream), totals and the
-    residual wall. `phases`: r5.phase_wall of the same runs (its lead_wait_s is the lead's waiting)."""
+    residual wall. `phases`: r5.phase_wall of the same runs (its lead_wait_s is the lead's waiting).
+    A builtin arm's Agent-tool worker is role `sub`, reason `built-in worker`, as ccx's sub-agent is: its tokens are
+    its own messages in the lead's stream (parent_tool_use_id set) and its $ is `worker_usd` (the worker model's
+    share of the result's modelUsage, r5's sub_usd), taken out of the lead's `model` $. Its seconds stay in the
+    lead's parts: the result's API seconds hold both and the stream does not split them (s 0, said here)."""
     parts, missing = run_parts(Path(hub), run_ids) if hub and run_ids else ({}, 0)
     lead = lead_stream(stream) if stream else None
     if lead and lead["requests"]:
         wait = float((phases or {}).get("lead_wait_s") or 0)
         api = float(lead["api_s"] or 0)
         wall = float(wall_s if wall_s is not None else (lead["duration_s"] or 0))
-        _add(parts, "lead", "model", api, lead["usd"], lead["tokens"])
+        w_usd = float(worker_usd or 0)
+        if lead.get("worker_requests") or w_usd:
+            _add(parts, "sub", "built-in worker", 0, w_usd, lead.get("worker_tokens") or 0)
+        _add(parts, "lead", "model", api, None if lead["usd"] is None else max(0.0, lead["usd"] - w_usd),
+             lead["tokens"])
         if wait:
             _add(parts, "lead", "waiting on ccx", wait, 0, 0)
         _add(parts, "lead", "tools and other", max(0.0, wall - api - wait), 0, 0)

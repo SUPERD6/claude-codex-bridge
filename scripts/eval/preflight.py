@@ -104,6 +104,19 @@ CCX_HOOK_EVENTS = ("SessionStart", "UserPromptSubmit")
 CODEX_ARMS = ("ccx", "ccx2", "ccx2-skill", "direct", "balanced", "save", "cheapest")
 # arms whose lead hands the work to Claude Code's own Agent-tool worker (no Codex: no eval CODEX_HOME needed)
 BUILTIN_ARMS = ("builtin", "builtin2", "builtin2r")
+# arms whose lead loads skills (no --disable-slash-commands; needs --claude-isolation ccx-home; r5.SKILL_ARMS)
+SKILL_ARMS = ("ccx2-skill",)
+# folders an organisation's managed settings could put skills in (names only: a skill of that name there is
+# never taken for one of Claude Code's own bundled skills)
+MANAGED_SKILL_DIRS = (Path("C:/Program Files/ClaudeCode/.claude/skills"),
+                      Path("/Library/Application Support/ClaudeCode/.claude/skills"),
+                      Path("/etc/claude-code/.claude/skills"))
+# Claude Code's own bundled skills a skill lead (no --disable-slash-commands) may list, allowed by name: the ones a
+# Claude Code 2.1.308 session listed. Not yet checked against a fresh-home `claude -p`: the skill canary does that
+# before a round, and a name missing here fails it (never passes silently). Recorded per run (`bundled_skills`).
+CLAUDE_BUNDLED_SKILLS = frozenset({
+    "update-config", "keybindings-help", "simplify", "fewer-permission-prompts", "loop", "schedule", "claude-api",
+    "init", "security-review", "code-review", "run", "plugin-authoring", "workflow-authoring"})
 # Names a dedicated eval CODEX_HOME must not have: each would bring the person's rules, memory or tools back.
 # (skills/ is checked separately: Codex installs its own system skills in skills/.system by itself.)
 CODEX_FORBIDDEN = ("AGENTS.md", "AGENTS.override.md", "memories", "rules", "plugins", "hooks")
@@ -846,12 +859,20 @@ def _builtin_plugin(p) -> bool:
 
 
 def check_init(text: str, allowed: list[Path], prefixes: list[str] = (), agents: set[str] = frozenset(),
-               ok_skills: set[str] = frozenset(), ok_hooks: tuple[str, ...] = ()) -> tuple[list[str], dict]:
+               ok_skills: set[str] = frozenset(), ok_hooks: tuple[str, ...] = (),
+               skill_dirs: list[Path] = (),
+               bundled_ok: frozenset[str] = CLAUDE_BUNDLED_SKILLS) -> tuple[list[str], dict]:
     """Problems in a Claude stream's start: hooks that ran, MCP servers, skills, slash commands, an output style,
     non-builtin plugins or agents, memory paths outside the unit (`allowed` folders; `prefixes`: folder-name prefixes
     paths of the unit's own <claude home>/projects/<folder>, one ending in "-" a prefix). Also returns the init
     fields worth recording. ccx-home: `ok_skills` (ccx's bundled skills) may be loaded, with the slash commands they
-    bring (recorded), and hooks of the `ok_hooks` events may run (recorded); anything else is still a problem."""
+    bring (recorded), and hooks of the `ok_hooks` events may run (recorded). A skill lead (no
+    --disable-slash-commands) also lists Claude Code's own bundled skills (update-config, simplify, ...): with
+    `ok_skills`, a skill that is not ccx's, has no plugin prefix, is named in `bundled_ok` (CLAUDE_BUNDLED_SKILLS, an
+    allow-list by name) and has no folder of its name in `skill_dirs` (every place outside the unit's own home, which
+    holds ccx's only, a skill on disk could come from: the person's Claude home, the repository's and its parents'
+    .claude/skills, managed folders) is taken for one of those, allowed and recorded (`bundled_skills`); any other
+    skill, a bundled one not on the list included, is still a problem (the skill canary says so before a round)."""
     probs, info = [], {}
     ran: list[str] = []
     roots = [_norm(p) for p in allowed]
@@ -867,12 +888,21 @@ def check_init(text: str, allowed: list[Path], prefixes: list[str] = (), agents:
             info = {k: ev.get(k) for k in ("model", "claude_code_version", "apiKeySource", "session_id") if k in ev}
             if ev.get("mcp_servers"):
                 probs.append(f"mcp servers loaded: {len(ev['mcp_servers'])}")
-            skills = [_skill_name(x) for x in ev.get("skills") or []]
-            other = [x for x in skills if x not in ok_skills]
+            raw = [str((x.get("name") if isinstance(x, dict) else x) or "") for x in ev.get("skills") or []]
+            ccx = [_skill_name(x) for x in raw if _skill_name(x) in ok_skills]
+            other = [_skill_name(x) for x in raw if _skill_name(x) not in ok_skills]
+            if ok_skills:
+                on_disk = lambda n: any((Path(d) / n).exists() for d in skill_dirs)  # noqa: E731
+                bundled = sorted({_skill_name(x) for x in raw if _skill_name(x) not in ok_skills and ":" not in x
+                                  and _skill_name(x) in bundled_ok and not on_disk(_skill_name(x))})
+                other = [_skill_name(x) for x in raw if _skill_name(x) not in ok_skills
+                         and not (":" not in x and _skill_name(x) in bundled)]
+                if bundled:
+                    info["bundled_skills"] = bundled
             if other:
                 probs.append(f"skills loaded: {len(other)}" + (f" not ccx's: {other[:5]}" if ok_skills else ""))
-            elif skills:
-                info["skills"] = skills
+            if ccx:
+                info["skills"] = ccx
             if ev.get("slash_commands"):
                 if ok_skills:          # a lead allowed skills gets the commands that come with them: recorded
                     info["slash_commands"] = len(ev["slash_commands"])
@@ -900,6 +930,21 @@ def check_init(text: str, allowed: list[Path], prefixes: list[str] = (), agents:
     if ran:
         info["hooks_ran"] = sorted(set(ran))
     return sorted(set(probs)), info
+
+
+def foreign_skill_dirs(u: Unit) -> list[Path]:
+    """Skill folders outside the unit's own Claude home a lead's skill could come from (check_init's `skill_dirs`):
+    the person's real Claude home(s), .claude/skills of the repository, its ccx worktrees and every parent folder,
+    and the managed settings folders."""
+    out = [Path(u.real["claude_home"]) / "skills", Path(u.real["home_claude"]) / "skills"]
+    for base in (u.repo, u.worktrees):
+        out += [p / ".claude" / "skills" for p in (Path(base), *Path(base).parents)]
+    out += list(MANAGED_SKILL_DIRS)
+    uniq: list[Path] = []
+    for p in out:
+        if p not in uniq:
+            uniq.append(p)
+    return uniq
 
 
 def _skill_name(x) -> str:
@@ -981,7 +1026,8 @@ def audit(u: Unit, stream: str) -> dict:
     """The unit's lead stream and every ccx sub-agent log in its hub."""
     allowed = [u.x, u.repo, u.hub, u.worktrees] + ([u.claude_dir] if u.fresh_home else [])
     pre = u.own_project_dirs()
-    ok = {"ok_skills": set(ccx_skill_names()), "ok_hooks": CCX_HOOK_EVENTS} if u.ccx_home else {}
+    ok = {"ok_skills": set(ccx_skill_names()), "ok_hooks": CCX_HOOK_EVENTS, "skill_dirs": foreign_skill_dirs(u)} \
+        if u.ccx_home else {}
     probs, info = check_init(stream, allowed, pre, set(u.agents), **ok) if stream else ([], {})
     inputs = tool_inputs(stream)
     sids = session_ids(stream)
@@ -1318,6 +1364,43 @@ def canary(work: Path, u_kw: dict, timeout: int = 300) -> dict:
     return {"ok": not probs, "problems": probs, "init": info}
 
 
+def skill_canary(work: Path, u_kw: dict, timeout: int = 300) -> dict:
+    """One tiny real skill lead (R7, ccx2-skill) in a ccx home, with the command line a skill lead gets (no
+    --disable-slash-commands, the Skill tool): its init event must pass the audit a real skill lead's does (ccx's
+    skills and hooks, Claude Code's own bundled skills recorded, nothing else) and must list ccx's agent-delegate.
+    Its init (skills, bundled_skills, slash commands) goes into the preflight report, so the bundled skills a run
+    allowed are on record. Costs one cheap request (haiku, --max-budget-usd 0.05)."""
+    d = work / "canary"
+    rmtree(d)
+    repo = d / "repo"
+    repo.mkdir(parents=True)
+    (repo / "AGENTS.md").write_text("A canary project.\n", encoding="utf-8")
+    u = Unit(key="canary", work=d, repo=repo, hub=d / "hub", ccx_home=True, **u_kw)
+    (u.hub / "ccx").mkdir(parents=True)
+    env = prepare(u)
+    b = find_bin("claude")
+    if not b:
+        return {"ok": False, "problems": ["claude CLI not found"]}
+    argv = [*([sys.executable, b] if b.endswith(".py") else [b]), "-p", "--output-format", "stream-json", "--verbose",
+            "--model", "haiku", "--effort", "low", "--tools", "Read,Skill", "--permission-mode", "dontAsk",
+            "--strict-mcp-config", "--exclude-dynamic-system-prompt-sections",
+            "--no-session-persistence", "--max-budget-usd", "0.05", *lead_flags(u)]
+    before = snapshot()
+    job = Job()
+    out, err, rc, _left = run(argv, cwd=repo, env=env, timeout=timeout, input="Reply with exactly OK.", job=job)
+    probs, info = check_init(out, [u.x, u.repo, u.hub, u.claude_dir], u.own_project_dirs(),
+                             ok_skills=set(ccx_skill_names()), ok_hooks=CCX_HOOK_EVENTS,
+                             skill_dirs=foreign_skill_dirs(u))
+    if rc:
+        probs.append(f"skill canary lead failed rc={rc}: {err[-160:]}")
+    if "agent-delegate" not in (info.get("skills") or []):
+        probs.append("skill canary: ccx's agent-delegate skill was not loaded (the skill arm would test nothing)")
+    after_unit(u, before, job, session_ids(out), keep_repo=False)
+    rmtree(d)
+    return {"ok": not probs, "problems": [f"skill canary: {p}" if not p.startswith("skill canary") else p
+                                          for p in probs], "init": info}
+
+
 @dataclass
 class Options:
     work: Path
@@ -1383,6 +1466,16 @@ def run_checks(o: Options) -> dict:
             if not o.start:
                 rmtree(cw)
         probs += can["problems"]
+    scan = None
+    if o.canary and not probs and o.claude == "ccx-home" and any(a in SKILL_ARMS for a in o.arms):
+        # the skill lead's own command line in a ccx home: the plain canary above runs neither
+        cw = o.work if o.start else Path(tempfile.mkdtemp(prefix="ccx-canary-"))
+        try:
+            scan = skill_canary(cw, {"claude": o.claude, "codex_home": o.codex_home, "dsh": o.dsh})
+        finally:
+            if not o.start:
+                rmtree(cw)
+        probs += scan["problems"]
     rep = {"ok": not probs, "problems": probs, "commit": cs["commit"], "dirty": bool(cs["dirty"]),
            "tasks_file": Path(o.tasks_file).name,
            "tasks_sha256": (sha256_file(o.tasks_file) or "")[:16], "tiers_sha256": (sha256_file(TIERS_FILE) or "")[:16],
@@ -1391,6 +1484,9 @@ def run_checks(o: Options) -> dict:
            "canary_init": (can or {}).get("init"), "cleaned": cleaned, "real_state": real_state(real, o.work),
            "force_unclean": o.force_unclean, "codex_home": str(o.codex_home) if o.codex_home else None,
            "python": platform.python_version(), "pytest": _pkg_version("pytest"), "os": platform.platform()}
+    if scan is not None:
+        rep["skill_canary"] = "pass" if scan["ok"] else "fail"
+        rep["skill_canary_init"] = scan.get("init")
     rep["result"] = "pass" if rep["ok"] else ("forced" if o.force_unclean else "fail")
     return rep
 
@@ -1408,6 +1504,10 @@ def fingerprint(rep: dict, u: Unit | None, env: dict | None, models: dict | None
         fp["lead"] = rep["lead"]
     if rep.get("pinned_commit"):         # the one commit this tag (round) runs on (r5 pin_check)
         fp["pinned_commit"] = rep["pinned_commit"]
+    if rep.get("skill_canary"):          # the skill lead's canary, and Claude Code's bundled skills it saw
+        fp["skill_canary"] = rep["skill_canary"]
+        fp["bundled_skills"] = (rep.get("skill_canary_init") or {}).get("bundled_skills")
+        fp["bundled_skills_allowed"] = sorted(CLAUDE_BUNDLED_SKILLS)   # the allow-list by name the audit used
     if u is not None:
         fp["isolation"] = {"claude": u.claude, "setting_sources": SETTING_SOURCES, "hooks": "disabled",
                            **({"claude_home": "ccx", "lead_setting_sources": LEAD_SETTING_SOURCES,

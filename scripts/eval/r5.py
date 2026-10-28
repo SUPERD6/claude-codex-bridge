@@ -40,12 +40,17 @@ so doing it takes many requests. Arms (the lead is a fresh headless Claude Code,
 
 The lead is sonnet medium unless --lead-model / --lead-effort say otherwise; both are recorded in every row, in its
 fingerprint and in the done-key, and a summary shows another lead's units as their own arm (`ccx2@opus-high`).
+Likewise a lead that ran in a ccx home (--claude-isolation ccx-home, an arm that uses ccx: ccx's hooks and memory
+block reach it) is its own arm (`ccx2@ccx-home`), never pooled with the same arm under flags.
 --budget counts the spend of this tag's rows only (plus --extra-spent), not the whole results file.
 
 The summary counts env_clean rows only (rows that are not, or from before the clean room, are left out and their
-number printed; --include-unclean counts them, never in the tier rule). Per arm it splits the spend into the lead's
-(lead_usd: the Claude lead's own result cost, a builtin worker included) and ccx's (ccx_usd: the hub's runs), each
-also per success. A tag runs on one commit: `run` refuses to go on with a tag whose rows were made at another commit
+number printed, per arm too, `excluded_by_arm`; each paired comparison and the tier rule say how many shared units
+they lost and on which side, `lost_pairs`, and a tier rule pass with a one-sided loss is Unknown; --include-unclean
+counts them, never in the tier rule). Per arm it splits the spend into the lead's (lead_usd: the Claude lead's own
+result cost, a builtin worker included) and ccx's (ccx_usd: the hub's runs), each also per success, and the same
+for every arm into the lead's own work and the delegated work (lead_only_usd / sub_usd: ccx's sub-agents or the
+builtin worker); a skill arm says how many of its leads loaded the skill (`skill_used`). A tag runs on one commit: `run` refuses to go on with a tag whose rows were made at another commit
 (the fingerprint keeps `pinned_commit`; --pin-commit SHA also refuses any other HEAD). Every unit's row carries a
 `timeline` (scripts/eval/r5_timeline.py, R8): seconds, $ and tokens per role and reason.
 
@@ -288,7 +293,7 @@ def ccx_lead_model(model: str) -> str:
 # the whole-workflow tier arms (opt-in): named as the tiers, so tier_rule (balanced vs save) reads them
 TIER_ARMS = ("fast", "balanced", "save", "cheapest")
 TIER_LEAD_ARMS = ("balanced", "save")            # the lead sizes with ccx propose and follows its answer
-SKILL_ARMS = ("ccx2-skill",)                     # the lead loads the agent-delegate skill (needs ccx-home)
+SKILL_ARMS = PF.SKILL_ARMS                       # the lead loads the agent-delegate skill (needs ccx-home)
 CCX_ARMS = ("ccx", "ccx2", *SKILL_ARMS, *TIER_LEAD_ARMS)   # leads that may hand work to ccx (session file, metrics)
 BUILTIN_ARMS = PF.BUILTIN_ARMS
 # not in ARMS: the default schedule (and old tags' done-keys) stay
@@ -563,25 +568,45 @@ def lead_of(r: dict) -> tuple[str, str]:
     return (r.get("lead_model") or DEFAULT_LEAD[0], r.get("lead_effort") or DEFAULT_LEAD[1])
 
 
+CCX_HOME_SUFFIX = "@ccx-home"
+
+
+def in_ccx_home(r: dict) -> bool:
+    """Whether a unit's or row's lead ran in a ccx home (--claude-isolation ccx-home and an arm in CCX_ARMS: ccx's
+    hooks and CLAUDE.md block reached the lead, so it was told more than the same arm under flags). Units carry
+    `ccx_home`; rows from before the field: their fingerprint's isolation says so."""
+    if "ccx_home" in r:
+        return bool(r["ccx_home"])
+    return ((r.get("fingerprint") or {}).get("isolation") or {}).get("claude_home") == "ccx"
+
+
 def _lead_suffix(r: dict) -> str:
     m, e = lead_of(r)
     return "" if (m, e) == DEFAULT_LEAD else "@" + re.sub(r"[^\w.-]", "_", f"{m}-{e}")
 
 
+def _arm_suffix(r: dict) -> str:
+    """The lead's suffix, then `@ccx-home` for a lead in a ccx home."""
+    return _lead_suffix(r) + (CCX_HOME_SUFFIX if in_ccx_home(r) else "")
+
+
 def arm_of(r: dict) -> str:
-    """The arm a summary counts a row under: its arm, plus its lead when not the default (`ccx2@opus-high`), so
-    units with different leads are never pooled or paired as one arm."""
-    return f"{r['arm']}{_lead_suffix(r)}"
+    """The arm a summary counts a row under: its arm, plus its lead when not the default (`ccx2@opus-high`) and
+    `@ccx-home` when its lead ran in a ccx home (`ccx2@ccx-home`, `ccx2@opus-high@ccx-home`), so units with
+    different leads, or leads told different things, are never pooled or paired as one arm."""
+    return f"{r['arm']}{_arm_suffix(r)}"
 
 
 def done_key(r: dict) -> tuple:
-    """What makes a unit done: tag, round, task, arm and the lead (old rows: the default lead, so they still match)."""
-    return (r.get("tag"), r.get("round"), r.get("task"), r.get("arm"), *lead_of(r))
+    """What makes a unit done: tag, round, task, arm, the lead (old rows: the default lead, so they still match) and,
+    for a lead in a ccx home, that (a ccx2 unit done under flags does not stand for one in a ccx home)."""
+    return (r.get("tag"), r.get("round"), r.get("task"), r.get("arm"), *lead_of(r)) + \
+        (("ccx-home",) if in_ccx_home(r) else ())
 
 
 def unit_key(u: dict) -> str:
-    """The unit's folder / stream name in the work dir (the old name for the default lead)."""
-    return f"{u['round']}-{u['task']}-{u['arm']}{_lead_suffix(u)}"
+    """The unit's folder / stream name in the work dir (the old name for the default lead outside a ccx home)."""
+    return f"{u['round']}-{u['task']}-{u['arm']}{_arm_suffix(u)}"
 
 
 def lead_unit(u: dict, a, work: Path, repo: Path, hub: Path, iso: PF.Unit | None = None, env: dict | None = None,
@@ -633,7 +658,8 @@ def lead_unit(u: dict, a, work: Path, repo: Path, hub: Path, iso: PF.Unit | None
     if u["arm"] in SKILL_ARMS:
         row["skills_used"] = ls["skills"]
         row["skill_used"] = "agent-delegate" in ls["skills"]
-    row["timeline"] = TL.unit_timeline(hub, cost["run_ids"], out, wall, row.get("phases"))
+    row["timeline"] = TL.unit_timeline(hub, cost["run_ids"], out, wall, row.get("phases"),
+                                       worker_usd=row["sub_usd"] if is_builtin else None)
     return row
 
 
@@ -1301,7 +1327,9 @@ def cmd_run(a) -> int:
     todo = []
     for u in schedule(a.rounds, a.seed, tasks, arms):
         u = {**u, "tag": a.tag, "seed": a.seed, "taskset": a.taskset, **(lead if has_lead(u["arm"]) else {})}
-        u["label"] = f"eval-r5:{a.tag}:{u['round']}:{u['task']}:{u['arm']}{_lead_suffix(u)}"
+        if a.claude_isolation == "ccx-home" and u["arm"] in CCX_ARMS:
+            u["ccx_home"] = True                  # its own arm (`@ccx-home`), key, folder and label
+        u["label"] = f"eval-r5:{a.tag}:{u['round']}:{u['task']}:{u['arm']}{_arm_suffix(u)}"
         if done_key(u) not in done:
             todo.append(u)
     print(f"work dir: {work}  results: {out}  units: {len(todo)}  lead: {lead['lead_model']} "
@@ -1561,9 +1589,10 @@ def compare_pair(ps: list[tuple[dict, dict]], A: str, B: str) -> dict:
     return out
 
 
-def paired_all(rows: list[dict]) -> dict:
+def paired_all(rows: list[dict], every: list[dict] | None = None) -> dict:
     """compare_pair for every two arms that share units, with Holm-adjusted McNemar and task sign p over those
-    pairs."""
+    pairs. `every`: all rows before the clean ones were picked; each pair then says the pairs it lost to rows that
+    are not env_clean, per side (lost_pairs), and notes it when that loss is one-sided."""
     arms = arm_order(arm_of(r) for r in rows if "error" not in r)
     out = {}
     for i, A in enumerate(arms):
@@ -1571,6 +1600,11 @@ def paired_all(rows: list[dict]) -> dict:
             ps = pair_units(rows, A, B)
             if ps:
                 out[f"{A} vs {B}"] = compare_pair(ps, A, B)
+                if every is not None:
+                    lp = lost_pairs(every, A, B)
+                    out[f"{A} vs {B}"]["lost_pairs"] = lp
+                    if lp.get("note"):
+                        out[f"{A} vs {B}"]["lost_pairs_note"] = lp["note"]
     for key in ("mcnemar_p", "task_sign_p"):
         for k, (_p, adj) in S.holm({k: v[key] for k, v in out.items()}).items():
             out[k][f"{key}_holm"] = adj
@@ -1584,6 +1618,50 @@ def clean_rows(rows: list[dict]) -> tuple[list[dict], dict]:
     keep = [r for r in rows if r.get("env_clean") is True]
     return keep, {"unclean": sum(r.get("env_clean") is False for r in rows),
                   "env_unknown": sum("env_clean" not in r or r.get("env_clean") is None for r in rows)}
+
+
+def _excluded(r: dict) -> str | None:
+    """Why clean_rows leaves a row out (unclean / env_unknown), or None when it counts."""
+    if r.get("env_clean") is True:
+        return None
+    return "unclean" if r.get("env_clean") is False else "env_unknown"
+
+
+def excluded_by_arm(rows: list[dict]) -> dict:
+    """Per arm (arm_of), the rows clean_rows leaves out: {arm: {unclean, env_unknown, of}} for arms that lost any
+    (`of`: the arm's rows before), so a one-sided loss shows next to the arm it changes."""
+    out: dict = {}
+    for r in rows:
+        cell = out.setdefault(arm_of(r), {"unclean": 0, "env_unknown": 0, "of": 0})
+        cell["of"] += 1
+        why = _excluded(r)
+        if why:
+            cell[why] += 1
+    return {a: c for a, c in out.items() if c["unclean"] or c["env_unknown"]}
+
+
+def excluded_by_tag(rows: list[dict]) -> dict:
+    """excluded_by_arm per tag."""
+    out = {}
+    for tag in sorted({str(r.get("tag")) for r in rows}):
+        ex = excluded_by_arm([r for r in rows if str(r.get("tag")) == tag])
+        if ex:
+            out[tag] = ex
+    return out
+
+
+def lost_pairs(rows: list[dict], A: str, B: str) -> dict:
+    """The units both arms ran (rows without an error) that a summary of clean rows cannot pair, because one side
+    or both is not env_clean: how many, and per arm how many of them it made unclean. A loss that is not the same on
+    both sides gets a note: the clean pairs left may no longer be like for like (one arm's harder units dropped)."""
+    ps = pair_units(rows, A, B)
+    lost = [(x, y) for x, y in ps if _excluded(x) or _excluded(y)]
+    side = {A: sum(bool(_excluded(x)) for x, _ in lost), B: sum(bool(_excluded(y)) for _, y in lost)}
+    out = {"lost": len(lost), "of": len(ps), "unclean_side": side}
+    if side[A] != side[B]:
+        out["note"] = (f"one-sided loss: {side[A]} of {A}'s and {side[B]} of {B}'s rows on shared units were not "
+                       "env_clean; the comparison counts only the pairs left and may be biased")
+    return out
 
 
 RIGHT_CI_FLOOR = -1.0     # the rule's right condition: the CI's lower end of balanced - save, in tasks
@@ -1604,11 +1682,16 @@ def tier_rule(rows: list[dict], bal: str = TIER_RULE_ARMS[0], save: str = TIER_R
     `balanced` is worth it over `save` when it is not less often right, its wall median is at most 60% of save's and
     its cost per success at most 1.5x save's. "Not less often right" is paired: the task-bootstrap 95% CI of
     balanced's minus save's right answers in tasks (right_diff_tasks) must have its lower end at RIGHT_CI_FLOOR (-1
-    task) or above: pass; a lower end below it, or no CI (fewer than two tasks), is Unknown, not a pass (ten tasks x
-    three rounds cannot see a drop of one to three tasks). Each other condition: pass / fail (n/a when a cost per
-    success is missing). Overall: fail when any condition fails, else unknown when the right condition is unknown,
-    else n/a when one cannot be told, else pass. The wall median is the upper middle, as wall_med. None unless both
-    arms have clean rows."""
+    task) or above: pass; its upper end below it (clearly worse): fail; a CI across it, or no CI (fewer than two
+    tasks), is Unknown, not a pass (ten tasks x three rounds cannot see a drop of one to three tasks). The floor is in
+    tasks over the whole sample, so the CI of the summed difference widens with the number of tasks: with more tasks
+    a pass is harder, and with ten any observed miss already gives Unknown (the condition reads as "no observed
+    loss"). Each other condition: pass / fail (n/a when a cost per success is missing). Overall: fail when any
+    condition fails, else unknown when the right condition is unknown, else n/a when one cannot be told, else pass;
+    a pass whose shared units lost rows that are not env_clean unevenly (lost_pairs: more on one side) is Unknown
+    too (`exclusion_note`). The wall median is the upper middle, as wall_med. None unless both arms have clean
+    rows."""
+    every = [r for r in rows if "error" not in r]
     rows, excluded = clean_rows(rows)
     ps = pair_units(rows, save, bal)
     if not ps:
@@ -1622,15 +1705,24 @@ def tier_rule(rows: list[dict], bal: str = TIER_RULE_ARMS[0], save: str = TIER_R
     pf = lambda v: "pass" if v else "fail"  # noqa: E731
     cond = {"right": {"rule": f"{bal} - {save} right answers, paired 95% CI lower end >= {RIGHT_CI_FLOOR:g} task",
                       "value": [b_ok, s_ok], "diff_tasks": right_diff_tasks(ps), "ci": ci,
-                      "result": "unknown" if ci is None or ci[0] < RIGHT_CI_FLOOR else "pass"},
+                      "result": "unknown" if ci is None else "fail" if ci[1] < RIGHT_CI_FLOOR
+                      else "unknown" if ci[0] < RIGHT_CI_FLOOR else "pass"},
             "wall": {"rule": f"{bal} wall median <= 60% of {save}'s", "value": [b_w, s_w],
                      "result": pf(b_w <= 0.6 * s_w)},
             "cps": {"rule": f"{bal} $/success <= 1.5x {save}'s", "value": [b_c, s_c],
                     "result": "n/a" if b_c is None or s_c is None else pf(b_c <= 1.5 * s_c)}}
     res = [c["result"] for c in cond.values()]
-    return {"units": len(ps), "conditions": cond, "excluded_rows": excluded,
-            "result": "fail" if "fail" in res else "unknown" if "unknown" in res else "n/a" if "n/a" in res
-            else "pass"}
+    lp = lost_pairs(every, save, bal)
+    out = {"units": len(ps), "conditions": cond, "excluded_rows": excluded,
+           "excluded_by_arm": {k: v for k, v in excluded_by_arm(every).items() if k in (bal, save)},
+           "lost_pairs": lp,
+           "result": "fail" if "fail" in res else "unknown" if "unknown" in res else "n/a" if "n/a" in res
+           else "pass"}
+    if lp.get("note"):
+        out["exclusion_note"] = lp["note"]
+        if out["result"] == "pass":
+            out["result"] = "unknown"
+    return out
 
 
 def tier_rule_lines(tr: dict | None) -> list[str]:
@@ -1639,7 +1731,8 @@ def tier_rule_lines(tr: dict | None) -> list[str]:
         return []
     return [f"tier rule ({tr['units']} shared clean units): {tr['result']}"] + \
         [f"  {c['result']:7}  {c['rule']}: {c['value'][0]} vs {c['value'][1]}"
-         + (f" (diff {c['diff_tasks']} tasks, CI {c['ci']})" if "ci" in c else "") for c in tr["conditions"].values()]
+         + (f" (diff {c['diff_tasks']} tasks, CI {c['ci']})" if "ci" in c else "") for c in tr["conditions"].values()] \
+        + ([f"  note     {tr['exclusion_note']}"] if tr.get("exclusion_note") else [])
 
 
 def tier_rules(rows: list[dict]) -> dict:
@@ -1719,8 +1812,10 @@ def summarize(rows: list[dict], include_unclean: bool = False) -> dict:
     unclean = sum(r.get("env_clean") is False for r in rows if "error" not in r)
     unknown = sum("env_clean" not in r for r in rows if "error" not in r)    # rows from before the clean room
     tags = sorted({str(r.get("tag")) for r in rows})
-    excluded = {"unclean": 0, "env_unknown": 0}
+    excluded, ex_arm, ex_tag = {"unclean": 0, "env_unknown": 0}, {}, {}
+    every = [r for r in rows if "error" not in r]          # the tier rule picks its clean rows itself
     if not include_unclean:
+        ex_arm, ex_tag = excluded_by_arm(rows), excluded_by_tag(rows)
         rows, excluded = clean_rows(rows)
     rows = [r for r in rows if "error" not in r]
     out = {}
@@ -1730,12 +1825,19 @@ def summarize(rows: list[dict], include_unclean: bool = False) -> dict:
         ok = sum(bool(r.get("ok")) for r in rs)
         lead_usd = round(sum(r.get("lead_usd") or 0 for r in rs), 4)
         ccx_usd = round(sum(r.get("ccx_usd") or 0 for r in rs), 4)
+        # who did the work, the same split for every arm: the lead itself, and whoever it delegated to (ccx's
+        # sub-agents, or a builtin arm's Agent-tool worker, which lead_usd holds)
+        only = round(sum(r.get("lead_only_usd") or 0 for r in rs), 4)
+        sub = round(sum(r.get("sub_usd") or 0 for r in rs), 4)
         out[arm] = {"ok": ok, "n": len(rs), "usd": round(sum(r.get("usd") or 0 for r in rs), 4),
                     "cps": round(sum(r.get("usd") or 0 for r in rs) / ok, 4) if ok else None,
                     # whose spend: the lead's own (a builtin worker is inside it) and ccx's runs, each per success
                     "lead_usd": lead_usd, "ccx_usd": ccx_usd,
                     "lead_cps": round(lead_usd / ok, 4) if ok else None,
                     "ccx_cps": round(ccx_usd / ok, 4) if ok else None,
+                    "lead_only_usd": only, "sub_usd": sub,
+                    "lead_only_cps": round(only / ok, 4) if ok else None,
+                    "sub_cps": round(sub / ok, 4) if ok else None,
                     "lead_only_usd_med": med("lead_only_usd"), "lead_tokens_med": med("lead_tokens"),
                     "lead_requests_med": med("lead_requests"), "wall_med": med("wall_s"),
                     **{k: v for k, v in wall_stats(rs).items() if k in ("wall_mean", "wall_p75")},
@@ -1752,13 +1854,24 @@ def summarize(rows: list[dict], include_unclean: bool = False) -> dict:
         ph = phase_stats(rs)
         if ph:
             out[arm]["phases"] = ph
+        if ex_arm.get(arm):
+            out[arm]["excluded"] = ex_arm[arm]
+        if arm.split("@", 1)[0] in SKILL_ARMS:        # did the lead load the skill the arm is about
+            used = [r.get("skill_used") for r in rs]
+            out[arm]["skill_used"] = f"{sum(x is True for x in used)}/{len(rs)}"
+            if not all(x is True for x in used):
+                out[arm]["skill_used_note"] = (f"{sum(x is not True for x in used)} of {len(rs)} units: the lead "
+                                               "did not load agent-delegate (the arm's protocol not followed)")
     res = {"arms": out, "by_tag": by_tag(rows), "unclean_rows": unclean, "env_unknown_rows": unknown, "tags": tags,
            "counted": "all rows (--include-unclean)" if include_unclean else "env_clean rows only",
            "excluded_rows": excluded,
            "long_style": r4.summarize_long([{**r, "arm": arm_of(r)} for r in rows
                                             if arm_of(r) in r4.LONG_ARMS])["paired"],
-           "paired": paired_all(rows)}
-    trs = tier_rules(rows)
+           "paired": paired_all(rows, None if include_unclean else every)}
+    if ex_arm:
+        res["excluded_by_arm"] = ex_arm
+        res["excluded_by_tag"] = ex_tag
+    trs = tier_rules(every)
     if trs:
         res["tier_rules"] = trs
         # the default lead's (#142's field), else the first other lead's in arm_order (sorted, so stable): the
@@ -1791,8 +1904,11 @@ def excluded_line(res: dict) -> str | None:
     n = sum(ex.values())
     if not n:
         return None
+    per = res.get("excluded_by_arm") or {}
+    arms = ("; per arm: " + ", ".join(f"{a} {c['unclean'] + c['env_unknown']}/{c['of']}" for a, c in per.items())
+            if per else "")
     return (f"left out {n} rows that are not env_clean ({ex.get('unclean', 0)} unclean, {ex.get('env_unknown', 0)} "
-            "from before the clean room); --include-unclean counts them (the tier rule never does)")
+            f"from before the clean room){arms}; --include-unclean counts them (the tier rule never does)")
 
 
 def cmd_summary(a) -> int:

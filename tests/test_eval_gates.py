@@ -244,3 +244,81 @@ def test_timeline_reaches_rows_and_its_summary_reads_them(tmp_path, monkeypatch,
     assert json.loads(cap.out)["ccx2"]["units"] == 1 and "excluded 1 rows" in cap.err
     assert TL.main(["summary", "--include-unclean"]) == 0
     assert json.loads(capsys.readouterr().out)["ccx2"]["units"] == 2
+
+
+# ------------------------------------------------------------------ review fixes: the gates' blind spots
+
+def test_unclean_rows_are_counted_per_arm_and_a_one_sided_loss_is_flagged():
+    clean = [r for t in "ab" for r in (_row(t, 1, "save", True, 0.1, 100), _row(t, 1, "balanced", True, 0.1, 50))]
+    # c-f: save's rows are clean, balanced's are not: the pairs are lost on balanced's side only
+    lopsided = [r for t in "cdef" for r in (_row(t, 1, "save", True, 0.1, 100),
+                                            _row(t, 1, "balanced", False, 0.1, 50, env_clean=False))]
+    s = r5.summarize(clean + lopsided)
+    assert s["arms"]["balanced"]["excluded"] == {"unclean": 4, "env_unknown": 0, "of": 6}
+    assert "excluded" not in s["arms"]["save"] and s["excluded_by_arm"] == {"balanced": s["arms"]["balanced"]
+                                                                              ["excluded"]}
+    assert s["excluded_by_tag"] == {"t": s["excluded_by_arm"]}
+    lp = s["paired"]["balanced vs save"]["lost_pairs"]
+    assert lp["lost"] == 4 and lp["of"] == 6 and lp["unclean_side"] == {"balanced": 4, "save": 0}
+    assert "one-sided" in s["paired"]["balanced vs save"]["lost_pairs_note"]
+    tr = s["tier_rule"]
+    assert tr["units"] == 2 and all(c["result"] == "pass" for c in tr["conditions"].values())
+    assert tr["result"] == "unknown" and "one-sided" in tr["exclusion_note"]          # a pass it cannot trust
+    assert tr["excluded_by_arm"]["balanced"]["unclean"] == 4 and tr["excluded_rows"]["unclean"] == 4
+    assert any("note" in x for x in r5.tier_rule_lines(tr))
+    assert "per arm: balanced 4/6" in r5.excluded_line(s)
+    # the same loss on both sides: no note, the rule may pass
+    even = [_row(t, 1, arm, True, 0.1, 100 if arm == "save" else 50, env_clean=False)
+            for t in "cd" for arm in ("save", "balanced")]
+    assert r5.tier_rule(clean + even)["result"] == "pass"
+
+
+def test_right_condition_fails_when_the_whole_ci_is_below_the_floor():
+    rows = [r for i in range(10) for r in (_row(f"t{i}", 1, "save", True, 0.1, 100),
+                                           _row(f"t{i}", 1, "balanced", i >= 5, 0.1, 50))]
+    tr = r5.tier_rule(rows)
+    assert tr["conditions"]["right"]["ci"][1] < r5.RIGHT_CI_FLOOR
+    assert tr["conditions"]["right"]["result"] == "fail" and tr["result"] == "fail"
+
+
+def test_a_lead_in_a_ccx_home_is_its_own_arm(tmp_path, capsys):
+    flags = _row("a", 1, "ccx2", True)
+    home = _row("a", 1, "ccx2", True, ccx_home=True)
+    old = _row("a", 1, "ccx2", True, fingerprint={"isolation": {"claude": "ccx-home", "claude_home": "ccx"}})
+    assert r5.arm_of(flags) == "ccx2" and r5.arm_of(home) == r5.arm_of(old) == "ccx2@ccx-home"
+    assert r5.arm_of({**home, "lead_model": "opus", "lead_effort": "high"}) == "ccx2@opus-high@ccx-home"
+    assert r5.done_key(flags) != r5.done_key(home) == r5.done_key(old)
+    assert r5.unit_key(home) == "1-a-ccx2@ccx-home" and r5.unit_key(flags) == "1-a-ccx2"
+    s = r5.summarize([flags, home, old])
+    assert s["arms"]["ccx2"]["n"] == 1 and s["arms"]["ccx2@ccx-home"]["n"] == 2     # never pooled
+    # the tier rule pairs a ccx home's balanced with a ccx home's save
+    rows = [r for t in "ab" for r in (_row(t, 1, "save", True, 0.1, 100, ccx_home=True),
+                                      _row(t, 1, "balanced", True, 0.1, 50, ccx_home=True))]
+    assert list(r5.summarize(rows)["tier_rules"]) == ["balanced@ccx-home vs save@ccx-home"]
+    out = tmp_path / "r.jsonl"
+    a = ["run", "--tag", "x", "--rounds", "1", "--tasks", tasks_r5.IDS[0], "--arms", "ccx2,builtin2", "--out", str(out),
+         "--workdir", str(tmp_path / "w"), "--dry-run", "--claude-isolation", "ccx-home"]
+    assert r5.main(a) == 0
+    text = capsys.readouterr().out
+    assert f":{tasks_r5.IDS[0]}:ccx2@ccx-home " in text and f":{tasks_r5.IDS[0]}:builtin2 " in text
+
+
+def test_every_arm_splits_lead_only_and_delegated_spend_and_the_skill_arm_says_if_the_skill_was_used():
+    rows = [_row("a", 1, "builtin2", True, 0.3, lead_usd=0.3, lead_only_usd=0.2, sub_usd=0.1),
+            _row("a", 1, "ccx2", True, 0.3, lead_usd=0.1, ccx_usd=0.2, lead_only_usd=0.1, sub_usd=0.2),
+            _row("a", 1, "ccx2-skill", True, ccx_home=True, skill_used=True),
+            _row("b", 1, "ccx2-skill", True, ccx_home=True, skill_used=False)]
+    a = r5.summarize(rows)["arms"]
+    assert (a["builtin2"]["lead_only_usd"], a["builtin2"]["sub_usd"], a["builtin2"]["sub_cps"]) == (0.2, 0.1, 0.1)
+    assert (a["ccx2"]["lead_only_cps"], a["ccx2"]["sub_cps"]) == (0.1, 0.2)
+    sk = a["ccx2-skill@ccx-home"]
+    assert sk["skill_used"] == "1/2" and "did not load agent-delegate" in sk["skill_used_note"]
+    assert "skill_used" not in a["ccx2"]
+
+
+def test_timeline_shows_the_builtin_worker_as_a_sub_agent():
+    tl = TL.unit_timeline(None, [], _stream(), 100.0, None, worker_usd=0.02)
+    p = tl["parts"]
+    assert p["sub"]["built-in worker"]["usd"] == 0.02 and p["sub"]["built-in worker"]["tokens"] == 1 + 100 + 10 + 99
+    assert p["lead"]["model"]["usd"] == 0.03 and tl["usd"] == 0.05                  # the total is unchanged
+    assert TL.lead_stream(_stream())["worker_requests"] == 1
