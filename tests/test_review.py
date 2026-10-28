@@ -535,6 +535,7 @@ class TestReviewRun(Env):
         mine = [r for r in rows if not r.get("type") and (r.get("run_id") in (first, fix)
                                                             or r.get("label") in (f"review:{first}", f"review:{fix}"))]
         self.assertEqual(len(mine), 4, rows)                    # two builder runs, two reviews
+        self.assertIn("cost_chain", out, out.get("cost_chain_error"))
         cc = out["cost_chain"]
         self.assertEqual((cc["runs"], cc["reviews"]), ([first, fix], 2))
         self.assertAlmostEqual(cc["ae_usd"], sum(r["ae_usd"] or 0 for r in mine), places=6)

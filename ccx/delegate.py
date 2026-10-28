@@ -916,8 +916,8 @@ def run(req: Request, p: Paths) -> dict:
         try:                               # the lead sees what the whole chain cost, not only its last run
             fix["cost_chain"] = ledger.chain_cost(p, [run_id, *((fix.get("cost_chain") or {}).get("runs")
                                                                  or [fix["run_id"]])])
-        except Exception:  # noqa: BLE001 — accounting only; never fails the run
-            pass
+        except Exception as e:  # noqa: BLE001 — accounting only; never fails the run, but says why it is missing
+            fix["cost_chain_error"] = repr(e)[:300]
         _write_record(p.runs / fix["run_id"], fix)
         return fix
     return record
@@ -1022,6 +1022,8 @@ def compact(record: dict) -> dict:
                                             "edited_tests") if rv.get(k)}
         if rv.get("edited_tests"):                    # a builder that changed existing tests: the lead looks first
             out["edited_tests"] = rv["edited_tests"]
+    if record.get("cost_chain_error"):
+        out["cost_chain_error"] = record["cost_chain_error"]
     if record.get("cost_chain"):                  # tokens and $ of the whole fix round chain; tokens above: this run
         out["cost_chain"] = record["cost_chain"]
     if record.get("first_review"):
