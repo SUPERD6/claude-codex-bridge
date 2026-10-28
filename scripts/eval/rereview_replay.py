@@ -207,7 +207,7 @@ def same_problem(recorded: str, other: str) -> bool:
     f2, i2 = anchors(other)
     if f1 and not (f1 & f2):
         return False
-    return not i1 or bool(i1 & i2) or not f1
+    return not i1 or bool(i1 & i2)
 
 
 def summary(*files: Path, rows: Path | None = None) -> dict:
@@ -231,7 +231,8 @@ def summary(*files: Path, rows: Path | None = None) -> dict:
             out[v] = {"median_s": statistics.median(r["seconds"] for r in rs if r.get("seconds") is not None),
                       "median_tools": statistics.median(r.get("tool_uses") or 0 for r in rs),
                       "usd": round(sum(r.get("usd") or 0 for r in rs), 4),
-                      "issues": sum(r["verdict"] == "issues" for r in rs)}
+                      "issues": sum(r["verdict"] == "issues" for r in rs),
+                      "other": sorted(k for k, p in pairs.items() if p[v]["verdict"] not in ("pass", "issues"))}
     saves = [p["full"]["seconds"] - p["focus"]["seconds"] for p in pairs.values()
              if p["full"].get("seconds") is not None and p["focus"].get("seconds") is not None]
     out["median_saving_s"] = statistics.median(saves) if saves else None
@@ -254,6 +255,8 @@ def summary(*files: Path, rows: Path | None = None) -> dict:
     out["verdict_table"] = {f"{a}->{b}": sum(1 for p in pairs.values() if p["full"]["verdict"] == a
                                              and p["focus"]["verdict"] == b)
                             for a in ("pass", "issues") for b in ("pass", "issues")}
+    # a pair where either side is neither pass nor issues ("unclear"): counted here so the table adds up to pairs
+    out["verdict_table"]["other"] = len(pairs) - sum(out["verdict_table"].values())
     return out
 
 

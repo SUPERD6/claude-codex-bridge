@@ -17,6 +17,10 @@ class TestMatching(unittest.TestCase):
         self.assertFalse(R.same_problem(rec, "[must] ccx/board.py:12 `use_report` is wrong"))      # other file
         self.assertFalse(R.same_problem(rec, "[must] ccx/memory.py:9 `entries` is slow"))          # other names
         self.assertTrue(R.same_problem("[must] a.py:3 — off by one", "[must] a.py:4 still off"))  # no names quoted
+        # no file named but `identifiers` quoted: an unrelated item is not the same problem
+        self.assertFalse(R.same_problem("[must] `use_report` drops notes", "[must] ccx/board.py:12 `entries` slow"))
+        self.assertTrue(R.same_problem("[must] `use_report` drops notes", "[must] x.py:1 `use_report` still drops"))
+        self.assertTrue(R.same_problem("[must] the log is never closed", "[must] anything at all"))  # nothing to match
 
 
 class TestSummary(unittest.TestCase):
@@ -48,6 +52,22 @@ class TestSummary(unittest.TestCase):
         self.assertEqual(s["rescues_kept"], 1)
         self.assertEqual([r["case"] for r in s["rescues"]], ["r5x/2-t-ccx2/F2"])
         self.assertEqual(s["verdict_table"]["issues->pass"], 1)
+        self.assertEqual(s["verdict_table"]["other"], 0)
+        self.assertEqual(s["focus"]["other"], [])
+
+    def test_unclear_verdicts_are_counted_not_dropped(self):
+        d = Path(tempfile.mkdtemp())
+        res = [{"case": "r5x/1-t-ccx2/F1", "variant": "full", "ok": True, "seconds": 20, "verdict": "pass",
+                "issues": []},
+               {"case": "r5x/1-t-ccx2/F1", "variant": "focus", "ok": True, "seconds": 15, "verdict": "unclear",
+                "issues": []}]
+        out = d / "out.json"
+        out.write_text(json.dumps({"spent": 0, "cases": [], "results": res}), encoding="utf-8")
+        s = R.summary(out)
+        self.assertEqual(s["verdict_table"]["other"], 1)
+        self.assertEqual(sum(s["verdict_table"].values()), s["pairs"])
+        self.assertEqual(s["focus"]["other"], ["r5x/1-t-ccx2/F1"])
+        self.assertEqual(s["full"]["other"], [])
 
 
 if __name__ == "__main__":
