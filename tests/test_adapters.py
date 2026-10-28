@@ -636,8 +636,39 @@ def test_codex_gets_the_windows_shell_note(tmp_path, monkeypatch):
                              resume_id="s1")
     assert new.stdin.startswith(WINDOWS_SHELL) == (os.name == "nt")
     assert new.stdin.endswith("do x")
-    assert again.stdin == "more"                    # the session already has it
+    assert WINDOWS_SHELL not in again.stdin         # the session already has it
+    assert again.stdin.endswith("more")
     assert "-Encoding UTF8" in WINDOWS_SHELL
+
+
+def test_windows_shell_note_matches_powershell_5_1(monkeypatch):
+    """Round 5: `python -c` lost its inner quotes, `pytest tests/*.py` found nothing, `&&` and double-quoted rg
+    patterns failed. The note must not recommend python -c any more."""
+    import ccx.agents.codex as cx
+    note = cx.WINDOWS_SHELL
+    assert "use `python -c`" not in note and "not `python -c`" in note
+    assert "`;`" in note and "`&&` does not work" in note
+    assert "does not expand `*`" in note
+    assert "temporary .py file" in note and "here-strings" in note
+    assert "rg patterns in single quotes" in note
+    assert "Get-Content -Encoding UTF8" in note                 # the UTF-8 line stays
+
+
+def test_codex_exec_note_on_every_system_and_on_resume(tmp_path, monkeypatch):
+    """Round 5: 85% of exec_command calls printed only r.output; pytest outlived the 30 s yield, its session_id was
+    lost and the same tests were started again. The note goes to fresh exec and exec resume, on any system."""
+    from pathlib import Path
+    import ccx.agents.codex as cx
+    monkeypatch.setenv("CCX_CODEX_BIN", str(Path(__file__).parent / "fakes" / "fake_codex.py"))
+    new = cx.codex_invocation(model="m", effort="low", perm=[], cwd=tmp_path, prompt="do x", run_dir=tmp_path)
+    again = cx.codex_invocation(model="m", effort="low", perm=[], cwd=tmp_path, prompt="more", run_dir=tmp_path,
+                                resume_id="s1")
+    for inv, tail in ((new, "do x"), (again, "more")):
+        assert cx.EXEC_NOTE in inv.stdin and inv.stdin.endswith(tail)
+    assert again.stdin == cx.EXEC_NOTE + "more"          # not tied to the Windows note
+    for words in ("text(JSON.stringify(r))", "exit_code", "session_id", "write_stdin({session_id, chars: ''})",
+                  "do not start the same command again"):
+        assert words in cx.EXEC_NOTE
 
 
 def test_rules_do_not_forbid_the_sub_agents_a_task_asks_for():
