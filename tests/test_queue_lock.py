@@ -5,6 +5,8 @@ cause, not reproduced locally). Also: the lock never waits forever, a lasting de
 never taken over, a release removes only its own lock, and a `q run` row that fails after its run keeps the run."""
 import os
 import shutil
+import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -207,6 +209,66 @@ class TestLockRetries(unittest.TestCase):
         self.assertEqual(errs, [])
         lines = (wq.qdir(self.root) / "queue.jsonl").read_text(encoding="utf-8").splitlines()
         self.assertEqual(len(lines), n * t)
+
+    def test_processes_never_lose_a_write(self):
+        # writers in separate processes meet only at the lock file (threads of one process take turns in-process)
+        n, procs = 60, 4
+        code = ("import sys; sys.path.insert(0, sys.argv[1]); from pathlib import Path; from ccx import queue as wq\n"
+                "for _ in range(int(sys.argv[3])): wq.update(Path(sys.argv[2]), 'q1', status='doing')\n")
+        repo = str(Path(__file__).resolve().parent.parent)
+        ps = [subprocess.Popen([sys.executable, "-c", code, repo, str(self.root), str(n)],
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) for _ in range(procs)]
+        outs = [p.communicate(timeout=300) for p in ps]
+        self.assertEqual([p.returncode for p in ps], [0] * procs, outs)
+        lines = (wq.qdir(self.root) / "queue.jsonl").read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(lines), n * procs)
+        self.assertFalse(self.lock.exists())
+
+    def test_busy_lock_that_keeps_changing_hands_is_waited_for(self):
+        # CI windows 3.12: a writer gave up after 2 * timeout in all while the others kept writing. The deadline
+        # counts from the last time the lock changed hands, so only a lock that stays the same one fails
+        d = wq.qdir(self.root)
+        d.mkdir(parents=True)
+        self.lock.write_bytes(b"0")
+        stop, churn = threading.Event(), 1.0           # 5 * timeout: well past the old 2 * timeout limit
+
+        def other_writers():                           # a new lock file every 20 ms (a new holder), never absent
+            i, t = 0, time.time()
+            while time.time() - t < churn:
+                i += 1
+                tmp = d / f"next.{i}"
+                tmp.write_bytes(str(i).encode())
+                try:
+                    os.link(self.lock, d / f"held.{i}")   # keep the old file alive: its id is never reused
+                    os.replace(tmp, self.lock)
+                except OSError:
+                    pass
+                time.sleep(0.02)
+            self.lock.unlink()
+            stop.set()
+        th = threading.Thread(target=other_writers, daemon=True)
+        th.start()
+        self.addCleanup(th.join)
+        t = time.time()
+        with wq._lock(self.root, timeout=0.2):
+            pass
+        self.assertTrue(stop.is_set())
+        self.assertGreaterEqual(time.time() - t, churn - 0.1)
+
+    def test_probe_names_differ_within_one_clock_tick(self):
+        # monotonic_ns is ~15 ms coarse on Windows before 3.13: two threads probing in one tick shared a name, and
+        # one hit the other's deleted probe ("delete pending") and called a busy lock a folder it may not write
+        d = wq.qdir(self.root)
+        d.mkdir(parents=True)
+        made, real = [], os.open
+
+        def record(path, *a, **k):
+            made.append(Path(path).name)
+            return real(path, *a, **k)
+        with mock.patch("ccx.queue.time.monotonic_ns", return_value=1), mock.patch("ccx.queue.os.open", record):
+            self.assertTrue(wq._can_create(d))
+            self.assertTrue(wq._can_create(d))
+        self.assertEqual(len(set(made)), 2, made)
 
 
 class TestFailedRow(unittest.TestCase):
