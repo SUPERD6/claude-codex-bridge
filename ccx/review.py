@@ -588,26 +588,66 @@ def fix_rereview(rc: dict) -> str:
 _PREFIX = re.compile(r"^[\s*_`#>]*review\s*[:：]?\s*[*_`]*\s*(pass|issues)\b", re.I)
 
 
+ISSUE_CHARS, ISSUE_FULL_CHARS, MAX_ISSUES = 300, 1500, 8   # the lead's short form; what a fix round is handed
+_TAG_SPLIT = re.compile(r"\n(?=[\s*_`>-]*\[(?:must|note)\])", re.I)
+
+
+def _verdict_in_item(items: list[str]) -> tuple[str | None, list[str]]:
+    """An answer whose `REVIEW: ...` line landed in open_questions instead of the summary (round 5, r5f:1: the first
+    item began "REVIEW: issues" followed by a [must], and the review was read as unclear). Returns the verdict that
+    line names (None: no item starts with one) and the items with that line taken off, an item holding several
+    tagged lines split into one per tag. Used only when the summary itself names no verdict."""
+    hint, out = None, []
+    for x in items:
+        m = _PREFIX.match(x)
+        if not m:
+            out.append(x)
+            continue
+        hint = hint or m.group(1).lower()
+        rest = x[m.end():].lstrip(" \t*_`:：.—–-\r\n")
+        out += [y.strip() for y in _TAG_SPLIT.split(rest) if y.strip()]
+    return hint, out
+
+
 def verdict(result: dict | None) -> dict:
+    """The review's answer: verdict; issues (the [must] items, ISSUE_CHARS each: what the lead reads in compact and
+    needs_lead); issues_full when one was longer (the same items up to ISSUE_FULL_CHARS each: what a fix round is
+    handed, so the reviewer's fix and test notes reach the fixer whole); summary (400 characters; summary_full
+    when longer)."""
     r = result or {}
     s = (r.get("summary") or "").strip()
     m = _PREFIX.match(s)
     v = m.group(1).lower() if m else "unclear"
-    items = [str(x)[:300] for x in (r.get("open_questions") or [])]
-    items = ["[note]" + x.lstrip()[len("[must]"):] if _OUT_OF_SCOPE.match(x) else x for x in items]
-    must =[x for x in items if x.lstrip().lower().startswith("[must]")]
-    notes = [x for x in items if x not in must]
+    full = [str(x) for x in (r.get("open_questions") or [])]
+    hint = None
+    if v == "unclear":
+        hint, full = _verdict_in_item(full)
+    full = ["[note]" + x.lstrip()[len("[must]"):] if _OUT_OF_SCOPE.match(x) else x for x in full]
+    full = [x[:ISSUE_FULL_CHARS] for x in full]
+    must_full = [x for x in full if x.lstrip().lower().startswith("[must]")]
+    notes_full = [x for x in full if x not in must_full]
+    must = [x[:ISSUE_CHARS] for x in must_full]
+    notes = [x[:ISSUE_CHARS] for x in notes_full]
     lenient = False
-    if v == "unclear" and items:
+    if v == "unclear" and full:
         # no `REVIEW: ...` line (e.g. the summary written in another language, round 2 of the seven-cores A/B:
         # haiku named the real bug as [must] and the run was left unfixed): the tagged items still say it
         if must:
             v, lenient = "issues", True
         elif all(x.lstrip().lower().startswith("[note]") for x in notes):
             v, lenient = "pass", True
+        elif hint == "issues":
+            v, lenient = "issues", True                  # "REVIEW: issues" in an item, untagged problems after it
+    elif v == "unclear" and hint == "pass":
+        v, lenient = "pass", True                        # the only item was "REVIEW: pass"
     if v == "issues" and not must and notes and any(x.lstrip().lower().startswith("[note]") for x in notes):
         v = "pass"                    # only notes: nothing that makes the change wrong, so no fix round
-    out = {"verdict": v, "issues": (must or ([] if v == "pass" else notes))[:8], "summary": s[:400]}
+    picked = (must_full or ([] if v == "pass" else notes_full))[:MAX_ISSUES]
+    out = {"verdict": v, "issues": [x[:ISSUE_CHARS] for x in picked], "summary": s[:400]}
+    if any(len(x) > ISSUE_CHARS for x in picked):
+        out["issues_full"] = picked
+    if len(s) > 400:
+        out["summary_full"] = s
     if lenient:
         out["format"] = "lenient"
     if v == "pass" and notes:

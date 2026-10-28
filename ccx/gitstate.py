@@ -15,6 +15,10 @@ SHARED_WHY = ("the project has uncommitted changes, which a worktree (made from 
 # what `ccx batch` prints (under "stale_base") for a task that asked for a worktree while the project was dirty
 STALE_WHY = ("these tasks asked for a worktree, which starts from the last commit and lacks the project's "
              "uncommitted changes; commit first if they need them")
+# what `ccx run --worktree` records (run.json "base_note", its JSON "base") when the project was dirty: the run
+# itself is unchanged (a worktree from HEAD, as git's and Claude's own --worktree do), but its check ran on code
+# without those changes
+BASE_NOTE = "base: HEAD, uncommitted changes not included: commit first"
 
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess:

@@ -20,6 +20,7 @@ def _q(*items):
 
 class TestUncommittedWork(QEnv):
     def test_writers_after_a_lone_writer_see_its_uncommitted_work(self):
+        self.env["FAKE_TOUCH"] = "1"        # the builder changes something (a write run that changes nothing is no_changes)
         # a ran alone in the project folder and left a_done.txt uncommitted; b and c (two writers) used to get
         # worktrees made from HEAD, without it, and failed. Now they share the folder, as before this change
         self.git_init()
@@ -139,6 +140,7 @@ class TestAcceptance(unittest.TestCase):
 
 class TestWorktreeBranches(QEnv):
     def test_unmerged_branches_nothing_waits_on_are_listed(self):
+        self.env["FAKE_TOUCH"] = "1"        # the builder changes something (a write run that changes nothing is no_changes)
         self.git_init()
         for i in range(2):
             self.q("add", f"w{i}", "--brief", f"write piece {i}", "--minutes", "5", "--mode", "write", "--to",

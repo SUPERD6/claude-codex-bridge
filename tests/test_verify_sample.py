@@ -15,6 +15,7 @@ from test_ccx import Env  # noqa: E402
 class TestVerifySample(Env):
     def setUp(self):
         super().setUp()
+        self.env["FAKE_TOUCH"] = "1"        # each write run changes something (else it is kind no_changes)
         g = ["git", "-c", "user.name=t", "-c", "user.email=t@t"]
         subprocess.run(["git", "init", "-q"], cwd=self.work, check=True)
         (self.work / "a.py").write_text("x = 1\n", encoding="utf-8")

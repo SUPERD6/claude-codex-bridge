@@ -122,6 +122,8 @@ def parse_claude(stdout: str, stderr: str, rc: int, _last: Path | None = None) -
                 write += extra_w
         out.usage = usage_dict(fresh=fresh, write=write, write_1h=w1h, cached=cached, out=outp)
         out.cost_usd = data.get("total_cost_usd")
+        if isinstance(data.get("permission_denials"), list):    # tool calls the allow-list refused in this run
+            out.permission_denials = len(data["permission_denials"])
         out.result = data.get("structured_output") or _json_from_text(str(data.get("result", "")))
         out.raw_text = str(data.get("result", ""))
         if data.get("is_error"):

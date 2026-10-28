@@ -90,6 +90,7 @@ class Outcome:
     auth_problem: bool = False
     kind: str = "ok"            # ok | quota | auth | error | timeout
     retry_after: str | None = None
+    permission_denials: int | None = None   # tool calls the CLI refused (Claude's result event); None: not reported
 
 
 # Usage is normalized to the same four buckets for every agent (billing differs per bucket):

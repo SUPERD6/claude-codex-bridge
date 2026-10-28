@@ -87,10 +87,15 @@ def _slim(record: dict) -> dict:
     costs = [a["cost_usd"] for a in record["attempts"] if a.get("cost_usd") is not None]
     slim["cost_usd"] = round(sum(costs), 5) if costs else None
     slim["attempts"] = len(record["attempts"])
+    den = [a["permission_denials"] for a in record["attempts"] if a.get("permission_denials") is not None]
+    if den:                      # tool calls the CLI refused (Claude reports them); e.g. a reviewer's shell reads
+        slim["permission_denials"] = sum(den)
     if record.get("check"):                         # J7: which acceptance command passed or failed it
         c = record["check"]
         slim["check"] = {"key": check_key(c.get("cmd", ""), record.get("cwd"))[0], "cmd": (c.get("cmd") or "")[:200],
                          "passed": bool(c.get("passed"))}
+        if c.get("unchanged_tree"):                 # the run changed nothing: the check ran on the tree it found
+            slim["check"]["unchanged_tree"] = True
     return slim
 
 

@@ -228,8 +228,10 @@ def run_ccx(env, *args):
 def test_run_project_goes_into_it_with_its_rules(tmp_path):
     catalog(tmp_path)
     env = run_env(tmp_path)
+    env["FAKE_TOUCH"] = "1"            # the write run changes something (else it is kind no_changes)
     code, out = run_ccx(env, "run", "--from", "claude", "--to", "codex", "--tier", "T1", "--project", "桌宠",
-                        "--approved", "rename foo to bar in a.py")         # a write run: L1 waits for a yes
+                        "--approved", "--review", "off",                  # its change alone, not a reviewer's call
+                        "rename foo to bar in a.py")                        # a write run: L1 waits for a yes
     assert code == 0, out
     assert out["project"]["name"] == "desk-pet"
     call = json.loads((tmp_path / "calls.jsonl").read_text(encoding="utf-8").splitlines()[-1])
@@ -240,6 +242,7 @@ def test_run_project_goes_into_it_with_its_rules(tmp_path):
 def test_run_project_with_approval_rules_stops_until_the_lead_read_them(tmp_path):
     catalog(tmp_path)
     env = run_env(tmp_path)
+    env["FAKE_TOUCH"] = "1"            # the write run changes something (else it is kind no_changes)
     code, out = run_ccx(env, "run", "--from", "claude", "--to", "codex", "--tier", "T1", "--project", "lab", "x")
     assert code == 0 and out["delegated"] is False
     assert out["approval_rules"][0]["text"] == "Approval needed before each stage."     # quoted as written
