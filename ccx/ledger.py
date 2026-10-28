@@ -111,6 +111,24 @@ def sum_usage(attempts: list[dict]) -> dict:
     return tot
 
 
+def chain_cost(p: Paths, run_ids: list[str]) -> dict:
+    """What a chain of runs (a run and its review fix rounds) cost in all, from the ledger: their own rows plus the
+    review runs ccx started for them (label review:<run id>). tokens as sum_usage; ae_usd (API-equivalent) and
+    cost_usd (billed) sum the rows that know theirs, None when none does."""
+    ids = list(dict.fromkeys(run_ids))
+    labels = {f"review:{i}" for i in ids}
+    mine = [r for r in rows(p) if not r.get("type") and (r.get("run_id") in ids or r.get("label") in labels)]
+    tok = {"input": 0, "cache_write": 0, "cached": 0, "output": 0}
+    for r in mine:
+        for k in tok:
+            tok[k] += int((r.get("usage") or {}).get(k) or 0)
+    def total(key, nd):
+        known = [r[key] for r in mine if r.get(key) is not None]
+        return round(sum(known), nd) if known else None
+    return {"runs": ids, "reviews": sum(r.get("label") in labels for r in mine), "tokens": tok,
+            "ae_usd": total("ae_usd", 6), "cost_usd": total("cost_usd", 5)}
+
+
 def load_run(p: Paths, run_id: str) -> dict:
     f = p.runs / run_id / "run.json"
     if not f.exists():

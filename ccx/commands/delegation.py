@@ -56,7 +56,9 @@ def _background(argv: list[str], p, procs: list | None = None) -> dict:
     proc = detach(_without_wait(argv), log, {"CCX_RUN_ID": run_id})
     if procs is not None:
         procs.append(proc)
-    return {"run_id": run_id, "state": "started", "check": f"ccx show {run_id}", "log": str(log),
+    # peek: a look now, without waiting (it follows a review fix round too). Named `check` earlier: renamed so it
+    # is not read as the acceptance check, which the result reports under `check`
+    return {"run_id": run_id, "state": "started", "peek": f"ccx show {run_id}", "log": str(log),
             "next": f"ccx show {run_id} --wait"}     # blocks until done, under a 10-minute tool-call limit
 
 

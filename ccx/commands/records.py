@@ -187,14 +187,45 @@ def cmd_show(a) -> int:
         _out(_result(rec, run_id, rid, a.full))
         return 0
     recover.sweep(p)                    # a run whose ccx process is gone shows as interrupted, not running
-    rec = ledger.load_run(p, run_id)
+    rec, rid = follow_chain(p, ledger.load_run(p, run_id))
     if a.full:
         _out(rec)
-        d = p.runs / run_id
-        print(f"\nlogs: {d}")
-    else:
-        _out(compact(rec))
+        if rid != run_id:
+            print(f"\nchain: {run_id} -> {rid}")
+        print(f"\nlogs: {p.runs / rid}")
+        return 0
+    res = _result(rec, run_id, rid, False) if rid != run_id else compact(rec)   # as --wait reports the chain
+    if fix_round_due(p, rec):
+        # the review found problems and its fix round is about to start: this record is not the result yet
+        res.update(ok=False, fix_round="starting", next=f"ccx show {run_id} --wait")
+    _out(res)
     return 0
+
+
+def follow_chain(p, rec: dict) -> tuple[dict, str]:
+    """The last record of the review fix round chain rec started (rec itself when there is none yet), and its id.
+    `ccx show ID` without --wait reports the same final state and kind as `--wait`, never the first run's stale
+    result; a fix round still running shows as running."""
+    seen = {rec["run_id"]}
+    while True:
+        nxt = _fix_round(p, rec)
+        if not nxt or nxt.get("run_id") in seen:
+            return rec, rec["run_id"]
+        seen.add(nxt["run_id"])
+        rec = nxt
+
+
+def fix_round_due(p, rec: dict) -> bool:
+    """A finished run whose review found problems, with a session to fix them in and no fix round yet, that ended
+    less than FIX_ROUND_GRACE ago (by its run.json): the fix round is about to start (the rule RunWaiter waits by).
+    Later than that, none started: review_issues is then its final kind."""
+    if rec.get("state") == "running" or rec.get("kind") != "review_issues" or not rec.get("session_id"):
+        return False
+    try:
+        ended = (p.runs / rec["run_id"] / "run.json").stat().st_mtime
+    except OSError:
+        return False
+    return time.time() - ended < FIX_ROUND_GRACE
 
 
 def cmd_stats(a) -> int:
