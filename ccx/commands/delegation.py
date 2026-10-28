@@ -14,7 +14,7 @@ from pathlib import Path
 from .. import lanes, learn, ledger, router, usage
 from ..config import AGENTS, DELEGATE_AGENTS, PROVIDER_AGENTS, TIER_ORDER, load_config, paths
 from ..delegate import Request, compact, recap, run, verify
-from ..gitstate import SHARED_WHY, clean, in_git
+from ..gitstate import SHARED_WHY, STALE_WHY, clean, in_git
 from ..runners import find_bin
 from ..workspace import missing_test_paths
 from .common import (_brief, _caller, _out, _routing_args, _spec_from_args, _target, find_continuable,
@@ -666,21 +666,27 @@ def cmd_batch(a) -> int:
     writers = [t for t in tasks if t["mode"] == "write"]
     seen: dict[str, tuple[bool, bool]] = {}      # folder -> (in git, clean), asked once per folder
     shared: list = []
+    stale: list = []                             # asked for a worktree in a dirty project
 
-    def isolate(i: int, t: dict) -> bool:
-        """Parallel writers in one repo must not trample each other: each gets a worktree. Outside git there is
-        none, and with uncommitted changes a worktree (made from the last commit) would miss them: then they share
-        the folder, as `ccx q run` does (listed under shared_folder), so keep pieces disjoint."""
-        if "worktree" in t:
-            return t["worktree"]
-        if not (len(writers) > 1 and t in writers):
-            return False
+    def state(t: dict) -> tuple[bool, bool]:
         cwd = Path(t.get("cwd") or os.getcwd())
         key = str(cwd.resolve())
         if key not in seen:
             git = in_git(cwd)
             seen[key] = (git, git and clean(cwd, ignore=(Path(a.plan),)))
-        git, tidy = seen[key]
+        return seen[key]
+
+    def isolate(i: int, t: dict) -> bool:
+        """Parallel writers in one repo must not trample each other: each gets a worktree. Outside git there is
+        none, and with uncommitted changes a worktree (made from the last commit) would miss them: then they share
+        the folder, as `ccx q run` does (listed under shared_folder), so keep pieces disjoint."""
+        if "worktree" in t:                      # an explicit choice stands; say when it misses uncommitted work
+            if t["worktree"] and state(t) == (True, False):
+                stale.append(t.get("id") or f"#{i}")
+            return t["worktree"]
+        if not (len(writers) > 1 and t in writers):
+            return False
+        git, tidy = state(t)
         if git and not tidy:
             shared.append(t.get("id") or f"#{i}")
         return git and tidy
@@ -695,6 +701,8 @@ def cmd_batch(a) -> int:
                             cwd=Path(t.get("cwd") or os.getcwd()), caller=caller, label=t.get("id", ""),
                             task=t.get("task"), step=t.get("step"), worktree=isolate(i, t), **kw))
     extra = {"shared_folder": {"ids": shared, "why": SHARED_WHY}} if shared else {}
+    if stale:
+        extra["stale_base"] = {"ids": stale, "why": STALE_WHY}
     threads = int(cfg["defaults"].get("max_parallel", 3))
     n = lanes.width(getattr(a, "lanes", None), cfg)
     if n:

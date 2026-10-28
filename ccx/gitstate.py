@@ -9,8 +9,12 @@ from pathlib import Path
 
 # what `ccx q run` and `ccx batch` print (under "shared_folder") when they kept writers in the project folder
 SHARED_WHY = ("the project has uncommitted changes, which a worktree (made from the last commit) would not see: "
-              "these writers worked side by side in the project folder, as before; commit first to give each its "
-              "own worktree")
+              "these writers worked side by side in the project folder, so each one's check, review and undo can "
+              "also see the others' edits; keep pieces on separate files, and commit first to give each its own "
+              "worktree")
+# what `ccx batch` prints (under "stale_base") for a task that asked for a worktree while the project was dirty
+STALE_WHY = ("these tasks asked for a worktree, which starts from the last commit and lacks the project's "
+             "uncommitted changes; commit first if they need them")
 
 
 def _git(root: Path, *args: str) -> subprocess.CompletedProcess:
@@ -25,7 +29,9 @@ def in_git(root: Path) -> bool:
 def clean(root: Path, ignore: tuple[Path, ...] = ()) -> bool:
     """No uncommitted change in the repository (ccx's own .ccx folders aside, and the files in `ignore`, such as
     the plan file `ccx batch` was given)."""
-    args = ["status", "--porcelain"] + (["--untracked-files=all"] if ignore else [])
+    # -z: paths come back raw (no quoting of spaces or non-ASCII names), NUL-separated; a rename's or copy's
+    # entry is followed by its old path as a field of its own
+    args = ["status", "--porcelain", "-z"] + (["--untracked-files=all"] if ignore else [])
     r = _git(root, *args)
     if r.returncode != 0:
         return False
@@ -36,9 +42,19 @@ def clean(root: Path, ignore: tuple[Path, ...] = ()) -> bool:
         if t.returncode == 0 and t.stdout.strip():
             top = Path(t.stdout.strip()).resolve()
             skip = {Path(f).resolve() for f in ignore}
-    for line in r.stdout.splitlines():
-        for path in line[3:].split(" -> "):
-            path = path.strip().strip('"')
+    fields = r.stdout.split("\0")
+    i = 0
+    while i < len(fields):
+        entry = fields[i]
+        i += 1
+        if len(entry) < 4:
+            continue
+        paths = [entry[3:]]
+        if entry[0] in "RC":                      # the old path follows
+            if i < len(fields):
+                paths.append(fields[i])
+            i += 1
+        for path in paths:
             if ".ccx" in path.replace("\\", "/").split("/"):
                 continue
             if top is not None and (top / path).resolve() in skip:
