@@ -5,7 +5,13 @@
 - A write run that says done/partial but changed nothing since its undo snapshot (same HEAD, so a commit of its own
   counts as a change; no edit; no new file) is `kind: no_changes`: `ok` false with `needs_lead`, not learned from,
   never auto-judged right; its check is shown as `ran on unchanged tree` (`passed: null`). A label only: no retry.
-  Read runs and ccx's reviewer are untouched.
+  Read runs and ccx's reviewer are untouched. A pre-existing untracked file that is gone counts as a change, and
+  files with non-ASCII names are checked too. It is measured before ccx's check runs on that attempt (also when
+  the check runs inside the escalation loop), so files the check writes are not the builder's. Files that are
+  .gitignore'd or outside the repo are not seen (the hint says so). `ccx q` marks such a piece `failed` (its
+  dependents wait, `restored` = decide), a lane starts the next piece fresh, and `ccx ui` asks the person
+  ("have it make the change" / "already met: accept") instead of showing an ordinary review card.
+- `plan_build`'s fix round also gets the planner's [must] items whole (`issues_full`).
 - `ccx run --worktree` in a project with uncommitted changes records `base: HEAD, uncommitted changes not included:
   commit first` (run.json `base_note`, the result's `base`); the run itself is unchanged.
 - A Claude reviewer is told to read with Read/Grep/Glob and use Bash only for git diff/log/status, without `cd`

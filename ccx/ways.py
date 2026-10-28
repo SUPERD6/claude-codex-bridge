@@ -299,7 +299,8 @@ def run(p: Paths, brief: str, choice: dict, *, cwd: Path, check: str | None = No
             _save_record(p, build)
             if v["verdict"] != "issues" or rnd == 1 or not build.get("session_id"):
                 break
-            issues = "\n".join(f"- {x}" for x in v["issues"])
+            # the planner's [must] items whole (review.ISSUE_FULL_CHARS each), as delegate's fix round gets them
+            issues = "\n".join(f"- {x}" for x in (v.get("issues_full") or v["issues"]))
             first = build
             build = step("fix", runner(to=roles["builder"], resume_run=build["run_id"], mode="write", check=check,
                                        review="off", fallback=False, label=label,

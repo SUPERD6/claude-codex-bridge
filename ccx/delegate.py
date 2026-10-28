@@ -747,9 +747,11 @@ def run(req: Request, p: Paths) -> dict:
             # (needed once tradeoff = save picks cheap models first, 2026-10-25)
             if want_review:                    # reviewed while the check runs; dropped if the check fails
                 bg_review = _start_review(req, p, cfg, record, cwd, run_dir, oc.result)
+            # did this attempt change anything: told before the check runs, so files the check writes don't count
+            left = _left_unchanged(p, record) if req.mode == "write" else None
             chk = (_namecheck(req, p, cfg, record, cwd)         # mode fail + a hit: the command is not run
                    or run_check(req.check, cwd, int(cfg["defaults"].get("check_timeout_sec", 900))))
-            early_check = (len(record["attempts"]), chk)
+            early_check = (len(record["attempts"]), chk, left)
             if not chk["passed"] and not chk.get("broken"):   # a broken check is no reason to climb
                 if bg_review is not None:
                     _finish_review(bg_review, record, p, keep=False)
@@ -785,9 +787,12 @@ def run(req: Request, p: Paths) -> dict:
         record["stop_requested"] = True
     check_passed = None
     # a write run that says done/partial but left the tree as it found it (no edit, no new file, no commit of its
-    # own): measured before ccx's check runs, so files the check itself writes do not count as the builder's
+    # own): measured before ccx's check runs on this attempt (the in-loop check's own measure when it ran there),
+    # so files the check writes do not count as the builder's. Files an earlier attempt's failed check left that
+    # are not .gitignore'd do count: then no label (the safe side)
+    same = early_check and early_check[0] == len(record["attempts"])
     no_change = (req.mode == "write" and oc.ok and status in ("done", "partial")
-                 and _left_unchanged(p, record) is True)
+                 and (early_check[2] if same else _left_unchanged(p, record)) is True)
     want_review = want_review and oc.ok and status in ("done", "partial")
     if bg_review is not None and not (want_review and early_check and early_check[0] == len(record["attempts"])):
         _finish_review(bg_review, record, p, keep=False)         # not this attempt's (cannot happen; be safe)
@@ -979,7 +984,8 @@ def compact(record: dict) -> dict:
             st = r.get("status") or "done"
             out["hint"] = (f"the sub-agent said {st} but changed nothing (no edit, no new file, no commit) since the "
                            f"run started" + ("; its check " + NO_CHANGES_NOTE if record.get("check") else "") +
-                           f": if the task was already met, accept it; otherwise `ccx resume {record['run_id']} "
+                           " (files .gitignore'd or outside the repo are not seen): if the task was already met, "
+                           f"accept it; otherwise `ccx resume {record['run_id']} "
                            f"\"nothing was changed: make the change\"`")
             out["needs_lead"] = f"no_changes: status {st}, nothing changed"
         if record["kind"] == "needs_write":

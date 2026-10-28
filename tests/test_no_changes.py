@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from ccx.config import Paths  # noqa: E402
 from test_ccx import Env  # noqa: E402
+from test_queue_pipeline import QEnv  # noqa: E402
 
 G = ["git", "-c", "user.name=t", "-c", "user.email=t@t"]
 
@@ -95,6 +96,63 @@ class TestNoChanges(Env):
         out = self.run_ccx()
         self.assertEqual((out["ok"], out.get("kind")), (True, None), out)
 
+    def test_deleting_an_untracked_file_is_a_change(self):
+        # "remove the stray tmp.log": the only change is that a file which was there (untracked) is gone
+        (self.work / "tmp.log").write_text("junk\n", encoding="utf-8")
+        out = self.run_ccx(env={"FAKE_DELETE": str(self.work / "tmp.log")})
+        self.assertEqual((out["ok"], out.get("kind")), (True, None), out)
+
+    def test_non_ascii_untracked_file_does_not_hide_the_label(self):
+        # git C-quotes non-ASCII names (core.quotepath): the mtime check must still find the file on disk
+        (self.work / "笔记.txt").write_text("old\n", encoding="utf-8")
+        out = self.run_ccx()
+        self.assertEqual((out["kind"], out["ok"]), ("no_changes", False), out)
+        out = self.run_ccx(env={"FAKE_WRITE": f"{self.work / '笔记.txt'}=new\n"})
+        self.assertEqual(out.get("kind"), None, out)
+
+    def test_check_that_writes_a_file_on_a_ladder_keeps_the_label(self):
+        # with a rung left, ccx runs the check inside the attempt loop: a file the check writes is not the builder's
+        check = 'python -c "open(\'check-out.log\', \'w\').write(\'x\')"'
+        r = self.ccx("run", "--from", "claude", "--to", "codex", "--tier", "T1", "--mode", "write", "--no-fallback",
+                     "--review", "off", "--check", check, "change x to 2 in a.py")
+        self.assertIn(r.returncode, (0, 2), r.stderr)
+        out = json.loads(r.stdout)
+        rec = self.record(out["run_id"])
+        self.assertEqual(rec["first_rung"], rec["attempts"][0]["rung"])
+        self.assertTrue((self.work / "check-out.log").exists())
+        self.assertEqual((out["kind"], out["ok"]), ("no_changes", False), out)
+        self.assertEqual(len(rec["attempts"]), 1)
+
+
+class TestUnquote(unittest.TestCase):
+    def test_git_quoted_names(self):
+        from ccx.workspace import _unquote
+        self.assertEqual(_unquote('"\\347\\254\\224\\350\\256\\260.txt"'), "笔记.txt")
+        self.assertEqual(_unquote('"a\\"b.txt"'), 'a"b.txt')
+        self.assertEqual(_unquote("plain.txt"), "plain.txt")
+
+
+class TestNoChangesDownstream(unittest.TestCase):
+    """ccx ui and the lanes treat no_changes as not finished cleanly (the queue: TestQueueNoChanges)."""
+    REC = {"run_id": "r1", "kind": "no_changes", "state": "finished", "ok": True, "to": "codex",
+           "result": {"status": "done", "summary": "done"}, "attempts": []}
+
+    def test_ui_asks_the_person(self):
+        import time
+        from ccx import ui
+        act = ui._act(dict(self.REC), None, time.time(), None)
+        self.assertEqual((act["kind"], act["what"]), ("decide", "a_no_changes"))
+        self.assertEqual([b["label"] for b in act["buttons"]], ["b_see", "b_make_change", "b_already_met"])
+        self.assertEqual(ui.hist_of_run(dict(self.REC), "t")[-1]["k"], "h_no_changes")
+        strings = json.loads((Path(ui.__file__).parent / "ui_static" / "strings.json").read_text(encoding="utf-8"))
+        for lang in strings.values():
+            for k in ("a_no_changes", "w_no_changes", "b_make_change", "b_already_met", "h_no_changes"):
+                self.assertIn(k, lang)
+
+    def test_lane_starts_fresh(self):
+        from ccx import lanes
+        self.assertIn("no_changes", lanes.BAD_KINDS)
+
 
 class TestWorktreeBase(Env):
     def setUp(self):
@@ -126,6 +184,17 @@ class TestWorktreeBase(Env):
         self.assertIn("worktree", out)
         self.assertNotIn("base", out)
         self.assertNotIn("base_note", rec)
+
+
+class TestQueueNoChanges(QEnv):
+    def test_dependent_does_not_start_on_work_never_made(self):
+        self.git_init()
+        a = self.q("add", "a", "--brief", "write piece a", "--minutes", "5", "--mode", "write", "--to", "codex")
+        b = self.q("add", "b", "--brief", "write piece b", "--minutes", "5", "--mode", "write", "--to", "codex",
+                   "--dep", a["id"])
+        out = self.q("run")
+        self.assertEqual([(r["id"], r["status"]) for r in out["results"]], [(a["id"], "failed")], out)
+        self.assertEqual(out["dep_blocked"], {b["id"]: [a["id"]]})
 
 
 if __name__ == "__main__":

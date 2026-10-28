@@ -94,6 +94,7 @@ class TestLanes(AdapterEnv):
         self.assertNotIn("lanes", out)
 
     def test_worktree_lane_commits_each_piece(self):
+        self.env["FAKE_TOUCH"] = "1"        # the builder changes something (a write run that changes nothing is no_changes)
         for args in (["init", "-q"], ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty",
                                      "-m", "init"]):
             subprocess.run(["git", *args], cwd=self.work, check=True, capture_output=True)

@@ -100,6 +100,8 @@ for spec in filter(None, _writes.split(";")):   # "path=content;path2=content"
     path, _, content = spec.partition("=")
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(content)
+for path in filter(None, os.environ.get("FAKE_DELETE", "").split(";")):   # files the builder deletes
+    os.remove(path)
 if os.environ.get("FAKE_TOUCH"):         # a change of its own on every call: a new file in its working folder
     with open(f"fake-{tid}-{time.time_ns()}.txt", "w", encoding="utf-8") as fh:
         fh.write("touched\n")

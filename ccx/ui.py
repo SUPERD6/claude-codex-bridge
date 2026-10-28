@@ -390,6 +390,12 @@ def _act(rec: dict, verdict: dict | None, now: float, beat: float | None) -> dic
         return {"kind": "decide", "what": "a_check_broken", "why": ["w_check_broken", {"cmd": c.get("cmd") or "",
                                                                                          "why": c.get("broken") or ""}],
                 "buttons": [show]}
+    if kind == "no_changes":                         # said done/partial, changed nothing: met already, or not done
+        return {"kind": "decide", "what": "a_no_changes", "why": ["w_no_changes", {}],
+                "buttons": [show, _btn("b_make_change", ["ccx", "resume", rid, "nothing was changed: make the change"],
+                                       "primary"),
+                            _btn("b_already_met", ["ccx", "verify", rid, "--ok", "1", "--note",
+                                                   "the task was already met"])]}
     if kind == "check_failed":
         c = rec.get("check") or {}
         return {"kind": "decide", "what": "a_check_failed", "why": ["w_check_failed", {"cmd": c.get("cmd") or "",
@@ -529,7 +535,8 @@ def hist_of_run(rec: dict, title: str) -> list[dict]:
     if rec.get("state") == "finished":
         k = rec.get("kind")
         st = (rec.get("result") or {}).get("status")
-        key = ("h_" + k) if k in ("needs_write", "check_failed", "check_broken", "review_failed", "quota", "timeout", "over_budget") \
+        key = ("h_" + k) if k in ("needs_write", "check_failed", "check_broken", "review_failed", "quota", "timeout",
+                                  "over_budget", "no_changes") \
             else "h_done" if rec.get("ok") and st in ("done", "partial") else "h_failed"
         out.append({"ts": t, "k": key, "p": {"t": title}, "tone": "ok" if key == "h_done" else "bad"})
     v = rec.get("verdict") or {}

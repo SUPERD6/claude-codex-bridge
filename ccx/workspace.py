@@ -320,11 +320,21 @@ def diffstat(snap: dict | None) -> str | None:
     return "; ".join(parts) or "no changes"
 
 
+def _unquote(name: str) -> str:
+    """A path as `git ls-files` prints it (C-quoted when core.quotepath is on and the name is not ASCII) -> the real
+    name. Unquoted names come back as they are."""
+    if len(name) >= 2 and name[0] == name[-1] == '"':
+        import codecs
+        return codecs.escape_decode(name[1:-1].encode("ascii", "backslashreplace"))[0].decode("utf-8")
+    return name
+
+
 def unchanged(snap: dict | None, since: float | None = None) -> bool | None:
     """Did a write run leave the tree exactly as its undo snapshot found it? True only when HEAD is the same (a
     commit of the builder's own is a change), no tracked file differs from the snapshot's base, no untracked file is
-    new, and no untracked file that was already there was written after `since` (the run's start; git keeps no
-    content of those). None when there is no snapshot or git can't answer: then nothing is claimed."""
+    new or gone, and no untracked file that was already there was written after `since` (the run's start; git keeps
+    no content of those). Not seen: files .gitignore'd or outside the repo (a run that writes only those looks
+    unchanged; the hint says so). None when there is no snapshot or git can't answer: then nothing is claimed."""
     if not snap or not snap.get("base"):
         return None
     try:
@@ -344,12 +354,15 @@ def unchanged(snap: dict | None, since: float | None = None) -> bool | None:
         if rc != 0:
             return None
         before = set(snap.get("untracked") or [])
-        for n in others.splitlines():
-            if not n or n.startswith(".ccx/"):
-                continue
-            if n not in before:
-                return False
-            if since is not None and (repo / n).stat().st_mtime > since:
+        now = [n for n in others.splitlines() if n and not n.startswith(".ccx/")]
+        if any(n not in before for n in now):
+            return False                        # a new untracked file
+        if {n for n in before if n and not n.startswith(".ccx/")} - set(now):
+            return False                        # an untracked file that was there is gone (deleted, moved, added)
+        for n in now:
+            # git C-quotes non-ASCII names in this list (the snapshot's too, so the comparisons above agree);
+            # the file on disk has the real name
+            if since is not None and (repo / _unquote(n)).stat().st_mtime > since:
                 return False
     except (OSError, KeyError, TypeError, ValueError):
         return None
