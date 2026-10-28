@@ -2,7 +2,10 @@
   is ccx's own unedited copy (its `<!-- ccx:handoff ... -->` header and the same text as a file in
   `.ccx/handoffs/`); otherwise the new handoff lives only in `.ccx/handoffs/` and the result carries
   `latest_skipped` (with `latest` pointing at that file). The session-start hook reads `.ccx/handoffs/` first, so it
-  still shows the new one once. The comment in `cmd_fresh` that said fresh never wrote `.ccx/handoff.md` is fixed.
+  still shows the new one once. A `.ccx/handoff.md` ccx wrote before `.ccx/handoffs/` existed (ccx header, no
+  history yet) is copied there once, byte for byte, and then updated as ccx's copy; whoever was shown it stays
+  marked as having seen it. The comment in `cmd_fresh` that said fresh never wrote `.ccx/handoff.md` is fixed.
+  `scripts/eval/preflight_e2e.py` checks the handoff file the command prints, not `.ccx/handoff.md`.
 - agent-delegate (SKILL.md + README.zh.md) teaches one call for long work, `ccx run ... --bg --wait 540` with a
   600000 ms shell timeout (Codex / DeepSeek leads set `--wait` about a minute under their own tool timeout), keeps
   `ccx show <run_id> --wait` for a run still going, judges `kind` from either final result, and adds: the lead's own
@@ -11,7 +14,10 @@
 - Docs no longer teach a 70% quota gate for DeepSeek (task-routing SKILL.md, the `ccx run --quota` help,
   `config/tiers.toml`): routing prices quota by its shadow price (E4); the unread `[cash] from_quota` is removed
   from priors.toml. three-way.md no longer calls ccx the cheapest way while saying the built-in sub-agent cost
-  less; rubric.md points to `--tier` / `ccx stats` / the person's own config instead of hand-editing tiers.toml.
+  less; rubric.md points to `--tier` / `ccx stats` / `ccx verify`, and says a lasting change to an agent's default
+  tier is the person's own edit of their hub tiers.toml (`ccx config set` has no per-agent tier key).
 - `tests/test_skills_core.py` guards pipelining (`ccx q ...`, `--any`), whole-workflow tiers (`--tradeoff`) and the
-  result-reading rules (`needs_lead`, `edited_tests`, `namecheck`, `weak`, fix round, resume) in every skill
-  trim, plus the one-call wait and the removed stale rules. `.gitignore` ignores `.claude/` (local state).
+  result-reading rules in every skill trim: `namecheck` / `weak`, and the rules themselves by their own wording in
+  agent-delegate SKILL.md and README.zh.md (don't re-send a run's brief, never resume a running run, judge `kind`
+  only from a final result, `review_issues` after `--wait`, no resume for `review_failed`), plus the one-call wait
+  and the removed stale rules. `.gitignore` ignores `.claude/` (local state).
