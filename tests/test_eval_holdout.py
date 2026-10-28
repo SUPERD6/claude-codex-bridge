@@ -105,3 +105,61 @@ def test_other_worktrees_of_the_checkout_are_forbidden(tmp_path):
                 real=real)
     assert other in PF.forbidden(u)
     assert any("sibling-worktree" in d for d in PF.claude_settings(u)["permissions"]["deny"])
+
+
+def _changed_tests(old: str, new: str) -> list[str]:
+    """Test functions (Class::name) whose body differs between two versions of a test file, as NEW_TESTS lists."""
+    import ast
+
+    def funcs(src):
+        out = {}
+
+        def walk(nodes, prefix):
+            for n in nodes:
+                if isinstance(n, ast.ClassDef):
+                    walk(n.body, prefix + n.name + "::")
+                elif isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name.startswith("test"):
+                    out[prefix + n.name] = ast.dump(n)
+        walk(ast.parse(src).body, "")
+        return out
+    o, n = funcs(old), funcs(new)
+    return [k for k, v in n.items() if o.get(k) != v]
+
+
+def test_every_hidden_check_derives_from_its_brief():
+    """derives_from: every test the commit added or changed is mapped, each quote is the brief's own words, and the
+    map says whether it has been independently reviewed (completeness only: whether a quote really determines
+    the check is the reviewer's call, not a test's)."""
+    norm = lambda x: " ".join(x.split())  # noqa: E731
+    assert set(tasks_holdout.DERIVES_FROM) == set(tasks_holdout.IDS) == set(tasks_holdout.NEW_TESTS)
+    for t in tasks_holdout.T:
+        m = tasks_holdout.derives_from(t["id"])
+        assert m and {e["test"] for e in m} == set(tasks_holdout.NEW_TESTS[t["id"]]), t["id"]
+        for e in m:
+            assert e["test"].split("::")[0] in t["tests"] and e["checks"], (t["id"], e)
+            assert e["brief"] or e.get("regression"), (t["id"], e)           # a quote, or why there is none
+            for q in e["brief"]:
+                assert norm(q) in norm(t["brief"]), (t["id"], q)
+    assert tasks_holdout.REVIEW["status"] in ("draft", "reviewed")
+    assert tasks_holdout.REVIEW["status"] == "draft" or tasks_holdout.REVIEW["independent_review"]
+
+
+def test_new_tests_match_the_commits_where_history_is_here():
+    """For this repository's tasks NEW_TESTS is recomputed from git (skipped in a shallow clone)."""
+    import subprocess
+    root = Path(__file__).resolve().parents[1]
+    checked = 0
+    for t in tasks_holdout.T:
+        if tasks_holdout.external(t):
+            continue
+        f = t["tests"][0]
+        show = lambda rev: subprocess.run(["git", "show", f"{rev}:{f}"], cwd=root, capture_output=True,  # noqa: E731
+                                          text=True, encoding="utf-8")
+        new, old = show(t["commit"]), show(t["commit"] + "^")
+        if new.returncode:
+            continue
+        got = [f"{f}::{x}" for x in _changed_tests(old.stdout if old.returncode == 0 else "", new.stdout)]
+        assert sorted(got) == sorted(tasks_holdout.NEW_TESTS[t["id"]]), t["id"]
+        checked += 1
+    if not checked:
+        pytest.skip("no history of the hold-out commits here (shallow clone)")
