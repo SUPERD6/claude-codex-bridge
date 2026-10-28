@@ -1,6 +1,6 @@
 # Measured
 
-English · [中文](measured.zh.md) · back to the [README](../README.md)
+English · [中文](measured.zh.md) · back to the [README](../README.md) · all [research reports](research/README.md)
 
 ## Behind the README's four numbers
 
@@ -10,6 +10,27 @@ English · [中文](measured.zh.md) · back to the [README](../README.md)
 | More accurate | first try right 36/36 vs 7/36 (McNemar p ≈ 4e-9) | same A/B | same; on the neutral task both arms were 6/6 |
 | Split the work | the lead made one request fewer on every task, 21/21 | [seven-cores A/B](research/2026-10-24-seven-cores-ab.md) §2.2 | total spend about even (ratio 1.02), 3.3× tokens, ~23 s slower; a short headless lead |
 | Share | project note followed: 9/9 right vs 0/9 (McNemar p = 0.004, Holm 0.016) | [seven-cores A/B](research/2026-10-24-seven-cores-ab.md) §2.1 | 3 tasks × 3; hub memory through start hooks not tested |
+
+## Round 5: large real tasks (2026-10-26/27, dev set)
+
+Ten real changes from this repository × 2, a sonnet-medium lead, hidden tests; details and every arm in the
+[round-5 report](research/2026-10-26-r5.md). **Dev set, signal only**: the tasks were also used while fixing ccx,
+and this run came before the clean-environment checks ([r5 plan §8](research/2026-10-26-r5-plan.md)). It does not
+change the four numbers above.
+
+| Run | Arm | Right | Cost per success | Wall, median |
+|---|---|---|---|---|
+| r5h | ccx2 (ccx as the agent-delegate skill teaches it) | 19/20 | $0.135 | 236 s |
+
+The four ccx2 runs after the fixes (r5e–r5h) were 19, 20, 18 and 19 out of 20, at $0.116–0.135 per success; r5h is
+not the best of them. For comparison, from earlier runs on older ccx (the lead doing it itself was not re-run after
+the first run): the lead doing it itself 19/20, $0.211, 94 s, and the built-in sub-agent 19/20, $0.155, 278 s (both
+first run); the built-in sub-agent with the same lean recipe (builtin2, r5d) 17/20, **$0.114**, 276 s, cheaper per
+success than r5h ccx2. Right answers also hid harness problems: the
+[harness audit](research/2026-10-28-harness-audit.md) found that every right ccx2 unit in r5e–r5h (76/76) failed at
+least one harness criterion, none of the 80 passed all of them, and the harness macro was 0.67. The report's §7 table
+stops at r5f; the r5h row uses its definitions (total spend of the 20 units / units right; plain median of the 20
+walls) on the same results file.
 
 ## Measured (2026-10-24, ccx 0.4.0)
 

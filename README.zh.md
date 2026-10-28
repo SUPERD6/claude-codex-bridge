@@ -54,7 +54,7 @@ ccx run --to codex --mode read "用三行总结 README.md"
 | DeepSeek（`dsh`，或经 Claude Code；接活也可经 Codex） | 能 | 能 |
 | Gemini CLI；经 Claude Code 的 Kimi、GLM、Qwen、OpenRouter | 不能 | 已适配，没真跑过 |
 
-所有“能”都在一台 Windows 电脑上真跑过；macOS 和 Linux 只在 CI 里跑。现在是 v0.4，仍在开发中：
+所有“能”都在一台 Windows 电脑上真跑过；macOS 和 Linux 只在 CI 里跑。现在是 v0.5，仍在开发中：
 哪些验证过、怎么验证的，见 [docs/STATUS.zh.md](docs/STATUS.zh.md)。
 
 ## 更多
