@@ -1,7 +1,7 @@
 """Stand-in for `claude -p` used by tests (Claude Code 2.1.309 shapes).
 
 --output-format stream-json (+ --verbose): system/init event first, then a final type=result event.
-FAKE_STATUS: done | blocked | blocked_then_done | quota | hang
+FAKE_STATUS: done | blocked | blocked_then_done | quota | hang | gone (a resume finds no conversation)
 """
 import json
 import os
@@ -49,6 +49,11 @@ if mode == "hang":
         print(json.dumps(msg), flush=True)
         print(json.dumps(msg), flush=True)
     time.sleep(float(os.environ.get("FAKE_HANG_S") or 30))
+if mode == "gone" and resuming:     # the shape seen on a real resume of a session that no longer existed
+    print(json.dumps({"type": "result", "subtype": "error_during_execution", "is_error": True, "session_id": sid,
+                      "errors": [f"No conversation found with session ID: {sid}"],
+                      "usage": {"input_tokens": 0, "output_tokens": 0}, "total_cost_usd": 0.0}))
+    sys.exit(1)
 if mode == "quota":
     if stream:
         print(json.dumps({"type": "rate_limit_event", "session_id": sid,

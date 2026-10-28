@@ -63,6 +63,33 @@ def user_config_file() -> Path:
     return Path(env).expanduser() if env else Path.home() / ".ccx" / "config.toml"
 
 
+TOML_PATH_HINT = ("Windows paths: write them with / or in single quotes ('C:\\x\\y'); inside double quotes a "
+                  "backslash starts an escape (\\n becomes a line break)")
+_WARNED: set[str] = set()
+
+
+def toml_problem(f: Path, e: tomllib.TOMLDecodeError) -> str:
+    """One line for a TOML file that does not parse: the file, where (line and column are in the message), a hint."""
+    return f"{f} is not valid TOML: {e}. {TOML_PATH_HINT}"
+
+
+def _warn_once(text: str) -> None:
+    if text not in _WARNED:
+        _WARNED.add(text)
+        print(f"ccx: {text}", file=sys.stderr)
+
+
+def has_control_chars(value) -> bool:
+    """A string (or one inside a list/dict) with a control character: usually "C:\\new" in double quotes."""
+    if isinstance(value, str):
+        return any(ord(c) < 32 for c in value)
+    if isinstance(value, dict):
+        return any(has_control_chars(v) for v in value.values())
+    if isinstance(value, list):
+        return any(has_control_chars(v) for v in value)
+    return False
+
+
 def hub_dir() -> Path:
     env = os.environ.get("CCX_HUB")
     if env:
@@ -73,16 +100,24 @@ def hub_dir() -> Path:
             hub = tomllib.loads(f.read_text(encoding="utf-8")).get("hub")
             if hub:
                 return Path(hub).expanduser()
-        except tomllib.TOMLDecodeError:
-            pass
+        except tomllib.TOMLDecodeError as e:
+            # not silent: ccx would otherwise use the default hub and seem to have forgotten everything
+            _warn_once(toml_problem(f, e) + f"; using {Path.home() / '.ccx-hub'} for now (`ccx doctor`, row "
+                       "'ccx config')")
     return Path.home() / ".ccx-hub"
+
+
+def toml_string(s: str) -> str:
+    """A TOML literal string ('...': no escapes, so a Windows path stays as it is); a basic string only when the text
+    holds a single quote or a control character, which a literal string cannot."""
+    return f"'{s}'" if "'" not in s and not has_control_chars(s) else json.dumps(s)
 
 
 def save_hub(path: Path) -> Path:
     """Remember the hub location for this machine (never inside the repo)."""
     f = user_config_file()
     f.parent.mkdir(parents=True, exist_ok=True)
-    f.write_text(f'# written by `ccx init --hub`\nhub = {json.dumps(str(path))}\n', encoding="utf-8")
+    f.write_text(f'# written by `ccx init --hub`\nhub = {toml_string(str(path))}\n', encoding="utf-8")
     return f
 
 
@@ -121,7 +156,8 @@ def load_layout(hub: Path) -> dict:
         try:
             lay.update(tomllib.loads(f.read_text(encoding="utf-8")).get("layout", {}))
         except tomllib.TOMLDecodeError as e:
-            raise ValueError(f"{f} is not valid TOML: {e}") from e
+            _warn_once(toml_problem(f, e))      # stderr too: a caller that swallows the error still leaves a trace
+            raise ValueError(toml_problem(f, e)) from e
     return lay
 
 
