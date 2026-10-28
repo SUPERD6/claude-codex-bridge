@@ -91,6 +91,9 @@ The work dir defaults to <temp>/<tag>, so two tags never share unit folders.
   python scripts/eval/r5.py run --taskset holdout --rounds 3 --tag ho1 --budget 20   # the unseen hold-out set (C1)
   python scripts/eval/r5.py run --taskset holdout --rounds 3 --arms fast,balanced,save,ccx2,cheapest --tag ho2 \
       --lead-model opus --budget 70 --dry-run          # the schedule and its cost estimate, nothing run
+  python scripts/eval/r5.py run --taskset holdout --rounds 3 --arms ccx2 --tag ho4 --lead-model auto --dry-run
+      # lead model per task (ccx's lead.model_by_task rule, its own arm ccx2@auto-medium); compare with the
+      # same tag under --lead-model opus and the default sonnet
   python scripts/eval/r5.py run --taskset holdout --rounds 3 --arms ccx2,ccx2-skill --tag ho3 --budget 20 \
       --claude-isolation ccx-home      # skill vs inline wording (export CLAUDE_CODE_OAUTH_TOKEN yourself first)
   python scripts/eval/r5.py summary [--taskset holdout] [--include-unclean]
@@ -300,6 +303,10 @@ BUILTIN_ARMS = PF.BUILTIN_ARMS
 # not in ARMS: the default schedule (and old tags' done-keys) stay
 OPT_IN_ARMS = ("ccx2", "builtin2", "builtin2r", *TIER_ARMS, *SKILL_ARMS)
 DEFAULT_LEAD = (r3.LEAD_MODEL, r3.LEAD_EFFORT)
+# --lead-model auto: each task's lead model from its difficulty by ccx's lead.model_by_task rule (ccx/leadmodel.py,
+# this checkout's config/tiers.toml [lead] / [lead_by_task], never the hub's settings), so the next round can compare
+# auto with fixed opus and fixed sonnet. Its units are their own arm (`ccx2@auto-medium`).
+LEAD_AUTO = "auto"
 # with both of these arms present the summary checks the tier decision rule (tier_rule)
 TIER_RULE_ARMS = ("balanced", "save")
 DIRECT = ["--to", "codex", "--model", "gpt-6-luna", "--effort", "low", "--review", "on", "--context", "off",
@@ -581,8 +588,15 @@ def in_ccx_home(r: dict) -> bool:
     return ((r.get("fingerprint") or {}).get("isolation") or {}).get("claude_home") == "ccx"
 
 
+def is_auto(r: dict) -> bool:
+    """A unit or row whose lead model was picked per task (--lead-model auto): its own arm, whatever it picked."""
+    return r.get("lead_pick") == LEAD_AUTO and has_lead(r.get("arm") or "")
+
+
 def _lead_suffix(r: dict) -> str:
     m, e = lead_of(r)
+    if is_auto(r):                       # never pooled with the fixed sonnet / opus arms it picks between
+        return "@" + re.sub(r"[^\w.-]", "_", f"{LEAD_AUTO}-{e}")
     return "" if (m, e) == DEFAULT_LEAD else "@" + re.sub(r"[^\w.-]", "_", f"{m}-{e}")
 
 
@@ -602,7 +616,7 @@ def done_key(r: dict) -> tuple:
     """What makes a unit done: tag, round, task, arm, the lead (old rows: the default lead, so they still match) and,
     for a lead in a ccx home, that (a ccx2 unit done under flags does not stand for one in a ccx home)."""
     return (r.get("tag"), r.get("round"), r.get("task"), r.get("arm"), *lead_of(r)) + \
-        (("ccx-home",) if in_ccx_home(r) else ())
+        ((LEAD_AUTO,) if is_auto(r) else ()) + (("ccx-home",) if in_ccx_home(r) else ())
 
 
 def unit_key(u: dict) -> str:
@@ -829,6 +843,42 @@ def ref_size(task: dict) -> dict | None:
 
 
 BANDS = ("small", "medium", "large")
+
+
+def band_minutes(policy: dict | None = None) -> dict:
+    """Minutes standing for each size band under [policy.bands]: half the medium floor, the geometric middle of
+    medium, twice the large floor (15 / 45 shipped: 7.5, 26, 90 minutes, b 2.9 / 4.7 / 6.5)."""
+    bands = (policy if policy is not None else shipped_policy()).get("bands") or {}
+    lo, hi = float(bands.get("medium_minutes", 15)), float(bands.get("large_minutes", 45))
+    return {"small": lo / 2, "medium": (lo * hi) ** 0.5, "large": hi * 2}
+
+
+def task_difficulty(task: dict) -> tuple[float | None, str]:
+    """(b, where it came from) for --lead-model auto: a task's own `minutes` when it has one (an estimate made before
+    the run, as a person would give ccx fresh --minutes), else the reference change's size band in minutes
+    (band_minutes) — an oracle stand-in: the band comes from the answer's size, which a real estimate does not see,
+    so auto's result is an upper bound on what the rule gives with real estimates. None when neither is known."""
+    tr = task_routing()
+    if task.get("minutes"):
+        return round(tr.b_from_minutes(float(task["minutes"])), 2), "minutes"
+    ref = ref_size(task)
+    if not ref or ref.get("band") not in BANDS:
+        return None, "unknown"
+    return round(tr.b_from_minutes(band_minutes()[ref["band"]]), 2), f"ref band {ref['band']}"
+
+
+def auto_lead(task: dict) -> dict:
+    """The lead fields of one auto unit: lead_model by ccx's rule (leadmodel.pick, forced on, this checkout's
+    config), lead_pick auto, lead_b, lead_band (easy / hard; unknown difficulty: the strong lead, never cheaper)."""
+    import tomllib
+    from ccx import leadmodel
+    with open(ROOT / "config" / "tiers.toml", "rb") as f:
+        cfg = tomllib.load(f)
+    b, src = task_difficulty(task)
+    ch = leadmodel.pick(cfg, "claude", b, task.get("risk"), force=True)
+    strong = str((cfg.get("lead") or {}).get("claude") or "opus")
+    return {"lead_model": ch["model"] if ch else strong, "lead_pick": LEAD_AUTO, "lead_b": b,
+            "lead_band": ch["band"] if ch else "unknown", "lead_b_from": src}
 
 
 def misband(planned: str | None, ref: str | None) -> str | None:
@@ -1337,9 +1387,12 @@ def cmd_run(a) -> int:
                          "also needs CLAUDE_CODE_OAUTH_TOKEN, which you export yourself)")
     done = {done_key(r) for r in read_jsonl(out)}
     lead = {"lead_model": a.lead_model or DEFAULT_LEAD[0], "lead_effort": a.lead_effort or DEFAULT_LEAD[1]}
+    auto = lead["lead_model"] == LEAD_AUTO
     todo = []
     for u in schedule(a.rounds, a.seed, tasks, arms):
         u = {**u, "tag": a.tag, "seed": a.seed, "taskset": a.taskset, **(lead if has_lead(u["arm"]) else {})}
+        if auto and has_lead(u["arm"]):
+            u.update(auto_lead(by_id(u["task"])))
         if a.claude_isolation == "ccx-home" and u["arm"] in CCX_ARMS:
             u["ccx_home"] = True                  # its own arm (`@ccx-home`), key, folder and label
         u["label"] = f"eval-r5:{a.tag}:{u['round']}:{u['task']}:{u['arm']}{_arm_suffix(u)}"
@@ -1352,8 +1405,16 @@ def cmd_run(a) -> int:
         ratios = {m: lead_price_ratio(m, mix) for m in sorted({lead_of(u)[0] for u in todo if has_lead(u["arm"])})}
         for u in todo:
             sp = unit_split(u, ratios.get(lead_of(u)[0], 1.0))
+            picked = (f"; lead {u['lead_model']} ({u['lead_band']}, b {u['lead_b']} from {u['lead_b_from']})"
+                      if is_auto(u) else "")
             print(f"[dry] {u['label']}  ~${sp['usd']:.3f} ({sp['mode']}; lead ~${sp['lead']:.3f}, "
-                  f"ccx ~${sp['ccx']:.3f})")
+                  f"ccx ~${sp['ccx']:.3f}{picked})")
+        if auto:
+            n: dict[str, int] = {}
+            for u in todo:
+                if is_auto(u):
+                    n[u["lead_model"]] = n.get(u["lead_model"], 0) + 1
+            print("[dry] lead auto picks: " + (", ".join(f"{m} x{k}" for m, k in sorted(n.items())) or "none"))
         for line in plan_lines(todo, a.budget, budget_spent(out, a.tag, a.extra_spent), ratios, note):
             print(line)
         if skill and a.claude_isolation != "ccx-home":
@@ -1942,7 +2003,7 @@ def cmd_export(a) -> int:
             "sub_usd", "by_model_usd", "ccx_usd", "ccx_review_usd", "ccx_agents", "lead_requests", "lead_tokens",
             "lead_output_tokens", "lead_tools", "lead_edits", "agent_calls", "ccx_runs", "ccx_resumes", "rework",
             "delegated", "context_attached", "files_changed", "diffstat", "model", "status", "verdicts", "error",
-            "env_clean", "fingerprint", "lead_model", "lead_effort", "phases", "tier", "tier_plan", "ref_size",
+            "env_clean", "fingerprint", "lead_model", "lead_effort", "lead_pick", "lead_b", "lead_band", "phases", "tier", "tier_plan", "ref_size",
             "actual_mode", "misband", "misband_overall", "followed_plan", "ccx_check_passed", "may_be_wrong",
             "ccx_routes", "bookkeeping_error", "lead_usage", "timeline", "skill_used", "skills_used")
     rows = tagged(read_jsonl(results_file(a.taskset)), a.tag)
@@ -1970,7 +2031,8 @@ def parser() -> argparse.ArgumentParser:
     r.add_argument("--budget", type=float, default=3.0,
                    help="stop before a new unit once this tag's rows (plus --extra-spent) reach $")
     r.add_argument("--extra-spent", type=float, default=0.0, help="$ spent elsewhere, counted against --budget")
-    r.add_argument("--lead-model", default="", help=f"the lead's Claude model (default: {DEFAULT_LEAD[0]}); "
+    r.add_argument("--lead-model", default="", help=f"the lead's Claude model (default: {DEFAULT_LEAD[0]}), or "
+                   "auto: each task's from its difficulty by ccx's lead.model_by_task rule (its own arm, @auto); "
                    "recorded in every row and its done-key")
     r.add_argument("--lead-effort", default="", help=f"the lead's effort (default: {DEFAULT_LEAD[1]})")
     r.add_argument("--jobs", type=int, default=2, help="tasks run at the same time")
