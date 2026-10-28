@@ -19,24 +19,28 @@ ROOT = Path(__file__).resolve().parents[1]
 SKIP_FILES = {"two-way-test-log.txt"}
 
 NAME = r"([^\\/\s\"'`<>*$%{}()\[\],;:|]+)"
+SLUG_NAME = r"([^\\/\s\"'`<>*$%{}()\[\],;:|-]+)"
+# Any case: Windows ignores it, and Codex writes its trust entries lowercased ([projects.'c:\users\...']).
 PATTERNS = [
-    # C:\Users\<name>, C:/Users/<name>, //c/Users/<name>, /c/Users/<name> (Git Bash)
-    re.compile(r"(?<![A-Za-z0-9])[A-Za-z]:?[\\/]+Users[\\/]+" + NAME),
+    # C:\Users\<name>, c:\users\<name>, C:/Users/<name>, //c/Users/<name>, /c/Users/<name> (Git Bash)
+    re.compile(r"(?<![A-Za-z0-9])[A-Za-z]:?[\\/]+Users[\\/]+" + NAME, re.IGNORECASE),
     # /Users/<name> (macOS), /home/<name> (Linux): only at the start of a path, not inside x/home/...
-    re.compile(r"(?<![\w.~-])/(?:Users|home)/" + NAME),
+    re.compile(r"(?<![\w.~-])/(?:Users|home)/" + NAME, re.IGNORECASE),
+    # C--Users-<name>-proj: Claude Code's project-folder name for a Windows path
+    re.compile(r"(?<![A-Za-z0-9])[A-Za-z]--Users-" + SLUG_NAME, re.IGNORECASE),
 ]
 
 # Folder names that are not a person: placeholders, CI runners, test stand-ins.
 PLACEHOLDERS = {
     "you", "your", "yourname", "your-name", "user", "username", "user-name", "me", "name", "someone", "somebody",
     "example", "example-user", "alice", "bob", "carol", "jane", "john", "johndoe", "foo", "bar", "test", "tester",
-    "runner", "runneradmin", "public", "default", "shared", "all users", "hub", "x", "a", "b", "u",
+    "runner", "runneradmin", "public", "default", "shared", "all", "all users", "hub", "x", "a", "b", "u",
 }
 
 
 def _allowed(name: str) -> bool:
     n = name.strip().lower()
-    if not n.strip(".~"):                       # "...", "~"
+    if not n.strip(".~…"):                 # "...", "…", "~"
         return True
     if n in PLACEHOLDERS or len(n) == 1:
         return True
@@ -83,7 +87,8 @@ _N = "jdoe42"      # spelled through a variable so this file does not trip its o
 
 @pytest.mark.parametrize("text", [
     f"C:\\Users\\{_N}\\proj", f"D:/Users/{_N}/x", f"//c/Users/{_N}/.codex", f"/c/Users/{_N}/x",
-    f"see /home/{_N}/.config", f"cd /Users/{_N}/code",
+    f"see /home/{_N}/.config", f"cd /Users/{_N}/code", f"[projects.'c:\\users\\{_N}\\x']", f"C:\\USERS\\{_N}",
+    f"C--Users-{_N}-proj", f"c--users-{_N}",
 ])
 def test_detects_home_folders(text):
     assert find_personal_paths(text)
@@ -92,7 +97,7 @@ def test_detects_home_folders(text):
 @pytest.mark.parametrize("text", [
     "C:\\Users\\<you>\\hub", "/home/<you>/.ccx-hub", "C:\\Users\\RUNNER~1\\AppData", "/home/runner/work",
     "//c/Users/a/.codex", "/Users/example/x", "C:\\Users\\...\\x", "D:/x/home/memories/MEMORY.md", "~/.ccx-hub",
-    "$HOME/.agents", "%USERPROFILE%\\.codex",
+    "$HOME/.agents", "%USERPROFILE%\\.codex", "C:\\Users\\All Users\\x", "c:\\users\\…\\x", "C--Users-you-proj",
 ])
 def test_allows_placeholders(text):
     assert not find_personal_paths(text)
