@@ -80,7 +80,9 @@ def cmd_fresh(a) -> int:
     text = src[1] + (f"\n\n## Note from the person\n{a.note}" if a.note else "")
     out = project.handoff(root, agent, agent, text)
     out["suggested_notes"] = _suggest_quietly(agent, src[0])
-    # its own file, not .ccx/handoff.md: a parallel session may write a newer one before the new conversation starts
+    # Point the new conversation at this handoff's own file in .ccx/handoffs/: a parallel session may write a newer
+    # one before it starts, and .ccx/handoff.md is updated only while it is ccx's unedited copy (a hand-written one
+    # is kept as it is).
     prompt = FRESH_PROMPT.format(file=Path(out["handoff"]).relative_to(root).as_posix())
     cmd = [*bin_argv(agent), prompt]              # both CLIs take the first prompt as an argument
     out.update(from_transcript=str(src[0]),

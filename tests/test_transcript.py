@@ -231,6 +231,68 @@ class TestFresh(Env):
         self.assertNotIn("handoff to you", self.ccx("mem", "delta", "--as", "claude").stdout)   # once
         self.assertNotIn("handoff to you", self.ccx("mem", "delta", "--as", "codex").stdout)    # not for codex
 
+    def test_fresh_preserves_handwritten_latest_and_lists_new_handoff_once(self):
+        slug = re.sub(r"[^A-Za-z0-9]", "-", str(self.work.resolve()))
+        _w(self.home_claude / "projects" / slug / "abc.jsonl", claude_events())
+        latest = self.work / ".ccx" / "handoff.md"
+        latest.parent.mkdir(parents=True, exist_ok=True)
+        original = b"Personal notes\r\nkeep these bytes\x00\n"
+        latest.write_bytes(original)
+        out = json.loads(self.ccx("fresh", "--as", "claude", "--no-model", "--note", "new handoff").stdout)
+        self.assertEqual(latest.read_bytes(), original)
+        self.assertEqual(out["latest"], out["handoff"])
+        self.assertEqual(out["latest_skipped"], "hand-written .ccx/handoff.md kept")
+        self.assertTrue(Path(out["handoff"]).exists())
+        first = self.ccx("mem", "delta", "--as", "claude").stdout
+        self.assertIn("[ccx handoff to you from claude]", first)
+        self.assertNotIn("handoff to you", self.ccx("mem", "delta", "--as", "claude").stdout)
+
+    def test_handwritten_edit_to_ccx_latest_survives_second_handoff(self):
+        from ccx import project
+        project.handoff(self.work, "claude", "claude", "first")
+        latest = self.work / ".ccx" / "handoff.md"
+        latest.write_text(latest.read_text(encoding="utf-8") + "\nPersonal edit\n", encoding="utf-8")
+        before = latest.read_bytes()
+        out = project.handoff(self.work, "claude", "claude", "second")
+        self.assertEqual(latest.read_bytes(), before)
+        self.assertEqual(out["latest"], out["handoff"])
+        self.assertEqual(out["latest_skipped"], "hand-written .ccx/handoff.md kept")
+
+    def test_unedited_ccx_latest_is_replaced_by_new_handoff(self):
+        from ccx import project
+        first = project.handoff(self.work, "claude", "claude", "first")
+        second = project.handoff(self.work, "claude", "claude", "second")
+        latest = self.work / ".ccx" / "handoff.md"
+        self.assertEqual(latest.read_text(encoding="utf-8"), Path(second["handoff"]).read_text(encoding="utf-8"))
+        self.assertNotEqual(first["handoff"], second["handoff"])
+        self.assertNotIn("latest_skipped", second)
+
+    def test_legacy_ccx_latest_without_history_is_kept_and_updated(self):
+        """A handoff.md ccx wrote before handoffs/ existed is adopted into handoffs/ once, then updated."""
+        from ccx import project
+        d = self.work / ".ccx"
+        d.mkdir(parents=True, exist_ok=True)
+        latest = d / "handoff.md"
+        old = b"<!-- ccx:handoff from=codex to=claude ts=2026-01-02T03:04:05 -->\n# Handoff\n\nold notes\n"
+        latest.write_bytes(old)
+        (d / "handoff.seen.json").write_text(json.dumps({"claude": ["handoff.md"]}), encoding="utf-8")
+        out = project.handoff(self.work, "claude", "codex", "new")
+        self.assertNotIn("latest_skipped", out)
+        self.assertEqual(latest.read_text(encoding="utf-8"), Path(out["handoff"]).read_text(encoding="utf-8"))
+        kept = d / "handoffs" / "2026-01-02T030405-codex-to-claude.md"
+        self.assertEqual(kept.read_bytes(), old)
+        self.assertIn(kept.name, json.loads((d / "handoff.seen.json").read_text(encoding="utf-8"))["claude"])
+        self.assertEqual(project.pending_handoffs(self.work, "claude"), [])   # already shown as handoff.md
+
+    def test_handwritten_latest_without_header_is_not_adopted(self):
+        from ccx import project
+        latest = self.work / ".ccx" / "handoff.md"
+        latest.parent.mkdir(parents=True, exist_ok=True)
+        latest.write_text("my own notes\n", encoding="utf-8")
+        out = project.handoff(self.work, "claude", "codex", "new")
+        self.assertEqual(out["latest_skipped"], "hand-written .ccx/handoff.md kept")
+        self.assertEqual(len(list((self.work / ".ccx" / "handoffs").glob("*.md"))), 1)
+
     def test_hint_points_at_fresh(self):
         from ccx import context
         self.assertIn("ccx fresh", context.advice({"agent": "claude", "turns": 40, "last_turn_tokens": 300_000,

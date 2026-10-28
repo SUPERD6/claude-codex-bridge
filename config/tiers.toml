@@ -255,7 +255,7 @@ write = []
 daily_usd = 1.0   # dsh 用你的 DEEPSEEK_API_KEY 按 token 计费；每天最多花这么多美元
 
 # 模型来源（provider）：同一个 CLI 换一个 API，当作一个单独的智能体（自己的档位、价格和学习）。
-# 用法：ccx run --to deepseek --model deepseek-flash "..."（或 --provider deepseek）；自动选模型时，要所有订阅额度都用到 70% 以上才会考虑它（它花真钱）。
+# 用法：ccx run --to deepseek --model deepseek-flash "..."（或 --provider deepseek）；自动选模型时，它花的真钱和订阅额度的隐形价格比（额度用到 60% 以上隐形价格开始上涨，所以额度越紧它越常胜出；没有额度门槛），每天仍受 daily_usd 限制。
 # 值以 $ 开头的从你的环境变量读取，ccx 不保存任何密钥；没设这个变量的 provider 不参与任何选择（ccx agents 里 ready = false）。
 # 每家都有 daily_usd（每天最多花多少美元，到了就不再派给它）。模型没有价格时 ccx 算不出花费，上限就守不住，所以拒绝运行：
 # 价格写在 priors 的 [model_prices]，或这里的 prices."<模型>" = { input = .., cached = .., output = .. }（美元 / 百万 token）。

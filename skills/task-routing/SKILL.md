@@ -30,8 +30,9 @@ escalation. Add `--lead`, `--ctx-tokens`, `--lead-ctx` (your conversation's size
 ccx reads it by itself) and `--remaining-turns` when comparing continuation with delegation; an unrequested
 delegation offer is `ccx propose` (agent-delegate section 0). `--agents` restricts providers; `--explain` shows
 alternatives. Judging the tier yourself (`ccx run --tier`): agent-delegate's `references/rubric.md`.
-`--agents codex,claude,deepseek` adds DeepSeek, which costs real money per token; through ccx it is offered only
-once every subscription's quota reaches 70% (agent-delegate's `references/three-way.md`).
+`--agents codex,claude,deepseek` adds DeepSeek, which costs real money per token. There is no quota threshold: its
+money competes with the subscriptions' quota at a shadow price that rises as quota runs short (from 60% used), so
+it wins more often then; its `daily_usd` cap still applies (agent-delegate's `references/three-way.md`).
 Consult `--help` only for needed unfamiliar options.
 
 The output's probabilities and dollar costs are estimates, not measured guarantees or

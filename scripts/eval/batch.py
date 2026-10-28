@@ -512,7 +512,9 @@ def is_wait(name: str, inp: dict) -> bool:
     cmd = str((inp or {}).get("command", ""))
     if any(p.search(cmd) for p in WAIT_BASH):
         return True
-    return any("--bg" not in m.group(3) for m in FG_CCX.finditer(cmd))
+    # `--bg --wait N` (one call, #147) blocks like a foreground run; plain `--bg` returns at once
+    return any("--bg" not in m.group(3) or re.search(r"(?<![\w-])--wait\b", m.group(3))
+               for m in FG_CCX.finditer(cmd))
 
 
 def _text(content) -> str:

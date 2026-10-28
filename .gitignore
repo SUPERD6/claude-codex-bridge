@@ -14,3 +14,6 @@ __pycache__/
 
 # website build output (scripts/build_site.py)
 _site/
+
+# Claude Code local state in a checkout (settings.local.json, worktrees/, launch.json, locks); not the plugin
+.claude/

@@ -31,6 +31,23 @@ CORE = {
     "auto-archive": ("ccx archive",),
     "ccx ui": ("ccx ui",),
     "hub": ("ccx where", "ccx projects", "--project", "ccx autonomy", "ccx intake"),
+    "pipelining": ("ccx q", "ccx q add", "ccx q run", "ccx q done", "--any"),
+    "whole-workflow tiers": ("--tradeoff",),
+    # result fields a lead looks at first (needs_lead / edited_tests are anchored above); the rules themselves
+    # are guarded by their own wording in DECISION_RULES
+    "decision rules": ("namecheck", "weak"),
+}
+# the Chinese notes say some English anchors in Chinese (checked as plain substrings)
+ZH_WORDS: dict[str, str] = {}
+
+# the rules a lead acts on when a result comes back, by phrases that occur only in the rule itself (whitespace
+# folded): dropping one silently changes how work is accepted. English in SKILL.md, Chinese in README.zh.md.
+DECISION_RULES = {
+    "SKILL.md": ("do not send the same brief again", "Never `ccx resume` a run that is still running",
+                 "Judge `kind` only from a final result", "`review_issues` there means no fix round",
+                 "Don't `ccx resume` for it"),
+    "README.zh.md": ("别再派同一份简报", "还在跑的运行不要 `ccx resume`", "`kind` 只按最终结果判断",
+                     "仍是 `review_issues`，说明修改轮没跑成", "不要为此 `ccx resume`"),
 }
 
 
@@ -103,7 +120,32 @@ class TestCoreFeaturesTaught(unittest.TestCase):
                          if (SKILLS / n / "README.zh.md").exists())
         for feature, words in CORE.items():
             for w in words:
-                self.assertTrue(mentioned(w, text), f"core feature '{feature}': no README.zh.md mentions {w!r}")
+                ok = ZH_WORDS[w] in text if w in ZH_WORDS else mentioned(w, text)
+                self.assertTrue(ok, f"core feature '{feature}': no README.zh.md mentions {ZH_WORDS.get(w, w)!r}")
+
+    def test_decision_rules_kept(self):
+        for name, phrases in DECISION_RULES.items():
+            text = " ".join((SKILLS / "agent-delegate" / name).read_text(encoding="utf-8").split())
+            for ph in phrases:
+                self.assertIn(ph, text, f"agent-delegate/{name}: decision rule dropped")
+
+    def test_no_stale_rules(self):
+        """A4: no 70% quota gate (routing prices quota instead, E4), and no hand-editing of tiers.toml."""
+        routing = (SKILLS / "task-routing" / "SKILL.md").read_text(encoding="utf-8")
+        self.assertNotIn("70%", routing)
+        quota = next(a for a in _subparsers(build_parser())["run"]._actions if "--quota" in a.option_strings)
+        self.assertNotIn("70%", quota.help)
+        rubric = (SKILLS / "agent-delegate" / "references" / "rubric.md").read_text(encoding="utf-8")
+        self.assertNotIn("<hub>/ccx/tiers.toml", rubric)
+        self.assertNotIn("(`ccx config set`)", rubric)   # it has no per-agent tier key
+        self.assertNotIn("from_quota", (SKILLS / "task-routing" / "data" / "priors.toml").read_text(encoding="utf-8"))
+
+    def test_one_call_wait_taught(self):
+        """A2: long work is one `ccx run ... --bg --wait 540` call, with the fallback `ccx show <run_id> --wait`."""
+        for name in ("SKILL.md", "README.zh.md"):
+            text = (SKILLS / "agent-delegate" / name).read_text(encoding="utf-8")
+            for w in ("--bg --wait 540", "600000", "ccx show <run_id> --wait", "--worktree", "ccx q run"):
+                self.assertIn(w, text, f"{name}: {w}")
 
     def test_queue_merge_step_taught_where_pieces_are_planned(self):
         """Parallel queue writers run in worktrees (#141): the skill text that plans several pieces must not say

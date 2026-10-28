@@ -15,7 +15,7 @@ and `how` — the next step to take.
 |---|---|---|
 | **self** | tiny work, or a cheap lead with little context to carry | do it |
 | **builtin** — your own sub-agent (Claude Code: Agent tool, Haiku/Sonnet/Opus; Codex: multi_agent, your own model) | the other tool's quota is tight, or the same vendor is cheaper here; nothing below is needed | start it with the brief; check the result; `ccx verify --builtin <rung> --b <b> --ok 1\|0 --agent-id <id>` |
-| **delegate** — `ccx run` to another agent | cheapest start-up (slim start; per right task on round 5's large tasks the built-in sub-agent cost less, about even with lean briefs); the only way when you need an undo snapshot, a worktree, another vendor's model, or resume after a crash | `ccx run …` as in SKILL.md; then `ccx verify <run_id> --ok 1\|0` |
+| **delegate** — `ccx run` to another agent | you need an undo snapshot, a worktree, another vendor's model, a `--check` that ccx runs again, or resume after a crash (the only way to get these). Its start-up per request is smaller (slim start), but that is not the whole cost: per right task on round 5's large tasks the built-in sub-agent cost less (about even with lean briefs), so don't pick ccx for price alone | `ccx run …` as in SKILL.md; then `ccx verify <run_id> --ok 1\|0` |
 
 Facts behind the numbers (measured 2026-10-24): a built-in sub-agent starts with its full tools — 58.4k tokens on
 Claude Code, 22.2k on Codex — against 13.6k / 18–21k for ccx's slim start. A built-in sub-agent is one attempt:

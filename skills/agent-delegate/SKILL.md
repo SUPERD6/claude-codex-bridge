@@ -66,9 +66,15 @@ sub-agent. The extra requests came from the habits below.
   re-worded as "earliest position" came back wrong). Don't read the code base, README, STATUS or docs to write
   it: the sub-agent reads them (and `.ccx/context.md`) on the cheaper model. Reuse an existing `.ccx/context.md`;
   update it only when keeping that context is part of what you were asked to do. Shape: `references/brief-template.md`.
-- **Long or multi-file work:** `ccx run --bg ...` prints the run_id; then `ccx show <run_id> --wait`, again while it
-  says running. Never `ccx resume` a run that is still running. Don't pipe ccx output through `tail`/`head`: the
-  result is one small JSON object, and a pipe on a long run hits your shell's timeout.
+- **Long or multi-file work: one call,** `ccx run ... --bg --wait 540` with your shell tool's timeout at 600000 ms
+  (Claude Code's Bash limit is 10 minutes; a Codex or DeepSeek lead sets `--wait` about a minute under its own
+  tool-call timeout). It prints the run_id at once (stderr) and the final result in the same call, like a plain
+  `ccx run`. If it is still running then: `ccx show <run_id> --wait`, again while it says running. Never
+  `ccx resume` a run that is still running. Don't pipe ccx output through `tail`/`head`: the result is one small
+  JSON object, and a pipe on a long run hits your shell's timeout.
+- **Your own sub-agents next to ccx:** pieces done by your built-in sub-agents and pieces done through ccx never
+  write the same files at the same time; a ccx writer running beside your own writers goes in `--worktree` or
+  through `ccx q run` (its undo snapshot, diff and check would otherwise take in their edits).
 - **Several authorized pieces:** plan with task-split `check`; pieces sharing a file go to one piece or to you,
   never in parallel (`q run` gives parallel writers in a clean git checkout their own worktree; otherwise they
   share this checkout). `ccx q add "<title>" --brief "..." --check "..."`
@@ -93,7 +99,8 @@ sub-agent. The extra requests came from the habits below.
 ccx run --from <you> --files 3 --coupling cross --clarity goal "brief..."  # routed; may edit (default)
 ccx run --from <you> --model <m> --effort <e> --minutes <n> "brief..."   # explicit pick; --minutes = how long a
 #   skilled engineer would need. Without it (or the rubric flags) the verdict can't teach routing
-ccx run --bg ...; ccx show <run_id> --wait   # long work: detached, then wait (again while running)
+ccx run ... --bg --wait 540      # long work, one call (shell timeout 600000 ms): the result, or still running
+ccx show <run_id> --wait         # still running after that: wait again (again while it says running)
 ccx stop <run_id>                # stop a running delegation (its whole process tree); resume continues it
 ccx run ... --task <id> --step <n>   # session id saved into task-checkpoint at once
 ccx run ... --mode read          # analysis only (without --mode, ccx infers read/write from the brief; follow it)
@@ -134,8 +141,9 @@ A printed result with a `run_id` means that delegation ran: do not send the same
 - `verification: not-run` = unverified — say so.
 - A `review` field is the independent review: `pass` (its notes are optional reading) or `issues` with
   `file:line`. ccx runs one fix round itself (`show --wait` follows it); after that, `needs_lead` is
-  your call and `review_failed` is below. Judge `kind` only from `ccx show <run_id> --wait` (a plain `show` can see the first
-  record before the fix round starts; resuming then collides with it). `review_issues` there means no fix round
+  your call and `review_failed` is below. Judge `kind` only from a final result: `ccx run ... --bg --wait` that
+  printed one, or `ccx show <run_id> --wait` (both follow the fix round; a plain `show` can see the first record
+  before the fix round starts, and resuming then collides with it). `review_issues` there means no fix round
   ran (no session to resume, or it failed to start): fix it yourself or dispatch it again.
 - `review_failed` (the fix round did not satisfy the review): check each `[must]` item against the diff; fix
   the real ones yourself and drop the wrong ones. Don't `ccx resume` for it.
