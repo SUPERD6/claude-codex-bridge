@@ -111,7 +111,7 @@ ccx run ... --review on|off      # force or skip it; default auto (risk, 50+ cod
                                  # changed files/functions, or a check that passed wrong work before;
                                  # these use the other vendor's cheapest rung, at most 20 a day: weak_daily)
 ccx run ... --worktree           # isolate edits on branch ccx/<run_id>
-ccx batch plan.json              # independent tasks in parallel (writers auto-isolated)
+ccx batch plan.json              # independent tasks in parallel (writers auto-isolated once committed)
 ccx resume <run_id> "follow-up"  # same sub-session: no re-briefing, cache stays warm
 # the next `ccx run` from this conversation (same folder + agent, < 1 h) continues the sub-session by itself;
 # --new for a fresh one; --fork (Claude -> Claude) starts from a copy of your whole conversation

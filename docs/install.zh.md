@@ -86,7 +86,7 @@ ccx undo <run_id> [--apply] [--wrong]   # 撤回某次可写运行改动的文�
 ccx ask "问题"                       # 让另一个模型快速给个第二意见（只读、低强度）
 ccx archive [--apply] | --restore <run>   # 归档用完的子会话（结果确定时自动归档；
                                           # sessions.archive = after_run | hours | off）
-ccx batch plan.json                 # 互不依赖的任务并行；多个写任务自动分到不同 worktree
+ccx batch plan.json                 # 互不依赖的任务并行；多个写任务自动分到不同 worktree（有未提交改动时共用项目目录：先提交）
 ccx q add "标题" --brief "..." [--dep q1] [--check CMD]   # 项目的待办队列；--plan plan.json 一次加整份计划
                                     # （{"tasks": ...} 或 task-split 的 {"pieces": ...}，认 depends_on、files）
 ccx q run [--gate] | resume | tree | done q3 --ok 1   # 就绪的块并行跑；多个写任务各开 worktree（仅限没有未提交改动时），依赖它们的块

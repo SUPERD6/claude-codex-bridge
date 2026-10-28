@@ -13,6 +13,7 @@ from pathlib import Path
 from .. import lanes, ledger, queue as wq
 from ..config import load_config, paths
 from ..delegate import Request, compact, run, verify
+from ..gitstate import SHARED_WHY, clean as _clean, in_git as _in_git
 from ..modes import resolve_mode
 from .common import _caller, _out, resolve
 
@@ -481,10 +482,7 @@ def _finish(root: Path, done: list, stop: dict | None, gate: bool = False,
     if loose:
         out["unmerged"] = loose          # nothing waits on them, but their work is only on these branches
     if shared:
-        out["shared_folder"] = {"ids": list(dict.fromkeys(shared)), "why": (
-            "the project has uncommitted changes, which a worktree (made from the last commit) would not see: these "
-            "writers worked side by side in the project folder, as before; commit first to give each its own "
-            "worktree")}
+        out["shared_folder"] = {"ids": list(dict.fromkeys(shared)), "why": SHARED_WHY}
     back = {r["id"]: r["restored"] for r in done if r.get("restored")}
     if back:
         # resumed = same session; fresh = started again; decide = needs you; finished = it had finished already
@@ -495,26 +493,6 @@ def _finish(root: Path, done: list, stop: dict | None, gate: bool = False,
     if stop:
         return {**stop, **out}, 2       # out's spent_usd: counted after the runs in flight finished
     return out, 0
-
-
-def _in_git(root: Path) -> bool:
-    return subprocess.run(["git", "rev-parse", "--is-inside-work-tree"], cwd=root, capture_output=True,
-                          stdin=subprocess.DEVNULL).returncode == 0
-
-
-def _clean(root: Path) -> bool:
-    """No uncommitted change in the repository (ccx's own .ccx folders aside). A worktree starts from the last
-    commit, so with uncommitted work (an earlier piece that ran in the project folder, the lead's own edits) a
-    writer in a worktree would start from code that lacks it."""
-    r = subprocess.run(["git", "status", "--porcelain"], cwd=root, capture_output=True, text=True,
-                       encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL)
-    if r.returncode != 0:
-        return False
-    for line in r.stdout.splitlines():
-        for path in line[3:].split(" -> "):
-            if ".ccx" not in path.strip().strip('"').replace("\\", "/").split("/"):
-                return False
-    return True
 
 
 def _run(a, root: Path) -> int:
