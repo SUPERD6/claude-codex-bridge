@@ -191,6 +191,72 @@ def mark_run_end(run_dir: Path, cwd: Path) -> None:
         pass
 
 
+def full_tree(cwd: Path) -> str | None:
+    """A git tree object of the working tree as it is now, new untracked files included (.gitignore'd files and
+    .ccx/ left out), built in a throwaway index: the real index, the files and HEAD stay as they are. Used by
+    [review] fix_rereview = "focus" (end.json); undo.json is never touched by it."""
+    import shutil
+    import tempfile
+    rc, top = _git(cwd, "rev-parse", "--show-toplevel")
+    if rc != 0 or not top:
+        return None
+    rc, real = _git(Path(top), "rev-parse", "--git-path", "index")
+    d = tempfile.mkdtemp(prefix="ccx-tree-")
+    try:
+        idx = Path(d) / "index"
+        if rc == 0 and real:
+            src = Path(real) if Path(real).is_absolute() else Path(top) / real
+            if src.is_file():
+                shutil.copyfile(src, idx)          # its stat cache: only changed files are hashed again
+        env = {**os.environ, "GIT_INDEX_FILE": str(idx)}
+
+        def g(*args: str) -> tuple[int, str]:
+            r = subprocess.run(["git", *args], cwd=top, capture_output=True, text=True, encoding="utf-8",
+                               errors="replace", stdin=subprocess.DEVNULL, env=env)
+            return r.returncode, r.stdout.strip()
+        if g("add", "-A", "--", ".", ":(exclude).ccx", ":(exclude,glob)**/.ccx/**")[0] != 0:
+            return None
+        rc, tree = g("write-tree")
+        return tree if rc == 0 and tree else None
+    except OSError:
+        return None
+    finally:
+        shutil.rmtree(d, ignore_errors=True)
+
+
+def write_end_tree(run_dir: Path, cwd: Path) -> None:
+    """end.json: the tree as this run left it (full_tree), so the review of the fix round that follows can show the
+    fix alone. A file of its own: undo.json and `ccx undo` are unchanged."""
+    try:
+        tree = full_tree(cwd)
+        if tree:
+            (run_dir / "end.json").write_text(json.dumps({"tree": tree, "ts": time.time()}), encoding="utf-8")
+    except (OSError, ValueError):                 # best effort: without it the fix round gets the full review
+        pass
+
+
+def fix_delta(p: Paths, prev_id: str | None, cwd: Path) -> str | None:
+    """`git diff` from the tree run prev_id left (its end.json) to the working tree now, new files included; None
+    when there is no end.json or git can't answer."""
+    if not prev_id:
+        return None
+    try:
+        end = json.loads((p.runs / prev_id / "end.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    now = full_tree(cwd)
+    if not now or not end.get("tree"):
+        return None
+    rc, top = _git(cwd, "rev-parse", "--show-toplevel")
+    try:
+        r = subprocess.run(["git", "-c", "core.quotepath=off", "diff", end["tree"], now],
+                           cwd=top if rc == 0 and top else cwd, capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", stdin=subprocess.DEVNULL)
+    except OSError:
+        return None
+    return r.stdout if r.returncode == 0 else None
+
+
 def chain_snapshot(p: Paths, record: dict, cwd: Path, prev_id: str | None) -> dict | None:
     """A resume / review fix round's undo snapshot: the chain's first one when the tree is still exactly as the
     previous link left it (same HEAD, same files; HEAD only when that link never finished), so its review and
