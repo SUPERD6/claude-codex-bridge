@@ -8,8 +8,12 @@ so doing it takes many requests. Arms (the lead is a fresh headless Claude Code,
   builtin  the lead must hand the implementation to its built-in sub-agent (Agent tool, a haiku `worker`)
   ccx      the lead must hand it to `ccx run --tradeoff save --review on --context auto`
   direct   no lead: `ccx run` straight to Codex gpt-6-luna low with another vendor's cheap review on
-  ccx2     opt-in (--arms ccx2): ccx as the agent-delegate skill now says (verbatim brief, --bg + show --wait,
-           default review, trust a passed check, no commit request); not in the default schedule
+  ccx2     opt-in (--arms ccx2): ccx as the agent-delegate skill now says, spelled out inline (verbatim brief, one
+           call `--bg --wait 540` with show --wait as the fallback, default review, trust a passed check, no commit
+           request); not in the default schedule
+  ccx2-skill opt-in (--arms ccx2-skill, R7): the lead is only told to delegate through ccx as its agent-delegate
+           skill says and must load that skill (no inline HOW); needs --claude-isolation ccx-home, a fresh Claude
+           home holding ccx's marked block, hooks and skills only (scripts/eval/preflight.py)
   builtin2 opt-in (--arms builtin2): builtin's Agent-tool hand-off with ccx2's brief and acceptance wording, word
            for word (the worker reports check / files_changed / diffstat / status); not in the default schedule
   builtin2r opt-in (--arms builtin2r): builtin2 whose worker's own prompt also carries ccx's KEEP_TESTS and WIRING
@@ -36,12 +40,30 @@ so doing it takes many requests. Arms (the lead is a fresh headless Claude Code,
 
 The lead is sonnet medium unless --lead-model / --lead-effort say otherwise; both are recorded in every row, in its
 fingerprint and in the done-key, and a summary shows another lead's units as their own arm (`ccx2@opus-high`).
+Likewise a lead that ran in a ccx home (--claude-isolation ccx-home, an arm that uses ccx: ccx's hooks and memory
+block reach it) is its own arm (`ccx2@ccx-home`), never pooled with the same arm under flags.
 --budget counts the spend of this tag's rows only (plus --extra-spent), not the whole results file.
+
+The summary counts env_clean rows only (rows that are not, or from before the clean room, are left out and their
+number printed, per arm too, `excluded_by_arm`; each paired comparison and the tier rule say how many shared units
+they lost and on which side, `lost_pairs`, and a tier rule pass with a one-sided loss is Unknown; --include-unclean
+counts them, never in the tier rule). Per arm it splits the spend into the lead's (lead_usd: the Claude lead's own
+result cost, a builtin worker included) and ccx's (ccx_usd: the hub's runs), each also per success, and the same
+for every arm into the lead's own work and the delegated work (lead_only_usd / sub_usd: ccx's sub-agents or the
+builtin worker); a skill arm says how many of its leads loaded the skill (`skill_used`). A tag runs on one commit: `run` refuses to go on with a tag whose rows were made at another commit
+(the fingerprint keeps `pinned_commit`; --pin-commit SHA also refuses any other HEAD). Every unit's row carries a
+`timeline` (scripts/eval/r5_timeline.py, R8): seconds, $ and tokens per role and reason.
 
 The summary pairs every two arms on the units they share (tag, round, task): McNemar exact p (Holm over the pairs),
 task-level bootstrap 95% CIs for the cost-per-success and wall-median differences; per arm a Wilson CI, the right
 count per round and, for units that used ccx, the wall per phase (sub-agent attempts, checks, reviews, fix rounds,
-the lead waiting) from the ccx run records; with arms `balanced` and `save` both present, the tier decision rule.
+the lead waiting) from the ccx run records; with arms `balanced` and `save` both present, the tier decision rule
+(its right-rate condition is paired: the task-bootstrap 95% CI of balanced's minus save's right answers, in tasks,
+must have its lower end at -1 or above; otherwise it is Unknown, not a pass).
+
+--dry-run prices the lead's part of each unit at its own model's list prices (PRICES: Opus vs Sonnet per token
+class, weighted by the token mix of this file's measured Sonnet leads, or an assumed mix without them) and prints
+the lead / ccx split per arm.
 
 Every unit: the repository at the task commit's parent, with today's tests/conftest.py committed into it (old
 commits' tests may predate per-test hubs, #73), a fresh throwaway hub (CCX_HUB, as round 3). The hidden test is the
@@ -69,7 +91,10 @@ The work dir defaults to <temp>/<tag>, so two tags never share unit folders.
   python scripts/eval/r5.py run --taskset holdout --rounds 3 --tag ho1 --budget 20   # the unseen hold-out set (C1)
   python scripts/eval/r5.py run --taskset holdout --rounds 3 --arms fast,balanced,save,ccx2,cheapest --tag ho2 \
       --lead-model opus --budget 70 --dry-run          # the schedule and its cost estimate, nothing run
-  python scripts/eval/r5.py summary [--taskset holdout]
+  python scripts/eval/r5.py run --taskset holdout --rounds 3 --arms ccx2,ccx2-skill --tag ho3 --budget 20 \
+      --claude-isolation ccx-home      # skill vs inline wording (export CLAUDE_CODE_OAUTH_TOKEN yourself first)
+  python scripts/eval/r5.py summary [--taskset holdout] [--include-unclean]
+  python scripts/eval/r5_timeline.py summary [--taskset holdout] [--tag ho2]       # where the time went (R8)
   python scripts/eval/r5.py export docs/research/data/2026-10-26-r5.json
 
 Hold-out (--taskset holdout, scripts/eval/tasks_holdout.py): 10 other past changes never used while tuning, for the
@@ -110,6 +135,7 @@ import seven_ab as S  # noqa: E402
 from common import ROOT, append_jsonl, archive_hub, ccx_verify, git, read_jsonl  # noqa: E402
 from ccx.prompts import KEEP_TESTS, WIRING  # noqa: E402
 import ext_repo  # noqa: E402
+import r5_timeline as TL  # noqa: E402
 import tasks_holdout  # noqa: E402
 import tasks_r5  # noqa: E402
 
@@ -182,14 +208,32 @@ LEAN_ACCEPT = ("When the result's check passed and its files_changed / diffstat 
                "is partial or blocked, look yourself and send it back with\n"
                "  {send_back}\n"
                "After accepting, commit the work yourself.")
+# One call (A2, #147): `--bg --wait 540` starts the run and waits for it in the same call, so the lead makes one
+# request less than `--bg` then `show --wait`. 540 s stays under the 600 s Bash limit the lead is told to set (at
+# 600 the tool could be cut before ccx prints); a run still going then prints its run_id, and the fallback is the
+# old wait. WAIT_ONE_CALL is shared by ccx2 and the tier arms so they are told it in the same words.
+WAIT_SECONDS = 540
+BASH_TIMEOUT_MS = 600000
+WAIT_ONE_CALL = (f"Run it with the Bash tool's timeout set to {BASH_TIMEOUT_MS}: `--bg --wait {WAIT_SECONDS}` starts "
+                 f"the run and waits up to {WAIT_SECONDS} s for it in the same call, then prints the final result. "
+                 "If it is still running when that call returns (it prints the run_id and a running status "
+                 "instead), wait with\n"
+                 "  {ccx} show <run_id> --wait\n"
+                 "and call that again while it says the run is still running (never resume a running run; do not "
+                 "pipe ccx output through tail or head).")
 HOW_CCX2 = ("Do not edit files yourself: hand the implementation to a sub-agent through ccx. Run\n"
-            "  {ccx} run --bg --tradeoff save --context auto --mode write --new --no-ab --label {label} "
-            "--check \"<a pytest command for the relevant test files>\" \"<brief>\"\n"
-            "then wait for it with\n"
-            "  {ccx} show <run_id> --wait\n"
-            "and call that again while it says the run is still running (never resume a running run; do not pipe ccx "
-            "output through tail or head). " + LEAN_BRIEF + " "
+            f"  {{ccx}} run --bg --wait {WAIT_SECONDS} --tradeoff save --context auto --mode write --new --no-ab "
+            "--label {label} --check \"<a pytest command for the relevant test files>\" \"<brief>\"\n"
+            + WAIT_ONE_CALL + " " + LEAN_BRIEF + " "
             + LEAN_ACCEPT.replace("{send_back}", "{ccx} resume <run_id> \"<what to fix>\""))
+# ccx2-skill (opt-in, `--arms ccx2-skill`, R7): the lead is told only to delegate as its agent-delegate skill says
+# and must load that skill; no command, flag or acceptance rule is given inline (HOW_CCX2 spells all of them out,
+# so ccx2 measures the eval's wording, this arm what the shipped skill teaches). It needs a lead whose Claude home
+# has the skill: `--claude-isolation ccx-home` (preflight.py), checked by cmd_run.
+HOW_CCX2_SKILL = ("Do not edit files yourself: hand the implementation to a sub-agent through ccx. Load your "
+                  "`agent-delegate` skill first (Skill tool) and follow what it says for how to start the run, wait "
+                  "for it, check the result and send it back; the person has authorized this delegation. Do not "
+                  "ask the sub-agent to commit; after accepting, commit the work yourself.")
 # builtin2 (opt-in, `--arms builtin2`): builtin's Agent-tool hand-off with ccx2's lean brief and acceptance, so a
 # ccx2 vs builtin win is not just the instruction. The worker runs the acceptance command itself and reports what a
 # ccx result carries (check, files_changed, diffstat, status).
@@ -232,11 +276,8 @@ HOW_TIER = (TIER_PICKED + " Before you start, size the work and ask ccx, giving 
             "--files <how many source files the change touches> \"<the person's request, verbatim>\"\n"
             "It prints one JSON object. If it says `authorized: true`, do not edit files yourself: run its `next` "
             "command once (`{ccx} run ...` with its --proposal and the same --minutes and --files), adding "
-            "`--bg --context auto --mode write --new --no-ab --label {label} --check \"<a pytest command for the "
-            "relevant test files>\"` and the brief, then wait for it with\n"
-            "  {ccx} show <run_id> --wait\n"
-            "and call that again while it says the run is still running (never resume a running run; do not pipe ccx "
-            "output through tail or head). " + LEAN_BRIEF + " "
+            f"`--bg --wait {WAIT_SECONDS} --context auto --mode write --new --no-ab --label {{label}} --check \"<a "
+            "pytest command for the relevant test files>\"` and the brief. " + WAIT_ONE_CALL + " " + LEAN_BRIEF + " "
             + LEAN_ACCEPT.replace("{send_back}", "{ccx} resume <run_id> \"<what to fix>\"")
             + " If it says the tier has you do it (no `authorized: true`), do the work yourself. If `ccx run` "
             "refuses the proposal (it prints `ok: false` and an error instead of a run_id), do not propose again: "
@@ -252,10 +293,11 @@ def ccx_lead_model(model: str) -> str:
 # the whole-workflow tier arms (opt-in): named as the tiers, so tier_rule (balanced vs save) reads them
 TIER_ARMS = ("fast", "balanced", "save", "cheapest")
 TIER_LEAD_ARMS = ("balanced", "save")            # the lead sizes with ccx propose and follows its answer
-CCX_ARMS = ("ccx", "ccx2", *TIER_LEAD_ARMS)      # leads that may hand work to ccx (session file, ccx metrics)
+SKILL_ARMS = PF.SKILL_ARMS                       # the lead loads the agent-delegate skill (needs ccx-home)
+CCX_ARMS = ("ccx", "ccx2", *SKILL_ARMS, *TIER_LEAD_ARMS)   # leads that may hand work to ccx (session file, metrics)
 BUILTIN_ARMS = PF.BUILTIN_ARMS
-OPT_IN_ARMS = ("ccx2", "builtin2", "builtin2r", *TIER_ARMS)   # not in ARMS: the default schedule (and old tags'
-#                                                               done-keys) stay
+# not in ARMS: the default schedule (and old tags' done-keys) stay
+OPT_IN_ARMS = ("ccx2", "builtin2", "builtin2r", *TIER_ARMS, *SKILL_ARMS)
 DEFAULT_LEAD = (r3.LEAD_MODEL, r3.LEAD_EFFORT)
 # with both of these arms present the summary checks the tier decision rule (tier_rule)
 TIER_RULE_ARMS = ("balanced", "save")
@@ -473,6 +515,8 @@ def lead_how(arm: str, label: str, lead: tuple[str, str] = DEFAULT_LEAD) -> str:
         return HOW_CCX.format(ccx=r3.CCX_CMD, label=label)
     if arm == "ccx2":
         return HOW_CCX2.format(ccx=r3.CCX_CMD, label=label)
+    if arm in SKILL_ARMS:
+        return HOW_CCX2_SKILL
     if arm in ("builtin2", "builtin2r"):          # builtin2r: the same lead wording, the rules are in the worker
         return HOW_BUILTIN2
     if arm == "fast":
@@ -487,6 +531,18 @@ def lead_flags_arm(arm: str) -> str:
     if arm == "fast":                             # the lead does it all itself: self's command line
         return "self"
     return "ccx" if arm in CCX_ARMS else "builtin" if arm in BUILTIN_ARMS else arm
+
+
+def skill_argv(argv: list[str]) -> list[str]:
+    """A lead command line that may load skills: no --disable-slash-commands (Claude Code 2.1.309: it "disables all
+    skills and commands") and the Skill tool added to --tools and --allowed-tools."""
+    out = [x for x in argv if x != "--disable-slash-commands"]
+    for flag, sep in (("--tools", ","), ("--allowed-tools", " ")):
+        if flag in out:
+            i = out.index(flag) + 1
+            if "Skill" not in out[i].replace(",", " ").split():
+                out[i] = out[i] + sep + "Skill"
+    return out
 
 
 def worker_agents(arm: str) -> dict | None:
@@ -512,25 +568,45 @@ def lead_of(r: dict) -> tuple[str, str]:
     return (r.get("lead_model") or DEFAULT_LEAD[0], r.get("lead_effort") or DEFAULT_LEAD[1])
 
 
+CCX_HOME_SUFFIX = "@ccx-home"
+
+
+def in_ccx_home(r: dict) -> bool:
+    """Whether a unit's or row's lead ran in a ccx home (--claude-isolation ccx-home and an arm in CCX_ARMS: ccx's
+    hooks and CLAUDE.md block reached the lead, so it was told more than the same arm under flags). Units carry
+    `ccx_home`; rows from before the field: their fingerprint's isolation says so."""
+    if "ccx_home" in r:
+        return bool(r["ccx_home"])
+    return ((r.get("fingerprint") or {}).get("isolation") or {}).get("claude_home") == "ccx"
+
+
 def _lead_suffix(r: dict) -> str:
     m, e = lead_of(r)
     return "" if (m, e) == DEFAULT_LEAD else "@" + re.sub(r"[^\w.-]", "_", f"{m}-{e}")
 
 
+def _arm_suffix(r: dict) -> str:
+    """The lead's suffix, then `@ccx-home` for a lead in a ccx home."""
+    return _lead_suffix(r) + (CCX_HOME_SUFFIX if in_ccx_home(r) else "")
+
+
 def arm_of(r: dict) -> str:
-    """The arm a summary counts a row under: its arm, plus its lead when not the default (`ccx2@opus-high`), so
-    units with different leads are never pooled or paired as one arm."""
-    return f"{r['arm']}{_lead_suffix(r)}"
+    """The arm a summary counts a row under: its arm, plus its lead when not the default (`ccx2@opus-high`) and
+    `@ccx-home` when its lead ran in a ccx home (`ccx2@ccx-home`, `ccx2@opus-high@ccx-home`), so units with
+    different leads, or leads told different things, are never pooled or paired as one arm."""
+    return f"{r['arm']}{_arm_suffix(r)}"
 
 
 def done_key(r: dict) -> tuple:
-    """What makes a unit done: tag, round, task, arm and the lead (old rows: the default lead, so they still match)."""
-    return (r.get("tag"), r.get("round"), r.get("task"), r.get("arm"), *lead_of(r))
+    """What makes a unit done: tag, round, task, arm, the lead (old rows: the default lead, so they still match) and,
+    for a lead in a ccx home, that (a ccx2 unit done under flags does not stand for one in a ccx home)."""
+    return (r.get("tag"), r.get("round"), r.get("task"), r.get("arm"), *lead_of(r)) + \
+        (("ccx-home",) if in_ccx_home(r) else ())
 
 
 def unit_key(u: dict) -> str:
-    """The unit's folder / stream name in the work dir (the old name for the default lead)."""
-    return f"{u['round']}-{u['task']}-{u['arm']}{_lead_suffix(u)}"
+    """The unit's folder / stream name in the work dir (the old name for the default lead outside a ccx home)."""
+    return f"{u['round']}-{u['task']}-{u['arm']}{_arm_suffix(u)}"
 
 
 def lead_unit(u: dict, a, work: Path, repo: Path, hub: Path, iso: PF.Unit | None = None, env: dict | None = None,
@@ -550,6 +626,8 @@ def lead_unit(u: dict, a, work: Path, repo: Path, hub: Path, iso: PF.Unit | None
     model, effort = lead_of(u)
     argv = r3.lead_argv(lead_flags_arm(u["arm"]), a.lead_budget, model, effort, worker_agents(u["arm"])) \
         + (PF.lead_flags(iso) if iso else [])
+    if u["arm"] in SKILL_ARMS:
+        argv = skill_argv(argv)
     out, _err, rc, _left = PF.run(argv, input=prompt, cwd=repo, env=env, timeout=a.timeout, job=job)
     wall = round(time.time() - t0, 1)
     (work / f"{unit_key(u)}.stream.jsonl").write_text(out, encoding="utf-8")
@@ -575,6 +653,13 @@ def lead_unit(u: dict, a, work: Path, repo: Path, hub: Path, iso: PF.Unit | None
                                       for rid in cost["run_ids"])
         if cost["run_ids"]:
             row["phases"] = phase_wall(hub, cost["run_ids"], wall)
+    ls = TL.lead_stream(out)
+    row["lead_usage"] = ls["usage"]               # per token class: what --dry-run prices another lead model with
+    if u["arm"] in SKILL_ARMS:
+        row["skills_used"] = ls["skills"]
+        row["skill_used"] = "agent-delegate" in ls["skills"]
+    row["timeline"] = TL.unit_timeline(hub, cost["run_ids"], out, wall, row.get("phases"),
+                                       worker_usd=row["sub_usd"] if is_builtin else None)
     return row
 
 
@@ -670,6 +755,7 @@ def direct_unit(u: dict, a, repo: Path, hub: Path, env: dict | None = None, job:
            "stderr": err if rc else ""}
     if cost["run_ids"]:
         row["phases"] = phase_wall(hub, cost["run_ids"])          # no lead: nothing waits
+    row["timeline"] = TL.unit_timeline(hub, cost["run_ids"], "", row["wall_s"])
     return row
 
 
@@ -851,7 +937,8 @@ def bookkeeping(row: dict, arm: str, hub: Path, task: dict) -> None:
 def unit_of(u: dict, a, work: Path) -> PF.Unit:
     key = unit_key(u)
     return PF.Unit(key=key, work=work, repo=work / key, hub=work / f"h-{key}", label=u["label"],
-                   claude=a.claude_isolation, codex_home=Path(a.codex_home).expanduser() if a.codex_home else None,
+                   claude=a.claude_isolation, ccx_home=a.claude_isolation == "ccx-home" and u["arm"] in CCX_ARMS,
+                   codex_home=Path(a.codex_home).expanduser() if a.codex_home else None,
                    dsh=a.dsh_home, agents=tuple(r3.WORKER), **ext_guard(by_id(u["task"]), a, work))
 
 
@@ -1066,7 +1153,18 @@ UNIT_USD = {"self": 0.20, "builtin": 0.17, "builtin2": 0.10, "builtin2r": 0.10, 
             "direct": 0.05}
 LEAD_SHARE = {"self": 1.0, "builtin": 0.75, "builtin2": 0.73, "builtin2r": 0.73, "ccx": 0.72, "ccx2": 0.64,
               "direct": 0.0}
-OPUS_LEAD = 1.7            # an Opus lead's part costs about this much more than sonnet's (the design's assumption)
+OPUS_LEAD = 1.7            # the old flat assumption (an Opus lead's part x1.7); unit_estimate's default ratio only
+# List prices, $ per million tokens, of the lead models Claude Code's aliases name (opus = Claude Opus 5.5, sonnet =
+# Claude Sonnet 5.5, the models round 5's streams show), from the Claude API model table cached 2026-10-06:
+# input / output; cache reads; cache writes are 1.25x input (5-minute cache). Opus 5.5 costs twice Sonnet 5.5 per
+# input, output and cache-write token but the same per cache read, so the ratio of a lead's cost depends on its mix.
+PRICES = {"opus": {"input": 4.0, "output": 20.0, "cache_read": 0.20, "cache_write": 5.0},
+          "sonnet": {"input": 2.0, "output": 10.0, "cache_read": 0.20, "cache_write": 2.5}}
+TOKEN_CLASSES = {"input": "input_tokens", "output": "output_tokens", "cache_read": "cache_read_input_tokens",
+                 "cache_write": "cache_creation_input_tokens"}
+# The share of a Sonnet lead's $ per token class when the results file has no measured leads (one ccx2 row of r5h
+# solved for its cache writes: lead_usd $0.0767 = 381 output, ~71k cache reads, ~23k cache writes): an assumption
+LEAD_MIX_ASSUMED = {"input": 0.0, "output": 0.05, "cache_read": 0.19, "cache_write": 0.76}
 PROPOSE_USD = 0.01         # one `ccx propose` call by the lead (design estimate)
 # the measured arm a tier mode is estimated from (direct: the direct arm's mean, which paid a review and a fixed
 # gpt-6-luna low that cheapest's run does not, so cheapest's estimate is rough, not a measurement of it)
@@ -1088,10 +1186,49 @@ def planned_mode(arm: str, task: dict) -> str:
     return rules.get(ref["band"], "self")
 
 
-def unit_estimate(u: dict) -> tuple[float, str]:
-    """(estimated $, the mode the estimate stands for) of one unit: the measured per-unit cost of its arm (a tier arm:
-    of the mode it is expected to run in, plus one ccx propose for balanced / save), the lead's share times OPUS_LEAD
-    when the lead is an Opus model. Arms without a measurement: ccx2's, marked `?`."""
+def model_family(model: str) -> str | None:
+    """opus / sonnet / haiku from an alias or a full model id; None for anything else."""
+    m = str(model or "").lower()
+    return next((x for x in ("opus", "sonnet", "haiku") if x in m), None)
+
+
+def mix_of(usage: dict, prices: dict) -> dict | None:
+    """A lead's $ per token class (`usage`: its per-class token counts, TOKEN_CLASSES) as shares of its total."""
+    usd = {k: int(usage.get(v) or 0) * prices[k] / 1e6 for k, v in TOKEN_CLASSES.items()}
+    total = sum(usd.values())
+    return {k: v / total for k, v in usd.items()} if total else None
+
+
+def lead_mix(rows: list[dict]) -> tuple[dict, str]:
+    """The token mix of the default (Sonnet) lead's $: the mean of its rows' mixes in this results file (rows with
+    `lead_usage`, which r5 records from the lead's stream), else LEAD_MIX_ASSUMED. Returns (mix, where it is from)."""
+    mixes = [m for r in rows if r.get("lead_usage") and has_lead(r.get("arm") or "")
+             and model_family(lead_of(r)[0]) == "sonnet" for m in [mix_of(r["lead_usage"], PRICES["sonnet"])] if m]
+    if not mixes:
+        return dict(LEAD_MIX_ASSUMED), "assumed (no measured lead token mix in this results file)"
+    return {k: round(sum(m[k] for m in mixes) / len(mixes), 4) for k in TOKEN_CLASSES}, \
+        f"measured from {len(mixes)} sonnet-lead rows"
+
+
+def lead_price_ratio(model: str, mix: dict | None = None, base: str = "sonnet") -> float | None:
+    """What a lead of `model` costs per unit of work relative to the measured Sonnet lead, at list prices: each token
+    class's price ratio weighted by the Sonnet lead's $ mix (the same tokens, priced at the other model). 1.0 for
+    the base model; None for a model without a price (estimated at the base's then, and marked)."""
+    fam = model_family(model)
+    if fam == base:
+        return 1.0
+    if fam not in PRICES:
+        return None
+    mix = mix or LEAD_MIX_ASSUMED
+    return round(sum(mix[k] * PRICES[fam][k] / PRICES[base][k] for k in TOKEN_CLASSES), 4)
+
+
+def unit_split(u: dict, ratio: float | None = OPUS_LEAD) -> dict:
+    """The estimate of one unit split into the lead's part and ccx's part, and the mode it stands for: the measured
+    per-unit cost of its arm (a tier arm: of the mode it is expected to run in, plus one ccx propose for balanced /
+    save, a lead's call) split by its measured lead share; the lead's part times `ratio` when the lead is not the
+    measured Sonnet (its model's price ratio, lead_price_ratio; None: no price, kept at Sonnet's and marked `$?`).
+    Arms without a measurement: ccx2's, marked `?`."""
     arm = u["arm"]
     if arm in TIER_ARMS:
         mode = "self" if arm == "fast" else planned_mode(arm, by_id(u["task"]))
@@ -1099,36 +1236,73 @@ def unit_estimate(u: dict) -> tuple[float, str]:
     else:
         mode, base = arm, arm if arm in UNIT_USD else "ccx2"
     usd, share = UNIT_USD[base], LEAD_SHARE[base]
-    if has_lead(arm) and "opus" in lead_of(u)[0].lower():
-        usd = usd * (1 - share) + usd * share * OPUS_LEAD
+    lead, ccx = usd * share, usd * (1 - share)
+    other = has_lead(arm) and model_family(lead_of(u)[0]) != "sonnet"
+    k = (ratio if ratio is not None else 1.0) if other else 1.0
     if arm in TIER_LEAD_ARMS:
-        usd += PROPOSE_USD * (OPUS_LEAD if "opus" in lead_of(u)[0].lower() else 1)
-    return round(usd, 4), mode if arm in UNIT_USD or arm in TIER_ARMS else f"{mode}?"
+        lead += PROPOSE_USD
+    lead *= k
+    tag = mode if arm in UNIT_USD or arm in TIER_ARMS else f"{mode}?"
+    if other and ratio is None:
+        tag += " $?"
+    return {"lead": round(lead, 4), "ccx": round(ccx, 4), "usd": round(lead + ccx, 4), "mode": tag}
 
 
-def plan_lines(todo: list[dict], budget: float, spent_usd: float) -> list[str]:
-    """The dry-run planner: per arm units, $/unit and $, the total, and whether it fits what is left of the budget."""
+def unit_estimate(u: dict, ratio: float | None = OPUS_LEAD) -> tuple[float, str]:
+    """(estimated $, the mode the estimate stands for) of one unit (unit_split's total)."""
+    sp = unit_split(u, ratio)
+    return sp["usd"], sp["mode"]
+
+
+def plan_lines(todo: list[dict], budget: float, spent_usd: float, ratios: dict | None = None,
+               mix_note: str = "") -> list[str]:
+    """The dry-run planner: per arm units, $/unit and $ (the lead's and ccx's part), the total, and whether it fits
+    what is left of the budget. `ratios`: lead model -> lead_price_ratio (default: the old flat OPUS_LEAD)."""
     by: dict[str, list] = {}
     for u in todo:
-        usd, mode = unit_estimate(u)
-        by.setdefault(arm_of(u), []).append((usd, mode))
+        r = (ratios or {}).get(lead_of(u)[0], OPUS_LEAD) if ratios is not None else OPUS_LEAD
+        by.setdefault(arm_of(u), []).append(unit_split(u, r))
     out, total = [], 0.0
     for arm in arm_order(by):
         xs = by[arm]
-        s = sum(x for x, _ in xs)
+        s, lead, ccx = (sum(x[k] for x in xs) for k in ("usd", "lead", "ccx"))
         total += s
         modes: dict[str, int] = {}
-        for _, m in xs:
-            modes[m] = modes.get(m, 0) + 1
-        out.append(f"[estimate] {arm:22} {len(xs):3} units  ~${s / len(xs):.3f}/unit  ~${s:.2f}  modes "
-                   + " ".join(f"{m}={n}" for m, n in sorted(modes.items())))
+        for x in xs:
+            modes[x["mode"]] = modes.get(x["mode"], 0) + 1
+        out.append(f"[estimate] {arm:22} {len(xs):3} units  ~${s / len(xs):.3f}/unit  ~${s:.2f} (lead ~${lead:.2f}, "
+                   f"ccx ~${ccx:.2f})  modes " + " ".join(f"{m}={n}" for m, n in sorted(modes.items())))
     left = round(budget - spent_usd, 4)
     out.append(f"[estimate] total ~${total:.2f} for {len(todo)} units; budget ${budget} with ${spent_usd:.2f} of this "
                f"tag spent leaves ${left:.2f}: " + ("fits" if total <= left else f"short by ~${total - left:.2f}"))
-    out.append("[estimate] from measured r5 means with a sonnet lead (Opus lead: its share x1.7; a ? mode has no "
-               "measurement and uses ccx2's); tier arms by the mode the shipped tier plans for each task's "
-               "reference size, so misbanding moves the real cost")
+    if ratios:
+        out.append("[estimate] lead prices: " + ", ".join(
+            f"{m} x{r} of sonnet" if r is not None else f"{m}: no price (kept at sonnet's)" for m, r in ratios.items())
+            + (f"; token mix {mix_note}" if mix_note else ""))
+    out.append("[estimate] from measured r5 means with a sonnet lead, split by the measured lead share; another lead "
+               "model's part repriced at its list prices (PRICES); a ? mode has no measurement and uses ccx2's; tier "
+               "arms by the mode the shipped tier plans for each task's reference size, so misbanding moves the real "
+               "cost")
     return out
+
+
+def pin_check(rows: list[dict], tag: str, head: str, pin: str = "") -> tuple[str, list[str]]:
+    """The one commit a tag (round) runs on: the commit of its rows already written (their fingerprint), else
+    --pin-commit, else this checkout's HEAD. Problems: HEAD is not --pin-commit, the tag's rows were made at another
+    commit than HEAD, or at more than one. A round that changes code half-way (say a PR merged into the eval checkout
+    between invocations) would pool two versions as one arm. Returns (pinned commit, 12 chars; problems)."""
+    head12 = (head or "")[:12]
+    seen = sorted({str((r.get("fingerprint") or {}).get("commit") or "")[:12] for r in rows
+                   if r.get("tag") == tag and (r.get("fingerprint") or {}).get("commit")})
+    probs = []
+    pin12 = (pin or "")[:12]
+    if pin and not (head or "").startswith(pin):
+        probs.append(f"this checkout is at {head12}, not the pinned commit {pin}")
+    if len(seen) > 1:
+        probs.append(f"tag {tag} already has rows from {len(seen)} commits: {', '.join(seen)}")
+    if seen and head12 not in seen:
+        probs.append(f"tag {tag} was run at {seen[0]}; this checkout is at {head12}")
+    return (seen[0] if seen else pin12 or head12), probs
 
 
 def cmd_run(a) -> int:
@@ -1143,23 +1317,45 @@ def cmd_run(a) -> int:
     bad = [x for x in arms if x not in (*ARMS, *OPT_IN_ARMS)]
     if bad:
         raise SystemExit(f"unknown arm(s): {', '.join(bad)} (known: {', '.join((*ARMS, *OPT_IN_ARMS))})")
+    skill = [x for x in arms if x in SKILL_ARMS]
+    if skill and a.claude_isolation != "ccx-home" and not a.dry_run:
+        raise SystemExit(f"arm {', '.join(skill)} needs --claude-isolation ccx-home: its lead must load the "
+                         "agent-delegate skill from a Claude home that has ccx's install and nothing else (that "
+                         "also needs CLAUDE_CODE_OAUTH_TOKEN, which you export yourself)")
     done = {done_key(r) for r in read_jsonl(out)}
     lead = {"lead_model": a.lead_model or DEFAULT_LEAD[0], "lead_effort": a.lead_effort or DEFAULT_LEAD[1]}
     todo = []
     for u in schedule(a.rounds, a.seed, tasks, arms):
         u = {**u, "tag": a.tag, "seed": a.seed, "taskset": a.taskset, **(lead if has_lead(u["arm"]) else {})}
-        u["label"] = f"eval-r5:{a.tag}:{u['round']}:{u['task']}:{u['arm']}{_lead_suffix(u)}"
+        if a.claude_isolation == "ccx-home" and u["arm"] in CCX_ARMS:
+            u["ccx_home"] = True                  # its own arm (`@ccx-home`), key, folder and label
+        u["label"] = f"eval-r5:{a.tag}:{u['round']}:{u['task']}:{u['arm']}{_arm_suffix(u)}"
         if done_key(u) not in done:
             todo.append(u)
     print(f"work dir: {work}  results: {out}  units: {len(todo)}  lead: {lead['lead_model']} "
           f"{lead['lead_effort']}", flush=True)
     if a.dry_run:
+        mix, note = lead_mix(read_jsonl(out))
+        ratios = {m: lead_price_ratio(m, mix) for m in sorted({lead_of(u)[0] for u in todo if has_lead(u["arm"])})}
         for u in todo:
-            usd, mode = unit_estimate(u)
-            print(f"[dry] {u['label']}  ~${usd:.3f} ({mode})")
-        for line in plan_lines(todo, a.budget, budget_spent(out, a.tag, a.extra_spent)):
+            sp = unit_split(u, ratios.get(lead_of(u)[0], 1.0))
+            print(f"[dry] {u['label']}  ~${sp['usd']:.3f} ({sp['mode']}; lead ~${sp['lead']:.3f}, "
+                  f"ccx ~${sp['ccx']:.3f})")
+        for line in plan_lines(todo, a.budget, budget_spent(out, a.tag, a.extra_spent), ratios, note):
             print(line)
+        if skill and a.claude_isolation != "ccx-home":
+            print(f"[dry] note: {', '.join(skill)} needs --claude-isolation ccx-home to run")
+        pinned, probs = pin_check(read_jsonl(out), a.tag, PF.commit_state()["commit"], a.pin_commit)
+        for p in probs:
+            print(f"[dry] commit: {p}")
         return 0
+    pinned, pin_probs = pin_check(read_jsonl(out), a.tag, PF.commit_state()["commit"], a.pin_commit)
+    for p in pin_probs:
+        print(f"[commit] {p}", flush=True)
+    if pin_probs and not a.force_unclean:
+        print("not starting: one tag runs on one commit (finish it there, start a new --tag, or --force-unclean, "
+              "which is recorded)", flush=True)
+        return 3
     # the other repositories first: a bad --ext-python or copy must not cost the paid canary
     probs = prepare_external(todo, a, work)
     for p in probs:
@@ -1176,6 +1372,10 @@ def cmd_run(a) -> int:
               flush=True)
         return 3
     rep["lead"] = {"model": lead["lead_model"], "effort": lead["lead_effort"]}     # in every row's fingerprint
+    rep["pinned_commit"] = pinned
+    if pin_probs:                                  # forced past a commit change: recorded, and no row is clean
+        rep["pin_problems"] = pin_probs
+        rep["result"] = "forced"
     work.mkdir(parents=True, exist_ok=True)
     (work / "preflight.json").write_text(json.dumps(rep, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"[preflight] {rep['result']}: commit {rep['commit'][:12]} cli {rep['cli']} codex {rep['codex']['mode']} "
@@ -1389,9 +1589,10 @@ def compare_pair(ps: list[tuple[dict, dict]], A: str, B: str) -> dict:
     return out
 
 
-def paired_all(rows: list[dict]) -> dict:
+def paired_all(rows: list[dict], every: list[dict] | None = None) -> dict:
     """compare_pair for every two arms that share units, with Holm-adjusted McNemar and task sign p over those
-    pairs."""
+    pairs. `every`: all rows before the clean ones were picked; each pair then says the pairs it lost to rows that
+    are not env_clean, per side (lost_pairs), and notes it when that loss is one-sided."""
     arms = arm_order(arm_of(r) for r in rows if "error" not in r)
     out = {}
     for i, A in enumerate(arms):
@@ -1399,18 +1600,99 @@ def paired_all(rows: list[dict]) -> dict:
             ps = pair_units(rows, A, B)
             if ps:
                 out[f"{A} vs {B}"] = compare_pair(ps, A, B)
+                if every is not None:
+                    lp = lost_pairs(every, A, B)
+                    out[f"{A} vs {B}"]["lost_pairs"] = lp
+                    if lp.get("note"):
+                        out[f"{A} vs {B}"]["lost_pairs_note"] = lp["note"]
     for key in ("mcnemar_p", "task_sign_p"):
         for k, (_p, adj) in S.holm({k: v[key] for k, v in out.items()}).items():
             out[k][f"{key}_holm"] = adj
     return out
 
 
+def clean_rows(rows: list[dict]) -> tuple[list[dict], dict]:
+    """The rows a summary counts: env_clean is True (preflight.env_clean: a clean audit, no leftovers, a quiet machine,
+    a passed preflight). Returns (those rows, how many were left out: `unclean` (env_clean False) and `env_unknown`
+    (rows from before the clean room, without the field))."""
+    keep = [r for r in rows if r.get("env_clean") is True]
+    return keep, {"unclean": sum(r.get("env_clean") is False for r in rows),
+                  "env_unknown": sum("env_clean" not in r or r.get("env_clean") is None for r in rows)}
+
+
+def _excluded(r: dict) -> str | None:
+    """Why clean_rows leaves a row out (unclean / env_unknown), or None when it counts."""
+    if r.get("env_clean") is True:
+        return None
+    return "unclean" if r.get("env_clean") is False else "env_unknown"
+
+
+def excluded_by_arm(rows: list[dict]) -> dict:
+    """Per arm (arm_of), the rows clean_rows leaves out: {arm: {unclean, env_unknown, of}} for arms that lost any
+    (`of`: the arm's rows before), so a one-sided loss shows next to the arm it changes."""
+    out: dict = {}
+    for r in rows:
+        cell = out.setdefault(arm_of(r), {"unclean": 0, "env_unknown": 0, "of": 0})
+        cell["of"] += 1
+        why = _excluded(r)
+        if why:
+            cell[why] += 1
+    return {a: c for a, c in out.items() if c["unclean"] or c["env_unknown"]}
+
+
+def excluded_by_tag(rows: list[dict]) -> dict:
+    """excluded_by_arm per tag."""
+    out = {}
+    for tag in sorted({str(r.get("tag")) for r in rows}):
+        ex = excluded_by_arm([r for r in rows if str(r.get("tag")) == tag])
+        if ex:
+            out[tag] = ex
+    return out
+
+
+def lost_pairs(rows: list[dict], A: str, B: str) -> dict:
+    """The units both arms ran (rows without an error) that a summary of clean rows cannot pair, because one side
+    or both is not env_clean: how many, and per arm how many of them it made unclean. A loss that is not the same on
+    both sides gets a note: the clean pairs left may no longer be like for like (one arm's harder units dropped)."""
+    ps = pair_units(rows, A, B)
+    lost = [(x, y) for x, y in ps if _excluded(x) or _excluded(y)]
+    side = {A: sum(bool(_excluded(x)) for x, _ in lost), B: sum(bool(_excluded(y)) for _, y in lost)}
+    out = {"lost": len(lost), "of": len(ps), "unclean_side": side}
+    if side[A] != side[B]:
+        out["note"] = (f"one-sided loss: {side[A]} of {A}'s and {side[B]} of {B}'s rows on shared units were not "
+                       "env_clean; the comparison counts only the pairs left and may be biased")
+    return out
+
+
+RIGHT_CI_FLOOR = -1.0     # the rule's right condition: the CI's lower end of balanced - save, in tasks
+
+
+def right_diff_tasks(ps: list[tuple[dict, dict]], n_tasks: int | None = None) -> float | None:
+    """B's right answers minus A's on these pairs, in tasks: the per-unit difference times the number of tasks (a
+    task's rounds count as one task's worth), so -1 means one task's worth fewer right. `n_tasks`: the sample's
+    task count, fixed while the bootstrap resamples tasks (a resample repeats some and drops others)."""
+    if not ps:
+        return None
+    d = sum(bool(y.get("ok")) - bool(x.get("ok")) for x, y in ps)
+    return round(d * (n_tasks or len({x["task"] for x, _ in ps})) / len(ps), 4)
+
+
 def tier_rule(rows: list[dict], bal: str = TIER_RULE_ARMS[0], save: str = TIER_RULE_ARMS[1]) -> dict | None:
-    """The tier decision rule on the units both arms share: `balanced` is worth it over `save` when it is right at
-    least as often, its wall median is at most 60% of save's and its cost per success at most 1.5x save's. Each
-    condition: pass / fail (n/a when a cost per success is missing); overall: fail when any condition fails, else n/a
-    when one cannot be told, else pass. The wall median is the upper middle, as wall_med. None unless both arms
-    have rows."""
+    """The tier decision rule on the clean units both arms share (env_clean only, whatever the summary counts):
+    `balanced` is worth it over `save` when it is not less often right, its wall median is at most 60% of save's and
+    its cost per success at most 1.5x save's. "Not less often right" is paired: the task-bootstrap 95% CI of
+    balanced's minus save's right answers in tasks (right_diff_tasks) must have its lower end at RIGHT_CI_FLOOR (-1
+    task) or above: pass; its upper end below it (clearly worse): fail; a CI across it, or no CI (fewer than two
+    tasks), is Unknown, not a pass (ten tasks x three rounds cannot see a drop of one to three tasks). The floor is in
+    tasks over the whole sample, so the CI of the summed difference widens with the number of tasks: with more tasks
+    a pass is harder, and with ten any observed miss already gives Unknown (the condition reads as "no observed
+    loss"). Each other condition: pass / fail (n/a when a cost per success is missing). Overall: fail when any
+    condition fails, else unknown when the right condition is unknown, else n/a when one cannot be told, else pass;
+    a pass whose shared units lost rows that are not env_clean unevenly (lost_pairs: more on one side) is Unknown
+    too (`exclusion_note`). The wall median is the upper middle, as wall_med. None unless both arms have clean
+    rows."""
+    every = [r for r in rows if "error" not in r]
+    rows, excluded = clean_rows(rows)
     ps = pair_units(rows, save, bal)
     if not ps:
         return None
@@ -1418,23 +1700,39 @@ def tier_rule(rows: list[dict], bal: str = TIER_RULE_ARMS[0], save: str = TIER_R
     s_w = _med([x.get("wall_s") or 0 for x, _ in ps])
     b_w = _med([y.get("wall_s") or 0 for _, y in ps])
     s_c, b_c = r3.cps([x for x, _ in ps]), r3.cps([y for _, y in ps])
+    n_tasks = len({x["task"] for x, _ in ps})
+    ci = task_boot(ps, lambda q: right_diff_tasks(q, n_tasks))
     pf = lambda v: "pass" if v else "fail"  # noqa: E731
-    cond = {"right": {"rule": f"{bal} right >= {save} right", "value": [b_ok, s_ok], "result": pf(b_ok >= s_ok)},
+    cond = {"right": {"rule": f"{bal} - {save} right answers, paired 95% CI lower end >= {RIGHT_CI_FLOOR:g} task",
+                      "value": [b_ok, s_ok], "diff_tasks": right_diff_tasks(ps), "ci": ci,
+                      "result": "unknown" if ci is None else "fail" if ci[1] < RIGHT_CI_FLOOR
+                      else "unknown" if ci[0] < RIGHT_CI_FLOOR else "pass"},
             "wall": {"rule": f"{bal} wall median <= 60% of {save}'s", "value": [b_w, s_w],
                      "result": pf(b_w <= 0.6 * s_w)},
             "cps": {"rule": f"{bal} $/success <= 1.5x {save}'s", "value": [b_c, s_c],
                     "result": "n/a" if b_c is None or s_c is None else pf(b_c <= 1.5 * s_c)}}
     res = [c["result"] for c in cond.values()]
-    return {"units": len(ps), "conditions": cond,
-            "result": "fail" if "fail" in res else "n/a" if "n/a" in res else "pass"}
+    lp = lost_pairs(every, save, bal)
+    out = {"units": len(ps), "conditions": cond, "excluded_rows": excluded,
+           "excluded_by_arm": {k: v for k, v in excluded_by_arm(every).items() if k in (bal, save)},
+           "lost_pairs": lp,
+           "result": "fail" if "fail" in res else "unknown" if "unknown" in res else "n/a" if "n/a" in res
+           else "pass"}
+    if lp.get("note"):
+        out["exclusion_note"] = lp["note"]
+        if out["result"] == "pass":
+            out["result"] = "unknown"
+    return out
 
 
 def tier_rule_lines(tr: dict | None) -> list[str]:
     """The tier decision rule as plain lines (cmd_summary prints them after the JSON, on stderr)."""
     if not tr:
         return []
-    return [f"tier rule ({tr['units']} shared units): {tr['result']}"] + \
-        [f"  {c['result']:4}  {c['rule']}: {c['value'][0]} vs {c['value'][1]}" for c in tr["conditions"].values()]
+    return [f"tier rule ({tr['units']} shared clean units): {tr['result']}"] + \
+        [f"  {c['result']:7}  {c['rule']}: {c['value'][0]} vs {c['value'][1]}"
+         + (f" (diff {c['diff_tasks']} tasks, CI {c['ci']})" if "ci" in c else "") for c in tr["conditions"].values()] \
+        + ([f"  note     {tr['exclusion_note']}"] if tr.get("exclusion_note") else [])
 
 
 def tier_rules(rows: list[dict]) -> dict:
@@ -1508,18 +1806,38 @@ def phase_stats(rs: list[dict]) -> dict | None:
     return {k: med_p75([p[k] for p in ph if p.get(k) is not None]) for k in PHASES if any(k in p for p in ph)}
 
 
-def summarize(rows: list[dict]) -> dict:
+def summarize(rows: list[dict], include_unclean: bool = False) -> dict:
+    """Per arm, per tag, paired and tier summaries of env_clean rows (`excluded_rows` says how many others were left
+    out; include_unclean counts them everywhere except the tier rule, which always takes clean rows only)."""
     unclean = sum(r.get("env_clean") is False for r in rows if "error" not in r)
     unknown = sum("env_clean" not in r for r in rows if "error" not in r)    # rows from before the clean room
     tags = sorted({str(r.get("tag")) for r in rows})
+    excluded, ex_arm, ex_tag = {"unclean": 0, "env_unknown": 0}, {}, {}
+    every = [r for r in rows if "error" not in r]          # the tier rule picks its clean rows itself
+    if not include_unclean:
+        ex_arm, ex_tag = excluded_by_arm(rows), excluded_by_tag(rows)
+        rows, excluded = clean_rows(rows)
     rows = [r for r in rows if "error" not in r]
     out = {}
     for arm in arm_order(arm_of(r) for r in rows):
         rs = [r for r in rows if arm_of(r) == arm]
         med = lambda k: sorted(r.get(k) or 0 for r in rs)[len(rs) // 2]  # noqa: E731
         ok = sum(bool(r.get("ok")) for r in rs)
+        lead_usd = round(sum(r.get("lead_usd") or 0 for r in rs), 4)
+        ccx_usd = round(sum(r.get("ccx_usd") or 0 for r in rs), 4)
+        # who did the work, the same split for every arm: the lead itself, and whoever it delegated to (ccx's
+        # sub-agents, or a builtin arm's Agent-tool worker, which lead_usd holds)
+        only = round(sum(r.get("lead_only_usd") or 0 for r in rs), 4)
+        sub = round(sum(r.get("sub_usd") or 0 for r in rs), 4)
         out[arm] = {"ok": ok, "n": len(rs), "usd": round(sum(r.get("usd") or 0 for r in rs), 4),
                     "cps": round(sum(r.get("usd") or 0 for r in rs) / ok, 4) if ok else None,
+                    # whose spend: the lead's own (a builtin worker is inside it) and ccx's runs, each per success
+                    "lead_usd": lead_usd, "ccx_usd": ccx_usd,
+                    "lead_cps": round(lead_usd / ok, 4) if ok else None,
+                    "ccx_cps": round(ccx_usd / ok, 4) if ok else None,
+                    "lead_only_usd": only, "sub_usd": sub,
+                    "lead_only_cps": round(only / ok, 4) if ok else None,
+                    "sub_cps": round(sub / ok, 4) if ok else None,
                     "lead_only_usd_med": med("lead_only_usd"), "lead_tokens_med": med("lead_tokens"),
                     "lead_requests_med": med("lead_requests"), "wall_med": med("wall_s"),
                     **{k: v for k, v in wall_stats(rs).items() if k in ("wall_mean", "wall_p75")},
@@ -1536,11 +1854,24 @@ def summarize(rows: list[dict]) -> dict:
         ph = phase_stats(rs)
         if ph:
             out[arm]["phases"] = ph
+        if ex_arm.get(arm):
+            out[arm]["excluded"] = ex_arm[arm]
+        if arm.split("@", 1)[0] in SKILL_ARMS:        # did the lead load the skill the arm is about
+            used = [r.get("skill_used") for r in rs]
+            out[arm]["skill_used"] = f"{sum(x is True for x in used)}/{len(rs)}"
+            if not all(x is True for x in used):
+                out[arm]["skill_used_note"] = (f"{sum(x is not True for x in used)} of {len(rs)} units: the lead "
+                                               "did not load agent-delegate (the arm's protocol not followed)")
     res = {"arms": out, "by_tag": by_tag(rows), "unclean_rows": unclean, "env_unknown_rows": unknown, "tags": tags,
+           "counted": "all rows (--include-unclean)" if include_unclean else "env_clean rows only",
+           "excluded_rows": excluded,
            "long_style": r4.summarize_long([{**r, "arm": arm_of(r)} for r in rows
                                             if arm_of(r) in r4.LONG_ARMS])["paired"],
-           "paired": paired_all(rows)}
-    trs = tier_rules(rows)
+           "paired": paired_all(rows, None if include_unclean else every)}
+    if ex_arm:
+        res["excluded_by_arm"] = ex_arm
+        res["excluded_by_tag"] = ex_tag
+    trs = tier_rules(every)
     if trs:
         res["tier_rules"] = trs
         # the default lead's (#142's field), else the first other lead's in arm_order (sorted, so stable): the
@@ -1568,9 +1899,24 @@ def tagged(rows: list[dict], tag: str | None) -> list[dict]:
     return [r for r in rows if not tag or r.get("tag") == tag]
 
 
+def excluded_line(res: dict) -> str | None:
+    ex = res.get("excluded_rows") or {}
+    n = sum(ex.values())
+    if not n:
+        return None
+    per = res.get("excluded_by_arm") or {}
+    arms = ("; per arm: " + ", ".join(f"{a} {c['unclean'] + c['env_unknown']}/{c['of']}" for a, c in per.items())
+            if per else "")
+    return (f"left out {n} rows that are not env_clean ({ex.get('unclean', 0)} unclean, {ex.get('env_unknown', 0)} "
+            f"from before the clean room){arms}; --include-unclean counts them (the tier rule never does)")
+
+
 def cmd_summary(a) -> int:
-    res = summarize(tagged(read_jsonl(results_file(a.taskset)), a.tag))
+    res = summarize(tagged(read_jsonl(results_file(a.taskset)), a.tag), a.include_unclean)
     print(json.dumps(res, ensure_ascii=False, indent=1))
+    line = excluded_line(res)
+    if line:
+        print(line, file=sys.stderr)
     for name, tr in (res.get("tier_rules") or {}).items():   # stdout stays one JSON object
         for line in tier_rule_lines(tr):
             print(line if name == "balanced vs save" else line.replace("tier rule", f"tier rule {name}", 1),
@@ -1585,9 +1931,9 @@ def cmd_export(a) -> int:
             "delegated", "context_attached", "files_changed", "diffstat", "model", "status", "verdicts", "error",
             "env_clean", "fingerprint", "lead_model", "lead_effort", "phases", "tier", "tier_plan", "ref_size",
             "actual_mode", "misband", "misband_overall", "followed_plan", "ccx_check_passed", "may_be_wrong",
-            "ccx_routes", "bookkeeping_error")
+            "ccx_routes", "bookkeeping_error", "lead_usage", "timeline", "skill_used", "skills_used")
     rows = tagged(read_jsonl(results_file(a.taskset)), a.tag)
-    data = {"summary": summarize(rows),
+    data = {"summary": summarize(rows, a.include_unclean),
             "rows": [r3.scrub({**{k: r[k] for k in keep if k in r},
                                **({"audit": {"problems": r["audit"].get("problems"),
                                              "n_path_hits": r["audit"].get("n_path_hits")}} if r.get("audit") else {})})
@@ -1620,6 +1966,8 @@ def parser() -> argparse.ArgumentParser:
     r.add_argument("--workdir", default="")
     r.add_argument("--timeout", type=int, default=2400)
     r.add_argument("--dry-run", action="store_true")
+    r.add_argument("--pin-commit", default="", help="refuse to run unless this checkout is at this commit (a tag "
+                   "is also refused at a commit other than its earlier rows')")
     r.add_argument("--no-canary", action="store_true", help="skip the one tiny real lead that checks the isolation")
     r.add_argument("--ext-cache", default="", help="a folder with local copies (clones) of the other repositories "
                    "of the hold-out set, named after them, to clone from instead of their URLs")
@@ -1631,11 +1979,14 @@ def parser() -> argparse.ArgumentParser:
     s = sub.add_parser("summary")
     s.add_argument("--tag", default=None, help="only this round's rows (default: all; the tags are listed)")
     s.add_argument("--taskset", choices=sorted(TASKSETS), default="r5")
+    s.add_argument("--include-unclean", action="store_true", help="count rows that are not env_clean too (the "
+                   "tier rule still takes clean rows only)")
     s.set_defaults(fn=cmd_summary)
     e = sub.add_parser("export")
     e.add_argument("dest")
     e.add_argument("--tag", default=None)
     e.add_argument("--taskset", choices=sorted(TASKSETS), default="r5")
+    e.add_argument("--include-unclean", action="store_true")
     e.set_defaults(fn=cmd_export)
     return ap
 

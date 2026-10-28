@@ -324,3 +324,173 @@ def by_id(task_id: str) -> dict:
 
 def dropped_by_id(task_id: str) -> dict:
     return next(t for t in DROPPED if t["id"] == task_id)
+
+
+# ------------------------------------------------------------ derives_from: every hidden check -> its brief sentence
+# Round 5 lost 8 of its 13 failures on two briefs that left the hidden test's demand open. For the hold-out set each
+# test the commit added or changed (NEW_TESTS: test functions whose body differs between the parent and the commit,
+# read with ast from both versions; the rest of the file is the existing suite, a regression check) is mapped to the
+# brief text it follows from, quoted word for word (whitespace aside): DERIVES_FROM[task] lists, per test, what it
+# checks and the quotes. An entry with no quote says why (`regression`: behaviour the brief keeps "as today").
+# tests/test_eval_holdout.py checks completeness only: every task has entries, they cover exactly NEW_TESTS (for
+# this repository's tasks also recomputed from git when the commit is there), every quote is in the brief.
+# Rules: the briefs are not edited to fit this map (r5's briefs are frozen; a hold-out brief changes only on an
+# independent reviewer's finding, recorded here), and a test's literal inputs or expected values are never copied
+# into a brief. REVIEW says who has checked the map; until an independent reviewer (a person or a model that did
+# not tune ccx on r5) has, its fit is Unknown.
+REVIEW = {"status": "draft", "mapped_by": "the PR-E author (Claude), from the commits' test diffs",
+          "independent_review": None}
+
+NEW_TESTS = {
+    "review-min-lines": ["tests/test_review.py::TestReason::test_when"],
+    "undo-not-verdict": ["tests/test_verdicts.py::TestVerdicts::test_undo_is_not_a_verdict_unless_wrong"],
+    "doctor-codex-sandbox": [f"tests/test_codex_lead_sandbox.py::TestCodexLeadSandbox::{n}" for n in (
+        "test_full_access_is_fine", "test_workspace_write_needs_the_hub_and_network",
+        "test_configured_workspace_write_is_fine", "test_unset_and_read_only", "test_windows_needs_full_access",
+        "test_bad_toml_is_unknown")],
+    "discuss-auto-tier": ["tests/test_discuss.py::TestDiscuss::test_dry_run_runs_nothing",
+                          "tests/test_discuss.py::TestEstimate::test_auto_tier_steps_down_the_agent_that_would_run_out"],
+    "ledger-repair": ["tests/test_ccx.py::TestDelegation::test_repair_recounts_records_from_before_the_fix"],
+    "hz-intword-carry": ["tests/test_number.py::test_intword_rounding_rollover"],
+    "hz-naturaldelta-nonfinite": ["tests/test_time.py::test_naturaldelta_non_finite",
+                                  "tests/test_time.py::test_naturaldelta_too_large_value_raises"],
+    "hz-naturaldate-tz": ["tests/test_time.py::test_naturaldate_tz_aware"],
+    "hz-natural-list-iterables": ["tests/test_lists.py::test_natural_list"],
+    "its-timed-fallback-signers": ["tests/test_itsdangerous/test_timed.py::TestTimedSerializer::test_fallback_signers"],
+}
+
+
+def _d(test: str, checks: str, *brief: str, regression: str | None = None) -> dict:
+    return {"test": test, "checks": checks, "brief": list(brief), **({"regression": regression} if regression else {})}
+
+
+DERIVES_FROM = {
+    "review-min-lines": [
+        _d("tests/test_review.py::TestReason::test_when",
+           "reason() on a diff of enough code lines names them; min_lines=0 turns that off",
+           "`ccx.review.reason(mode, risk, result, claimed, actual, lines=0, min_lines=50)`",
+           "the new trigger's reason is \"<n> changed code lines\"", "`0` turns this trigger off"),
+        _d("tests/test_review.py::TestReason::test_when",
+           "code_lines() counts added and removed lines of code files only, from `+++ ` headers",
+           "`ccx.review.code_lines(diff: str) -> int`: added plus removed lines in the code files of a unified diff",
+           "A file's lines start at its `+++ ` header (the diff may come without `diff --git` or `---` lines).",
+           "Documentation files (`.md`, `.txt`, `.rst`, `.adoc`) do not count."),
+    ],
+    "undo-not-verdict": [
+        _d("tests/test_verdicts.py::TestVerdicts::test_undo_is_not_a_verdict_unless_wrong",
+           "plain undo: files back, verdict starts with none, routing state and verdict events unchanged",
+           "`ccx undo <run_id> --apply` puts back the files a write run changed",
+           "Undoing alone records no verdict: the routing state and the verdict events stay as they were, and the "
+           "`verdict` field of the JSON output starts with `none`"),
+        _d("tests/test_verdicts.py::TestVerdicts::test_undo_is_not_a_verdict_unless_wrong",
+           "the ledger gets one undo event (reason undone, wrong false); the sweep leaves the run alone",
+           "Every applied undo appends an event to the ledger: `{\"type\": \"undo\", \"run_id\": ..., \"reason\": "
+           "\"undone\", \"wrong\": <true|false>, \"ts\": ...}`.",
+           "An undone run is left alone by the probable-verdict pass (`ccx verify --sweep`): it waits for the person."),
+        _d("tests/test_verdicts.py::TestVerdicts::test_undo_is_not_a_verdict_unless_wrong",
+           "undo --wrong: its verdict text, routing changes, an ordinary (not soft) verdict with reason wrong",
+           "New flag `ccx undo <run_id> --apply --wrong`: also records the run as wrong with reason `wrong`, exactly "
+           "as the person's own `ccx verify <run_id> --ok 0 --reason wrong` records it (an ordinary verdict, not a "
+           "soft, probable one)",
+           "the JSON `verdict` is then \"recorded as wrong (undo --wrong)\""),
+    ],
+    "doctor-codex-sandbox": [
+        _d("tests/test_codex_lead_sandbox.py::TestCodexLeadSandbox::test_full_access_is_fine", "full access: ok",
+           "`ccx.doctor.codex_lead_sandbox(config_text: str, hub, windows: bool | None = None) -> tuple[str, str]`",
+           "`sandbox_mode = \"danger-full-access\"`: `ok`."),
+        _d("tests/test_codex_lead_sandbox.py::TestCodexLeadSandbox::test_workspace_write_needs_the_hub_and_network",
+           "workspace-write without roots or network: WARN naming both parts and the hub path",
+           "Otherwise `WARN`: the detail names each missing part (\"the hub is not a writable root\", "
+           "\"network_access is off\") and gives the exact lines to add, with the hub path written with forward "
+           "slashes."),
+        _d("tests/test_codex_lead_sandbox.py::TestCodexLeadSandbox::test_configured_workspace_write_is_fine",
+           "a writable root above the hub and network on: ok",
+           "is `ok` only when `[sandbox_workspace_write]` lists the hub or a folder above it in `writable_roots` and "
+           "has `network_access = true`"),
+        _d("tests/test_codex_lead_sandbox.py::TestCodexLeadSandbox::test_unset_and_read_only",
+           "no sandbox_mode: WARN saying not set; read-only: WARN",
+           "or no `sandbox_mode` at all (Codex then decides; check it as workspace-write and say it is \"not set\")",
+           "Elsewhere `read-only` is `WARN`."),
+        _d("tests/test_codex_lead_sandbox.py::TestCodexLeadSandbox::test_windows_needs_full_access",
+           "on Windows a configured workspace-write is still WARN, naming danger-full-access",
+           "On Windows anything else: `WARN`, and the detail says to give lead sessions `danger-full-access`"),
+        _d("tests/test_codex_lead_sandbox.py::TestCodexLeadSandbox::test_bad_toml_is_unknown", "bad TOML: Unknown",
+           "Text that is not valid TOML: `Unknown`."),
+    ],
+    "discuss-auto-tier": [
+        _d("tests/test_discuss.py::TestDiscuss::test_dry_run_runs_nothing",
+           "the default (auto, no quota readings) talks at T2 and the dry run has tier_why for every agent; an "
+           "explicit T1 is everyone's (the T1 models of the shipped config) and has no tier_why",
+           "`--tier auto`, the new default: T2",
+           "With `auto`, `why` has an entry for every agent",
+           "A tier given explicitly applies to everyone as before.",
+           "The `ccx discuss --dry-run` JSON has `tier_why` only when the tier is auto."),
+        _d("tests/test_discuss.py::TestEstimate::test_auto_tier_steps_down_the_agent_that_would_run_out",
+           "tiers() steps an agent above 100% down to T1, says its share as a percentage or no reading; estimate() "
+           "takes the per-agent dict; a fixed tier has an empty why",
+           "`ccx.discuss.tiers(p, names, tier=\"auto\", quota=None) -> (tiers, why)`",
+           "T1 for a participant whose projected quota share at its reset is above 100%",
+           "the projected share as a percentage (like \"85%\") when there is a reading, or a text containing \"no "
+           "quota reading\" when there is none",
+           "take either one tier for everyone or such a per-agent dict; the estimate's `models` and `tier` are per "
+           "agent.",
+           "With a fixed tier, `why` is empty."),
+    ],
+    "ledger-repair": [
+        _d("tests/test_ccx.py::TestDelegation::test_repair_recounts_records_from_before_the_fix",
+           "without --apply nothing changes and the fix is reported; with it the attempt's usage becomes the growth, "
+           "the ledger row is rebuilt, and a second repair finds nothing",
+           "Without `--apply` it is a dry run: it reports what it would fix and changes nothing.",
+           "a Codex attempt without `codex_total` that continues a session seen before gets its `usage` replaced by "
+           "the growth over that session's previous total",
+           "The ledger rows of the fixed runs are rebuilt the same way `ledger.append` writes them",
+           "Every Codex attempt it has looked at then carries `codex_total`, so a second repair finds nothing to fix.",
+           "JSON output: `applied`, `runs_fixed`"),
+    ],
+    "hz-intword-carry": [
+        _d("tests/test_number.py::test_intword_rounding_rollover",
+           "a value just under each unit up to decillion is written as 1 of that unit, with the default and a %.0f "
+           "format; the number before the unit stays below 1000",
+           "a value that rounds up to a whole next unit is written as 1 of that next unit (with the default format, "
+           "\"1.0 <next unit>\", never \"1000.0 <unit>\")",
+           "the round-up carry works for every named unit up to decillion, whatever format is passed."),
+        _d("tests/test_number.py::test_intword_rounding_rollover", "a decillion-gap number stays in decillions",
+           "Numbers above a decillion and below a googol have no unit of their own; they stay written in decillions "
+           "exactly as today."),
+        _d("tests/test_number.py::test_intword_rounding_rollover", "a googol multiple is written in googols",
+           regression="unchanged behaviour of the googol unit, not touched by the brief's change"),
+    ],
+    "hz-naturaldelta-nonfinite": [
+        _d("tests/test_time.py::test_naturaldelta_non_finite", "NaN, inf and -inf come back as their str()",
+           "every non-finite float (NaN, infinity, minus infinity) is returned unchanged, as `str(value)`."),
+        _d("tests/test_time.py::test_naturaldelta_too_large_value_raises", "a too large finite value still raises",
+           "A finite number of seconds that is too large for a `datetime.timedelta` still raises OverflowError"),
+    ],
+    "hz-naturaldate-tz": [
+        _d("tests/test_time.py::test_naturaldate_tz_aware",
+           "naturaldate() of an aware datetime is today / tomorrow by the date in that value's own zone",
+           "when the value is a timezone-aware datetime, \"today\" is the current date in that value's own time "
+           "zone, in both functions.",
+           "otherwise hands the value, with its time zone, on to `naturalday()`."),
+    ],
+    "hz-natural-list-iterables": [
+        _d("tests/test_lists.py::test_natural_list",
+           "tuples, a dict's keys, a generator and a range give the same text as a list (the list cases are the "
+           "existing ones)",
+           "`natural_list(items)` accepts any iterable, read only once (so a generator works), and gives the same "
+           "text as it does for a list of the same items",
+           "one item gives that item as text, two give \"x and y\", more give \"x, y and z\"",
+           "Every item is turned into text with `str()` as now."),
+    ],
+    "its-timed-fallback-signers": [
+        _d("tests/test_itsdangerous/test_timed.py::TestTimedSerializer::test_fallback_signers",
+           "a TimedSerializer whose fallback has the old digest loads data signed with it",
+           "`TimedSerializer.loads()` tries the main signer and then the fallbacks, as `Serializer.loads()` does, and "
+           "returns the payload"),
+    ],
+}
+
+
+def derives_from(task_id: str) -> list[dict]:
+    """The map of a hold-out task's hidden checks to its brief (DERIVES_FROM)."""
+    return DERIVES_FROM.get(task_id, [])

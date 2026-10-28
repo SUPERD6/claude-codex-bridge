@@ -45,9 +45,11 @@ ZH_WORDS: dict[str, str] = {}
 DECISION_RULES = {
     "SKILL.md": ("do not send the same brief again", "Never `ccx resume` a run that is still running",
                  "Judge `kind` only from a final result", "`review_issues` there means no fix round",
-                 "Don't `ccx resume` for it"),
+                 "Don't `ccx resume` for it", "was absent or `weak`",
+                 "never write the same files at the same time"),
     "README.zh.md": ("别再派同一份简报", "还在跑的运行不要 `ccx resume`", "`kind` 只按最终结果判断",
-                     "仍是 `review_issues`，说明修改轮没跑成", "不要为此 `ccx resume`"),
+                     "仍是 `review_issues`，说明修改轮没跑成", "不要为此 `ccx resume`", "带 `weak`",
+                     "绝不同时写同一批文件"),
 }
 
 

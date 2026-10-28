@@ -34,6 +34,10 @@ def test_ccx2_lead_instruction_follows_the_skill():
     assert "--review on" in old and old == r5.HOW_CCX.format(ccx=r5.r3.CCX_CMD, label="L")   # old arm unchanged
     assert "--review" not in new and "--bg" in new and "show <run_id> --wait" in new
     assert "verbatim" in new and "do not ask the sub-agent to commit" in new and "tail" in new
+    # A2: one call (--bg --wait 540 under a 600000 ms Bash timeout), show --wait only if it is still running
+    assert "run --bg --wait 540 " in new and "timeout set to 600000" in new
+    assert "If it is still running when that call returns" in new
+    assert new.index("--wait 540") < new.index("show <run_id> --wait") and "then wait for it with" not in new
 
 
 def test_unknown_arm_is_refused(tmp_path):
@@ -44,7 +48,7 @@ def test_unknown_arm_is_refused(tmp_path):
 
 def test_summary_of_rows():
     rows = [{"task": "a", "round": 1, "arm": arm, "ok": arm != "self", "usd": usd, "lead_only_usd": usd,
-             "lead_tokens": 10, "lead_requests": 3, "wall_s": 5}
+             "lead_tokens": 10, "lead_requests": 3, "wall_s": 5, "env_clean": True}
             for arm, usd in (("self", 0.3), ("builtin", 0.3), ("ccx", 0.2), ("direct", 0.04), ("ccx2", 0.1))]
     s = r5.summarize(rows)
     assert s["arms"]["self"]["cps"] is None and s["arms"]["direct"]["cps"] == 0.04
@@ -65,7 +69,7 @@ def test_builtin2_is_builtin_with_ccx2_acceptance():
     us = r5.schedule(1, 53, tasks_r5.IDS[:2], ["ccx2", "builtin2"])
     assert sorted(u["arm"] for u in us) == ["builtin2", "builtin2", "ccx2", "ccx2"]
     s = r5.summarize([{"task": "a", "round": 1, "arm": "builtin2", "ok": True, "usd": 0.2, "lead_only_usd": 0.1,
-                       "lead_tokens": 1, "lead_requests": 1, "wall_s": 1}])
+                       "lead_tokens": 1, "lead_requests": 1, "wall_s": 1, "env_clean": True}])
     assert s["arms"]["builtin2"]["n"] == 1
 
 
@@ -73,7 +77,7 @@ def test_builtin2_is_builtin_with_ccx2_acceptance():
 
 def _row(task, rd, arm, ok, usd, wall, **kw):
     return {"tag": "t", "round": rd, "task": task, "arm": arm, "ok": ok, "usd": usd, "wall_s": wall,
-            "lead_only_usd": usd, "lead_tokens": 1, "lead_requests": 1, **kw}
+            "lead_only_usd": usd, "lead_tokens": 1, "lead_requests": 1, "env_clean": True, **kw}
 
 
 def test_builtin2r_worker_carries_ccx_rules_word_for_word(monkeypatch):
@@ -207,10 +211,13 @@ def test_tier_rule_pass_and_fail():
     assert tr["result"] == "pass" and all(c["result"] == "pass" for c in tr["conditions"].values())
     bad = [r for t in "ab" for r in (_row(t, 1, "save", True, 0.10, 100), _row(t, 1, "balanced", t == "a", 0.2, 61))]
     c = r5.tier_rule(bad)["conditions"]
-    assert c["right"]["result"] == c["wall"]["result"] == c["cps"]["result"] == "fail"
+    # one task's worth fewer right: the CI's lower end is below -1 task, so the right condition is Unknown
+    assert c["right"]["result"] == "unknown" and c["right"]["diff_tasks"] == -1.0 and c["right"]["ci"][0] < -1
+    assert c["wall"]["result"] == c["cps"]["result"] == "fail" and r5.tier_rule(bad)["result"] == "fail"
     none = [_row("a", 1, "save", False, 0.1, 100), _row("a", 1, "balanced", True, 0.1, 10)]
-    # cannot tell is not failed: n/a overall when nothing failed and one condition is n/a
-    assert r5.tier_rule(none)["conditions"]["cps"]["result"] == "n/a" and r5.tier_rule(none)["result"] == "n/a"
+    # cannot tell is not failed: one task has no CI (unknown), and its cost per success is n/a
+    assert r5.tier_rule(none)["conditions"]["cps"]["result"] == "n/a"
+    assert r5.tier_rule(none)["conditions"]["right"]["result"] == "unknown" and r5.tier_rule(none)["result"] == "unknown"
     none_bad = [_row("a", 1, "save", False, 0.1, 100), _row("a", 1, "balanced", True, 0.1, 90)]
     assert r5.tier_rule(none_bad)["result"] == "fail"                    # a failed condition still fails it
     # the wall median is the upper middle, as the arms' wall_med
@@ -220,7 +227,7 @@ def test_tier_rule_pass_and_fail():
     assert s["tier_rule"]["conditions"]["wall"]["value"] == [s["arms"]["balanced"]["wall_med"],
                                                              s["arms"]["save"]["wall_med"]] == [200, 200]
     lines = r5.tier_rule_lines(r5.tier_rule(ok))
-    assert lines[0].startswith("tier rule (2 shared units): pass") and len(lines) == 4
+    assert lines[0].startswith("tier rule (2 shared clean units): pass") and len(lines) == 4 and "CI" in lines[1]
     assert "tier_rule" not in r5.summarize([_row("a", 1, "save", True, 0.1, 1)])
 
 
@@ -338,6 +345,7 @@ def test_tier_lead_wording():
         assert f"`{t}`" in how and "policy.picked" in how and "propose --lead claude:" in how
         assert "--minutes" in how and "--files" in how and "authorized: true" in how and "next" in how
         assert "--label L" in how and "--bg" in how and "show <run_id> --wait" in how and "--no-ab" in how
+        assert "`--bg --wait 540 " in how and "600000" in how and r5.WAIT_ONE_CALL.split("{ccx}")[0] in how
         assert r5.LEAN_BRIEF in how and "do the work yourself" in how
         head, tail = r5.LEAN_ACCEPT.split("{send_back}")
         assert head in how and tail in how                                       # ccx2's acceptance, shared
@@ -529,9 +537,14 @@ def test_dry_run_prints_the_schedule_and_the_estimate(tmp_path, capsys):
     assert r5.cmd_run(a) == 0
     out = capsys.readouterr().out
     assert "units: 10" in out and len(re.findall(r"^\[dry\] eval-r5:t:", out, re.M)) == 10
-    assert ":fast@opus-high  ~$0.340 (self)" in out and ":cheapest  ~$0.050 (direct)" in out
-    assert ":ccx2@opus-high  ~$0.174 (ccx2)" in out
-    assert re.search(r"\[estimate\] save@opus-high\s+2 units\s+~\$0\.191/unit", out)
+    # Opus priced at its list prices on the assumed Sonnet mix (empty results file): x1.81 of the lead's part
+    assert r5.lead_price_ratio("opus") == 1.81 and r5.lead_price_ratio("sonnet") == 1.0
+    assert ":fast@opus-high  ~$0.362 (self; lead ~$0.362, ccx ~$0.000)" in out
+    assert ":cheapest  ~$0.050 (direct; lead ~$0.000, ccx ~$0.050)" in out
+    assert ":ccx2@opus-high  ~$0.182 (ccx2;" in out
+    assert re.search(r"\[estimate\] save@opus-high\s+2 units\s+~\$0\.200/unit\s+~\$0\.40 \(lead ~\$0\.31, ccx "
+                     r"~\$0\.09\)", out)
+    assert "[estimate] lead prices: opus x1.81 of sonnet; token mix assumed" in out
     assert "[estimate] total ~$" in out and "short by" in out                  # $1 does not cover 10 units
     assert not (tmp_path / "w").exists()                                       # nothing prepared, nothing run
     # the estimate per unit: measured means, an Opus lead's share x1.7, one propose for balanced / save

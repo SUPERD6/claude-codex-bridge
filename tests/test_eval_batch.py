@@ -368,6 +368,10 @@ def test_what_counts_as_a_blocking_wait():
     assert not bash('python "/r/ccx.py" run --bg --worktree "brief"')
     assert bash('python "/r/ccx.py" run --bg --wait 540 --check "p" "brief"')     # one call: blocks
     assert bash('python "/r/ccx.py" resume r1 --bg --wait 540 "more"')
+    # a flag named inside a quoted brief or --check command is text, not a flag
+    assert not bash('python "/r/ccx.py" run --bg "add a --wait flag to the cli"')
+    assert not bash("python ccx.py run --bg --check 'pytest --wait' 'brief'")
+    assert bash('python "/r/ccx.py" run "drop the --bg option"')
     assert bash('python "/r/ccx.py" batch /tmp/plan.json') and bash('python "/r/ccx.py" show r1 --wait')
     assert not bash('python "/r/ccx.py" q run --bg') and bash('python "/r/ccx.py" q run')
     assert not bash('python "/r/ccx.py" q add --plan /tmp/p.json') and not bash("git status")
