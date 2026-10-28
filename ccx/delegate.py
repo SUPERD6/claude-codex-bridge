@@ -37,7 +37,7 @@ from .review import review_run as _review  # noqa: F401
 from .verdicts import (REASONS, SOFT_AFTER_H, _hard_verdict, _soft_verdict, soft_verdicts, verify,  # noqa: F401
                        verify_builtin)
 from .workspace import (_git, chain_snapshot, diffstat, make_worktree, mark_run_end, run_check,  # noqa: F401
-                        run_snapshot, undo, undo_snapshot)
+                        run_snapshot, undo, undo_snapshot, write_end_tree)
 
 AGENTS = DELEGATE_AGENTS
 
@@ -78,6 +78,7 @@ class Request:
     review: str = "auto"            # independent review by another vendor's cheap model: auto | on | off (F1)
     risk: str | None = None         # low | visible | critical (from the routing rubric): visible+ is reviewed
     review_round: int = 0           # 1 = this run fixes what a review found
+    prior_issues: list[str] | None = None   # a fix round: the review issues it was handed ([review] fix_rereview)
     share_context: str | None = None  # auto | on | off: the lead's recent work, from its session file (context_share)
     namecheck: str | None = None    # warn | fail | off: static undefined-name check (None = [defaults] namecheck)
     run_id: str | None = None       # the id to use (`ccx q run` names it up front so `q ls` can show it)
@@ -864,6 +865,9 @@ def run(req: Request, p: Paths) -> dict:
     if record.get("kind") == "review_issues" and record.get("session_id"):
         # hand the problems back to the same sub-session once; its fix is reviewed again, against the same task
         issues = "\n".join(f"- {x}" for x in record["review"]["issues"]) or record["review"]["summary"]
+        from .review import fix_rereview
+        if fix_rereview(cfg.get("review") or {}) == "focus":
+            write_end_tree(run_dir, cwd)       # the tree before the fix, so its review can show the fix alone
         fix = run(Request(to=req.to, brief=f"An independent review of your change found problems:\n{issues}\n"
                           "Fix the real ones (say which you think are wrong and why), then re-run only the tests touching "
                           "your fix (-k NAME / one test id)"
@@ -871,7 +875,8 @@ def run(req: Request, p: Paths) -> dict:
                           "Change only what the task needs; do not add checks or hardening it did not ask for.",
                           resume_run=run_id, caller=req.caller, cwd=req.cwd, review="on", risk=req.risk,
                           review_round=req.review_round + 1, check=req.check, fallback=False, task=req.task,
-                          step=req.step, label=req.label, namecheck=req.namecheck), p)
+                          step=req.step, label=req.label, namecheck=req.namecheck,
+                          prior_issues=list(record["review"].get("issues") or [])), p)
         fix["review_of"], fix["first_review"] = run_id, record["review"]
         _write_record(p.runs / fix["run_id"], fix)
         return fix

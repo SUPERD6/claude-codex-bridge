@@ -53,6 +53,28 @@ safety problem the change adds (code execution, secrets, data loss). A [must] wi
 missing extra tests. Start summary with exactly `REVIEW: pass` (no [must]) or `REVIEW: issues` (at least one
 [must]); put the items in open_questions, [must] first. Status done."""
 
+# [review] fix_rereview = "focus" (B2, default "full" = the brief above unchanged): the review of a fix round also
+# gets the first review's problems and the fix alone (the diff since the run before it ended, end.json), and is
+# asked to settle those problems first. The whole change stays in the brief (the round-5 r5g:1 real bug was found
+# only by the second full review); only when it is over max_diff_chars does the fix alone stand in for it.
+FOCUS_HEAD = """
+## The problems the first review found
+This change was reviewed once; the agent was then asked to fix these:
+{issues}
+
+## The fix alone (git diff since that review{cut})
+```diff
+{delta}
+```
+"""
+FOCUS_ANSWER = """This is the review of the fix round. First settle each problem listed under "The problems the first
+review found", from the fix and the files: one that is still there is a `[must]` that quotes it; one that is fixed
+needs no item. Start from the fix and the files it touches. Then check the whole change, by the rules below, for a
+problem the fix added or the first review missed.
+"""
+FOCUS_TOO_BIG = ("(the whole change is longer than {n} characters: the fix alone is shown below; open the files "
+                 "for the rest)")
+
 # a [must] that labels itself as outside the task right after the tag ("[must] (out of scope) ...", "[must] Hardening:
 # ...") is a note: round 5 found fix rounds spent on robustness the task never asked for, none of them making a unit right
 _OUT_OF_SCOPE = re.compile(r"^\s*\[must\][\s:—–-]*[(\[]?\s*(out[- ]of[- ]scope|beyond the task|not (asked|required|"
@@ -512,10 +534,14 @@ def reviewers(cfg: dict, worker: str, installed, p=None, cheapest: bool = False)
 
 
 def brief(run_id: str, task: str, summary: str, diff: str, max_chars: int, check: dict | None = None,
-          edited: list[str] | None = None, static: str = "", cwd: Path | None = None) -> str:
+          edited: list[str] | None = None, static: str = "", cwd: Path | None = None,
+          focus: dict | None = None) -> str:
     """The reviewer's brief. `edited` (default: found in `diff`) names pre-existing test files the change edited;
     `static`: what ccx's own static checks found (namecheck), as weak evidence under Checks.
-    `cwd` (the reviewed tree): add the code around the change, in what is left of `max_chars` after the diff."""
+    `cwd` (the reviewed tree): add the code around the change, in what is left of `max_chars` after the diff.
+    `focus` ({issues, delta}: [review] fix_rereview = "focus", a fix round's review): see FOCUS_HEAD."""
+    if focus:
+        return _focus_brief(run_id, task, summary, diff, max_chars, check, edited, static, focus)
     edited = edited_tests(diff) if edited is None else edited
     ed = (f"\nExisting tests edited: {', '.join(edited[:8])} — check the task requires it; an existing assertion "
           f"changed to fit the new code without the task asking for it is a [must] (b)." if edited else "")
@@ -532,6 +558,31 @@ def brief(run_id: str, task: str, summary: str, diff: str, max_chars: int, check
             context = ""
     return BRIEF.format(mark=MARK, run_id=run_id, task=task.strip()[:2000], summary=(summary or "")[:800],
                         diff=shown or "(empty)", cut=cut, check=ran, edited=ed + static, context=context)
+
+
+def _focus_brief(run_id: str, task: str, summary: str, diff: str, max_chars: int, check: dict | None,
+                 edited: list[str] | None, static: str, focus: dict) -> str:
+    """brief() for a fix round's review with [review] fix_rereview = "focus": the whole change (or, past max_chars,
+    a note that only the fix is shown), then the first review's problems and the fix alone, and FOCUS_ANSWER."""
+    edited = edited_tests(diff) if edited is None else edited
+    too_big = len(diff) > max_chars
+    full = brief(run_id, task, summary, FOCUS_TOO_BIG.format(n=max_chars) if too_big else diff, max_chars, check,
+                 edited, static)
+    delta = focus.get("delta") or ""
+    dmax = max_chars if too_big else max(4000, max_chars - len(diff))
+    dcut = f"; cut to {dmax} characters, open the files for the rest" if len(delta) > dmax else ""
+    issues = "\n".join(f"{i}. {x}" for i, x in enumerate(focus.get("issues") or [], 1)) or "(none recorded)"
+    head = FOCUS_HEAD.format(issues=issues, cut=dcut,
+                             delta=delta[:dmax] or "(empty: nothing changed since that review)")
+    before, sep, after = full.rpartition("\n## Checks\n")
+    before, sep2, answer = (before + head + sep + after).rpartition("## Answer\n")
+    return before + sep2 + FOCUS_ANSWER + answer
+
+
+def fix_rereview(rc: dict) -> str:
+    """[review] fix_rereview: "full" (default) or "focus"; anything else is "full"."""
+    v = str(rc.get("fix_rereview") or "full").strip().lower()
+    return v if v in ("full", "focus") else "full"
 
 
 _PREFIX = re.compile(r"^[\s*_`#>]*review\s*[:：]?\s*[*_`]*\s*(pass|issues)\b", re.I)
@@ -605,9 +656,18 @@ def review_run(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path, run_d
             nc = nck.scan(cwd, snap, actual, diff)
         except Exception:  # noqa: BLE001 — weak evidence only; never stops the review
             nc = None
+    focus = None
+    if req.review_round and req.prior_issues and not req.continued and fix_rereview(rc) == "focus":
+        from .workspace import fix_delta
+        try:
+            delta = fix_delta(p, req.resume_run, cwd)
+        except Exception:  # noqa: BLE001 — without the fix alone the review is the full one
+            delta = None
+        if delta is not None:
+            focus = {"issues": list(req.prior_issues), "delta": delta}
     text = rv.brief(record["run_id"], task_for_review(p, req), res.get("summary", ""), diff,
                     int(rc.get("max_diff_chars", 12000)), record.get("check"), edited, nck.brief_note(nc),
-                    cwd=cwd if rc.get("context", False) else None)
+                    cwd=cwd if rc.get("context", False) else None, **({"focus": focus} if focus else {}))
     usd, tried = 0.0, []
     for agent, model, effort in cands[:2]:
         if cancel is not None and cancel.is_set():
@@ -624,6 +684,8 @@ def review_run(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path, run_d
     record["review"] = {**v, "reason": why, "by": tried[-1], "run_id": rev["run_id"], "usd": round(usd, 4)}
     if len(tried) > 1:
         record["review"]["tried"] = tried
+    if focus:
+        record["review"]["rereview"] = "focus"
     if edited:
         record["review"]["edited_tests"] = edited
     if v["verdict"] == "issues":
