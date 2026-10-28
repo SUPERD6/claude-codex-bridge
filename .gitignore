@@ -17,3 +17,6 @@ _site/
 
 # Claude Code local state in a checkout (settings.local.json, worktrees/, launch.json, locks); not the plugin
 .claude/
+
+# local run logs (may hold personal paths)
+*-test-log.txt
