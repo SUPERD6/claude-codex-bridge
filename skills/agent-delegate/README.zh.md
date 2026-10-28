@@ -36,8 +36,8 @@
    - `check_broken` = 验收命令什么都没测：`ccx resume <run_id> "要测什么" --check "..."`。任务点名了一个入口（命令、CLI）却没有测试把它当真实进程跑：resume 一次，要求补一个。
    - `no_changes` = 写任务说 done/partial，却什么都没改（没有改文件、没有提交；check 是在没改过的代码上跑的；`ccx q` 把这一块记为失败，依赖它的块会等着）：只有任务本来就已满足才接受，否则 resume。`--worktree` 的结果里有 `base`：它从 HEAD 起步，不含你未提交的改动，所以它的 check 没测到这些改动。
    - `verification: not-run` 就照实说“没验证”。
-   - `review` 是独立审查：`pass` 或 `issues`（带文件:行）。ccx 自己会跑一轮修改（`show --wait` 会等它）；之后的 `needs_lead` 由你决定，`review_failed` 见下一条。`kind` 只按最终结果判断：打印出结果的 `ccx run ... --bg --wait`，或 `ccx show <run_id> --wait`（两者都会等修改轮；不带 `--wait` 的 `show` 可能在修改轮开始前看到第一条记录，这时续跑会和修改轮撞上）。`--wait` 之后仍是 `review_issues`，说明修改轮没跑成（没有可续的会话，或没能启动）：自己改，或重新派。
-   - `review_failed`（修改轮之后审查仍不过）：对着 diff 逐条核对 `[must]` 项，属实的自己修，不属实的放下；不要为此 `ccx resume`。
+   - `review` 是独立审查：`pass` 或 `issues`（带文件:行）。ccx 自己会跑一轮修改（`show --wait` 会等它）；之后的 `needs_lead` 由你决定，`review_failed` 见下一条。`kind` 只按最终结果判断：打印出结果的 `ccx run ... --bg --wait`，或 `ccx show <run_id>`（带不带 `--wait` 都会跟到修改轮；显示 `fix_round: starting` 说明修改轮马上开始：用 `ccx show <run_id> --wait`，不要续跑）。最终仍是 `review_issues`，说明修改轮没跑成（没有可续的会话，或没能启动）：自己改，或重新派。有修改轮时，`cost_chain` 是整条链的花费（tokens 和美元）。
+   - `review_failed`（修改轮之后审查仍不过）：对着 diff 逐条核对 `[must]` 项，属实的自己修，不属实的放下。不要为此 `ccx resume`，除非用户要求再改一轮（要多花一次运行）。
    - 然后 `ccx verify <run_id> --ok 1|0 [--reason unfinished|wrong|overreach|other]`：校准路由（给了 `--minutes` 还校准拆分），并把 checkpoint 的这一步标成完成。没人判断的运行，12 小时后验收或自查通过、审查也通过会记成“大概率对”；`ccx undo --apply` 撤回的等你判，加 `--wrong` 同时记成“错”。只要真的看过，就记一下。
 5. **换主智能体**：用户说“交接给 X”时，自己还能写就 `ccx handoff --by <你> --to X "…"`；原主智能体写不了（额度用完、崩了、窗口关了）就 `ccx handoff --from-transcript <原主智能体> --to X`。接手方先核对其中的说法。自己的对话太长、下一块又是新活时：先问用户，再 `ccx fresh`（用本对话的记录写交接，新对话开局就能看到）。
 6. **记忆**：只有记忆维护已获授权时，才用 `ccx mem add` 保存必要的长期事实（`--project` 写进本项目 `.ccx/` 的日志；`ccx project status` 看这一层）；委派任务本身不授权写入记忆。

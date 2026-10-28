@@ -912,9 +912,21 @@ def run(req: Request, p: Paths) -> dict:
                           step=req.step, label=req.label, namecheck=req.namecheck,
                           prior_issues=list(record["review"].get("issues") or [])), p)
         fix["review_of"], fix["first_review"] = run_id, record["review"]
+        try:                               # the lead sees what the whole chain cost, not only its last run
+            fix["cost_chain"] = ledger.chain_cost(p, [run_id, *((fix.get("cost_chain") or {}).get("runs")
+                                                                 or [fix["run_id"]])])
+        except Exception:  # noqa: BLE001 — accounting only; never fails the run
+            pass
         _write_record(p.runs / fix["run_id"], fix)
         return fix
     return record
+
+
+# review_failed: the same rule in the hint, `ccx ui`'s card (ui.py) and the agent-delegate skill (SKILL.md, README.zh.md)
+REVIEW_FAILED_HINT = ("an independent review still finds problems after one fix round (review.issues): decide "
+                      "yourself: check each [must] item against the diff, fix the real ones yourself and drop the wrong "
+                      "ones, then give your verdict (`ccx verify {run_id} --ok 1|0`). Another round (`ccx resume {run_id} \"...\"`) costs a run: "
+                      "only when the person asks for it")
 
 
 NO_CHANGES_NOTE = "ran on unchanged tree"
@@ -947,7 +959,9 @@ def compact(record: dict) -> dict:
     out = {
         "run_id": record["run_id"], "agent": record["to"], "tier": record["tier"],
         "model": f"{last.get('model')}/{last.get('effort')}",
-        "ok": bool(record["ok"]) and record.get("kind") not in ("review_failed", "check_broken", "no_changes"),
+        # review_issues as a final kind = the review found problems and no fix round ran: not a success either
+        "ok": bool(record["ok"]) and record.get("kind") not in ("review_issues", "review_failed", "check_broken",
+                                                                 "no_changes"),
         "status": r.get("status") or ("running" if record.get("state") == "running" else "error"),
         "summary": r.get("summary") or record.get("error"),
         "files_changed": r.get("files_changed", []),
@@ -969,7 +983,9 @@ def compact(record: dict) -> dict:
     if record.get("kind") and record["kind"] != "ok":
         out["kind"] = record["kind"]
         if record["kind"] == "over_budget":
-            out["hint"] = (record.get("error") or "stopped over the sub-agent spending cap") +                 f"; what it did so far: `ccx show {record['run_id']} --full`"
+            out["hint"] = ((record.get("error") or "stopped over the sub-agent spending cap") +
+                           f"; what it did so far: `ccx show {record['run_id']} --full`; to go on under a new cap: "
+                           f"`ccx resume {record['run_id']} --budget USD`")
         if record["kind"] == "check_failed" and record["check"].get("reason") == "namecheck":
             out["hint"] = (f"the changed code uses names no scope defines (see namecheck; `{record['check']['cmd']}` "
                            f"re-runs it); fix them: ccx resume {record['run_id']} \"fix the undefined names\"")
@@ -978,8 +994,10 @@ def compact(record: dict) -> dict:
                            f"see `ccx show {record['run_id']} --full`, or continue: ccx resume {record['run_id']} "
                            f"\"the check fails: fix it\"")
         if record["kind"] == "check_broken":
-            out["hint"] = record["check"].get("broken") or "the check tested nothing"
-            out["needs_lead"] = "check_broken: " + out["hint"].split(";")[0]
+            why = record["check"].get("broken") or "the check tested nothing"
+            out["needs_lead"] = "check_broken: " + why.split(";")[0]
+            out["hint"] = (f"{why}; give it a check that tests the change: `ccx resume {record['run_id']} "
+                           f"\"what to test\" --check \"...\"`")
         if record["kind"] == "no_changes":
             st = r.get("status") or "done"
             out["hint"] = (f"the sub-agent said {st} but changed nothing (no edit, no new file, no commit) since the "
@@ -1003,12 +1021,13 @@ def compact(record: dict) -> dict:
                                             "edited_tests") if rv.get(k)}
         if rv.get("edited_tests"):                    # a builder that changed existing tests: the lead looks first
             out["edited_tests"] = rv["edited_tests"]
+    if record.get("cost_chain"):                  # tokens and $ of the whole fix round chain; tokens above: this run
+        out["cost_chain"] = record["cost_chain"]
     if record.get("first_review"):
         out.setdefault("review", {})["first_round"] = {k: record["first_review"].get(k) for k in ("verdict", "issues")}
         out["fixed_after_review_of"] = record["review_of"]
     if record.get("kind") == "review_failed":
-        out["hint"] = ("an independent review still finds problems after one fix round (review.issues): decide "
-                       f"yourself, or `ccx resume {record['run_id']} \"...\"`")
+        out["hint"] = REVIEW_FAILED_HINT.format(run_id=record["run_id"])
         first = ((record.get("review") or {}).get("issues") or ["(see review)"])[0]
         out["needs_lead"] = f"review_failed: {first}"[:300]
     if record.get("check"):
@@ -1044,7 +1063,12 @@ def recap(record: dict, res: dict) -> str:
                                   f"{'broken' if record.get('kind') == 'check_broken' else 'failed'} (exit {c.get('exit')})")
     review = (res.get("review") or {}).get("verdict") or "none"
     usd = sum(a.get("ae_usd") or 0 for a in record.get("attempts") or []) + ((res.get("review") or {}).get("usd") or 0)
+    cc = record.get("cost_chain") or {}
+    if cc.get("ae_usd") is not None:              # after a fix round: what the whole chain cost
+        usd = cc["ae_usd"]
     ok = res.get("ok", record.get("ok"))
     lead = f" needs_lead={res['needs_lead'].split(':')[0]}" if res.get("needs_lead") else ""
     return (f"ccx run {record['run_id']}: status={res.get('status')} ok={str(bool(ok)).lower()} "
-            f"check={check} review={review}{lead} cost=~${usd:.4f}; next: ccx show {record['run_id']}")
+            f"check={check} review={review}{lead} cost=~${usd:.4f}"
+            + (f" ({len(cc['runs'])} runs + {cc.get('reviews', 0)} reviews)" if cc.get("ae_usd") is not None else "")
+            + f"; next: ccx show {record['run_id']}")

@@ -6,3 +6,13 @@
   clock tick on Windows < 3.13 drew the same name, and one hit the other's delete-pending probe and failed with a bare
   PermissionError). A denied release is retried for about 2 s instead of 0.2 s (a lock left behind stalls everyone
   until it is stale). Locally: max wait for one write 7.1 s -> 0.2 s (6 threads, 10 ms writes).
+- `ccx show ID` without `--wait` follows a review fix round like `--wait`: it reports the chain's final record (with
+  `chain`), shows a fix round still running as running, and says `fix_round: starting` (ok false, `next` = `--wait`)
+  while one is about to start. A final `review_issues` (no fix round ran) is no longer `ok`. The `--bg` output's
+  `check` field (the `ccx show` command) is now `peek`, so it is not read as the acceptance check.
+- `review_failed`: the hint, the `ccx ui` card and the agent-delegate skill now say the same thing: the lead checks each
+  [must] against the diff and fixes the real ones itself; another round costs a run and happens only on the person's
+  word (a secondary ui button). `check_broken` and `over_budget` hints name the action their ui button gives. A
+  table-driven test keeps hint, ui and skill in step for every kind.
+- After a review fix round the result has `cost_chain`: tokens, API-equivalent and billed $ of every run and review in
+  the chain, from the ledger; `recap`'s cost is the chain's. The per-run fields are unchanged.

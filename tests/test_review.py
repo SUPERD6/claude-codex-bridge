@@ -521,9 +521,30 @@ class TestReviewRun(Env):
         out = self.go("--review", "on", review_seq="issues")
         self.assertEqual(out["kind"], "review_failed")
         self.assertIn("independent review", out["hint"])
-        self.assertIn("decide yourself", out["hint"])                 # the hint as on main (H11: no default change)
+        self.assertIn("decide yourself", out["hint"])
+        self.assertIn("fix the real ones yourself", out["hint"])    # the skill's rule; another round only on request
         self.assertNotIn("last resort", out["hint"])
         self.assertEqual(len(self.reviews()), 2)
+
+    def test_cost_chain_after_a_fix_round_is_the_ledger_total(self):
+        # plan I4: after a fix round the lead saw only the last run's cost; cost_chain sums the whole chain
+        from ccx.config import Paths
+        out = self.go("--review", "on", review_seq="issues")
+        first, fix = out["fixed_after_review_of"], out["run_id"]
+        rows = [json.loads(x) for x in Paths(self.hub).ledger.read_text(encoding="utf-8").splitlines()]
+        mine = [r for r in rows if not r.get("type") and (r.get("run_id") in (first, fix)
+                                                            or r.get("label") in (f"review:{first}", f"review:{fix}"))]
+        self.assertEqual(len(mine), 4, rows)                    # two builder runs, two reviews
+        cc = out["cost_chain"]
+        self.assertEqual((cc["runs"], cc["reviews"]), ([first, fix], 2))
+        self.assertAlmostEqual(cc["ae_usd"], sum(r["ae_usd"] or 0 for r in mine), places=6)
+        self.assertGreater(cc["ae_usd"], sum(r["ae_usd"] or 0 for r in mine if r.get("run_id") == fix))
+        for k in ("input", "cached", "output"):
+            self.assertEqual(cc["tokens"][k], sum(r["usage"][k] for r in mine), k)
+        self.assertNotEqual(cc["tokens"], out["tokens"])         # the run's own fields stay this run's
+        self.assertIn(f"cost=~${cc['ae_usd']:.4f} (2 runs + 2 reviews)", out["recap"])
+        shown = json.loads(self.ccx("show", first).stdout)       # the first id, no --wait: the chain's result
+        self.assertEqual((shown["run_id"], shown["kind"], shown["cost_chain"]), (fix, "review_failed", cc))
 
     def test_fix_rereview_full_by_default(self):
         # [review] fix_rereview defaults to "full": the fix round's review is the plain brief and no end.json is kept
