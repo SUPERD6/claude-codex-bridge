@@ -15,6 +15,7 @@ import preflight_e2e  # noqa: E402
 
 HAS_PYTEST = subprocess.run([sys.executable, "-c", "import pytest"], capture_output=True).returncode == 0
 SLUGIFY = "import re\ndef slugify(text):\n    return re.sub('[^a-z0-9]+', '-', text.lower()).strip('-')\n"
+SLUGIFY_DOC = SLUGIFY.replace("    return", '    """Slug."""\n    return')
 
 
 @unittest.skipUnless(HAS_PYTEST, "the steps judge by running pytest")
@@ -31,7 +32,8 @@ class TestPreflightSteps(Env):
         pf.env["FAKE_WRITE"] = f"textutil.py={SLUGIFY}"
         d = pf.delegate()
         self.assertTrue(d["ok"], d)
-        f = pf.followup()
+        pf.env["FAKE_WRITE"] = f"textutil.py={SLUGIFY_DOC}"
+        f = pf.followup()                                     # the follow-up really edits (else: no_changes)
         self.assertTrue(f["ok"] and f["same_session"], f)
         u = pf.undo()
         self.assertTrue(u["ok"], u)

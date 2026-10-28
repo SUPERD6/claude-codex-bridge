@@ -119,6 +119,7 @@ class TestGate(QEnv):
 
 class TestWorktrees(QEnv):
     def test_parallel_writers_get_worktrees_and_dependents_wait(self):
+        self.env["FAKE_TOUCH"] = "1"        # the builder changes something (a write run that changes nothing is no_changes)
         self.git_init()
         w = [self.q("add", f"w{i}", "--brief", f"write piece {i}", "--minutes", "5", "--mode", "write", "--to",
                     "codex", "--check", NEW_FILE)["id"] for i in range(2)]

@@ -34,6 +34,7 @@
    - 结果里有 `needs_lead`、`edited_tests` 或 `namecheck` 时**先看它们**（`namecheck`：改动的函数里没有任何作用域定义的名字，多半是测试没覆盖到的 NameError）。
    - `check` 通过且跑的是相关测试，再看 `files_changed` / `diffstat` 就够了，**不要自己重跑**（H11 实测 2026-10-24）。只有 check 失败、没有、带 `weak`（这个命令在这里放过过做错的结果），或状态是 partial/blocked 时，才自己跑测试或读完整 diff。
    - `check_broken` = 验收命令什么都没测：`ccx resume <run_id> "要测什么" --check "..."`。任务点名了一个入口（命令、CLI）却没有测试把它当真实进程跑：resume 一次，要求补一个。
+   - `no_changes` = 写任务说 done/partial，却什么都没改（没有改文件、没有提交；check 是在没改过的代码上跑的；`ccx q` 把这一块记为失败，依赖它的块会等着）：只有任务本来就已满足才接受，否则 resume。`--worktree` 的结果里有 `base`：它从 HEAD 起步，不含你未提交的改动，所以它的 check 没测到这些改动。
    - `verification: not-run` 就照实说“没验证”。
    - `review` 是独立审查：`pass` 或 `issues`（带文件:行）。ccx 自己会跑一轮修改（`show --wait` 会等它）；之后的 `needs_lead` 由你决定，`review_failed` 见下一条。`kind` 只按最终结果判断：打印出结果的 `ccx run ... --bg --wait`，或 `ccx show <run_id> --wait`（两者都会等修改轮；不带 `--wait` 的 `show` 可能在修改轮开始前看到第一条记录，这时续跑会和修改轮撞上）。`--wait` 之后仍是 `review_issues`，说明修改轮没跑成（没有可续的会话，或没能启动）：自己改，或重新派。
    - `review_failed`（修改轮之后审查仍不过）：对着 diff 逐条核对 `[must]` 项，属实的自己修，不属实的放下；不要为此 `ccx resume`。
