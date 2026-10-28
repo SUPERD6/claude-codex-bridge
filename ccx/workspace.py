@@ -320,6 +320,42 @@ def diffstat(snap: dict | None) -> str | None:
     return "; ".join(parts) or "no changes"
 
 
+def unchanged(snap: dict | None, since: float | None = None) -> bool | None:
+    """Did a write run leave the tree exactly as its undo snapshot found it? True only when HEAD is the same (a
+    commit of the builder's own is a change), no tracked file differs from the snapshot's base, no untracked file is
+    new, and no untracked file that was already there was written after `since` (the run's start; git keeps no
+    content of those). None when there is no snapshot or git can't answer: then nothing is claimed."""
+    if not snap or not snap.get("base"):
+        return None
+    try:
+        repo = Path(snap["repo"])
+        rc, head = _git(repo, "rev-parse", "HEAD")
+        if rc != 0:
+            return None
+        if snap.get("head") and head != snap["head"]:
+            return False
+        r = subprocess.run(["git", "diff", "--quiet", snap["base"], "--", ".", ":(exclude).ccx"], cwd=repo,
+                           capture_output=True, stdin=subprocess.DEVNULL)
+        if r.returncode == 1:
+            return False
+        if r.returncode != 0:
+            return None
+        rc, others = _git(repo, "ls-files", "--others", "--exclude-standard")
+        if rc != 0:
+            return None
+        before = set(snap.get("untracked") or [])
+        for n in others.splitlines():
+            if not n or n.startswith(".ccx/"):
+                continue
+            if n not in before:
+                return False
+            if since is not None and (repo / n).stat().st_mtime > since:
+                return False
+    except (OSError, KeyError, TypeError, ValueError):
+        return None
+    return True
+
+
 def undo(p: Paths, run_id: str, apply: bool = False, wrong: bool = False) -> dict:
     """Put back the files a write run changed. Dry run unless apply. New files are moved aside, not deleted.
     Undoing is not a verdict by itself (people undo to try again, or to split the work); `wrong` says it was."""

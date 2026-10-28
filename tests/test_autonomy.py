@@ -83,6 +83,7 @@ def calls(tmp_path):
 def test_run_project_l1_reads_by_itself_and_waits_before_edits(tmp_path):
     catalog(tmp_path)
     env = run_env(tmp_path)
+    env["FAKE_TOUCH"] = "1"            # the write run changes something (else it is kind no_changes)
     base = ("run", "--from", "claude", "--to", "codex", "--tier", "T1", "--project", "desk-pet")
     code, out = run_ccx(env, *base, "--mode", "write", "rename foo to bar in a.py")
     assert code == 0 and out["delegated"] is False and out["autonomy"]["level"] == "L1"
@@ -90,7 +91,7 @@ def test_run_project_l1_reads_by_itself_and_waits_before_edits(tmp_path):
     assert not calls(tmp_path)
     code, out = run_ccx(env, *base, "--mode", "read", "explain what a.py does")
     assert code == 0 and out["autonomy"] == {"level": "L1", "source": "config"} and len(calls(tmp_path)) == 1
-    code, out = run_ccx(env, *base, "--mode", "write", "--approved", "rename foo to bar in a.py")
+    code, out = run_ccx(env, *base, "--mode", "write", "--approved", "--review", "off", "rename foo to bar in a.py")
     assert code == 0 and out["autonomy"]["level"] == "L1" and len(calls(tmp_path)) == 2
 
 

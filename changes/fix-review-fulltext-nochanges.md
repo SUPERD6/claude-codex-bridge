@@ -1,0 +1,13 @@
+- Review fix round: the fixer now gets each [must] item whole (`issues_full`, up to 1500 characters, at most 8;
+  the summary uncut when there are no items), instead of the 300-character form the lead still reads in
+  `review.issues` / `needs_lead`. A review whose `REVIEW: issues` / `REVIEW: pass` line landed in its first item
+  instead of the summary is read by that line (only when the summary names no verdict).
+- A write run that says done/partial but changed nothing since its undo snapshot (same HEAD, so a commit of its own
+  counts as a change; no edit; no new file) is `kind: no_changes`: `ok` false with `needs_lead`, not learned from,
+  never auto-judged right; its check is shown as `ran on unchanged tree` (`passed: null`). A label only: no retry.
+  Read runs and ccx's reviewer are untouched.
+- `ccx run --worktree` in a project with uncommitted changes records `base: HEAD, uncommitted changes not included:
+  commit first` (run.json `base_note`, the result's `base`); the run itself is unchanged.
+- A Claude reviewer is told to read with Read/Grep/Glob and use Bash only for git diff/log/status, without `cd`
+  (its allow-list refused the `cat` / `rg` the old text offered); Codex's text is unchanged. Claude's
+  `permission_denials` are counted per attempt in run.json and summed in the ledger.

@@ -55,6 +55,19 @@ REVIEW_CALLER = "ccx-review"
 REVIEW_PERMISSION = ("read-only review: read and search files with your file tools or shell read commands (your "
                      "shell tool works: cat / Get-Content, rg, git diff, git log are fine), but run no tests or builds "
                      "and modify nothing")
+# Claude's read-only allow-list ([permissions.claude] read, config/tiers.toml) has Read/Grep/Glob and Bash only for
+# git status/diff/log and ls: the "cat / rg are fine" above was refused there, and `cd <repo> && git diff` is
+# refused as a whole. Its own wording asks for nothing the allow-list turns down; Codex keeps REVIEW_PERMISSION.
+REVIEW_PERMISSION_CLAUDE = ("read-only review: read and search files with Read, Grep and Glob; use Bash only for "
+                            "git diff, git log and git status; you are already in the repository, so do not cd. "
+                            "Run no tests or builds and modify nothing")
+
+
+def review_permission(cli: str) -> str:
+    """The reviewer's Permission line for the CLI it runs on: Claude's own wording, REVIEW_PERMISSION otherwise."""
+    return REVIEW_PERMISSION_CLAUDE if cli == "claude" else REVIEW_PERMISSION
+
+
 REVIEW_FINISH = ("Do not run tests or builds: the Checks section above says what ccx ran, if anything. Judge from "
                  "the task, the diff and the code; when you need more, open all the files you need at once "
                  "(several reads in one turn), not one per turn. Leave commands_run empty and set verification to "

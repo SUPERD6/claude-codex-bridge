@@ -69,6 +69,7 @@ class TestCheckTrust(unittest.TestCase):
 class TestWeakCheck(Env):
     def setUp(self):
         super().setUp()
+        self.env["FAKE_TOUCH"] = "1"        # each write run changes something (else it is kind no_changes)
         import subprocess
         g = ["git", "-c", "user.name=t", "-c", "user.email=t@t"]
         subprocess.run(["git", "init", "-q"], cwd=self.work, check=True)

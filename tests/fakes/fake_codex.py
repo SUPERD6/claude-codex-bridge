@@ -100,7 +100,17 @@ for spec in filter(None, _writes.split(";")):   # "path=content;path2=content"
     path, _, content = spec.partition("=")
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(content)
+if os.environ.get("FAKE_TOUCH"):         # a change of its own on every call: a new file in its working folder
+    with open(f"fake-{tid}-{time.time_ns()}.txt", "w", encoding="utf-8") as fh:
+        fh.write("touched\n")
+if os.environ.get("FAKE_COMMIT"):        # the builder commits its own work (FAKE_COMMIT = the commit message)
+    import subprocess
+    g = ["git", "-c", "user.name=fake", "-c", "user.email=fake@fake"]
+    subprocess.run(g + ["add", "-A"], check=True)
+    subprocess.run(g + ["commit", "-qm", os.environ["FAKE_COMMIT"]], check=True)
 status = "done"
+if mode == "partial":
+    status = "partial"
 if mode == "blocked" or (mode == "blocked_then_done" and not resuming):
     status = "blocked"
 if mode == "policy" or (mode == "policy_then_done" and not resuming):   # as codex-cli 0.164 on Windows

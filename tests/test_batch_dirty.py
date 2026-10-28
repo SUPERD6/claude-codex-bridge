@@ -10,6 +10,10 @@ NEED_WIP = 'python -c "import os, sys; sys.exit(0 if os.path.exists(\'wip.txt\')
 
 
 class TestBatchDirty(AdapterEnv):
+    def setUp(self):
+        super().setUp()
+        self.env["FAKE_TOUCH"] = "1"        # each write run changes something (else it is kind no_changes)
+
     def git_init(self):
         for args in (["init", "-q"], ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty",
                                      "-m", "init"]):

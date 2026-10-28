@@ -32,7 +32,8 @@ from .agents.codex import _add_children, _codex_growth, _codex_seen, _codex_tota
 from .ledger import write_record as _write_record  # noqa: F401
 from .plan import _fallback_plan, _plan, _provider_envs, _rung_spec, _usable, _within_budget, other  # noqa: F401
 from .prompts import (CONTINUE, ESCALATE, FOLLOWUP, LEAD_NOTE, NEEDS_WRITE, POLICY_MARKERS, POLICY_RETRY, PROMPT,  # noqa: F401
-                      REVIEW_CALLER, REVIEW_FINISH, REVIEW_PERMISSION, SELFCHECK, SELFCHECK_CMD, _policy_rejections)
+                      REVIEW_CALLER, REVIEW_FINISH, REVIEW_PERMISSION, SELFCHECK, SELFCHECK_CMD, _policy_rejections,
+                      review_permission)
 from .review import review_run as _review  # noqa: F401
 from .verdicts import (REASONS, SOFT_AFTER_H, _hard_verdict, _soft_verdict, soft_verdicts, verify,  # noqa: F401
                        verify_builtin)
@@ -421,7 +422,14 @@ def run(req: Request, p: Paths) -> dict:
     run_dir.mkdir(parents=True, exist_ok=True)
 
     cwd = req.cwd.resolve()
+    stale_base = None
     if req.worktree and req.mode == "write" and not prev:
+        try:              # a worktree starts from HEAD: say so when the project has work it will not see
+            from . import gitstate
+            if gitstate.in_git(cwd) and not gitstate.clean(cwd):
+                stale_base = gitstate.BASE_NOTE
+        except Exception:  # noqa: BLE001 — a note only; never stops the run
+            stale_base = None
         cwd = make_worktree(cwd, run_id)
 
     ctx = _project_context(cwd)
@@ -432,7 +440,9 @@ def run(req: Request, p: Paths) -> dict:
                  if req.mode == "read" else "you may edit files in the workspace; keep changes minimal and on-task")
     reviewer = req.caller == REVIEW_CALLER and req.mode == "read"   # ccx's reviewer: reads, runs no tests
     if reviewer:
-        mode_text = REVIEW_PERMISSION
+        # the CLI the reviewer runs on (a provider agent runs on another one's): its tools decide the wording
+        pv = provider_of(cfg, req.provider or req.to)
+        mode_text = review_permission(pv.get("agent", "claude") if pv else req.to)
     if not req.allow_subagents:
         # codex-cli 0.164 offers its multi_agent v2 tools (spawn_agent ...) even with both features disabled and
         # --ignore-user-config (checked 2026-10-24), so the rule has to be said; the spend watchdog stays as backstop
@@ -499,6 +509,7 @@ def run(req: Request, p: Paths) -> dict:
         "mode_source": req.mode_source, "mode_why": req.mode_why, "check_cmd": req.check, "risk": req.risk,
         "namecheck_mode": req.namecheck,
         "shared_context": shared_meta,
+        **({"base_note": stale_base} if stale_base else {}),
     }
     _write_record(run_dir, record)          # visible to `ccx show` at once (background runs, crashes)
     if req.mode == "write":
@@ -674,6 +685,7 @@ def run(req: Request, p: Paths) -> dict:
             "error": oc.error, "auth_problem": oc.auth_problem, "retry_after": oc.retry_after,
             "session_id": oc.session_id, "substituted_for": spec.get("substituted_for"),
             **({"recovered": True} if recovered and oc.usage else {}),
+            **({"permission_denials": oc.permission_denials} if oc.permission_denials is not None else {}),
             **({"codex_total": codex_total} if codex_total else {})})
         record["session_id"] = session
         record["tier"] = spec.get("tier", "rung")
@@ -772,6 +784,10 @@ def run(req: Request, p: Paths) -> dict:
     if stop_file.exists():
         record["stop_requested"] = True
     check_passed = None
+    # a write run that says done/partial but left the tree as it found it (no edit, no new file, no commit of its
+    # own): measured before ccx's check runs, so files the check itself writes do not count as the builder's
+    no_change = (req.mode == "write" and oc.ok and status in ("done", "partial")
+                 and _left_unchanged(p, record) is True)
     want_review = want_review and oc.ok and status in ("done", "partial")
     if bg_review is not None and not (want_review and early_check and early_check[0] == len(record["attempts"])):
         _finish_review(bg_review, record, p, keep=False)         # not this attempt's (cannot happen; be safe)
@@ -801,6 +817,15 @@ def run(req: Request, p: Paths) -> dict:
             _review(req, p, cfg, record, cwd, run_dir)
         except Exception as e:  # noqa: BLE001 — a review that can't run never fails the work itself
             record["review"] = {"verdict": "not-run", "error": f"{type(e).__name__}: {e}"[:200]}
+    if no_change:
+        # r5: an apply_patch that failed was reported as ok, and a check passed on the untouched tree. Only a label
+        # (no retry: the task may already have been met): not a success, the lead decides. A failed or broken
+        # check, or review issues, keep their own kind; the check is marked as run on the unchanged tree.
+        record["no_changes"] = True
+        if record.get("check"):
+            record["check"]["unchanged_tree"] = True
+        if record.get("kind") in (None, "ok"):
+            record["kind"] = "no_changes"
     if req.task and req.step:
         if oc.kind in ("quota", "timeout", "user_stopped"):
             args = ["fail", req.task, str(req.step), "--reason", "quota" if oc.kind == "quota" else "error",
@@ -818,7 +843,7 @@ def run(req: Request, p: Paths) -> dict:
     # `ccx verify` (the lead's verdict) adds or corrects this later.
     verified = check_passed is not None or (oc.result or {}).get("verification", "not-run") not in ("", "not-run")
     if oc.kind not in ("quota", "auth", "timeout", "model", "needs_write", "split", "over_budget", "user_stopped",
-                       "review_issues", "review_failed") and record.get("kind") != "check_broken" and (status in ("blocked", "failed") or not oc.ok
+                       "review_issues", "review_failed") and record.get("kind") not in ("check_broken", "no_changes") and (status in ("blocked", "failed") or not oc.ok
                                                         or (status == "done" and verified)):
         try:
             learn.record_outcomes(p, record, final_ok=oc.ok and status == "done" and check_passed is not False)
@@ -864,7 +889,11 @@ def run(req: Request, p: Paths) -> dict:
         pass
     if record.get("kind") == "review_issues" and record.get("session_id"):
         # hand the problems back to the same sub-session once; its fix is reviewed again, against the same task
-        issues = "\n".join(f"- {x}" for x in record["review"]["issues"]) or record["review"]["summary"]
+        # the reviewer's own text, up to review.ISSUE_FULL_CHARS an item: its fix and test notes reach the fixer
+        # (r5: about 2 in 3 [must] items were cut at 300 characters here); compact / needs_lead keep the short form
+        rv = record["review"]
+        issues = ("\n".join(f"- {x}" for x in (rv.get("issues_full") or rv["issues"]))
+                  or rv.get("summary_full") or rv["summary"])
         from .review import fix_rereview
         if fix_rereview(cfg.get("review") or {}) == "focus":
             write_end_tree(run_dir, cwd)       # the tree before the fix, so its review can show the fix alone
@@ -883,6 +912,28 @@ def run(req: Request, p: Paths) -> dict:
     return record
 
 
+NO_CHANGES_NOTE = "ran on unchanged tree"
+
+
+def _left_unchanged(p: Paths, record: dict) -> bool | None:
+    """workspace.unchanged for this run's snapshot (its own, or its chain's), counted from the start of the run
+    that took it; None when it can't be told (no git, no snapshot): then nothing is claimed."""
+    from .workspace import unchanged
+    try:
+        snap = run_snapshot(p, record)
+        if not snap:
+            return None
+        since = record.get("ts")
+        if snap.get("chain_from"):              # a fix round or resume: pre-existing files count from the chain's start
+            try:
+                since = ledger.load_run(p, snap["chain_from"]).get("ts") or since
+            except (OSError, ValueError):
+                pass
+        return unchanged(snap, since)
+    except Exception:  # noqa: BLE001 — a label only; never fails the run
+        return None
+
+
 def compact(record: dict) -> dict:
     """What the orchestrator actually reads. Keep it small."""
     r = record.get("result") or {}
@@ -891,7 +942,7 @@ def compact(record: dict) -> dict:
     out = {
         "run_id": record["run_id"], "agent": record["to"], "tier": record["tier"],
         "model": f"{last.get('model')}/{last.get('effort')}",
-        "ok": bool(record["ok"]) and record.get("kind") not in ("review_failed", "check_broken"),
+        "ok": bool(record["ok"]) and record.get("kind") not in ("review_failed", "check_broken", "no_changes"),
         "status": r.get("status") or ("running" if record.get("state") == "running" else "error"),
         "summary": r.get("summary") or record.get("error"),
         "files_changed": r.get("files_changed", []),
@@ -924,6 +975,13 @@ def compact(record: dict) -> dict:
         if record["kind"] == "check_broken":
             out["hint"] = record["check"].get("broken") or "the check tested nothing"
             out["needs_lead"] = "check_broken: " + out["hint"].split(";")[0]
+        if record["kind"] == "no_changes":
+            st = r.get("status") or "done"
+            out["hint"] = (f"the sub-agent said {st} but changed nothing (no edit, no new file, no commit) since the "
+                           f"run started" + ("; its check " + NO_CHANGES_NOTE if record.get("check") else "") +
+                           f": if the task was already met, accept it; otherwise `ccx resume {record['run_id']} "
+                           f"\"nothing was changed: make the change\"`")
+            out["needs_lead"] = f"no_changes: status {st}, nothing changed"
         if record["kind"] == "needs_write":
             out["hint"] = ("read-only run: the sub-agent says it needs to edit files (see summary). If you agree, "
                            f"run it again with --mode write")
@@ -952,6 +1010,11 @@ def compact(record: dict) -> dict:
         out["check"] = {"cmd": c["cmd"], "passed": c["passed"], "exit": c["exit"],
                         **({"weak": c["weak"], "note": c["note"]} if c.get("weak") else {}),
                         **({"status": "check_broken"} if c.get("broken") else {})}
+        if c.get("unchanged_tree") and c.get("passed"):
+            # it passed on the tree as it was before the run: no evidence about this run's work
+            out["check"].update(passed=None, status=NO_CHANGES_NOTE)
+        elif c.get("unchanged_tree"):
+            out["check"]["note"] = NO_CHANGES_NOTE
     if (record.get("namecheck") or {}).get("hits"):     # weak evidence for the lead; mode fail: also the check
         from .namecheck import line
         out["namecheck"] = [line(h) for h in record["namecheck"]["hits"][:5]]
@@ -959,6 +1022,8 @@ def compact(record: dict) -> dict:
         out["edited_tests"] = record["edited_tests"]
     if record["cwd"] and "/.ccx-worktrees/" in record["cwd"].replace("\\", "/"):
         out["worktree"] = record["cwd"]
+    if record.get("base_note"):                     # --worktree on a dirty project: its check ran on HEAD's code
+        out["base"] = record["base_note"]
     if record.get("auth_problem"):
         out["hint"] = f"{record['to']} looks logged out: run `{record['to']} login` on this machine."
     return out
@@ -968,7 +1033,8 @@ def recap(record: dict, res: dict) -> str:
     """One line for the end of `ccx run`'s output (its last key), so a lead that pipes it through `tail` still has
     the run_id: status, check, review, API-equivalent cost and what to run next."""
     c = res.get("check")
-    check = "none" if not c else ("passed" if c.get("passed") else
+    check = "none" if not c else (NO_CHANGES_NOTE.replace(" ", "-") if c.get("status") == NO_CHANGES_NOTE else
+                                  "passed" if c.get("passed") else
                                   f"{'broken' if record.get('kind') == 'check_broken' else 'failed'} (exit {c.get('exit')})")
     review = (res.get("review") or {}).get("verdict") or "none"
     usd = sum(a.get("ae_usd") or 0 for a in record.get("attempts") or []) + ((res.get("review") or {}).get("usd") or 0)
