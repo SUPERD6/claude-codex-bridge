@@ -29,7 +29,8 @@ def test_auto_is_its_own_arm():
     fixed_s, fixed_o = {**base, "lead_model": "sonnet"}, {**base, "lead_model": "opus"}
     assert r5.arm_of(auto_s) == r5.arm_of(auto_o) == "ccx2@auto-medium"
     assert r5.arm_of(fixed_s) == "ccx2" and r5.arm_of(fixed_o) == "ccx2@opus-medium"
-    assert len({r5.done_key(x) for x in (auto_s, fixed_s, auto_o, fixed_o)}) == 4
+    assert len({r5.done_key(x) for x in (auto_s, fixed_s, auto_o, fixed_o)}) == 3
+    assert r5.done_key(auto_s) == r5.done_key(auto_o)       # a changed rule never re-runs a done auto unit
     assert r5.lead_of(auto_o) == ("opus", "medium")         # the lead actually runs on the picked model
     direct = {**base, "arm": "direct", "lead_model": "opus", "lead_pick": "auto"}
     assert r5.arm_of(direct) == "direct"                    # no lead: auto changes nothing

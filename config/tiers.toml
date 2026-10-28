@@ -78,7 +78,7 @@ large = "direct"
 uncertain = "direct"
 hard = "direct"
 
-[lead]                    # 主智能体平时用的模型，只用来估算“如果自己做要花多少”
+[lead]                    # 主智能体平时用的模型：估算“如果自己做要花多少”；lead.model_by_task 开时也是“强档”的名字（强档不传 --model，工具照常用自己的模型）
 claude = "opus"
 codex = "gpt-6.1-sol"
 model_by_task = false     # 按任务选主智能体模型（默认关）：ccx 新开/推荐一个新的主对话时按难度选，见 [lead_by_task]
@@ -86,8 +86,9 @@ model_by_task = false     # 按任务选主智能体模型（默认关）：ccx 
 # 按任务选主智能体模型（lead.model_by_task = true 才生效）。只用在“新开一个主对话”的地方：ccx fresh、ccx handoff、
 # ccx route / propose 给的 new_lead（以及主智能体自己的内置子智能体的 builtin_model）。正在跑的对话永远不换模型
 # （换了整段提示缓存作废）。难度 b 和 ccx route 同一个（b = log2 分钟）：b <= easy_max_b 用 easy 里的模型，
-# 更难或 risk = hard_risk 用上面 [lead] 的模型；easy 里没写的工具一律用 [lead] 的。阈值是暂定值，
-# 等 scripts/eval/r5.py --lead-model auto 和固定 opus / sonnet 比过再定。
+# 更难或 risk = hard_risk 用上面 [lead] 的模型（不传 --model，按你平时的模型开）；easy 里没写的工具一律用 [lead] 的。
+# 阈值是暂定值，等 scripts/eval/r5.py --lead-model auto 和固定 opus / sonnet 比过再定（auto 若按参考答案的改动大小
+# 估难度，只是上限，不能拿来决定开关）。
 [lead_by_task]
 easy_max_b = 4.0          # 约 16 分钟以内的活
 hard_risk = "critical"

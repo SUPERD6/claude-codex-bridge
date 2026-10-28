@@ -614,8 +614,11 @@ def arm_of(r: dict) -> str:
 
 def done_key(r: dict) -> tuple:
     """What makes a unit done: tag, round, task, arm, the lead (old rows: the default lead, so they still match) and,
-    for a lead in a ccx home, that (a ccx2 unit done under flags does not stand for one in a ccx home)."""
-    return (r.get("tag"), r.get("round"), r.get("task"), r.get("arm"), *lead_of(r)) + \
+    for a lead in a ccx home, that (a ccx2 unit done under flags does not stand for one in a ccx home). An auto unit
+    keys on 'auto' and its effort, never on the model it picked: a rule changed between invocations under one tag
+    must not re-run a done task into the same arm under the other pick."""
+    lead = (LEAD_AUTO, lead_of(r)[1]) if is_auto(r) else lead_of(r)
+    return (r.get("tag"), r.get("round"), r.get("task"), r.get("arm"), *lead) + \
         ((LEAD_AUTO,) if is_auto(r) else ()) + (("ccx-home",) if in_ccx_home(r) else ())
 
 

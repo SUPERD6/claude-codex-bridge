@@ -4,13 +4,15 @@ difficulty — a cheaper lead (claude: sonnet) for easy work, the strong one ([l
 A running lead never switches its own model: its whole prompt cache would be lost (and Goose's per-turn switching
 was the negative evidence). So this applies only where a conversation starts: `ccx fresh` (its command line, or
 `--launch`), `ccx handoff` (the next line for the incoming lead), and as advice in `ccx route` / `ccx propose`
-output for a new conversation on that task (`new_lead`), plus the model for the lead's own built-in sub-agent
-(`builtin_model`, Claude Code's Agent tool).
+output for a new conversation on that task (`new_lead`), plus, only when route's calibrated `choice` did not
+recommend a built-in sub-agent, a fallback model for the lead's own one (`builtin_model`, Claude Code's Agent tool,
+easy band only).
 
 The difficulty is the same b `ccx route` computes (rubric and/or minutes, 0..10, b = log2(minutes)). The rule:
   setting lead.model_by_task off (shipped) -> None: nothing changes anywhere
   no b                                      -> no pick (the tool's own default model stays)
-  risk == hard_risk (critical), or b > easy_max_b -> the strong lead ([lead] <agent>)
+  risk == hard_risk (critical), or b > easy_max_b -> the strong lead: no --model flag is passed, the tool keeps
+                                               the model it normally runs on ([lead] <agent> names it)
   otherwise                                 -> [lead_by_task.easy] <agent> (none configured: the strong lead)
 Thresholds live in config/tiers.toml [lead_by_task]; they are provisional, to be compared by the r5 eval
 (scripts/eval/r5.py --lead-model auto).
@@ -60,8 +62,11 @@ def pick(cfg: dict, agent: str, b: float | None, risk: str | None = None, force:
 
 
 def builtin_model(choice: dict | None) -> str | None:
-    """The Agent tool `model` value for the same pick when the lead is Claude Code; None otherwise (omit it)."""
-    if not choice or choice.get("agent") != "claude":
+    """The Agent tool `model` value for the same pick when the lead is Claude Code: only in the easy band (the hard
+    band omits it, so the sub-agent inherits the lead's own model); None otherwise (omit it). A fallback only:
+    `ccx route` emits it when its calibrated `choice` did not recommend a built-in sub-agent (that choice's `how`
+    names its own rung's model and wins)."""
+    if not choice or choice.get("agent") != "claude" or choice.get("band") != "easy":
         return None
     m = str(choice.get("model") or "").lower()
     return m if m in AGENT_TOOL_MODELS else None
@@ -75,7 +80,10 @@ def difficulty(p, minutes: float | None = None, b: float | None = None, lead: st
     if not minutes:
         return None
     from . import learn
-    return float(learn.combine_difficulty(p, None, float(minutes), lead)["b"])
+    try:
+        return float(learn.combine_difficulty(p, None, float(minutes), lead)["b"])
+    except ValueError:      # an older task-routing copy without --minutes support: no pick, the command still works
+        return None
 
 
 def model_argv(agent: str, model: str) -> list[str]:
@@ -84,27 +92,41 @@ def model_argv(agent: str, model: str) -> list[str]:
     return ["--model", model] if agent in ("claude", "codex") and model else []
 
 
+def start_argv(choice: dict | None) -> list[str]:
+    """The model flag for starting the picked new conversation: only in the easy band, when its model differs from
+    the strong lead. The hard band passes nothing, so the tool keeps the model it normally runs on ([lead] <agent>
+    is ccx's name for it, which may be shorter than what the person really runs, e.g. a long-context variant)."""
+    if not choice or choice.get("band") != "easy" or choice["model"] == (choice.get("rule") or {}).get("strong"):
+        return []
+    return model_argv(choice["agent"], choice["model"])
+
+
 def record(p, choice: dict, where: str, extra: dict | None = None) -> None:
     """One ledger event per lead started or recommended with a by-task model (readers of runs skip typed rows)."""
     from . import ledger
     ledger.append_event(p, {"type": "lead_model", "ts": time.time(), "where": where, **choice, **(extra or {})})
 
 
-def add_args(parser) -> None:
-    """--minutes / --b / --risk on a command that starts or recommends a new lead (used only when the setting is on)."""
+def add_args(parser, short_b: bool = True) -> None:
+    """--minutes / --b (or --difficulty) / --risk on a command that starts or recommends a new lead (used only when
+    the setting is on). `short_b=False` where the parser has --by: an exact --b would take over the --b abbreviation
+    of --by, so there only --difficulty is offered."""
     g = parser.add_argument_group("lead model by task (only with `ccx config set lead.model_by_task on`)")
     g.add_argument("--minutes", type=float, help="how long a skilled engineer would need for the work the new "
                    "conversation takes on (its difficulty picks the lead's model)")
-    g.add_argument("--b", type=float, help="or the difficulty directly (0..10, as ccx route gives it)")
+    g.add_argument(*(("--b", "--difficulty") if short_b else ("--difficulty",)), dest="b", type=float,
+                   help="or the difficulty directly (0..10, as ccx route gives it)")
     g.add_argument("--risk", choices=["low", "visible", "critical"], help="critical always gets the strong lead")
 
 
-def for_new_lead(p, cfg: dict, agent: str, a, where: str, extra: dict | None = None) -> dict | None:
+def for_new_lead(p, cfg: dict, agent: str, a, where: str, extra: dict | None = None,
+                 estimator: str | None = None) -> dict | None:
     """The pick for a new `agent` conversation from a command's --minutes / --b / --risk, recorded in the ledger;
-    None (and nothing recorded) when the setting is off or no difficulty was given."""
+    None (and nothing recorded) when the setting is off or no difficulty was given. `estimator` is the lead who gave
+    --minutes (its learned estimating bias adjusts b, as in `ccx route`); default `agent`."""
     if not enabled(cfg):
         return None
-    b = difficulty(p, getattr(a, "minutes", None), getattr(a, "b", None), agent)
+    b = difficulty(p, getattr(a, "minutes", None), getattr(a, "b", None), estimator or agent)
     choice = pick(cfg, agent, b, getattr(a, "risk", None))
     if choice:
         record(p, choice, where, extra)

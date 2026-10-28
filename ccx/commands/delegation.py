@@ -782,7 +782,6 @@ def _route(a) -> dict:
         mode = apply_mode(spec)
         kw, route = resolve(spec, _caller(None), p, cfg)
         route["mode"] = mode            # recommended read/write and why; routing priced the start-up with it
-        _lead_by_task(cfg, route, a)
         if a.lead and route.get("rung"):
             ctx = a.ctx_tokens
             for f in a.ctx_files or []:        # rough: 4 bytes per token
@@ -816,6 +815,7 @@ def _route(a) -> dict:
             if choice:
                 choice.update(lead_ctx_tokens=lead_ctx, ctx_source=src)
                 route["choice"] = choice      # self / built-in sub-agent / ccx: see the agent-delegate skill
+        _lead_by_task(cfg, route, a)    # after `choice`: its built-in pick wins over builtin_model
         return route
     r = router.classify(" ".join(a.text), a.files)
     t = cfg["tiers"][r.tier]
@@ -830,13 +830,17 @@ def _route(a) -> dict:
 
 def _lead_by_task(cfg: dict, route: dict, a) -> None:
     """lead.model_by_task (opt-in, default off): the model for a NEW lead conversation on this task and for the lead's
-    own built-in sub-agent, from the same b. Advice only; a running conversation keeps its model."""
+    own built-in sub-agent, from the same b. Advice only; a running conversation keeps its model. `builtin_model` is
+    only a fallback: when the calibrated `choice` recommends a built-in sub-agent, its `how` names that rung's model
+    (one source; `ccx verify --builtin <rung>` then matches the model used) and builtin_model is left out."""
     from .. import leadmodel
     agent = a.lead.split(":")[0] if getattr(a, "lead", None) else _caller(None)
     lm = leadmodel.pick(cfg, agent, route.get("b"), getattr(a, "risk", None))
     if lm:
-        route["new_lead"] = {**lm, "note": "for a new conversation on this task; never switch a running one"}
-        bm = leadmodel.builtin_model(lm)
+        note = ("for a new conversation on this task; never switch a running one" +
+                ("" if lm["band"] == "easy" else "; the strong lead: start it on the model it normally runs on"))
+        route["new_lead"] = {**lm, "note": note}
+        bm = None if (route.get("choice") or {}).get("recommend") == "builtin" else leadmodel.builtin_model(lm)
         if bm:
             route["builtin_model"] = bm         # Claude Code's Agent tool `model` for your own sub-agent
 

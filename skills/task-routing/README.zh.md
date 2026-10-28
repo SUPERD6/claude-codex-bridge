@@ -46,7 +46,7 @@ python scripts/task_routing.py record --rung codex:gpt-6.1-sol:medium --b 4 --ok
 用同一个 id 再跑，或跑得比提议小，都会被拒绝。
 默认档仍是 `save`，等确认实验再定。
 
-**按任务选主智能体模型**（用户执行 `ccx config set lead.model_by_task on` 才开，默认关）：正在跑的对话不换模型（换了缓存作废）。用同一个难度 b，`ccx route` / `ccx propose` 多给 `new_lead`（新对话用的模型：b 不超过 `easy_max_b` 用 `[lead_by_task]` 的便宜模型，否则用你的）和 `builtin_model`（你自带子智能体用的）；`ccx fresh` / `ccx handoff` 带 `--minutes` 时照它选。
+**按任务选主智能体模型**（用户执行 `ccx config set lead.model_by_task on` 才开，默认关）：正在跑的对话不换模型（换了缓存作废）。用同一个难度 b，`ccx route` / `ccx propose` 多给 `new_lead`（新对话用的模型：b 不超过 `easy_max_b` 用 `[lead_by_task]` 的便宜模型，否则用你的：按你平时的模型开）；`choice` 没推荐自带子智能体时，再给 `builtin_model`（你自带子智能体的备用模型，只在简单档给）；`ccx fresh` / `ccx handoff` 带 `--minutes` 时照它选。
 
 ## 自动校准
 

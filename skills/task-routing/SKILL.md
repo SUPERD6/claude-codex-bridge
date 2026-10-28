@@ -71,8 +71,9 @@ The default tier stays `save` until a confirmation run decides.
 
 **Lead model by task** (off unless the person runs `ccx config set lead.model_by_task on`): a running
 conversation keeps its model (switching drops its cache). From the same b, `ccx route` / `ccx propose` add
-`new_lead` (a new conversation's model: `[lead_by_task]` easy model up to `easy_max_b`, else yours) and
-`builtin_model` (your built-in sub-agent's); `ccx fresh` / `ccx handoff` take `--minutes` and use it.
+`new_lead` (a new conversation's model: `[lead_by_task]` easy model up to `easy_max_b`, else yours: start it on
+the model you normally run) and, only when `choice` did not recommend a built-in sub-agent, `builtin_model` (a
+fallback for your built-in sub-agent, easy band only); `ccx fresh` / `ccx handoff` take `--minutes` and use it.
 
 ## Act within the task's scope
 

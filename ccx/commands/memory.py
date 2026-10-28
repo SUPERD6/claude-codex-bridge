@@ -45,11 +45,14 @@ def cmd_handoff(a) -> int:
         out["task"] = buf.getvalue().strip()
         out["next"] = f"in {a.to}: the session start shows this handoff; continue with ccx task resume {out['task']}"
     if a.to != "any":
-        lm = leadmodel.for_new_lead(paths(), load_config(), a.to, a, "handoff", {"handoff": out.get("handoff")})
+        # the handing-off lead (`by`) gave --minutes: its estimating bias adjusts b, as in its own `ccx route`
+        lm = leadmodel.for_new_lead(paths(), load_config(), a.to, a, "handoff", {"handoff": out.get("handoff")},
+                                    estimator=by)
         if lm:          # advice for the incoming lead's NEW conversation; a running one keeps its model
             out["lead_model"] = lm
-            flag = " ".join(leadmodel.model_argv(a.to, lm["model"]))
-            out["start"] = f"start the new {a.to} conversation with {flag or 'model ' + lm['model']}"
+            flag = " ".join(leadmodel.start_argv(lm))
+            out["start"] = (f"start the new {a.to} conversation with {flag}" if flag else
+                            f"start the new {a.to} conversation on the model it normally runs on")
     if not text:
         out["note"] = f"empty template written: fill in {out['handoff']} before switching"
     _out(out)
@@ -92,7 +95,7 @@ def cmd_fresh(a) -> int:
     prompt = FRESH_PROMPT.format(file=Path(out["handoff"]).relative_to(root).as_posix())
     # lead.model_by_task (opt-in, default off): the new conversation's model from --minutes / --b / --risk
     lm = leadmodel.for_new_lead(paths(), load_config(), agent, a, "fresh", {"handoff": out["handoff"]})
-    flag = leadmodel.model_argv(agent, lm["model"]) if lm else []
+    flag = leadmodel.start_argv(lm)              # easy band only; the hard band keeps the tool's own model
     cmd = [*bin_argv(agent), *flag, prompt]       # both CLIs take the first prompt as an argument
     shown = " ".join([agent, *flag])
     out.update(from_transcript=str(src[0]),
@@ -468,7 +471,7 @@ def register(sub) -> None:
     ho.add_argument("--no-model", action="store_true", help="with --from-transcript: code only; when the code "
                     "can't read the session file's format, don't fall back to a routed sub-agent reading it")
     ho.add_argument("--max-chars", type=int, help="with --from-transcript: size cap (default about one page)")
-    leadmodel.add_args(ho)
+    leadmodel.add_args(ho, short_b=False)     # --b would take over the --b abbreviation of --by
     ho.set_defaults(fn=cmd_handoff)
     m = sub.add_parser("mem", help="shared incremental memory")
     msub = m.add_subparsers(dest="mem_cmd", required=True)

@@ -40,8 +40,52 @@ class TestRule(unittest.TestCase):
         self.assertEqual(leadmodel.model_argv("codex", "gpt-6.1-sol"), ["--model", "gpt-6.1-sol"])
         self.assertEqual(leadmodel.model_argv("gemini", "pro"), [])
         self.assertEqual(leadmodel.builtin_model(leadmodel.pick(CFG, "claude", 2.0)), "sonnet")
+        self.assertIsNone(leadmodel.builtin_model(leadmodel.pick(CFG, "claude", 6.0)))   # hard: inherit the lead's
         self.assertIsNone(leadmodel.builtin_model(leadmodel.pick(CFG, "codex", 2.0)))
-        self.assertIsNone(leadmodel.builtin_model({"agent": "claude", "model": "claude-opus-5-5"}))
+        self.assertIsNone(leadmodel.builtin_model({"agent": "claude", "model": "claude-opus-5-5", "band": "easy"}))
+        # only the easy band passes a model; the hard band keeps the tool's own (e.g. a long-context variant)
+        self.assertEqual(leadmodel.start_argv(leadmodel.pick(CFG, "claude", 2.0)), ["--model", "sonnet"])
+        self.assertEqual(leadmodel.start_argv(leadmodel.pick(CFG, "claude", 6.0)), [])
+        self.assertEqual(leadmodel.start_argv(leadmodel.pick(CFG, "codex", 2.0)), [])     # easy == strong
+        self.assertEqual(leadmodel.start_argv(None), [])
+
+    def test_route_choice_wins_over_builtin_model(self):
+        from types import SimpleNamespace
+        from ccx.commands import delegation
+        a = SimpleNamespace(lead="claude:opus:high", risk=None)
+        route = {"b": 2.0, "choice": {"recommend": "builtin", "rung": "claude:haiku:low",
+                                      "how": "use your Agent tool with model haiku ..."}}
+        delegation._lead_by_task(CFG, route, a)
+        self.assertEqual(route["new_lead"]["model"], "sonnet")
+        self.assertNotIn("builtin_model", route)          # one source: the calibrated choice's `how`
+        route = {"b": 2.0, "choice": {"recommend": "delegate", "rung": "codex:gpt-6-luna:low"}}
+        delegation._lead_by_task(CFG, route, a)
+        self.assertEqual(route["builtin_model"], "sonnet")  # fallback when no built-in sub-agent was recommended
+
+    def test_difficulty_estimator_and_old_skill(self):
+        from unittest import mock
+        from ccx import learn
+        seen = []
+        with mock.patch.object(learn, "combine_difficulty", lambda p, br, m, lead: seen.append(lead) or {"b": 3.0}):
+            ns = type("A", (), {"minutes": 8, "b": None, "risk": None})()
+            with mock.patch.object(leadmodel, "record", lambda *x, **k: None):
+                ch = leadmodel.for_new_lead(None, CFG, "codex", ns, "handoff", estimator="claude")
+        self.assertEqual((ch["agent"], seen), ("codex", ["claude"]))   # the estimator's bias, the incoming tool's model
+
+        def old(*_):
+            raise ValueError("this task-routing copy needs the rubric (no --minutes support)")
+        with mock.patch.object(learn, "combine_difficulty", old):
+            self.assertIsNone(leadmodel.difficulty(None, 8))           # no pick, never a crash
+
+    def test_handoff_keeps_by_abbreviation(self):
+        import argparse
+        from ccx.commands import memory
+        ap = argparse.ArgumentParser()
+        memory.register(ap.add_subparsers())
+        a = ap.parse_args(["handoff", "--b", "claude", "--to", "codex", "x"])
+        self.assertEqual((a.by, a.b), ("claude", None))
+        self.assertEqual(ap.parse_args(["handoff", "--to", "codex", "--difficulty", "6", "x"]).b, 6.0)
+        self.assertEqual(ap.parse_args(["fresh", "--b", "2"]).b, 2.0)
 
 
 class TestCommands(ReportEnv):
@@ -62,7 +106,8 @@ class TestCommands(ReportEnv):
         easy = self.j("route", "--b", "2", "--to", "codex", "--lead", "claude:opus:high", "rename a var")
         self.assertEqual((easy["new_lead"]["model"], easy["builtin_model"]), ("sonnet", "sonnet"))
         hard = self.j("route", "--b", "6", "--to", "codex", "--lead", "claude:opus:high", "redesign the queue")
-        self.assertEqual((hard["new_lead"]["model"], hard["builtin_model"]), ("opus", "opus"))
+        self.assertEqual((hard["new_lead"]["model"], hard["new_lead"]["band"]), ("opus", "hard"))
+        self.assertNotIn("builtin_model", hard)                     # hard: the sub-agent inherits the lead's model
         self.assertEqual(self.events(), [])                         # route is a question: nothing recorded
         out = self.j("propose", "--b", "2", "--to", "codex", "--lead", "claude:opus:high", "rename a var")
         self.assertEqual(out["new_lead"]["model"], "sonnet")
@@ -81,10 +126,11 @@ class TestCommands(ReportEnv):
         easy = self.j("fresh", "--as", "claude", "--no-model", "--minutes", "5")
         self.assertIn('claude --model sonnet "Continue the work', easy["next"])
         hard = self.j("fresh", "--as", "claude", "--no-model", "--minutes", "5", "--risk", "critical")
-        self.assertIn("claude --model opus ", hard["next"])
-        ho = self.j("handoff", "--to", "codex", "--by", "claude", "--b", "7", "done: x; next: y")
+        self.assertNotIn("--model", hard["next"])                   # hard: the tool keeps its own model
+        self.assertEqual(hard["lead_model"]["band"], "hard")
+        ho = self.j("handoff", "--to", "codex", "--by", "claude", "--difficulty", "7", "done: x; next: y")
         self.assertEqual(ho["lead_model"]["model"], "gpt-6.1-sol")
-        self.assertIn("--model gpt-6.1-sol", ho["start"])
+        self.assertIn("normally runs on", ho["start"])
         self.assertEqual([e["where"] for e in self.events()], ["fresh", "fresh", "handoff"])
 
 
