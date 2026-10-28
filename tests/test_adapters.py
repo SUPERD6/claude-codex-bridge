@@ -481,8 +481,10 @@ class TestSetupWizard(AdapterEnv):
         hub = self.hub.parent / "newhub"
         r = self.ccx("setup", "--yes", "--hub", str(hub), env={"CCX_HUB": ""})
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        for n in range(1, 7):
-            self.assertIn(f"[{n}/6]", r.stdout)
+        for n in range(1, 8):                     # STEPS = 7: the counter said [n/6] for seven steps
+            self.assertIn(f"[{n}/7]", r.stdout)
+        self.assertNotIn("/6]", r.stdout)
+        self.assertNotIn("not valid TOML", r.stderr)          # the hub it saved reads back
         self.assertTrue((hub / "ccx").is_dir())
         self.assertIn("mem delta", (self.home_claude / "settings.json").read_text(encoding="utf-8"))
         self.assertIn("ccx:begin hooks", (self.home_codex / "config.toml").read_text(encoding="utf-8"))
@@ -677,3 +679,27 @@ def test_rules_do_not_forbid_the_sub_agents_a_task_asks_for():
     from ccx.prompts import PROMPT
     assert "do not delegate to other agents" not in PROMPT
     assert "your own sub-agents are fine when this task asks for them" in PROMPT
+
+
+class TestClaudeSessionGone(AdapterEnv):
+    def test_errors_reach_run_json_and_resume_says_use_new(self):
+        """hub run 20261024-213453-6292: a resume whose session was gone showed only error_during_execution."""
+        out = self.j("run", "--from", "codex", "--to", "claude", "--tier", "T2", "--mode", "read", "--no-fallback",
+                     "look at x")
+        r = self.ccx("resume", out["run_id"], "--no-escalate", "one more thing", env={"FAKE_STATUS_CLAUDE": "gone"})
+        res = json.loads(r.stdout)
+        self.assertFalse(res["ok"], r.stdout)
+        self.assertIn("ccx run --new", res.get("hint", ""), r.stdout)
+        errs = [x.get("error") or "" for x in self.rec(res["run_id"])["attempts"]]
+        self.assertTrue(any("No conversation found with session ID" in e for e in errs), errs)
+
+
+def test_parse_claude_keeps_errors_list():
+    from ccx.agents.claude import parse_claude
+    line = json.dumps({"type": "result", "subtype": "error_during_execution", "is_error": True, "session_id": "s",
+                       "errors": ["No conversation found with session ID: s"]})
+    oc = parse_claude(line, "", 1)
+    assert not oc.ok
+    assert "error_during_execution" in oc.error and "No conversation found with session ID: s" in oc.error
+    plain = parse_claude(json.dumps({"type": "result", "subtype": "error", "is_error": True, "result": "boom"}), "", 1)
+    assert plain.error == "boom"                       # no errors[]: as before

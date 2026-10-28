@@ -639,9 +639,18 @@ def cmd_resume(a) -> int:
                     next_step=f"wait for the run named in the error, then `ccx resume {a.run_id}` again")
         raise
     res = compact(rec)
+    if not res["ok"] and _session_gone(rec):
+        res["hint"] = (f"the sub-session of {a.run_id} is gone (\"No conversation found\"), so it cannot be resumed: "
+                       "send the task again as a fresh run with `ccx run --new ...`")
     res["recap"] = recap(rec, res)
     _out(res)
     return 0 if res["ok"] else 2
+
+
+def _session_gone(rec: dict) -> bool:
+    """Claude Code's errors[] says "No conversation found" when the session to resume no longer exists."""
+    texts = [rec.get("error") or ""] + [x.get("error") or "" for x in rec.get("attempts") or []]
+    return any("no conversation found" in str(t).lower() for t in texts)
 
 
 def cmd_stop(a) -> int:

@@ -223,6 +223,30 @@ def tier_policy_check(p: Paths, cfg: dict | None = None) -> tuple[str, str]:
                   "no tier picked: offer first (policy.picked)")
 
 
+def config_row(p: Paths) -> tuple[str, str]:
+    """~/.ccx/config.toml (where the hub is) and <hub>/ccx/layout.toml: FAIL when one does not parse (ccx then falls
+    back to the default hub, or stops), WARN when a value holds a control character ("C:\\new" in double quotes)."""
+    import tomllib
+    from .config import has_control_chars, toml_problem, user_config_file
+    files = [f for f in (user_config_file(), p.hub / "ccx" / "layout.toml") if f.exists()]
+    warn = []
+    for f in files:
+        try:
+            data = tomllib.loads(f.read_text(encoding="utf-8"))
+        except tomllib.TOMLDecodeError as e:
+            return "FAIL", toml_problem(f, e)
+        except OSError as e:
+            return "FAIL", f"{f}: {e}"
+        bad = sorted(k for k, v in data.items() if has_control_chars(v))
+        if bad:
+            warn.append(f"{f}: {', '.join(bad)} holds a control character (a backslash escape in double quotes?); "
+                        "write Windows paths with / or in single quotes")
+    if warn:
+        return "WARN", "; ".join(warn)
+    env = " (CCX_HUB is set)" if os.environ.get("CCX_HUB") else ""
+    return "ok", f"hub {p.hub}{env}; " + (", ".join(str(f) for f in files) or "no config file (defaults)")
+
+
 def doctor(p: Paths) -> bool:
     rows: list[tuple[str, str, str]] = []
 
@@ -235,6 +259,7 @@ def doctor(p: Paths) -> bool:
         add("tiers.toml", "ok")
     except Exception as e:  # noqa: BLE001
         add("tiers.toml", "FAIL", str(e))
+    add("ccx config", *config_row(p))
 
     from .agents import all_adapters
     for ad in all_adapters():
