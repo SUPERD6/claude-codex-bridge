@@ -84,7 +84,10 @@ def _fix_round(p, rec: dict) -> dict | None:
     if rec.get("kind") != "review_issues" or not rec.get("session_id") or not p.runs.exists():
         return None
     rid = rec["run_id"]
-    for d in sorted(x for x in p.runs.iterdir() if x.name > rid):       # run ids sort by start time
+    # run ids sort by start second (YYYYMMDD-HHMMSS), then 4 random hex digits: a fix round started in the same
+    # second may sort below its parent (CI on Linux/macOS: fast fakes), so compare the second, not the whole id
+    stamp = rid[:15]
+    for d in sorted(x for x in p.runs.iterdir() if x.name[:15] >= stamp and x.name != rid):
         f = d / "run.json"
         if not f.exists():
             continue

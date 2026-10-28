@@ -71,6 +71,16 @@ class TestShowWait(Env):
         self.assertIn(f'"run_id": "{fix}"', full)
         self.assertEqual(json.loads(self.ccx("show", fix).stdout)["run_id"], fix)       # the last link: itself
 
+    def test_show_follows_a_fix_round_started_in_the_same_second(self):
+        # CI (Linux/macOS): the fix round began in its parent's second and its random hex sorted below the parent's
+        first, fix = "20991231-100000-ffff", "20991231-100000-0000"
+        self.put(_rec(first, kind="review_issues", review={"verdict": "issues", "issues": ["a.py:1 bug"]}))
+        self.put(_rec(fix, resumed_from=first, review_of=first, kind="review_failed",
+                      review={"verdict": "issues", "issues": ["a.py:1 bug"]},
+                      first_review={"verdict": "issues", "issues": ["a.py:1 bug"]}))
+        self.assertEqual(json.loads(self.ccx("show", first).stdout)["run_id"], fix)
+        self.assertEqual(json.loads(self.ccx("show", first, "--wait", "5").stdout)["run_id"], fix)
+
     def test_plain_show_of_a_fix_round_still_running(self):
         first, fix = "20991231-100000-aaaa", "20991231-100500-bbbb"
         self.put(_rec(first, kind="review_issues", review={"verdict": "issues", "issues": ["a.py:1 bug"]}))
