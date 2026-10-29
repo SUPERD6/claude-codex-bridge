@@ -97,6 +97,64 @@ class TestJudge(RepoEnv):
         self.assertEqual([c["path"] for c in j["changed"]], ["pkg/m.py"])
         self.assertIsNone(j["mismatch"])
 
+    def test_after_only_run_reporting_a_file_untracked_before_is_not_red(self):
+        self.run_with_snapshots(end=False, files=("a.py", "new.py", "old.txt"))   # old.txt: untracked, edited, said
+        j = ui.judge(self.p, "r1")
+        self.assertEqual(j["source"], "after")
+        self.assertIsNone(j["mismatch"])
+        self.assertEqual(j["untracked_before"], ["old.txt"])                     # shown as "can't tell"
+
+    def test_non_ascii_untracked_names_are_unquoted(self):
+        (self.work / "äpre.txt").write_text("before\n", encoding="utf-8")
+        for rid, end in (("e1", True), ("e2", False)):
+            put_run(self.hub, rid, self.work, result={"status": "done", "files_changed": ["a.py", "ünew.py"]})
+            run_dir = self.hub / "ccx" / "runs" / rid
+            (run_dir / "undo.json").write_text(json.dumps(workspace.undo_snapshot(self.work)), encoding="utf-8")
+            (self.work / "a.py").write_text(f"a = {rid!r}\n", encoding="utf-8")
+            (self.work / "ünew.py").write_text("x = 1\n", encoding="utf-8")
+            workspace.mark_run_end(run_dir, self.work)
+            if end:
+                workspace.write_end_tree(run_dir, self.work)
+            j = ui.judge(self.p, rid)
+            paths = {c["path"] for c in j["changed"]}
+            self.assertEqual(paths, {"a.py", "ünew.py"}, rid)
+            self.assertIsNone(j["mismatch"], rid)
+            self.assertIn("äpre.txt", j["untracked_before"], rid)
+            self.assertNotIn("before", j["diff"] or "", rid)
+            (self.work / "ünew.py").unlink()
+
+    def test_repo_relative_names_from_a_subfolder_run_match(self):
+        sub = self.work / "pkg"
+        sub.mkdir()
+        (sub / "m.py").write_text("x = 1\n", encoding="utf-8")
+        git(self.work, "add", "pkg/m.py")
+        git(self.work, "commit", "-qm", "pkg")
+        put_run(self.hub, "r3", sub, result={"status": "done", "files_changed": ["pkg/m.py"]})
+        run_dir = self.hub / "ccx" / "runs" / "r3"
+        (run_dir / "undo.json").write_text(json.dumps(workspace.undo_snapshot(sub)), encoding="utf-8")
+        (sub / "m.py").write_text("x = 2\n", encoding="utf-8")
+        workspace.mark_run_end(run_dir, sub)
+        self.assertIsNone(ui.judge(self.p, "r3")["mismatch"])
+
+    def test_reported_network_and_absolute_names_are_never_resolved(self):
+        unc = "\\\\attacker.invalid\\share\\x.py"
+        top = git(self.work, "rev-parse", "--show-toplevel").strip()
+        self.run_with_snapshots(files=("a.py", "new.py", unc, "//attacker.invalid/s/y.py", "C:/elsewhere/z.py",
+                                       f"{top}/new.py"))
+        ui._resolved.cache_clear()
+        seen = []
+        real_resolve = Path.resolve
+
+        def spy(self_, *a, **k):
+            seen.append(str(self_))
+            return real_resolve(self_, *a, **k)
+        with mock.patch.object(Path, "resolve", spy):
+            j = ui.judge(self.p, "r1")
+        self.assertFalse([s for s in seen if "attacker" in s or "elsewhere" in s], seen)
+        said_not = j["mismatch"]["said_not_changed"]
+        self.assertIn(unc, said_not)                                     # shown as given, never touched
+        self.assertNotIn(f"{top}/new.py", said_not)           # an absolute name inside the repo matches
+
     def test_hostile_names_are_data_and_never_opened(self):
         outside = self.work.parent / "outside.txt"
         outside.write_text("secret", encoding="utf-8")
@@ -201,6 +259,15 @@ class TestJudgeEndpoint(RepoEnv):
         self.assertEqual(get(self.srv, "/api/judge/r1", token=self.srv.token, method="POST")[0], 404)   # no write path
         with mock.patch.object(ui, "judge", side_effect=AssertionError("cached")):
             self.assertEqual(get(self.srv, "/api/judge/r1", token=self.srv.token)[0], 200)      # same record: cached
+
+    def test_cache_is_dropped_when_end_json_appears_later(self):
+        run_dir = self.hub / "ccx" / "runs" / "r1"
+        end = run_dir / "end.json"
+        saved = end.read_text(encoding="utf-8")
+        end.unlink()
+        self.assertEqual(self.srv.judge("r1")["source"], "after")
+        end.write_text(saved, encoding="utf-8")                         # written after the last run.json write
+        self.assertEqual(self.srv.judge("r1")["source"], "end")
 
 
 class TestHiddenTab(Env):
@@ -341,8 +408,15 @@ class TestPageMarkup(unittest.TestCase):
 
     def test_heartbeat_says_hidden_and_beats_on_show_and_focus(self):
         self.assertIn('"?hidden=1"', self.fn("alive"))
-        self.assertIn('addEventListener("visibilitychange", alive)', self.js)
+        vis = re.search(r'addEventListener\("visibilitychange", ([^\n]*)\);', self.js).group(1)
+        self.assertIn("if (!document.hidden) alive()", vis)           # going hidden (a close, too) sends nothing
         self.assertIn('addEventListener("focus", alive)', self.js)
+
+    def test_says_and_ran_columns_only_for_a_piece_that_has_run(self):
+        body = self.fn("judgeHTML")
+        gate = body.index("if (!p.live && (p.run_id || p.summary || p.verification || c))")
+        self.assertLess(gate, body.index('t("j_no_verif")'))
+        self.assertLess(gate, body.index('t("j_no_check")'))
 
     def test_strip_stop_goes_through_prepare_and_confirm(self):
         self.assertIn("pressBtn(el.dataset.key, f.p, el.dataset.rbtn)", self.js)

@@ -31,8 +31,8 @@ continue, let it edit, change a queue's budget — first shows the exact `ccx` c
 on a second click; one that starts a sub-agent says it costs money and runs in the background. The page sends only
 which button, never a command; the server runs only a fixed list of ccx commands, as an argument list, from this page
 only (same origin, a token, a one-time confirmation). Suggested notes have a yes / no button. Showing the page reads
-only files ccx and the tools already write — no model is called — listens on 127.0.0.1 only, and exits a minute after
-the page is closed.
+only files ccx and the tools already write — no model is called — listens on 127.0.0.1 only, and exits about a minute after
+the page is closed (up to 5 minutes if it was a background tab).
 A review card shows, side by side, what the agent says (its summary and how it says it verified) and what ccx ran
 (the check command, its exit code and the last ~800 characters of output), then the files actually changed and the
 diff, computed from ccx's own snapshots of the run (the tree before it, `undo.json`, to the tree it left, `end.json`

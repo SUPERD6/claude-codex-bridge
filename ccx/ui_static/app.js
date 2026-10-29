@@ -594,7 +594,11 @@
   }
   function judgeHTML(p) {
     const j = JUDGE[judgeKey(p)] || null, c = p.check;
-    let h = `<div class="judge"><div class="jcol"><h3>${t("j_says")}</h3>`;
+    let h = "";
+    /* the two columns only for a piece that has run: a queued to-do or a live run has said nothing and ccx has run
+       nothing yet, and "no check was given" would be wrong there */
+    if (!p.live && (p.run_id || p.summary || p.verification || c)) {
+    h += `<div class="judge"><div class="jcol"><h3>${t("j_says")}</h3>`;
     if (p.summary) h += `<p class="says">${esc(p.summary)}</p>`;
     h += p.verification ? `<div class="k">${t("j_verified")}</div><p class="says">${esc(p.verification)}</p>` : `<p class="cost">${t("j_no_verif")}</p>`;
     h += `</div><div class="jcol"><h3>${t("j_ran")}</h3>`;
@@ -607,12 +611,14 @@
       h += c.tail ? `<div class="k">${t("j_tail")}</div><pre class="tail mono">${esc(c.tail)}</pre>` : `<p class="cost">${t("j_no_tail")}</p>`;
     } else h += `<p class="cost">${t("j_no_check")}</p>`;
     h += `</div></div>`;
+    }
     if (j && j.changed) {
       const mm = j.mismatch;
       if (mm) {
         h += `<div class="mismatch"><b>${t("j_mismatch")}</b>`;
         if ((mm.said_not_changed || []).length) h += `<div class="k">${t("j_said_not")}</div>` + fileList(mm.said_not_changed);
         if ((mm.changed_not_said || []).length) h += `<div class="k">${t("j_changed_not")}</div>` + fileList(mm.changed_not_said);
+        if ((mm.changed_not_said || []).length && c && c.cmd) h += `<p class="cost">${t("j_check_files")}</p>`;
         h += `</div>`;
       } else if (j.changed.length) h += `<p class="good-note">${t("j_match")}</p>`;
       h += `<h3>${t("j_changed", {n: j.changed.length})}</h3>` + fileList(j.changed.map(x => x.status + "  " + x.path));
@@ -818,7 +824,9 @@
     if (!OFFLINE || Date.now() - lastOk < 60000) alive();
     setTimeout(beat, ((D && D.beat_s) || 10) * 1000);
   }
-  document.addEventListener("visibilitychange", alive);      /* hidden: say so now; shown again: at once, not in 10 s */
+  /* shown again: say so at once, not in 10 s. Going hidden sends nothing: closing a tab also turns it hidden, and that
+     last word must not keep the server up for minutes; a tab that stays open says "hidden" on its next timer beat */
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) alive(); });
   addEventListener("focus", alive);
 
   async function start() {

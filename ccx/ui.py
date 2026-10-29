@@ -47,12 +47,13 @@ import hmac
 import importlib
 import json
 import os
+import posixpath
 import re
 import secrets
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from urllib.parse import urlsplit
 
 from . import agents
@@ -60,6 +61,7 @@ from . import queue as wq
 from .config import Paths, claude_home, codex_home, load_config
 from .ledger import is_eval
 from .usage import _ts
+from .workspace import _unquote
 
 STATIC = Path(__file__).resolve().parent / "ui_static"
 INTERNAL = ("review:", "quota-probe", "selftest", "handoff-from-transcript")
@@ -1198,23 +1200,29 @@ def _git_read(repo: str, args: list[str], cap: int) -> tuple[bytes, bool, bool]:
     return data[:cap], truncated, truncated or rc == 0
 
 
-def _said_path(f: str, cwd: str | None, repo: str) -> str:
-    """A file name the sub-agent reported, spelled like git's (relative to the repo top, forward slashes). Only a
-    string operation: the file is never opened."""
+def _said_path(f: str, cwd: str | None, repo: str) -> list[str]:
+    """The spellings a file name the sub-agent reported may have in git's terms (relative to the repo top, forward
+    slashes): as given, and with the run's subfolder in front when it ran in one. A string operation only: the name
+    is never opened or resolved (an absolute name like //host/share/x would make Windows reach that host), only the
+    repo and cwd, which ccx itself wrote, are resolved. A name outside the repo comes back as given."""
     s = str(f).strip().replace("\\", "/")
     while s.startswith("./"):
         s = s[2:]
-    top = _resolved(repo)
-    try:
-        if Path(s).is_absolute():
-            return _resolved(s).relative_to(top).as_posix()
-        if cwd:
-            rel = _resolved(cwd).relative_to(top).as_posix()
-            if rel not in ("", "."):
-                return f"{rel}/{s}"
-    except ValueError:
-        pass
-    return s
+    if s.startswith("//"):                            # UNC or network name: never ours, never touched
+        return [s]
+    top = _resolved(repo).as_posix().rstrip("/")
+    fold = (lambda x: x.casefold()) if os.name == "nt" else (lambda x: x)
+    if PureWindowsPath(s).drive or s.startswith("/"):
+        norm = posixpath.normpath(s)
+        if fold(norm).startswith(fold(top) + "/"):
+            return [norm[len(top) + 1:]]
+        return [s]
+    out = [posixpath.normpath(s)]
+    if cwd:
+        sub = _resolved(cwd).as_posix().rstrip("/")
+        if fold(sub).startswith(fold(top) + "/"):
+            out.insert(0, posixpath.normpath(f"{sub[len(top) + 1:]}/{s}"))
+    return out
 
 
 def judge(p: Paths, run_id: str) -> dict:
@@ -1263,7 +1271,7 @@ def judge(p: Paths, run_id: str) -> dict:
         out["note"] = "j_repo_gone"
         return out
     out["chain_from"] = snap.get("chain_from")
-    before_untracked = {str(x) for x in snap.get("untracked") or []}
+    before_untracked = {_unquote(str(x)) for x in snap.get("untracked") or []}   # git C-quotes non-ASCII names
     raw, _, ok = _git_read(repo, ["diff", "--name-status", "-z", "--no-renames", base, end_tree], 1_000_000)
     if not ok:
         out["note"] = "j_repo_gone"
@@ -1278,14 +1286,15 @@ def judge(p: Paths, run_id: str) -> dict:
             continue
         changed.append({"path": path, "status": st[:1]})
     if out["source"] == "after":                       # new untracked files: names only (contents not snapshotted)
-        now_untracked = {str(x) for x in after.get("untracked") or []}
+        now_untracked = {_unquote(str(x)) for x in after.get("untracked") or []}
         changed += [{"path": x, "status": "?"} for x in sorted(now_untracked - before_untracked)]
+        was_untracked += sorted(now_untracked & before_untracked)  # untracked before and after: can't tell
         if now_untracked - before_untracked:
             out["note"] = "j_untracked_names"
     out["changed"] = changed[:JUDGE_FILES_MAX]
     out["untracked_before"] = sorted(was_untracked)[:JUDGE_FILES_MAX]
     spec = []
-    if was_untracked:
+    if was_untracked and out["source"] == "end":     # the `after` tree holds no untracked file: nothing to exclude
         if len(was_untracked) <= JUDGE_EXCLUDE_MAX:
             spec = ["--", ".", *[f":(exclude,literal){x}" for x in was_untracked]]
         else:
@@ -1296,9 +1305,14 @@ def judge(p: Paths, run_id: str) -> dict:
         out["diff"], out["truncated"] = diff.decode("utf-8", errors="replace"), cut
     fold = (lambda s: s.casefold()) if os.name == "nt" else (lambda s: s)
     real = {fold(c["path"]): c["path"] for c in changed}
-    named = {fold(_said_path(f, rec.get("cwd"), repo)): f for f in said}
     skip = {fold(x) for x in was_untracked}
-    extra = [f for k, f in named.items() if k not in real and k not in skip]
+    named, extra = set(), []
+    for f in said:                                     # a name counts if any of its spellings is a real change
+        keys = [fold(x) for x in _said_path(f, rec.get("cwd"), repo)]
+        hit = [k for k in keys if k in real or k in skip]
+        named.update(hit[:1])
+        if not hit:
+            extra.append(f)
     missing = [v for k, v in real.items() if k not in named]
     if extra or missing:
         out["mismatch"] = {"said_not_changed": extra[:JUDGE_FILES_MAX], "changed_not_said": missing[:JUDGE_FILES_MAX]}
@@ -1569,9 +1583,16 @@ class UI:
             raise ValueError("bad run id")
         try:
             st = (self.p.runs / run_id / "run.json").stat()
-            key = (st.st_mtime_ns, st.st_size)
         except OSError:
             raise FileNotFoundError(f"no ccx run {run_id!r}") from None
+        key = [(st.st_mtime_ns, st.st_size)]
+        for name in ("undo.json", "end.json"):        # end.json is written after the last run.json write
+            try:
+                sx = (self.p.runs / run_id / name).stat()
+                key.append((sx.st_mtime_ns, sx.st_size))
+            except OSError:
+                key.append(None)
+        key = tuple(key)
         hit = self.judged.get(run_id)
         if hit and hit[0] == key:
             return hit[1]
