@@ -36,7 +36,8 @@ codex plugin marketplace add SUPERD6/relayline && codex plugin add relayline@rel
 - **Codex** gets the five skills only. Its hooks stay with `ccx sync` (plugin hooks in Codex must be trusted by
   hand and are not offered here).
 - **DeepSeek Harness (`dsh`)** has no plugin marketplace or skill install yet (its README, read 2026-10-25); `ccx sync`
-  writes its lead instructions as before.
+  writes its lead instructions as before when `dsh` is on PATH. A `dsh` found only inside the installed desktop
+  app is not connected by default; sync mentions it once as optional (put it on PATH, then `ccx sync` again).
 - **Still install ccx itself** (`pipx install git+https://github.com/SUPERD6/relayline`, then `ccx init` or
   `ccx setup`) to delegate from a terminal or from Codex. `ccx doctor` says so when the plugin is enabled but ccx is
   not installed on its own.

@@ -30,8 +30,8 @@ codex plugin marketplace add SUPERD6/relayline && codex plugin add relayline@rel
   文档提示。hook 运行插件里自带的 ccx（`bin/ccx`，经 `sh` 运行；Windows 上就是 Claude Code 跑 hook 用的 Git Bash），所以要有 Python 3.11+，但不用另装。
   没 `ccx init` 之前它们什么都不输出。
 - **Codex** 只得到五个技能。它的 hook 仍由 `ccx sync` 写（Codex 的插件 hook 要用户手动信任，这里不提供）。
-- **DeepSeek Harness（`dsh`）** 目前没有插件市场或技能安装方式（看的是它的 README，2026-10-25）；组长说明照旧由
-  `ccx sync` 写。
+- **DeepSeek Harness（`dsh`）** 目前没有插件市场或技能安装方式（看的是它的 README，2026-10-25）；`dsh` 在 PATH 上时，组长说明照旧由
+  `ccx sync` 写。只在已安装的桌面应用里找到的 `dsh` 默认不接入；sync 只提一次，说明是可选的（把它加到 PATH 后再跑 `ccx sync`）。
 - **ccx 本体仍要装**（`pipx install git+https://github.com/SUPERD6/relayline`，再 `ccx init` 或 `ccx setup`），才能在
   终端或 Codex 里派活。插件已启用、但 ccx 没单独装时，`ccx doctor` 会提示。
 - **不会接两遍：** 插件启用的工具里，`ccx sync` 把 Claude 的 hook 和这五个技能交给插件，并删掉它以前写的那份

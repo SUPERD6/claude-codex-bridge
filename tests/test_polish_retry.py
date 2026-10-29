@@ -197,3 +197,61 @@ class TestUiEnvAndStart(Env):
         for lg in ("zh", "en"):
             self.assertIn("{cmd}", strings[lg]["empty_first"])
             self.assertIn("{cmd}", strings[lg]["empty_demo"])
+
+
+# ---- 5. sync's dry run: one line for a missing Codex config; dsh found only inside its app is optional
+def _located_dsh(monkeypatch, where="C:/Apps/DeepSeek/resources/runtime/cli/bin/dsh.cmd"):
+    from ccx import runners
+    real = runners.find_bin
+    monkeypatch.setattr(runners, "find_bin", lambda a: where if a == "dsh" else real(a))
+    monkeypatch.delenv("CCX_DSH_BIN", raising=False)
+    import shutil
+    real_which = shutil.which
+    monkeypatch.setattr(shutil, "which", lambda n, *a, **k: None if n.startswith("dsh") else real_which(n, *a, **k))
+    return where
+
+
+def test_sync_dry_run_says_once_it_will_create_codex_config(tmp_path, monkeypatch):
+    from ccx import sync
+    from ccx.config import Paths
+    _located_dsh(monkeypatch)
+    plan = sync.sync_all(Paths(tmp_path / "hub"), apply=False, parts=["memory", "hooks", "mcp"])
+    ct = sync.codex_home() / "config.toml"
+    assert not ct.exists()
+    lines = plan.actions + plan.warnings
+    assert sum(str(ct) in x for x in lines) == 1, lines
+    assert any(f"will create {ct} with the SessionStart + UserPromptSubmit hook block" in x for x in plan.actions)
+    assert not any("nothing to import" in x for x in plan.warnings)
+    # only the mcp part (no hooks part to say it): the old warning stays
+    plan2 = sync.sync_all(Paths(tmp_path / "hub"), apply=False, parts=["mcp"])
+    assert any("nothing to import" in x for x in plan2.warnings)
+
+
+def test_dsh_found_only_inside_its_app_is_not_connected_by_default(tmp_path, monkeypatch):
+    from ccx import sync
+    from ccx.config import Paths
+    where = _located_dsh(monkeypatch)
+    from ccx.agents.dsh import dsh_home
+    agents_md = dsh_home() / "AGENTS.md"
+    assert "dsh" not in {a for a, _ in sync.memory_targets()}
+    plan = sync.sync_all(Paths(tmp_path / "hub"), apply=False, parts=["memory"])
+    assert not any(str(agents_md) in x for x in plan.actions)                  # nothing written for it
+    opt = [w for w in plan.warnings if w.startswith("optional: dsh")]
+    assert len(opt) == 1 and where in opt[0] and "not on PATH" in opt[0]
+    sync.sync_all(Paths(tmp_path / "hub"), apply=True, parts=["memory"])
+    assert not agents_md.exists()
+    # uninstall still looks there; and a dsh connected before keeps getting its block
+    assert "dsh" in {a for a, _ in sync.memory_targets(include_located=True)}
+    agents_md.parent.mkdir(parents=True, exist_ok=True)
+    agents_md.write_text(sync.BEGIN.format(id="memory") + "\nold\n" + sync.END.format(id="memory") + "\n",
+                         encoding="utf-8")
+    assert "dsh" in {a for a, _ in sync.memory_targets()}
+    assert not [w for w in sync.sync_all(Paths(tmp_path / "hub"), apply=False, parts=["memory"]).warnings
+                if w.startswith("optional: dsh")]
+
+
+def test_dsh_on_path_is_connected_as_before(tmp_path, monkeypatch):
+    from ccx import sync
+    monkeypatch.setenv("CCX_DSH_BIN", "dsh-on-path")
+    assert "dsh" in {a for a, _ in sync.memory_targets()}
+    assert sync.located_only() == []
