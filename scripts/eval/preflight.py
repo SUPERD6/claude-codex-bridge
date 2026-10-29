@@ -30,9 +30,10 @@ What it guarantees, by mechanism (command-line flags, environment, settings file
                             (--ignore-user-config, --ignore-rules, memories, plugins, remote plugins and apps off on
                             every Codex run). Its config.toml turns plugins, remote_plugin and apps off too (for the
                             Codex commands that read it), a starting run removes the plugin cache Codex synced into
-                            it (plugins/, nothing else), and after the canary and after every unit the home is
-                            checked again (no plugins, rules, memories, AGENTS.md, skills; the features still off;
-                            the connector and plugin catalog caches untouched): a change stops the run.
+                            it (plugins/, nothing else), and after every unit the home is checked
+                            again (no plugins, rules, memories, AGENTS.md, skills; the features still off; the
+                            connector and plugin catalog caches untouched): a change stops the run. The canary starts
+                            no Codex, so the first unit is the first point where a start's re-sync can show.
   E2 no leftovers           every process a unit starts runs in a Windows Job Object (started suspended, so nothing
                             escapes before it is in the job; POSIX: its own session, plus a marker variable
                             CCX_EVAL_UNIT); after the unit the job's survivors (killed by closing the job, never by a
@@ -1349,11 +1350,13 @@ def codex_remote_cache_sig(d: Path) -> str | None:
     return hashlib.sha256("\n".join(seen).encode()).hexdigest()[:16] if seen else None
 
 
-def codex_home_drift(d: Path) -> list[str]:
-    """What must still hold of the eval CODEX_HOME while the run goes on, checked after the canary and after every
-    unit: nothing of CODEX_FORBIDDEN (plugins/ above all: codex-cli 0.164 syncs the account's remote plugins into it on
-    a start with the plugin features on), no skills of its own, and config.toml still turning CODEX_FEATURES_OFF off.
-    The preflight check alone runs before any Codex has started, so it cannot see what a start brings in."""
+def codex_home_drift(d: Path, starting: bool = True) -> list[str]:
+    """What must still hold of the eval CODEX_HOME while the run goes on, checked after every unit (and after the
+    canary, which starts no Codex today: the first unit is the first point where a start's re-sync can be seen, and
+    that unit's row is then not clean and the run stops): nothing of CODEX_FORBIDDEN (plugins/ above all: codex-cli
+    0.164 syncs the account's remote plugins into it on a start with the plugin features on), no skills of its own,
+    and config.toml still turning CODEX_FEATURES_OFF off. `starting` False (a check-only preflight): a config.toml
+    with no [features] table is not a problem, as in check_codex_home, since a starting run writes the table."""
     d = Path(d)
     probs = [f"eval CODEX_HOME has {n} now (it would reach every later Codex run)" for n in CODEX_FORBIDDEN
              if (d / n).exists()]
@@ -1361,9 +1364,23 @@ def codex_home_drift(d: Path) -> list[str]:
         probs.append(f"eval CODEX_HOME has skills of its own now: {codex_skills(d)[:5]}")
     feats = _codex_features(d)
     on = [f for f in CODEX_FEATURES_OFF if feats.get(f) is not False]
-    if on:
+    if on and (starting or _has_features_table(d)):
         probs.append(f"eval CODEX_HOME config.toml no longer turns off [features] {', '.join(on)}")
     return probs
+
+
+def _has_features_table(d: Path) -> bool:
+    try:
+        return "features" in tomllib.loads((Path(d) / "config.toml").read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return True             # unreadable: checked as if the table were there (it then turns nothing off)
+
+
+def codex_home_after(rep: dict, need_codex: bool) -> dict | None:
+    """The row field `codex_home_after` of a run that starts Codex in an eval home (r5.py and batch.py), else None."""
+    if need_codex and rep["codex"].get("mode") == "eval" and rep.get("codex_home"):
+        return codex_home_state(Path(rep["codex_home"]))
+    return None
 
 
 def codex_home_state(d: Path) -> dict:
@@ -1592,8 +1609,9 @@ def run_checks(o: Options) -> dict:
                 rmtree(cw)
         probs += scan["problems"]
     if (can is not None or scan is not None) and need_codex and codex.get("mode") == "eval" and o.codex_home:
-        # the canaries start no Codex today; checked anyway, so a canary that does is covered
-        probs += [f"after the canary: {p}" for p in codex_home_drift(o.codex_home)]
+        # the canaries start no Codex today, so this sees nothing a Codex start brings in (the check after the first
+        # unit does); kept so a canary that does start Codex is covered
+        probs += [f"after the canary: {p}" for p in codex_home_drift(o.codex_home, starting=o.start)]
     rep = {"ok": not probs, "problems": probs, "commit": cs["commit"], "dirty": bool(cs["dirty"]),
            "tasks_file": Path(o.tasks_file).name,
            "tasks_sha256": (sha256_file(o.tasks_file) or "")[:16], "tiers_sha256": (sha256_file(TIERS_FILE) or "")[:16],

@@ -1621,9 +1621,9 @@ def cmd_run(a) -> int:
         between = PF.between_units(rep, need_codex, ours, watch.take())
         if between:
             row["between_units"] = between
-        if need_codex and rep["codex"].get("mode") == "eval" and rep.get("codex_home"):
-            # the eval Codex home after this unit: no plugin cache came back, the features are still off
-            row["codex_home_after"] = PF.codex_home_state(Path(rep["codex_home"]))
+        after = PF.codex_home_after(rep, need_codex)     # the eval Codex home after this unit
+        if after is not None:
+            row["codex_home_after"] = after
         row["env_clean"] = PF.env_clean(row, rep)
         why = list(between)
         if (row.get("ext") or {}).get("venv_changed"):

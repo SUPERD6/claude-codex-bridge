@@ -551,6 +551,23 @@ def test_plugins_coming_back_are_seen_after_every_unit(monkeypatch, tmp_path):
     assert PF.between_units(rep, True) == []
     (d / "config.toml").write_text("[features]\nplugins = false\n", encoding="utf-8")
     assert PF.codex_home_drift(d) == ["eval CODEX_HOME config.toml no longer turns off [features] apps, remote_plugin"]
+    assert PF.codex_home_drift(d, starting=False) == [
+        "eval CODEX_HOME config.toml no longer turns off [features] apps, remote_plugin"]   # a table of its own
+    assert PF.codex_home_after(rep, True) == PF.codex_home_state(d)          # the row field of r5.py and batch.py
+    assert PF.codex_home_after(rep, False) is None
+    assert PF.codex_home_after({**rep, "codex": {"mode": "real"}}, True) is None
+
+
+def test_a_check_only_preflight_agrees_with_itself_on_a_home_not_yet_given_features(machine):
+    # check_codex_home(write=False) accepts a config.toml with no [features] table (a starting run writes it), so
+    # the check after the canary must accept it too; a starting run requires the table
+    real, d = PF.real_paths(), machine["codex"]
+    (d / "auth.json").write_text("{}", encoding="utf-8")
+    (d / "config.toml").write_text('model = "x"\n', encoding="utf-8")
+    assert PF.check_codex_home(d, True, real, write=False)[0] == []
+    assert PF.codex_home_drift(d, starting=False) == []
+    assert PF.codex_home_drift(d, starting=True) == [
+        "eval CODEX_HOME config.toml no longer turns off [features] apps, plugins, remote_plugin"]
 
 
 def test_a_codex_run_stops_when_plugins_reappear_and_rows_record_the_home(machine, tmp_path, monkeypatch):
