@@ -131,20 +131,6 @@ def _shop(p: Paths, root: Path, now: float) -> dict:
               review={"verdict": "issues", "by": "claude:sonnet:medium",
                       "issues": ["[must] an expired code is still applied for the last hour (local time used in "
                                  "is_expired)", "[should] a 100% code makes the total negative with shipping"]})
-    if has_git:
-        run_dir = p.runs / rid
-        snap = workspace.undo_snapshot(root)
-        if snap:
-            _write(run_dir / "undo.json", json.dumps(snap))
-            _write(root / "orders.py", "from discounts import apply\n\n\ndef total(items, code=None):\n"
-                   "    return apply(sum(i['price'] for i in items), code)\n")
-            _write(root / "discounts.py", "import datetime\n\nCODES = {'SAVE10': 0.10}\n\n\ndef is_expired(code):\n"
-                   "    return datetime.datetime.now().hour >= 23\n\n\ndef apply(amount, code):\n"
-                   "    if not code or is_expired(code):\n        return amount\n"
-                   "    return amount * (1 - CODES.get(code, 0))\n")
-            _write(root / "checkout.py", "# touched but not reported by the agent\nSHIPPING = 4.5\n")
-            workspace.mark_run_end(run_dir, root)
-            workspace.write_end_tree(run_dir, root)
     out["review"] = rv
 
     out["running"] = _run(p, "demo-r-running", root, "Write the OpenAPI description for the orders endpoints",
@@ -178,6 +164,22 @@ def _shop(p: Paths, root: Path, now: float) -> dict:
            "## Done\n- orders API skeleton, tests green\n## Decisions (and why)\n- money as integer cents (no float "
            "rounding)\n## Open\n- discount codes\n## Next\n- /health, then discounts\n")
     _write(root / ".ccx" / "handoffs" / f"{ts.replace(':', '')}-codex-to-claude.md", doc)
+    # the review run's change, last: it came after the board and the handoff, so its undo puts back only its own
+    # files (the page refuses an undo that would revert other work)
+    if has_git:
+        run_dir = p.runs / rid
+        snap = workspace.undo_snapshot(root)
+        if snap:
+            _write(run_dir / "undo.json", json.dumps(snap))
+            _write(root / "orders.py", "from discounts import apply\n\n\ndef total(items, code=None):\n"
+                   "    return apply(sum(i['price'] for i in items), code)\n")
+            _write(root / "discounts.py", "import datetime\n\nCODES = {'SAVE10': 0.10}\n\n\ndef is_expired(code):\n"
+                   "    return datetime.datetime.now().hour >= 23\n\n\ndef apply(amount, code):\n"
+                   "    if not code or is_expired(code):\n        return amount\n"
+                   "    return amount * (1 - CODES.get(code, 0))\n")
+            _write(root / "checkout.py", "# touched but not reported by the agent\nSHIPPING = 4.5\n")
+            workspace.mark_run_end(run_dir, root)
+            workspace.write_end_tree(run_dir, root)
     return out
 
 

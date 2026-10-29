@@ -361,7 +361,15 @@ class TestStrings(unittest.TestCase):
         self.assertIn("(dsh)", self.s["zh"]["b_cont_dsh"])
         js = (STATIC / "app.js").read_text(encoding="utf-8")
         self.assertIn('dsh: "DeepSeek (dsh)"', js)
-        self.assertNotIn("you_asked", js.split("tk.kind === \"queue\"")[1].split(":")[0])   # the queue: no quote
+        # the queue's top box: the whole `const top = ...;` statement, both branches; no invented quote of the person
+        top = js.split('const top = tk.kind === "queue"', 1)[1].split(";", 1)[0]
+        q_branch = top.split("\n", 1)[0]                     # `? (queue: budget ? box_b : box)`, then `: you_asked`
+        self.assertIn('t("queue_box_b"', q_branch)
+        self.assertIn('t("queue_box"', q_branch)
+        self.assertNotIn("you_asked", q_branch)
+        for k in ("undo_restore", "undo_aside", "undo_chain", "act_started_bg"):
+            for lg in ("zh", "en"):
+                self.assertIn(k, self.s[lg], f"{lg}: {k}")
 
     def test_no_inline_handlers_in_the_page(self):
         for name in ("index.html", "app.js"):

@@ -367,8 +367,17 @@
     if (ACT.stage === "confirm") return `<div class="k">${t(ACT.label)} — ${t("act_will")}</div><code class="mono" id="cmdtext">${esc(ACT.cmd)}</code>`
       + `<p class="${ACT.spends || (b && b.note) ? "warn" : "cost"}" style="margin:6px 0">${t(b && b.note ? b.note : ACT.spends ? "act_spends" : "act_records")}</p>`
       + (ACT.blank ? `<p class="warn" style="margin:6px 0">${t("sw_blank_pre")}</p>` : "")
+      + undoLists(ACT.undo)
       + `<div class="acts"><button class="btn ${ACT.spends ? "bad" : "primary"}" data-do="act-run">${t(ACT.spends ? "act_confirm_spend" : "act_confirm")}</button>${cancel}<button data-do="copy">${t("copy")}</button></div>`;
     return "";
+  }
+  /* the undo confirm box: the files `ccx undo`'s dry run would put back and move aside, checked by the server */
+  function undoLists(u) {
+    if (!u) return "";
+    const li = xs => `<ul class="files">${xs.map(x => `<li class="mono">${esc(x)}</li>`).join("")}</ul>`;
+    return (u.restore && u.restore.length ? `<div class="k">${t("undo_restore")}</div>${li(u.restore)}` : "")
+      + (u.move_aside && u.move_aside.length ? `<div class="k">${t("undo_aside")}</div>${li(u.move_aside)}` : "")
+      + (u.chain_from ? `<p class="warn" style="margin:6px 0">${t("undo_chain", {r: u.chain_from})}</p>` : "");
   }
   function paintAct() {
     const c = $("cmd");
@@ -382,7 +391,7 @@
     ACT = {key, btn, b, label: b.label, stage: "busy"}; paintAct();
     try {
       const r = await post("/api/act/prepare", Object.assign(where(key), {btn, fill: fill || {}}));
-      Object.assign(ACT, {stage: r.demo ? "demo" : "confirm", cmd: r.cmd, nonce: r.nonce, spends: r.spends,
+      Object.assign(ACT, {stage: r.demo ? "demo" : "confirm", cmd: r.cmd, nonce: r.nonce, spends: r.spends, undo: r.undo || null,
         blank: "transcript" in r && !r.transcript});      /* U7: a handoff with no conversation file: a blank template */
     } catch (e) { Object.assign(ACT, {stage: "err", msg: e.message}); }
     paintAct();
@@ -392,7 +401,9 @@
     const a = ACT; a.stage = "busy"; paintAct();
     try {
       const r = await post("/api/act/run", {nonce: a.nonce});
-      const html = r.started ? t("act_started", {c: raw(`<code class="mono">${esc(r.cmd)}</code>`)})
+      /* a background job that starts no agent (q accept): no run appears on the chart; its answer is in its log */
+      const html = r.started && !a.spends ? t("act_started_bg", {c: raw(`<code class="mono">${esc(r.cmd)}</code>`), l: r.log || ""})
+        : r.started ? t("act_started", {c: raw(`<code class="mono">${esc(r.cmd)}</code>`)})
         : r.ok ? t("act_done", {c: raw(`<code class="mono">${esc(r.cmd)}</code>`)})
         : t("act_exit", {c: raw(`<code class="mono">${esc(r.cmd)}</code>`), e: String(r.exit), m: (r.err || r.out || "").slice(-300)});
       if (r.handoff) HANDOFF[where(a.key).project] = r.handoff;      /* U7: kept on the panel, not only flashed */

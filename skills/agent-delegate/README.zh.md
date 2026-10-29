@@ -9,7 +9,7 @@
 - **agent-delegate**（本技能）：负责怎么写简报、怎么派、怎么收、怎么验收。
 - **task-checkpoint**：长任务中途断了，从断点接着做。
 
-找不到 ccx 命令时才看 `ccx -h` / `ccx run -h`。
+找不到 ccx 命令时才看 `ccx -h --all` / `ccx run -h`。
 
 **最大的花费是主导自己的上下文**：每一轮都要把整段对话重读一遍。大块阅读（很多文件、长日志、查资料）用只读派出去，只拿回结论。输出很长的命令（跑测试、看日志、`git diff`）用 `ccx sum -- <命令>`：只拿到失败项或按文件的摘要，全文留在磁盘上。`ccx lead` 看你现在每一轮花多少，`ccx lead --breakdown` 看每轮重读的都是什么。
 
@@ -24,7 +24,7 @@
    - **大活或多文件：一次调用** `ccx run ... --bg --wait 540`，shell 工具超时设 600000 毫秒（Claude Code 的 Bash 上限是 10 分钟；Codex 或 DeepSeek 当主导时，把 `--wait` 设成比自己的工具调用超时少一分钟左右）。它立刻（在 stderr）打印 run_id，同一次调用里给出最终结果，和普通 `ccx run` 一样。到时还在跑：`ccx show <run_id> --wait`，显示还在跑就再调一次。还在跑的运行不要 `ccx resume`。不要把 ccx 输出接到 `tail`/`head`。
    - **自己的子智能体和 ccx 同时干活**：你自带子智能体做的块和 ccx 做的块绝不同时写同一批文件；ccx 的写任务和你自己的写任务并行时，用 `--worktree` 或走 `ccx q run`（不然它的 undo 快照、diff 和验收会把它们的改动算进去）。它们的模型用 ccx 给的，填进 Claude Code Agent 工具的 `model`（sonnet / opus / haiku / fable，Claude Code 2.1.309）：先用 `builtin` 选择的 `how`；没有这种选择时才用 `ccx route` 的 `builtin_model`；都没有就不填（跟你同一个模型）。
    - **几块已获授权的活**：先用 task-split `check` 排计划；改同一个文件的块合成一块或你自己做，绝不并行（干净的 git 检出里，`q run` 让并行的写任务各用一个 worktree；否则都在当前检出里跑）。每块 `ccx q add "<标题>" --brief "..." --check "..."`（有先后用 `--dep <id>`），再 `ccx q run --bg`。自己的块从短到长做，不要碰排队块的文件（它的 undo 快照和验收会把你的改动算进去）。
-   - **流水线：交出去，不干等。** 互不依赖的块一起交出去（同上），然后 `ccx show <live ids> --any --wait` 谁先结束先交回谁（`live` 的 id 在 `ccx q ls` 里，一块一行）。在 worktree 里做完的块显示 `unmerged`：别的块还在跑时就用 `ccx q accept <id>`（或 `--all-ready`；`--dry-run` 只看计划）把它落地。它按依赖顺序合并，每合并一块就跑一次联合验收（`--check "<各块验收命令的并集>"`，不给就用该块自己的），验收失败就撤回这次合并；拒绝的块（no_changes、失败、审查没过或还在跑、没有验证证据）和冲突都会说明原因。没有用户同意不合进 main。`q run` 输出里 `waiting` / `unmerged` 下的就是这些块；在当前检出里做的块用 `ccx q done <id> --ok 1`（一次给多个 id 时，没有通过的验收的块各加一条 `--note "<id>: 你查了什么"`）。`dep_blocked` 的块在等一个失败的块（见 `references/three-way.md`）。`last_run` 是 `stopped: backpressure`（额度/登录）时，在额度恢复前不再开新活。
+   - **流水线：交出去，不干等。** 互不依赖的块一起交出去（同上），然后 `ccx show <live ids> --any --wait` 谁先结束先交回谁（`live` 的 id 在 `ccx q ls` 里，一块一行）。在 worktree 里做完的块显示 `unmerged`：别的块还在跑时就用 `ccx q accept <id>`（或 `--all-ready`；`--dry-run` 只看计划；没有验收或审查证据时先给结论 `ccx q done <id> --ok 1`，和 `ccx q ls` 提示的顺序一样）把它落地。它按依赖顺序合并，每合并一块就跑一次联合验收（`--check "<各块验收命令的并集>"`，不给就用该块自己的），验收失败就撤回这次合并；拒绝的块（no_changes、失败、审查没过或还在跑、没有验证证据）和冲突都会说明原因。没有用户同意不合进 main。`q run` 输出里 `waiting` / `unmerged` 下的就是这些块；在当前检出里做的块用 `ccx q done <id> --ok 1`（一次给多个 id 时，没有通过的验收的块各加一条 `--note "<id>: 你查了什么"`）。`dep_blocked` 的块在等一个失败的块（见 `references/three-way.md`）。`last_run` 是 `stopped: backpressure`（额度/登录）时，在额度恢复前不再开新活。
    - **`--review` 保持默认（auto）**；只有高风险或用户能直接看到的改动（以及需要审查通过的 L2 自动合并）才 `--review on` / `--risk visible`。
    - **不要让子智能体提交**（Codex 沙盒禁止写 `.git`）；你验收后自己提交。
    - **用户说到某个项目但没给路径**：先 `ccx where "<用户原话>"`；一个 `pick` 就 `ccx run --project <名字>`，几个候选就问。项目规则讲到审批时 ccx 停下并列出（`approval_rules`）：按规则判断或问用户，之后才加 `--rules-ok` 重跑。细节见 project-manager。

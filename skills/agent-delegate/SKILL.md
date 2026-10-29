@@ -8,7 +8,7 @@ description: Execute an authorized cross-agent delegation through ccx and verify
 `ccx` runs the other agent headless and returns a small JSON result. Use the configured command;
 if it is not on PATH, resolve this skill directory to the bridge checkout and run
 `python -X utf8 <checkout>/ccx.py`. Sub-agents never delegate again. Only if you can't find the command, run
-`ccx -h` / `ccx run -h`.
+`ccx -h --all` / `ccx run -h`.
 
 **Your own context is the biggest cost:** every turn re-reads the whole conversation. Send big reads (many files,
 long logs, research) out read-only and take back the conclusion. Run long-output commands as
@@ -86,7 +86,8 @@ sub-agent. The extra requests came from the habits below.
 - **Pipeline: hand off, don't wait.** Hand the independent pieces off together (above), then
   `ccx show <live ids> --any --wait` (the `live` ids are in `ccx q ls`, one line a piece) hands back each one as
   it finishes. A finished worktree piece shows `unmerged`: land it while the others run with
-  `ccx q accept <id>` (or `--all-ready`; `--dry-run` shows the plan). It merges in dependency order, runs the
+  `ccx q accept <id>` (or `--all-ready`; `--dry-run` shows the plan; with no check or review evidence, give
+  the verdict first, `ccx q done <id> --ok 1`, as `ccx q ls` says). It merges in dependency order, runs the
   joint check after each merge (`--check "<union of the checks>"`, else the piece's own), rolls back a merge
   whose check fails, and says why it refused a piece (no_changes, failed, review failed or still running, not
   verified) or stopped at a conflict. Never into main without the person. Pieces under `waiting` / `unmerged`

@@ -17,3 +17,9 @@
   with a link to its switch-lead panel. After a verdict the side panel moves to the next waiting piece ("Next
   waiting", keys j / k). Times past two days read in days and weeks; a machine failure with no reason shows no empty
   brackets; the queue's top box says "Work queue: N pieces" instead of a quote you never typed.
+- `ccx ui` "Undo this run" lists the files `ccx undo`'s dry run would put back and move aside, and refuses (prepare
+  and again at run) when that goes beyond the files the run left changed (a later commit, your own edits, another
+  run's work) or a run going on from it is running: `ccx undo <id>` in a terminal shows the list first. "Merge into
+  the project" runs `ccx q accept --dry-run` first, so a refusal such as a protected branch shows on the page. On a
+  queue piece whose review failed, "The review is wrong: accept" and "I'll handle it" are `ccx q done` verdicts on
+  the piece, so it can be merged next.

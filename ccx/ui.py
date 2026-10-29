@@ -552,6 +552,93 @@ def _undo_state(rd: Reader, rec: dict) -> tuple[bool, float | None]:
     return (run_dir / "undo.json").is_file(), None
 
 
+UNDO_LIST_MAX = 30                 # files named in the page's undo confirm box
+
+
+def _chain_running(p: Paths, run_id: str) -> str | None:
+    """A running run that goes on from this one (a resume or review fix round: resumed_from, followed back a few
+    links, or its undo snapshot's chain_from), or None. Undoing then would change files under a working agent."""
+    if not p.runs.exists():
+        return None
+    for d in p.runs.iterdir():
+        rec = _read_json(d / "run.json")
+        if not isinstance(rec, dict) or rec.get("state") != "running" or d.name == run_id:
+            continue
+        snap = _read_json(d / "undo.json")
+        if isinstance(snap, dict) and snap.get("chain_from") == run_id:
+            return d.name
+        cur, seen = rec, 0
+        while isinstance(cur, dict) and cur.get("resumed_from") and seen < 6:
+            if cur["resumed_from"] == run_id:
+                return d.name
+            cur, seen = _read_json(p.runs / str(cur["resumed_from"]) / "run.json"), seen + 1
+    return None
+
+
+def undo_preview(p: Paths, run_id: str) -> dict:
+    """What the page's "Undo this run" would do now, from `ccx undo <id>`'s own dry run, for the confirm box.
+    LookupError (said on the page) when the page must not offer it: the run or a link going on from it is running,
+    it was undone already, git cannot list the files, or the undo would also put back files this run did not leave
+    changed (a later commit, the person's own edits elsewhere, other runs' work: `ccx undo` restores everything
+    that differs from the run's base). Those go to the terminal, where the dry run lists them first. Checked when
+    the button is prepared and again just before it runs."""
+    from .workspace import undo
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", run_id or ""):
+        raise LookupError("bad run id")
+    run_dir = p.runs / run_id
+    rec = _read_json(run_dir / "run.json")
+    if not isinstance(rec, dict):
+        raise LookupError(f"no ccx run {run_id}")
+    if rec.get("state") == "running":
+        raise LookupError("this run is running again: undo it after it has finished")
+    if (run_dir / "undone.json").exists():
+        raise LookupError("this run was undone already: reload")
+    busy = _chain_running(p, run_id)
+    if busy:
+        raise LookupError(f"run {busy} goes on from this one and is running: undo after it has finished")
+    try:
+        dry = undo(p, run_id, apply=False)
+    except (OSError, ValueError, KeyError) as e:
+        raise LookupError(f"ccx undo could not read this run's snapshot: {e}") from e
+    if dry.get("git_error"):
+        raise LookupError(dry["git_error"])
+    if dry.get("nothing_to_undo"):
+        raise LookupError(dry["nothing_to_undo"])
+    own = judge(p, run_id).get("changed")
+    if own is None:
+        raise LookupError(f"ccx has no record of the tree this run left, so the page cannot check what undo would "
+                          f"touch: `ccx undo {run_id}` in a terminal lists it first")
+    fold = (lambda s: s.casefold()) if os.name == "nt" else (lambda s: s)
+    mine = {fold(c["path"]) for c in own}
+    touched = [_unquote(x) for x in [*dry["restore"], *dry["move_aside"]]]
+    extra = [x for x in touched if fold(x) not in mine]
+    if extra:
+        more = f" and {len(extra) - 5} more" if len(extra) > 5 else ""
+        raise LookupError(f"undo would also put back files this run did not leave changed ({', '.join(extra[:5])}"
+                          f"{more}): a later commit, your own edits or another run's work. `ccx undo {run_id}` in a "
+                          "terminal lists everything first; undo there if that is what you want")
+    return {"restore": [_unquote(x) for x in dry["restore"]][:UNDO_LIST_MAX],
+            "move_aside": [_unquote(x) for x in dry["move_aside"]][:UNDO_LIST_MAX],
+            "chain_from": dry.get("chain_from")}
+
+
+def merge_preview(p: Paths, argv: list[str]) -> None:
+    """The page's Merge button (`ccx q accept <id> --cwd <root>`, run in the background): `q accept --dry-run`
+    first, so a refusal (a protected branch checked out, uncommitted changes, another writer, ...) comes back to
+    the page at once instead of only into the background job's log. LookupError with its reasons."""
+    from .accept import accept
+    try:
+        root = Path(argv[argv.index("--cwd") + 1])
+    except (ValueError, IndexError):
+        raise LookupError("the Merge button names no project folder: reload") from None
+    out, _ = accept(p, load_config(p), root, [argv[3]], dry_run=True)
+    if out.get("refused"):
+        raise LookupError("ccx q accept would refuse: " + "; ".join(f"{r.get('id')}: {r.get('why')}"
+                                                                   for r in out["refused"]))
+    if not out.get("plan"):
+        raise LookupError("there is nothing to merge for this piece: reload")
+
+
 def piece_of_run(rd: Reader, rec: dict, verdict: dict | None, now: float, title: str) -> dict:
     atts = rec.get("attempts") or []
     last = atts[-1] if atts else {}
@@ -1084,6 +1171,20 @@ def _queue_pieces(rd: Reader, root: Path, q: dict, recs: dict, verdicts: dict, n
                                                                                              {"s": it.get("summary") or ""}],
                                             "buttons": [show, _btn("b_q_resume", ["ccx", "q", "--cwd", str(root),
                                                                                   "resume"], "primary")]})
+        act = pc.get("act")
+        if act and act.get("what") == "a_review_failed" and it.get("verdict") is None:
+            # overruling the review, or handling it by hand, is a verdict on the queue piece (`ccx q done`, which
+            # records the run's verdict too): a run verdict alone leaves the piece failed, unmergeable, still listed
+            for i, b in enumerate(act["buttons"]):
+                if b["label"] == "b_accept_anyway":
+                    act["buttons"][i] = _btn(b["label"], ["ccx", "q", "done", it["id"], "--ok", "1", "--note",
+                                                          "review overruled: the person accepted it", "--cwd",
+                                                          str(root)], b["style"])
+                elif b["label"] == "b_myself":
+                    act["buttons"][i] = _btn(b["label"], ["ccx", "q", "done", it["id"], "--ok", "0", "--note",
+                                                          "handled by hand", "--cwd", str(root)], b["style"])
+            if it.get("worktree") and not it.get("merged"):
+                act["then"] = f"ccx q accept {it['id']}"
         kids = wq.children(q, it["id"])
         if kids:
             pc["children"] = [one(k) for k in kids]
@@ -1976,6 +2077,10 @@ class UI:
         extra = {}
         if b.get("handoff"):                          # U7: from the current lead's session file when there is one
             argv, extra["transcript"] = handoff_argv(self.p, argv, b["handoff"]["by"])
+        if argv[1:2] == ["undo"]:                     # the dry run's lists in the confirm box; refused when unsafe
+            extra["undo"] = undo_preview(self.p, argv[2])
+        if argv[1:3] == ["q", "accept"]:              # a refusal (protected branch, ...) said now, not in a log
+            merge_preview(self.p, argv)
         cmd = " ".join(_q(x) for x in argv)
         if self.demo and b["spends"]:                 # U6: a demo hub never starts an agent; the command is shown
             return {"nonce": None, "cmd": cmd, "spends": True, "demo": True, "ttl_s": 0}
@@ -1996,6 +2101,8 @@ class UI:
             raise LookupError("this confirmation has expired or was used: press the button again")
         if self.demo and job["spends"]:
             raise LookupError("demo data: a command that starts an agent is shown, not run")
+        if job["argv"][1:2] == ["undo"]:              # again: a resume may have started since it was prepared
+            undo_preview(self.p, job["argv"][2])
         out = execute(self.p, job["argv"], background=job["spends"] or bool(job.get("bg")))
         if job["argv"][1:2] == ["handoff"] and out.get("ok"):
             out["handoff"] = handoff_result(job["argv"], out.get("out") or "")

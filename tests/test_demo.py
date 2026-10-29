@@ -358,6 +358,8 @@ def test_undo_this_run_from_the_page_puts_the_files_back(server):
     assert "apply" in (root / "orders.py").read_text(encoding="utf-8")
     code, prep = post(srv, "/api/act/prepare", {"project": shop["id"], "task": t["id"], "piece": pc["id"], "btn": f"c{i}"})
     assert code == 200 and prep["nonce"] and not prep.get("demo") and prep["cmd"] == "ccx undo demo-r-review --apply"
+    # the confirm box lists what `ccx undo`'s own dry run would do: exactly the run's files
+    assert prep["undo"] == {"restore": ["orders.py"], "move_aside": ["checkout.py", "discounts.py"], "chain_from": None}
     code, out = post(srv, "/api/act/run", {"nonce": prep["nonce"]})
     assert code == 200 and out["ok"], out
     assert (root / "orders.py").read_text(encoding="utf-8").startswith("def total(items):")
@@ -365,6 +367,80 @@ def test_undo_this_run_from_the_page_puts_the_files_back(server):
     _, _, pc = _review_piece(json.loads(get(srv, "/api/data")[2]))
     assert pc.get("undone") and not any(b["label"] == "b_undo" for b in pc["ctl"])
     assert pc["act"] and pc["act"]["what"] == "a_review_failed"       # undo is not a verdict: it still waits for yours
+
+
+@pytest.mark.skipif(not HAS_GIT, reason="the undo snapshot needs git")
+def test_undo_from_the_page_refuses_when_it_would_revert_other_work(server):
+    """`ccx undo` puts back every file that differs from the run's base: a later edit of a file the run never
+    touched (or a later commit, or another run's work) would be reverted too. The page refuses then, at prepare
+    and again at run (an edit made between the two clicks), and says to use `ccx undo <id>` in a terminal."""
+    srv, base, p = server
+    shop, t, pc = _review_piece(json.loads(get(srv, "/api/data")[2]))
+    i = next(i for i, b in enumerate(pc["ctl"]) if b["label"] == "b_undo")
+    root = Path(shop["path"])
+    want = {"project": shop["id"], "task": t["id"], "piece": pc["id"], "btn": f"c{i}"}
+    code, prep = post(srv, "/api/act/prepare", want)
+    assert code == 200 and prep["nonce"]
+    readme = root / "README.md"
+    readme.write_text(readme.read_text(encoding="utf-8") + "\nan edit of the person's own\n", encoding="utf-8")
+    code, out = post(srv, "/api/act/run", {"nonce": prep["nonce"]})          # checked again before it runs
+    assert code != 200 and "README.md" in json.dumps(out), out
+    code, out = post(srv, "/api/act/prepare", want)
+    assert code != 200 and "README.md" in json.dumps(out) and "ccx undo demo-r-review" in json.dumps(out), out
+    assert "apply" in (root / "orders.py").read_text(encoding="utf-8")        # nothing was put back
+    assert "an edit of the person's own" in readme.read_text(encoding="utf-8")
+    assert not (p.runs / "demo-r-review" / "undone.json").exists()
+
+
+def test_undo_preview_refuses_while_a_run_goes_on_from_it(tmp_path):
+    """A resume or review fix round of the run that is running: undo would change files under a working agent."""
+    p = Paths(tmp_path / "hub")
+    for rid, rec in (("r1", {"run_id": "r1", "state": "done", "mode": "write"}),
+                     ("r2", {"run_id": "r2", "state": "running", "mode": "write", "resumed_from": "r1"})):
+        (p.runs / rid).mkdir(parents=True)
+        (p.runs / rid / "run.json").write_text(json.dumps(rec), encoding="utf-8")
+    with pytest.raises(LookupError, match="r2"):
+        ui.undo_preview(p, "r1")
+    (p.runs / "r2" / "run.json").write_text(json.dumps({"run_id": "r2", "state": "running", "mode": "write"}),
+                                             encoding="utf-8")
+    (p.runs / "r2" / "undo.json").write_text(json.dumps({"chain_from": "r1"}), encoding="utf-8")
+    with pytest.raises(LookupError, match="r2"):
+        ui.undo_preview(p, "r1")
+    (p.runs / "r1" / "undone.json").write_text("{}", encoding="utf-8")
+    with pytest.raises(LookupError, match="undone already"):
+        ui.undo_preview(p, "r1")
+
+
+def test_review_is_wrong_on_a_queue_piece_is_a_queue_verdict(tmp_path):
+    """On a queue piece whose run failed its review, overruling the review (or handling it by hand) is `ccx q done`,
+    which records the run's verdict too: a run verdict alone would leave the piece failed, hidden and unmergeable."""
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    rec = {"run_id": "r1", "state": "done", "mode": "write", "kind": "review_failed", "to": "codex", "attempts": [],
+           "result": {"status": "done"}, "review": {"verdict": "issues", "issues": ["[must] x"], "by": "claude:sonnet"}}
+    q = {"items": {"q1": {"id": "q1", "title": "x", "status": "failed", "run": "r1", "worktree": str(wt),
+                          "agent": "codex"}}, "order": ["q1"]}
+    rd = ui.Reader(Paths(tmp_path / "hub"))
+    pc = ui._queue_pieces(rd, tmp_path, q, {"r1": rec}, {}, time.time())[0]
+    assert pc["status"] == "decide" and pc["act"]["what"] == "a_review_failed"
+    bs = {b["label"]: b for b in pc["act"]["buttons"]}
+    assert bs["b_accept_anyway"]["argv"][:6] == ["ccx", "q", "done", "q1", "--ok", "1"]
+    assert bs["b_myself"]["argv"][:6] == ["ccx", "q", "done", "q1", "--ok", "0"]
+    assert "--cwd" in bs["b_accept_anyway"]["argv"] and ui._op(bs["b_accept_anyway"]["argv"]) == "record"
+    assert pc["act"]["then"] == "ccx q accept q1"
+    q["items"]["q1"].update(status="done", verdict=True)            # what `ccx q done q1 --ok 1` writes
+    rec["verdict"] = {"ok": True}
+    pc = ui._queue_pieces(rd, tmp_path, q, {"r1": rec}, {}, time.time())[0]
+    assert pc["act"] is None and pc["ctl"][0]["label"] == "b_q_merge"   # the merge comes next
+
+
+def test_merge_button_refusal_comes_back_when_prepared(server):
+    """`ccx q accept` runs in the background, so prepare runs its --dry-run first: a refusal (a protected branch,
+    uncommitted changes, a missing worktree...) is said on the page at once, not only in the job's log."""
+    srv, base, p = server
+    docs = project(json.loads(get(srv, "/api/data")[2]), demo.DOCS)
+    with pytest.raises(LookupError, match="q2"):
+        ui.merge_preview(p, ["ccx", "q", "accept", "q2", "--cwd", docs["path"]])
 
 
 def test_review_is_wrong_accept_records_an_ok_verdict(server):

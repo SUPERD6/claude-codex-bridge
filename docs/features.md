@@ -46,10 +46,12 @@ far, tokens when known) with its stop button, which asks for the same second cli
 Each to-do on the home page starts with what you need to do (a coloured chip: your call, check the result, a
 question for you), then the agent's own words, then where it is. A finished write run's card has **Undo this run**
 next to the diff (`ccx undo <id> --apply`: puts back the files from ccx's snapshot, moves new files aside, starts
-nothing, and is not a verdict by itself), and a run whose independent review still finds problems has **The review is
+nothing, and is not a verdict by itself; the confirm box lists the files, and when `ccx undo`'s dry run would also
+put back files the run did not change, such as a later commit or your own edits, the page refuses and points to
+`ccx undo <id>` in a terminal), and a run whose independent review still finds problems has **The review is
 wrong: accept** (`ccx verify <id> --ok 1` with a note saying so). A queue piece in a worktree goes in one order, in the
 page and in `ccx q ls` alike: your verdict first (`ccx q done`), then **Merge into the project** (`ccx q accept`, in
-the background). After a verdict the side panel moves on to the next piece that waits for you (also j / k). Each
+the background, after its `--dry-run` says it would merge: a protected branch checked out is said on the page). After a verdict the side panel moves on to the next piece that waits for you (also j / k). Each
 project card says who leads it, with a link to its switch-lead panel; text meant for your lead (not a command) is
 labelled "paste this to your lead".
 Its **Agent conversation** page shows what the agents wrote to each other on the board (`ccx say`), newest thread first; a thread stopped by the machine-message cap and a message that asks you (`@person`) show as to-dos, and you can reply from the page: shown first, written on a second click as you (via ui), at most 4000 characters, never run ([board](board.md#seeing-it-and-answering-in-ccx-ui)). `ccx ui --export snapshot.html` writes a static copy; `ccx config set ui.lang zh|en` picks the language.
