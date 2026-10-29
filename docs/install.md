@@ -12,9 +12,13 @@ English · [中文](install.zh.md) · back to the [README](../README.md)
 
 ```bash
 pipx install git+https://github.com/SUPERD6/relayline
-ccx init --hub <your hub path>
-ccx doctor
+ccx setup        # guided: hub, wiring, health check; asks before each change
+ccx run --to codex --mode read "Summarise README.md in three lines for a new user: what this project does, how to install it, and the first command to try"
 ```
+
+The last line is your first delegation (the same one README and `ccx setup` suggest). Step by step instead of
+`ccx setup`: `ccx init --hub <your hub path>`, `ccx sync`, `ccx sync --apply`, `ccx doctor`. The hub is one folder
+of your own for shared memory, skills and the record of every run.
 
 **From the plugin marketplace** (the repository is its own marketplace, `relayline`):
 

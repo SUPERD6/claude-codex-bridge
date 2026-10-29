@@ -91,7 +91,7 @@ In Claude Code you say: "make `loader.py` accept a custom delimiter and add test
 
 The other way round, run the same command inside Codex with `--to claude`: Codex leads, Claude Code is the sub-agent.
 Codex's sandbox decides whether that works: ccx writes its run records into the hub and the sub-agent needs the
-network. `ccx doctor` checks it (row "Codex as lead (sandbox)"). On Windows only `danger-full-access` worked in real
+network. `ccx doctor --codex-lead` checks it (row "Codex as lead (sandbox)"; plain `ccx doctor` shows it as one info line). On Windows only `danger-full-access` worked in real
 runs (codex-cli 0.164): in `workspace-write` the commands run as a separate sandbox account, and a Claude sub-agent
 started there refused every edit, even with the hub and `~/.claude` as writable roots and the network on.
 **Safety:** full access means every command the Codex lead runs has your rights, with no sandbox (your files, the
