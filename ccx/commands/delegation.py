@@ -452,7 +452,8 @@ def _restart_step(p, a, root: Path, step: dict, last: dict, brief: str) -> int:
     rung = (last.get("first_rung") or "").split(":")
     model, effort = (rung[1], rung[2]) if len(rung) == 3 and rung[0] == last["to"] else (None, None)
     req = Request(to=last["to"], brief=text, mode=last.get("mode") or "write", cwd=Path(last.get("cwd") or root),
-                  caller=_caller(a.caller), task=a.task, step=step["n"], label=f"{a.task}#{step['n']}",
+                  caller=_caller(a.caller), task=a.task, step=step["n"],
+                  label=last.get("label") or f"{a.task}#{step['n']}",    # the same step: keep its label
                   model=model, effort=effort, check=last.get("check_cmd"), provider=last.get("provider"),
                   review=last.get("review_mode") or "auto")
     rec = run(req, p)
@@ -511,7 +512,7 @@ def cmd_task(a) -> int:
             if got:
                 text += "\n\n# Where the cut-off session stood\n" + got[1]
         req = Request(to=to, brief=text, tier="T2" if to != "gemini" else "T2", caller=_caller(a.caller),
-                      cwd=root, task=a.task, step=nxt["n"], label=f"{a.task}#{nxt['n']}",
+                      cwd=root, task=a.task, step=nxt["n"], label=last.get("label") or f"{a.task}#{nxt['n']}",
                       review=last.get("review_mode") or "auto")
         rec = run(req, p)
         out = compact(rec) | {"handoff": f"{last['to']} -> {to} (quota)"}

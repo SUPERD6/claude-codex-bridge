@@ -521,7 +521,7 @@ def run(req: Request, p: Paths) -> dict:
         "namecheck_mode": req.namecheck,
         # the review the person asked for, which a later resume inherits; a review fix round (forced "on")
         # keeps the setting of the run it fixes
-        "review_mode": (prev or {}).get("review_mode", req.review) if req.review_round else req.review,
+        "review_mode": ((prev or {}).get("review_mode") or "auto") if req.review_round else req.review,
         "shared_context": shared_meta,
         **({"base_note": stale_base} if stale_base else {}),
     }

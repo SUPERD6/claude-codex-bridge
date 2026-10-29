@@ -391,11 +391,37 @@ class TestUndoAskTask(AdapterEnv):
             "run_id": "20261024-000000-early", "to": "codex", "caller": "claude", "tier": "rung", "mode": "write",
             "cwd": str(self.work), "session_id": None, "attempts": [], "state": "running", "ok": False,
             "task": tid, "step": 1, "first_rung": "codex:gpt-6-luna:low", "review_mode": "off",
-            "ts": time.time()}), encoding="utf-8")
+            "label": "eval:resume", "ts": time.time()}), encoding="utf-8")
         out = self.j("task", "resume", tid, env={"FAKE_WRITE": "a.py=changed by agent"})
         self.assertEqual(out["restarted"], "20261024-000000-early")
         self.assertEqual(self.record(out["run_id"])["review_mode"], "off")
+        self.assertEqual(self.record(out["run_id"])["label"], "eval:resume")      # the same step keeps its label
         self.assertEqual(self.reviews(), [])
+
+    def test_quota_hand_off_keeps_the_label(self):
+        tid = self.checkpoint("init", "--title", "long job", "--step", "part a")
+        self.j("run", "--from", "claude", "--to", "codex", "--tier", "T2", "--no-fallback", "--task", tid,
+               "--step", "1", "--label", "eval:quota", "part a", env={"FAKE_STATUS": "quota"}, code=2)
+        out = self.j("task", "resume", tid)
+        self.assertEqual(out["handoff"], "codex -> claude (quota)")
+        self.assertEqual(self.record(out["run_id"])["label"], "eval:quota")
+
+    def test_fix_round_of_an_old_record_stores_auto(self):
+        # a record from before review_mode was stored: its fix round (forced "on") must not pass "on" to a resume
+        import os
+        from unittest import mock
+        from ccx.config import paths
+        from ccx.delegate import Request, run
+        d = self.hub / "ccx" / "runs" / "20261020-000000-old"
+        d.mkdir(parents=True)
+        (d / "run.json").write_text(json.dumps({
+            "run_id": "20261020-000000-old", "to": "codex", "caller": "claude", "tier": "T2", "mode": "read",
+            "cwd": str(self.work), "session_id": "th-old", "attempts": [], "state": "done", "ok": True,
+            "ts": time.time()}), encoding="utf-8")
+        with mock.patch.dict(os.environ, self.env):
+            rec = run(Request(to="codex", brief="fix this", resume_run="20261020-000000-old", caller="claude",
+                              review="on", review_round=1), paths())
+        self.assertEqual(rec["review_mode"], "auto")
 
     def test_skills_install_links_repo_skills(self):
         (self.hub / "skills" / "task-split").mkdir(parents=True)          # an older real copy
