@@ -10,9 +10,12 @@
 
 ```bash
 pipx install git+https://github.com/SUPERD6/relayline
-ccx init --hub <你的个人hub路径>
-ccx doctor
+ccx setup        # 向导：hub、接线、体检；每次改动前先问
+ccx run --to codex --mode read "Summarise README.md in three lines for a new user: what this project does, how to install it, and the first command to try"
 ```
+
+最后一行是第一次派活（和 README、`ccx setup` 给的是同一条）。不用向导、一步步来：`ccx init --hub <你的个人hub路径>`、
+`ccx sync`、`ccx sync --apply`、`ccx doctor`。hub 是你自己的一个文件夹，放共享记忆、技能和每次运行的记录。
 
 **从插件市场装**（仓库本身就是一个插件市场，名字 `relayline`）：
 

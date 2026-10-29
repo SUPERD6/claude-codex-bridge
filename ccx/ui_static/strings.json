@@ -102,6 +102,16 @@
     "hint_mem_stale": "[ccx 共享记忆：{n} 条笔记 {days}+ 天没核对过，当作“待核对”：`ccx mem stale`]",
     "hint_waiting": "[ccx：{n} 件派出去的活等你处理（确认结果或拍板）—— `ccx ui` 打开看]",
     "hint_projects": "[ccx：用户说到某个项目却没给路径时，先 `ccx where \"原话\"`（{n} 个项目，不花钱）]",
+    "tier_T0_label": "自己做",
+    "tier_T0_when": "两三步就能完成、只改一两处、或说明任务比做任务还长。派出去的开销（写简报+对方读仓库）比直接做更贵。",
+    "tier_T1_label": "机械活",
+    "tier_T1_when": "改名、格式化、补注释/类型、按明确规则批量替换、样板代码、总结日志、查找定位。",
+    "tier_T2_label": "常规开发",
+    "tier_T2_when": "单个功能、复现清楚的 bug、补测试、单模块小重构、写脚本。",
+    "tier_T3_label": "困难",
+    "tier_T3_when": "跨多个文件/模块、原因不明的 bug、性能问题、需要先读懂较大代码库再改、方案设计。",
+    "tier_T4_label": "关键/研究级",
+    "tier_T4_when": "架构决策、安全审查、并发/正确性证明、新算法、出错代价很高的改动。",
     "hint_context": "[ccx] 这个对话每一轮都要重读约 {k}k token（约 ${usd} 一轮，已 {turns} 轮）。往后更省的做法：大段阅读（很多文件、日志、调研）交给子智能体，只拿回结论；如果接下来是新的一件事，换一个新对话接着做：先问一下用户，再运行 `ccx fresh`（它从这个对话的文件写好交接；在这个文件夹里开的新对话会从它开始）。"
   },
   "en": {
@@ -207,6 +217,16 @@
     "hint_mem_stale": "[ccx shared memory: {n} note(s) not checked for {days}+ days — treat them as 'to check': `ccx mem stale`]",
     "hint_waiting": "[ccx: {n} delegated piece(s) wait for you (a verdict or a decision) — `ccx ui` to see them]",
     "hint_projects": "[ccx: when the person names a project without a path, run `ccx where \"their words\"` first ({n} projects, free)]",
+    "tier_T0_label": "do it yourself",
+    "tier_T0_when": "two or three steps, one or two edits, or the brief would be longer than the work: handing it out (writing the brief, the other agent reading the repo) costs more than doing it.",
+    "tier_T1_label": "mechanical",
+    "tier_T1_when": "renames, formatting, comments/types, rule-based replacements, boilerplate, summarising logs, finding where something is.",
+    "tier_T2_label": "standard dev",
+    "tier_T2_when": "one feature, a bug with a clear repro, adding tests, a small refactor in one module, a script.",
+    "tier_T3_label": "hard",
+    "tier_T3_when": "across several files/modules, a bug with an unclear cause, performance, a larger codebase to understand first, design.",
+    "tier_T4_label": "critical / research",
+    "tier_T4_when": "architecture decisions, security review, concurrency/correctness proofs, new algorithms, changes where a mistake costs a lot.",
     "hint_context": "[ccx] This conversation re-reads about {k}k tokens every turn (≈ ${usd} a turn, {turns} turns so far). Cheaper from here: send big reads (many files, logs, research) to a sub-agent and take back only its conclusion; and if what comes next is a new piece of work, hand over to a fresh conversation: ask the person, then run `ccx fresh` (it writes the handoff from this conversation's file; a new conversation in this folder starts with it)."
   }
 }
