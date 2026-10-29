@@ -151,3 +151,49 @@ def test_brief_shows_the_end_of_the_check_output_when_it_ran():
     assert rr.parse_brief(text)["check"] == {"cmd": "pytest -q", "passed": True, "exit": 0}
     none = review.brief("r1", "do x", "did x", "+x = 1", 4000, None, [])
     assert "nobody ran the tests for you" in none and "need not run it" not in none
+
+
+# ---- 4. ccx ui: an environment failure, and an empty hub
+from test_ui import STATIC, pieces, put_run  # noqa: E402
+
+
+class TestUiEnvAndStart(Env):
+    def setUp(self):
+        super().setUp()
+        (self.work / ".git").mkdir()
+
+    def test_env_run_shows_the_hint_and_doctor_not_try_again(self):
+        from ccx import ui
+        from ccx.config import Paths
+        put_run(self.hub, "r-env", self.work, kind="env", ok=False, env_error="ShellExecuteExW failed: 1223",
+                result={"status": "blocked", "summary": "could not run anything"})
+        p = pieces(ui.collect(Paths(self.hub)))[0]
+        act = p["act"]
+        self.assertEqual(act["what"], "a_env")
+        self.assertEqual(act["why"][0], "w_env")
+        self.assertIn("ShellExecuteExW failed: 1223", act["why"][1]["hint"])        # the run's own fix hint
+        labels = [b["label"] for b in act["buttons"]]
+        self.assertNotIn("b_retry", labels)
+        doctor = next(b for b in act["buttons"] if b["label"] == "b_doctor")
+        self.assertEqual((doctor["cmd"], doctor["style"]), ("ccx doctor", "primary"))
+        # other failures keep "Try again"
+        put_run(self.hub, "r-fail", self.work, ok=False, result={"status": "failed", "summary": "nope"})
+        acts = {x["run_id"]: x["act"] for x in pieces(ui.collect(Paths(self.hub)))}
+        self.assertIn("b_retry", [b["label"] for b in acts["r-fail"]["buttons"]])
+
+    def test_empty_hub_says_what_to_do_first(self):
+        from ccx import ui, setup
+        from ccx.config import Paths
+        data = ui.collect(Paths(self.hub))
+        self.assertEqual(data["projects"], [])
+        self.assertEqual(data["start"]["first"], setup.first_command("codex"))     # README / setup's first command
+        from ccx.cli import build_parser
+        import argparse
+        sub = next(a for a in build_parser()._actions if isinstance(a, argparse._SubParsersAction))
+        self.assertEqual(data["start"]["demo"], "ccx demo" if "demo" in sub.choices else None)
+        js = (STATIC / "app.js").read_text(encoding="utf-8")
+        self.assertIn('t("empty") }</p>` + startHTML()'.replace(" }", "}"), js)
+        strings = json.loads((STATIC / "strings.json").read_text(encoding="utf-8"))
+        for lg in ("zh", "en"):
+            self.assertIn("{cmd}", strings[lg]["empty_first"])
+            self.assertIn("{cmd}", strings[lg]["empty_demo"])

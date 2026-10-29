@@ -23,7 +23,8 @@ English · [中文](features.zh.md) · back to the [README](../README.md)
 
 `ccx ui` opens a page on this machine: what waits for you (red = your call, amber = please review),
 who works on what (one column per agent, new agents get their own), and how the quota windows are going. Click a
-block for the reason, the evidence and its buttons. It is also the manager's board: every project in the `ccx projects`
+block for the reason, the evidence and its buttons (a run stopped by the machine itself, `kind: env`, shows its fix
+hint and `ccx doctor` instead of "Try again"; an empty hub says what to run first). It is also the manager's board: every project in the `ccx projects`
 catalog (a work queue there shows even without a recent run; quiet projects are one line; a project's approval rules
 are quoted on its page), and what this month's sub-agents cost and saved, labelled as a relative estimate (the same
 rule as `ccx report`). A button that changes something — stop a run, record right or wrong, one more fix round,

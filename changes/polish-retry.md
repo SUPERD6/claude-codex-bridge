@@ -8,3 +8,6 @@
 - `ccx -h`: show and q join Everyday; where, projects, intake, init, uninstall, repair and agents move to a new
   Advanced group; trial, ab, bench, improve and namecheck move to a Developer group listed last. Every command is
   still callable.
+- `ccx ui`: a run that stopped on an environment failure (`kind: env`) shows its fix hint and `ccx doctor` instead of
+  "Try again". An empty overview says what to run first (the same first delegation as README and `ccx setup`) and,
+  once this ccx has it, `ccx demo`.
