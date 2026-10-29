@@ -31,6 +31,7 @@ from pathlib import Path
 from .config import Paths
 
 DEMO_MARK = "ccx-demo.json"
+DEMO_DIRS = ("hub", "projects", "homes")          # all build() writes under its folder
 SEED = 7
 LEAD_SESSION = "0d3m0c1a-0000-4000-8000-00000000c1a0"     # the demo's Claude lead conversation (fake)
 SHOP, DOCS, QUIET = "shop-api", "docs-site", "mobile-app"
@@ -275,8 +276,10 @@ def build(base: Path | None = None, now: float | None = None) -> Paths:
     hub = Path(e["CCX_HUB"])
     if hub.exists() and not is_demo(Paths(hub)):
         raise ValueError(f"{hub} exists and is not a ccx demo hub: not touching it")
+    if not hub.exists() and base.is_dir() and any(base.iterdir()):
+        raise ValueError(f"{base} is not empty and holds no ccx demo: give a new or empty folder, or an earlier demo")
     if hub.exists():                           # an earlier demo here: start again from nothing (same records)
-        for sub in ("hub", "projects", "homes"):
+        for sub in DEMO_DIRS:
             if (base / sub).exists():
                 _rmtree(base / sub)
     for k in ("CLAUDE_CONFIG_DIR", "CODEX_HOME", "DSH_HOME"):
@@ -312,15 +315,21 @@ def build(base: Path | None = None, now: float | None = None) -> Paths:
     return p
 
 
-def remove(base: Path) -> None:
-    """Delete a demo folder (only one build() made: its hub carries the marker)."""
+def remove(base: Path, owned: bool = False) -> bool:
+    """Delete a demo folder: one build() made (its hub carries the marker), or with `owned` a folder new_base() made
+    for this process (a build that failed before the marker). True when the folder is gone."""
     base = Path(base)
-    if is_demo(Paths(base / "hub")):
+    if base.exists() and (owned or is_demo(Paths(base / "hub"))):
         _rmtree(base)
+    return not base.exists()
 
 
 def _rmtree(d: Path) -> None:
-    """shutil.rmtree that also removes read-only files (git keeps its objects read-only on Windows)."""
+    """shutil.rmtree that also removes read-only files (git keeps its objects read-only on Windows) and paths past
+    260 characters (the fake session file is written through the Windows long-path prefix; the tree is removed
+    through it too)."""
+    if os.name == "nt" and not str(d).startswith("\\\\"):
+        d = Path("\\\\?\\" + str(Path(d).resolve()))
     def again(fn, path, _exc):
         try:
             os.chmod(path, stat.S_IWRITE)
