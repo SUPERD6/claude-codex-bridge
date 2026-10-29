@@ -42,8 +42,13 @@ folder (offline, no Claude or Codex login; your own setup is not touched).
 claude plugin install relayline --marketplace SUPERD6/relayline   # the skills and hooks in Claude Code (2.1.275+)
 pipx install git+https://github.com/SUPERD6/relayline             # ccx itself, for your terminal and Codex
 ccx setup                    # guided: explains each step and asks before changing anything
-ccx run --to codex --mode read "Summarise README.md in three lines"
+ccx run --to codex --mode read "Summarise README.md in three lines for a new user: what this project does, how to install it, and the first command to try"
 ```
+
+Your first delegation is the last line: Codex reads this README and answers in three lines, on the cheapest model.
+From your own terminal, `--to` delegates even a very small task (stderr notes that doing it yourself is cheaper);
+when a lead session calls ccx, a task that small is still turned back to it.
+The hub `ccx setup` asks about is one folder of your own for shared memory, skills and the record of every run.
 
 You need Python 3.11+ and the `claude` and `codex` CLIs, logged in; DeepSeek (`dsh`, or a key in
 `DEEPSEEK_API_KEY`) is optional. `ccx -h` lists the everyday commands first.

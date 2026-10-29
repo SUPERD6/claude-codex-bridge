@@ -11,12 +11,12 @@ class TestQueue(AdapterEnv):
     def test_dependencies_decide_the_order(self):
         a = self.q("add", "write the parser", "--brief", "write parse() in p.py", "--minutes", "5")
         b = self.q("add", "test the parser", "--brief", "add tests for parse()", "--dep", a["id"], "--minutes", "5")
-        ls = self.q("ls")
+        ls = self.q("ls", "--long")
         self.assertEqual(ls["ready"], [a["id"]])                          # b waits for a
         out = self.q("run")
         self.assertEqual([r["id"] for r in out["results"]], [a["id"], b["id"]])
         self.assertEqual(out["open"], [])
-        items = {i["id"]: i for i in self.q("ls")["items"]}
+        items = {i["id"]: i for i in self.q("ls", "--long")["items"]}
         self.assertEqual({items[a["id"]]["status"], items[b["id"]]["status"]}, {"done"})
         self.assertTrue(items[a["id"]]["run"])                            # each item keeps its ccx run
 
@@ -29,7 +29,7 @@ class TestQueue(AdapterEnv):
         first = out["results"][0]
         self.assertEqual(first["id"], big["id"])
         self.assertEqual(len(first["split_into"]), 2)
-        items = {i["id"]: i for i in self.q("ls")["items"]}
+        items = {i["id"]: i for i in self.q("ls", "--long")["items"]}
         kids = [items[k] for k in first["split_into"]]
         self.assertTrue(all(k["parent"] == big["id"] and k["depth"] == 1 for k in kids))
         self.assertEqual(kids[1]["deps"], [kids[0]["id"]])               # the parts keep their order
@@ -63,7 +63,7 @@ class TestQueue(AdapterEnv):
         out = self.q("resume")
         self.assertEqual(out["restored"][a["id"]], "finished")
         self.assertEqual(len(self.calls()), n)                           # nothing run again
-        item = self.q("ls")["items"][0]
+        item = self.q("ls", "--long")["items"][0]
         self.assertEqual(item["status"], "done")
         self.assertGreater(item["cost_usd"], 0)
 

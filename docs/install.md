@@ -12,9 +12,13 @@ English · [中文](install.zh.md) · back to the [README](../README.md)
 
 ```bash
 pipx install git+https://github.com/SUPERD6/relayline
-ccx init --hub <your hub path>
-ccx doctor
+ccx setup        # guided: hub, wiring, health check; asks before each change
+ccx run --to codex --mode read "Summarise README.md in three lines for a new user: what this project does, how to install it, and the first command to try"
 ```
+
+The last line is your first delegation (the same one README and `ccx setup` suggest). Step by step instead of
+`ccx setup`: `ccx init --hub <your hub path>`, `ccx sync`, `ccx sync --apply`, `ccx doctor`. The hub is one folder
+of your own for shared memory, skills and the record of every run.
 
 **From the plugin marketplace** (the repository is its own marketplace, `relayline`):
 
@@ -123,6 +127,14 @@ ccx q add --plan plan.json            # a whole plan: {"tasks": ...} or task-spl
 ccx q run --gate                      # dependents start only after `ccx q done <id> --ok 1` (default off); parallel
                                       # writers get worktrees (clean checkout only), and what waits on one waits for
                                       # your merge + verdict; a piece whose dependency failed is marked dep_blocked
+ccx q ls [--long]                     # one line a piece: id, state, agent, seconds, $ (a worktree piece not landed
+                                      # yet shows `unmerged` with `next: ccx q accept qN`); --long = the full JSON
+ccx q accept q1 q2 | --all-ready [--check CMD] [--dry-run]   # land worktree pieces: merge in dependency order,
+                                      # joint check after each merge, roll that merge back if it fails; refuses
+                                      # unfinished / no_changes / unverified pieces and stops a piece at a conflict;
+                                      # never pushes, never into main without --into-protected (the person's yes);
+                                      # refuses a run you rejected (verify --ok 0); stops the batch when a rollback
+                                      # fails or the check leaves edits in tracked files
 ccx route --files 3 --coupling cross ... [--lead claude:opus:high --ctx-files log.txt]  # recommendation; + self vs delegate
 ccx plan size --minutes 240 --rung codex:gpt-6.1-sol:medium # how many pieces for a big task (task-split)
 ccx show <run_id> [--full]            # compact result by default

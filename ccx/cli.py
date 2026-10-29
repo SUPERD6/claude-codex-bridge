@@ -15,12 +15,12 @@ DESCRIPTION = ("A team of AI coding agents: Claude Code, Codex and DeepSeek hand
 
 # `ccx -h` lists commands by what they are for; every command stays callable, the last group is names only.
 GROUPS = (
-    ("Everyday", ("setup", "doctor", "run", "ask", "resume", "stop", "verify", "ui", "demo", "where", "projects",
+    ("Everyday", ("setup", "doctor", "run", "ask", "resume", "stop", "undo", "verify", "ui", "demo", "where", "projects",
                   "peek", "board", "say", "reply", "intake")),
     ("Memory and context", ("mem", "ctx", "project", "handoff", "fresh", "inbox", "skills")),
     ("Accounting and reports", ("stats", "report", "show", "quota", "lead", "trial", "ab", "bench")),
     ("Maintenance and advanced", ("task", "send", "plan", "batch", "route", "propose", "way", "discuss", "q",
-                                  "turn", "sum", "undo", "namecheck", "archive", "config", "autonomy", "improve",
+                                  "turn", "sum", "namecheck", "archive", "config", "autonomy", "improve",
                                   "selftest", "sync",
                                   "init", "uninstall", "agents", "repair")),
 )
@@ -126,7 +126,7 @@ def main(argv: list[str] | None = None) -> int:
         if isinstance(e, PermissionError):
             # seen on a real headless Codex lead: its workspace-write sandbox may not write outside the project
             out["hint"] = ("ccx could not write there. If a sandboxed agent (e.g. Codex in workspace-write) ran this, "
-                           "let it write to the ccx hub and use the network: see `ccx doctor`, row "
+                           "let it write to the ccx hub and use the network: see `ccx doctor --codex-lead`, row "
                            "'Codex as lead (sandbox)'.")
         _out(out)
         return 3

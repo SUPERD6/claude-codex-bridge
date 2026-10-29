@@ -13,13 +13,13 @@ from pathlib import Path
 
 from .. import lanes, learn, ledger, router, usage
 from ..config import AGENTS, DELEGATE_AGENTS, PROVIDER_AGENTS, TIER_ORDER, load_config, paths
-from ..delegate import Request, compact, recap, run, verify
+from ..delegate import Request, compact, exit_ok, human_summary, recap, run, verify
 from ..gitstate import SHARED_WHY, STALE_WHY, clean, in_git
 from ..runners import find_bin
 from ..workspace import missing_test_paths
-from .common import (_brief, _caller, _out, _routing_args, _spec_from_args, _target, find_continuable,
-    apply_mode, find_seat, installed_agents, lead_session_id, parse_quota, picked_tier, provider_agents, resolve,
-    tier_policy)
+from .common import (_brief, _caller, _out, _routing_args, human_tail, _spec_from_args, _target, find_continuable,
+    apply_mode, find_seat, installed_agents, lead_session_id, parse_quota, person_named_to, picked_tier,
+    provider_agents, resolve, tier_policy)
 from .install import tier_spec_safe
 from ..subagents import parse_spec as subagents_spec
 
@@ -111,7 +111,7 @@ def _bg_maybe_wait(argv: list[str], p, wait: float | None) -> int:
                 if rc is not None:
                     res["recap"] = rc            # last key: survives `| tail`
             _out(res)
-            return 0 if res.get("ok") else 2
+            return 0 if exit_ok(rec) else 2
         if time.time() - swept >= 20:            # a run whose ccx process died: interrupted, not running forever
             recover.sweep(p)
             swept = time.time()
@@ -286,6 +286,8 @@ def cmd_run(a) -> int:
     text = _brief(a)
     caller = _caller(a.caller)
     spec = _spec_from_args(a, text)
+    if person_named_to(caller, a.to, a.force) and not a.proposal and not (proj or a.autonomy):
+        spec["person_to"] = True
     preauth, tier_self = None, False
     if a.proposal:
         from .. import proposals
@@ -316,7 +318,11 @@ def cmd_run(a) -> int:
         _bg_not_delegated(p, a, route, caller)
         _out({"delegated": False, "advice": route.get("advice"), "route": route,
               "hint": "add --force to delegate anyway"})
+        human_tail([f"Not delegated: {route.get('advice')}", "Cost: $0 (nothing ran)",
+                    "Next: do it yourself, or add --force to delegate anyway"])
         return 0
+    if route.get("cheaper_self"):
+        print(f"ccx: {route['cheaper_self']}", file=sys.stderr, flush=True)
     if auto:
         plan = {"to": kw["to"], "model": kw.get("model"), "effort": kw.get("effort"), "mode": mode["mode"],
                 **{k: route[k] for k in ("rung", "p", "expected_usd") if route.get(k) is not None},
@@ -353,7 +359,8 @@ def cmd_run(a) -> int:
                   allow_subagents=not a.no_subagents, check=a.check, review=a.review, risk=a.risk,
                   namecheck=getattr(a, "namecheck", None),
                   subagents="off" if a.no_subagents else subagents_spec(a.subagents), budget_usd=a.budget,
-                  parallel=True if a.parallel else None, share_context=a.context, **kw)
+                  parallel=True if a.parallel else None, share_context=a.context,
+                  progress=not os.environ.get("CCX_RUN_ID"), **kw)    # not the detached child of --bg
     if preauth:
         # the run of a proposal the picked tier pre-authorised starts now: only now is it used (once), and only now
         # did it go out (actual_mode). Source "tier": not counted as a yes in proposals.stats. The claim is atomic:
@@ -369,7 +376,7 @@ def cmd_run(a) -> int:
     if prev:
         res["continued_from"] = prev          # same sub-session: it remembers the earlier task(s)
     res["route"] = {k: v for k, v in route.items() if k in ("source", "b", "rung", "p", "chain_p", "tier",
-                                                              "stale", "mode", "trial")}
+                                                              "stale", "mode", "trial", "cheaper_self")}
     if proj:
         res["project"] = {k: proj[k] for k in ("name", "path", "approval_rules") if proj.get(k)}
     if auto:
@@ -383,7 +390,8 @@ def cmd_run(a) -> int:
         res["route"]["learns"] = "no: give --minutes (or the rubric flags) so this run's verdict can teach routing"
     res["recap"] = recap(rec, res)              # last key: survives `| tail`
     _out(res)
-    return 0 if res["ok"] else 2
+    human_tail(human_summary(rec, res))
+    return 0 if exit_ok(rec) else 2
 
 
 def cmd_send(a) -> int:
@@ -633,7 +641,7 @@ def cmd_resume(a) -> int:
     req = Request(to="codex", brief=_brief(a), tier=a.tier, resume_run=a.run_id,
                   caller=_caller(a.caller), escalate=False if a.no_escalate else None,
                   model=a.model, effort=a.effort, budget_usd=a.budget, review=a.review, check=a.check,
-                  namecheck=getattr(a, "namecheck", None))
+                  namecheck=getattr(a, "namecheck", None), progress=not os.environ.get("CCX_RUN_ID"))
     if a.check:                         # replaces the stored check (one that named a missing file, say)
         prev = ledger.load_run(p, a.run_id)
         req.check = _check_names_real_tests(a.check, Path(prev.get("cwd") or os.getcwd()))
@@ -652,7 +660,8 @@ def cmd_resume(a) -> int:
         res["hint"] = f"{res['hint']} Also: {gone}" if res.get("hint") else gone
     res["recap"] = recap(rec, res)
     _out(res)
-    return 0 if res["ok"] else 2
+    human_tail(human_summary(rec, res))
+    return 0 if exit_ok(rec) else 2
 
 
 def _session_gone(rec: dict) -> bool:
@@ -729,21 +738,26 @@ def cmd_batch(a) -> int:
             for r in lane[1:]:
                 r.worktree = lane[0].worktree
 
+        bad: list[bool] = []                     # exit code as before compact's ok also said no to blocked/failed
+
         def step(r, warm):
             if warm:
                 r.resume_run, r.continued = warm, True
             try:
                 rec = run(r, p)
             except Exception as e:  # noqa: BLE001 — one piece's error must not stop its lane
+                bad.append(True)
                 return {"label": r.label, "ok": False, "error": f"{type(e).__name__}: {e}"[:300]}, None
+            bad.append(not exit_ok(rec))
             return compact(rec), rec
         results = lanes.run_lanes(lane_list, step, lanes.limits(cfg), threads)
         _out({"results": results, "do_yourself": skipped, "lanes": len(lane_list), **extra})
-        return 0 if all(r["ok"] for r in results) else 2
+        return 0 if not any(bad) else 2
     with ThreadPoolExecutor(max_workers=threads) as ex:
-        results = list(ex.map(lambda r: compact(run(r, p)), reqs))
+        recs = list(ex.map(lambda r: run(r, p), reqs))
+    results = [compact(rec) for rec in recs]
     _out({"results": results, "do_yourself": skipped, **extra})
-    return 0 if all(r["ok"] for r in results) else 2
+    return 0 if all(exit_ok(rec) for rec in recs) else 2
 
 
 def cmd_quota(a) -> int:
@@ -784,8 +798,30 @@ def cmd_bench(a) -> int:
 
 
 def cmd_route(a) -> int:
-    _out(_route(a))
+    out = _route(a)
+    _out(out)
+    human_tail(_route_summary(out))
     return 0
+
+
+def _route_summary(out: dict) -> list[str]:
+    """Plain lines for a person at a terminal (human_tail): the pick, why, and the command that runs it."""
+    if out.get("rung"):
+        pick = out["rung"].replace(":", " ", 1).replace(":", "/")
+        usd = out.get("expected_usd")
+        lines = [f"Pick: {pick}" + (f", p(success) {out['p']:.2f}" if isinstance(out.get("p"), (int, float)) else "")
+                 + (f", expected ~${usd:.4f}" if isinstance(usd, (int, float)) else "")]
+        if out.get("advice"):
+            lines.append(f"Advice: {out['advice']}")
+        return lines + [f"Next: ccx run --to {out['rung'].split(':')[0]} \"<the task>\" with the same flags"]
+    tier, label = out.get("tier"), out.get("label")
+    why = ", ".join(out.get("reasons") or [])
+    if tier == "T0":
+        nxt = ("do it yourself (a lead's `ccx run` refuses it; from your terminal, `ccx run --to <agent>` still "
+               "delegates it, on the cheapest rung)")
+    else:
+        nxt = f"ccx run --tier {tier} \"<the task>\""
+    return [f"Tier: {tier} ({label})" + (f": {why}" if why else ""), f"Next: {nxt}"]
 
 
 def _route(a) -> dict:
@@ -836,13 +872,32 @@ def _route(a) -> dict:
         return route
     r = router.classify(" ".join(a.text), a.files)
     t = cfg["tiers"][r.tier]
-    out = r.as_dict() | {"label": t.get("label"), "when": t.get("when"),
+    out = r.as_dict() | {"label": tier_words(p, t, r.tier, "label"), "when": tier_words(p, t, r.tier, "when"),
                          "note": "keyword heuristic; give the rubric flags for a calibrated pick",
                          "mode": apply_mode({"brief": " ".join(a.text or []), "mode": getattr(a, "mode", None)})}
     for ag in AGENTS:
         if t.get(ag):
             out[ag] = t[ag]
     return out
+
+
+_CJK = re.compile(r"[　-〿一-鿿＀-￯]")
+
+
+def tier_words(p, tier_cfg: dict, tier: str, key: str) -> str | None:
+    """A tier's `label` / `when` in the person's language (`ccx config set ui.lang zh|en`, English when unset). The
+    shipped tiers.toml words are Chinese; English output used them as they were (2026-10-29 new-user walkthrough).
+    A label of the person's own in config is kept when it suits the language: any text in Chinese, text without
+    Chinese characters in English."""
+    from ..lang import current, say
+    own = tier_cfg.get(key)
+    lang = current(p)
+    if own and (lang == "zh" or not _CJK.search(str(own))):
+        return own
+    try:
+        return say(f"tier_{tier}_{key}", lang=lang)
+    except KeyError:                       # a tier of the person's own: no shipped words for it
+        return own
 
 
 def _lead_by_task(cfg: dict, route: dict, a) -> None:

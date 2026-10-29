@@ -1,7 +1,8 @@
 """`ccx setup`: a guided first run — check, hub, init, sync (preview, then apply on a yes), doctor, notes from your
 recent sessions (L6, each one only on a yes), selftest.
 
-Every change is previewed and asked about first. Not on a terminal and no --yes: it only shows the plan.
+Every change is previewed and asked about first. Not on a terminal and no --yes (an agent running it, a pipe): it
+shows the whole plan as the commands to run and changes nothing.
 Goal: a new user delegates for the first time within five minutes."""
 from __future__ import annotations
 
@@ -19,6 +20,15 @@ COLD_DAYS = 7          # L6: how far back the first run looks for preferences an
 COLD_FILES = 20        # newest session files read, at most
 COLD_ASK = 10          # suggestions asked about one by one; the rest wait in `ccx mem suggestions`
 LOGIN = {"codex": "codex login", "claude": "claude  (then /login)", "gemini": "gemini  (then sign in)"}
+# The first delegation README, docs/install and setup all suggest: long enough to be delegated (a three-word summary
+# scored T0 and was refused as do-it-yourself in the 2026-10-29 new-user walkthrough), a summary, so the cheapest
+# rung; read-only.
+FIRST_TASK = ("Summarise README.md in three lines for a new user: what this project does, how to install it, "
+              "and the first command to try")
+
+
+def first_command(to: str = "codex") -> str:
+    return f'ccx run --to {to} --mode read "{FIRST_TASK}"'
 
 
 class Wizard:
@@ -154,11 +164,14 @@ def run(yes: bool = False, hub: str | None = None) -> int:
 
     w.step(1, "Check the tools")
     agents = [a for a in ("codex", "claude", "gemini") if find_bin(a)]
+    logged_out: list[str] = []
     for a in ("codex", "claude", "gemini"):
         if a not in agents:
             w.say(f"  {a:7s} not installed" + ("" if a == "gemini" else "  ← needed for that direction"))
             continue
         ok = _login_ok(a)
+        if ok is False:
+            logged_out.append(a)
         w.say(f"  {a:7s} installed, " + {True: "logged in", False: f"NOT logged in → run: {LOGIN[a]}",
                                          None: "login unknown"}[ok])
     if not {"codex", "claude"} & set(agents):
@@ -172,6 +185,9 @@ def run(yes: bool = False, hub: str | None = None) -> int:
     if not already:
         w.say("  Already have a shared AGENTS.md or your own sync script? Stop here and use "
               "`ccx init --hub … --snapshot … --external-sync …` instead.")
+
+    if not w.yes and not w.interactive:
+        return _plan_only(w, where, agents, logged_out)
 
     w.step(3, "Create the hub skeleton (only adds files, never changes existing ones)")
     if not w.ask(f"Create/update ccx files in {where}?", default=True):
@@ -209,7 +225,10 @@ def run(yes: bool = False, hub: str | None = None) -> int:
     cold_start(w, p)
 
     w.step(7, "Try it")
-    if w.ask("Run one tiny real task per installed agent (cheapest model, a few cents at most)?"):
+    if logged_out:
+        # it would only fail (and costs a little where it gets through): log in first, then `ccx selftest`
+        w.say(f"  skipped: {', '.join(logged_out)} not logged in. Log in first, then run `ccx selftest`")
+    elif w.ask("Run one tiny real task per installed agent (cheapest model, a few cents at most)?"):
         from types import SimpleNamespace
         from .commands.install import cmd_selftest
         buf = io.StringIO()
@@ -220,9 +239,40 @@ def run(yes: bool = False, hub: str | None = None) -> int:
                 w.say(f"  {r['agent']:7s} {'ok' if r['ok'] else 'FAILED'}  {r.get('model') or r.get('error', '')}")
         except (json.JSONDecodeError, KeyError):
             w.say(buf.getvalue())
-    other = "codex" if "codex" in agents else "claude"
+    _finish(w, agents, logged_out)
+    return 0
+
+
+def _login_todo(logged_out: list[str]) -> list[str]:
+    return [f"log in to {a}: {LOGIN[a]}" for a in logged_out]
+
+
+def _finish(w: Wizard, agents: list[str], logged_out: list[str]) -> None:
+    """Blocking items first (a CLI not logged in: the first delegation would fail), then the first delegation."""
+    todo = _login_todo(logged_out)
+    if todo:
+        w.say("\nBefore your first delegation:")
+        for i, t in enumerate(todo, 1):
+            w.say(f"  {i}. {t}")
     w.say("\nYour first delegation (from inside Claude Code or Codex, or a terminal):")
-    w.say(f'  ccx run --from {"claude" if other == "codex" else "codex"} --to {other} --mode read '
-          '"Read README.md and summarise it in three lines"')
+    w.say("  " + first_command("codex" if "codex" in agents else "claude"))
     w.say("Then check it and record your verdict: ccx verify <run_id> --ok 1")
+
+
+def _plan_only(w: Wizard, where: Path, agents: list[str], logged_out: list[str]) -> int:
+    """Not on a terminal and no --yes (e.g. a Claude Code or Codex Bash tool): show every remaining step as the exact
+    command, change nothing. Before, it stopped at step 3 and showed nothing of steps 4-7."""
+    w.say("\n  Not on a terminal, so setup changes nothing here. The remaining steps as commands (run them yourself,")
+    w.say("  or let your agent run them; `ccx setup` in a terminal of your own asks before each change instead):")
+    steps = [*_login_todo(logged_out),
+             f'create the hub skeleton (only adds files): ccx init --hub "{where}"',
+             "preview the wiring (session-start hook, skills, MCP): ccx sync",
+             "make those changes (each changed file is backed up; `ccx uninstall` removes them): ccx sync --apply",
+             "health check: ccx doctor"]
+    for i, t in enumerate(steps, 1):
+        w.say(f"    {i}. {t}")
+    w.say("  Then your first delegation:")
+    w.say("    " + first_command("codex" if "codex" in agents else "claude"))
+    w.say(f'  Or accept every step at once: ccx setup --yes --hub "{where}"')
+    w.say("  Nothing was changed.")
     return 0

@@ -10,9 +10,12 @@
 
 ```bash
 pipx install git+https://github.com/SUPERD6/relayline
-ccx init --hub <你的个人hub路径>
-ccx doctor
+ccx setup        # 向导：hub、接线、体检；每次改动前先问
+ccx run --to codex --mode read "Summarise README.md in three lines for a new user: what this project does, how to install it, and the first command to try"
 ```
+
+最后一行是第一次派活（和 README、`ccx setup` 给的是同一条）。不用向导、一步步来：`ccx init --hub <你的个人hub路径>`、
+`ccx sync`、`ccx sync --apply`、`ccx doctor`。hub 是你自己的一个文件夹，放共享记忆、技能和每次运行的记录。
 
 **从插件市场装**（仓库本身就是一个插件市场，名字 `relayline`）：
 
@@ -92,6 +95,12 @@ ccx q add "标题" --brief "..." [--dep q1] [--check CMD]   # 项目的待办队
 ccx q run [--gate] | resume | tree | done q3 --ok 1   # 就绪的块并行跑；多个写任务各开 worktree（仅限没有未提交改动时），依赖它们的块
                                     # 等你合并并 q done --ok 1；--gate（默认关）让所有下游都等你的结论；
                                     # 依赖失败的块标成 dep_blocked，不再一直卡着
+ccx q ls [--long]                   # 一块一行：id、状态、智能体、秒数、$（worktree 里做完还没落地的块显示 `unmerged`，
+                                    # 附 `next: ccx q accept qN`）；--long 是完整 JSON
+ccx q accept q1 q2 | --all-ready [--check CMD] [--dry-run]   # 把 worktree 里的块落地：按依赖顺序合并，每合并一块
+                                    # 跑一次联合验收，失败就撤回这次合并；没做完、no_changes、没验证的块拒绝，
+                                    # 冲突的块停下；从不 push，没有 --into-protected（用户同意）不合进 main；
+                                    # 你否决过的 run（verify --ok 0）拒绝；撤回失败或验收改动了已跟踪文件时整批停下
 ccx route --files 3 --coupling cross ... [--lead claude:opus:high --ctx-files 日志.txt]  # 只看推荐；加 --lead 还会比较自己做 vs 派出去
 ccx plan size --minutes 240 --rung codex:gpt-6.1-sol:medium   # 大任务拆几块（task-split）
 ccx show <run_id> [--full]          # 默认只显示压缩结果

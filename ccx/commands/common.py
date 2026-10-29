@@ -19,6 +19,18 @@ def _out(obj) -> None:
     print(json.dumps(obj, ensure_ascii=False, indent=2))
 
 
+def human_tail(lines: list[str], stream=None) -> None:
+    """A few plain lines after the JSON, only when stdout is a terminal: a person reads them. Leads and scripts read
+    stdout through a pipe and get the JSON byte for byte as before."""
+    stream = stream or sys.stdout
+    try:
+        tty = stream.isatty()
+    except (AttributeError, ValueError, OSError):
+        tty = False
+    if tty and lines:
+        print("\n" + "\n".join(lines), file=stream)
+
+
 def hook_text(text: str, as_: str | None) -> str:
     """What a session hook prints. Codex (0.164) reads hook output that starts with '[' or '{' as JSON, and when it
     isn't, the hook counts as failed and nothing reaches the conversation (H7: every ccx line starts with '[ccx').
@@ -336,7 +348,10 @@ def resolve(spec: dict, caller: str, p, cfg: dict) -> tuple[dict | None, dict]:
                      chain_p=pk["chain_p"], expected_usd=pk.get("expected_usd"))
         if pk.get("stale"):
             route["stale"] = pk["stale"]
-        if pk.get("advice") and not spec.get("force"):
+        if pk.get("advice") and not spec.get("force") and spec.get("person_to") \
+                and pk["advice"].startswith("do-it-yourself"):
+            route["cheaper_self"] = PERSON_TO_NOTE
+        elif pk.get("advice") and not spec.get("force"):
             route["advice"] = pk["advice"]
             return None, route
         from .. import trial
@@ -369,11 +384,26 @@ def resolve(spec: dict, caller: str, p, cfg: dict) -> tuple[dict | None, dict]:
     if why:
         route["why"] = why
     if tier == "T0" and not spec.get("force"):
-        route["advice"] = "do-it-yourself: delegating costs more than the task"
-        return None, route
+        if spec.get("person_to"):
+            route["cheaper_self"] = PERSON_TO_NOTE
+        else:
+            route["advice"] = "do-it-yourself: delegating costs more than the task"
+            return None, route
     if tier == "T0":
         tier = "T1"
     return {"to": _target(to, caller), "tier": tier, "route": route}, route
+
+
+PERSON_TO_NOTE = ("small enough that doing it yourself would be cheaper; delegated anyway because you named --to "
+                  "(a lead's call without --force is still refused)")
+
+
+def person_named_to(caller: str, to: str | None, force: bool = False) -> bool:
+    """Did a person at a plain terminal (no lead tool detected, or --from user) name the sub-agent themselves? Then a
+    too-small task is still delegated, with one line saying it would be cheaper to do it yourself: the README's first
+    command was refused as do-it-yourself in the 2026-10-29 new-user walkthrough. A lead's call keeps the refusal (the
+    agent-delegate skill relies on it)."""
+    return caller == "user" and bool(to) and to != "auto" and not force
 
 
 def tier_policy(p, cfg: dict, spec: dict, tradeoff) -> dict | None:

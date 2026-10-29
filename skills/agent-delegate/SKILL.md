@@ -82,12 +82,18 @@ sub-agent. The extra requests came from the habits below.
   never in parallel (`q run` gives parallel writers in a clean git checkout their own worktree; otherwise they
   share this checkout). `ccx q add "<title>" --brief "..." --check "..."`
   per piece (`--dep <id>` for an order), then `ccx q run --bg`. Your own pieces, shortest first, must not touch
-  a queued piece's files (its undo snapshot and check would take in your edits). `ccx q ls` shows a running
-  piece's run id as `live`: `ccx show <live ids> --any --wait` hands back each one as it finishes. Accept by
-  check+review plus a diff glance, then run the union of the checks. Pieces under `waiting` / `unmerged` ran in a
-  worktree: merge each listed branch, then `ccx q done <id> --ok 1` and `ccx q run` again; `dep_blocked` pieces wait
-  on one that failed (`references/three-way.md`). `last_run` with `stopped: backpressure`
-  (quota/auth): start nothing new until it has reset.
+  a queued piece's files (its undo snapshot and check would take in your edits).
+- **Pipeline: hand off, don't wait.** Hand the independent pieces off together (above), then
+  `ccx show <live ids> --any --wait` (the `live` ids are in `ccx q ls`, one line a piece) hands back each one as
+  it finishes. A finished worktree piece shows `unmerged`: land it while the others run with
+  `ccx q accept <id>` (or `--all-ready`; `--dry-run` shows the plan). It merges in dependency order, runs the
+  joint check after each merge (`--check "<union of the checks>"`, else the piece's own), rolls back a merge
+  whose check fails, and says why it refused a piece (no_changes, failed, review failed or still running, not
+  verified) or stopped at a conflict. Never into main without the person. Pieces under `waiting` / `unmerged`
+  in `q run`'s output are those; one that ran in this checkout: `ccx q done <id> --ok 1` (several ids at once:
+  `--note "<id>: what you checked"` for each without a passed check). `dep_blocked` pieces wait on one that
+  failed (`references/three-way.md`). `last_run` with `stopped: backpressure` (quota/auth): start nothing new
+  until it has reset.
 - **Leave `--review` at its default (auto)**; `--review on` / `--risk visible` only for risky or user-facing work
   (and for an L2 auto-merge, which needs a passed review).
 - **Never ask the sub-agent to commit** (Codex's sandbox blocks `.git` writes: wasted turns). You commit after
@@ -145,6 +151,9 @@ A printed result with a `run_id` means that delegation ran: do not send the same
   unchanged tree; `ccx q` marks the piece failed, so its dependents wait): accept only if the task was already
   met, else resume it. `base` on a `--worktree` run: it
   started from HEAD without your uncommitted changes, so its check did not test them.
+- `env` = the machine, not the model: the sub-agent's CLI could not start a process (e.g. Codex's Windows sandbox
+  helper). ccx did not climb or retry; pass its `hint` to the person and resume only after they fixed it. A
+  `blocked` or `failed` status is never `ok`.
 - `verification: not-run` = unverified — say so.
 - A `review` field is the independent review: `pass` (its notes are optional reading) or `issues` with
   `file:line`. ccx runs one fix round itself (`show --wait` follows it); after that, `needs_lead` is

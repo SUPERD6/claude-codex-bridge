@@ -112,9 +112,12 @@ def resume_answer(root: Path, e: dict, run_id: str) -> dict:
     from ..delegate import Request, compact, run
     req = Request(to="codex", brief=pushed_text(e, posted_for_you=True), resume_run=run_id, caller=board.vendor_of(e["from"]),
                   escalate=False, cwd=root, side_message=True)
-    out = compact(run(req, paths()))
+    rec = run(req, paths())
+    out = compact(rec)
     answer, who = out.get("summary") or "", board.vendor_of(out.get("agent") or "")
-    if out.get("ok") and answer and who in board.VENDORS:
+    # exit_ok, not out["ok"]: a "blocked" answer is still posted, as before compact's ok said no to it
+    from ..delegate import exit_ok
+    if exit_ok(rec) and answer and who in board.VENDORS:
         try:
             out["answer"] = board.post(root, who, e["from"], answer, reply_to=e["id"], via=f"ccx-run:{run_id}",
                                        max_machine=_max_machine())
