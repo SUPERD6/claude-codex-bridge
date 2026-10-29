@@ -15,3 +15,6 @@
   "add hook block" line plus "nothing to import"; a file that does not exist yet says "create" rather than "update
   managed block". A community lead (dsh) found only inside its installed app, not on PATH, is no longer connected by
   default (one optional note instead); one connected before keeps its block, and `ccx uninstall` still removes it.
+- `ccx doctor`: rows about ccx's own workings (python, tiers.toml, ccx config, hub format, hub layout, routing prior,
+  tier policy, hook timeouts) show only when they are not ok, or with the new `--verbose`; one line says how many
+  were left out.

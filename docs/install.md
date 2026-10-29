@@ -57,7 +57,8 @@ cd relayline
 - Runs `pipx install --editable .` if pipx is there, so `ccx` is on your PATH. Otherwise it tells you to add `bin/`
   to PATH.
 - Runs `ccx init`, which only creates files and never changes existing ones.
-- Runs `ccx doctor`, which checks CLIs, logins and wiring and reports Unknown when unsure.
+- Runs `ccx doctor`, which checks CLIs, logins and wiring and reports Unknown when unsure. Rows about ccx's own
+  workings (routing prior, tier policy, hub layout, ...) show only when something is wrong there, or with `--verbose`.
 
 **Then** run the guided first run, `ccx setup` (it explains each step and asks before changing anything), or do it
 step by step:

@@ -78,4 +78,4 @@ def test_doctor_with_a_broken_layout_still_prints_the_table(user_cfg, tmp_path, 
     out = capsys.readouterr().out
     assert "FAIL" in next(ln for ln in out.splitlines() if ln.startswith("ccx config"))
     assert "FAIL" in next(ln for ln in out.splitlines() if ln.startswith("hub layout"))
-    assert "python" in out and "hook timeouts" in out                       # the rest of the table is there
+    assert "Claude SessionStart hook" in out and "has agent-delegate" in out  # the rest of the table is there

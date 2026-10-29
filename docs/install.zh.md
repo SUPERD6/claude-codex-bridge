@@ -45,7 +45,7 @@ cd relayline
 .\install.ps1 -Hub <你的个人hub路径>     # Windows；macOS/Linux：./install.sh <hub路径>
 ```
 
-安装脚本会：有 pipx 就 `pipx install --editable .`（之后直接用 `ccx`），没有就提示把 `bin\` 加进 PATH；然后 `ccx init`（只新建，不改已有文件）和 `ccx doctor`（体检：CLI、登录、接线，不确定的写 Unknown）。接着运行向导 `ccx setup`（每一步都说明、改东西前先问），或者一步步来：
+安装脚本会：有 pipx 就 `pipx install --editable .`（之后直接用 `ccx`），没有就提示把 `bin\` 加进 PATH；然后 `ccx init`（只新建，不改已有文件）和 `ccx doctor`（体检：CLI、登录、接线，不确定的写 Unknown；routing prior、tier policy、hub layout 这类 ccx 内部的行只在有问题时显示，`--verbose` 全部显示）。接着运行向导 `ccx setup`（每一步都说明、改东西前先问），或者一步步来：
 
 ```powershell
 ccx sync            # 预演：列出将要做的改动，不改任何文件

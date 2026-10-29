@@ -255,3 +255,35 @@ def test_dsh_on_path_is_connected_as_before(tmp_path, monkeypatch):
     monkeypatch.setenv("CCX_DSH_BIN", "dsh-on-path")
     assert "dsh" in {a for a, _ in sync.memory_targets()}
     assert sync.located_only() == []
+
+
+# ---- 6. doctor: internal rows only with --verbose (or when they are not ok)
+def test_doctor_hides_internal_rows_unless_verbose(tmp_path, capsys):
+    from ccx import doctor
+    from ccx.config import Paths
+    p = Paths(tmp_path / "hub")
+    doctor.doctor(p)
+    short = capsys.readouterr().out
+    for row in ("routing prior", "tier policy", "hub layout"):
+        assert not any(ln.startswith(row) for ln in short.splitlines()), row
+    assert "`ccx doctor --verbose` shows them" in short
+    assert "has agent-delegate" in short and "Claude SessionStart hook" in short    # what a person acts on stays
+    doctor.doctor(p, verbose=True)
+    full = capsys.readouterr().out
+    for row in ("routing prior", "tier policy", "python"):
+        assert any(ln.startswith(row) for ln in full.splitlines()), row
+    assert "--verbose` shows them" not in full
+
+
+def test_a_problem_in_an_internal_row_is_always_shown():
+    from ccx import doctor
+    rows = [("tier policy", "WARN", "policy.picked = 'x' is not a tier"), ("routing prior", "ok", "priors"),
+            ("hub", "FAIL", "missing")]
+    assert [r[0] for r in doctor.shown_rows(rows, False)] == ["tier policy", "hub"]
+    assert len(doctor.shown_rows(rows, True)) == 3
+
+
+def test_doctor_verbose_flag_parses():
+    from ccx import cli
+    assert cli.parse(["doctor", "--verbose"]).verbose is True
+    assert cli.parse(["doctor"]).verbose is False
