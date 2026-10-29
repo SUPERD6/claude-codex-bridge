@@ -260,6 +260,10 @@ SETTINGS = {   # key -> (type, help). Only these can be set with `ccx config set
                            "autonomy L0/L1 still asks before edits). none (shipped) = offer first, as before"),
     "defaults.ab_self_rate": (float, "share of routed tasks the lead does itself to measure savings (0 = off)"),
     "defaults.max_escalations": (int, "stronger rungs to try after a verified failure"),
+    "defaults.focused_retry": (_bool, "true | false: when ccx's --check fails after the sub-agent said done, the next "
+                                      "attempt on the same agent continues its session with the failing command and "
+                                      "~2000 characters of its output, told to fix only that (default false: the "
+                                      "escalation note with 400 characters, as before)"),
     "defaults.max_parallel": (int, "parallel sub-agents in ccx batch"),
     "defaults.timeout_sec": (int, "per-attempt timeout"),
     "lanes.default": (int, "warm lanes for ccx batch / q run: small pieces for the same project and agent share at "

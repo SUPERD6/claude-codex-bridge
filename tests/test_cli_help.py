@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import argparse
 
+import pytest
+
 from ccx import cli
 
 
@@ -12,11 +14,47 @@ def _commands() -> set[str]:
     return set(sub.choices)
 
 
+PENDING = {"demo"}        # grouped ahead of its PR: skipped in the help until the command is registered
+
+
 def test_every_command_is_in_one_group():
     grouped = [n for _, names in cli.GROUPS for n in names]
     assert len(grouped) == len(set(grouped)), "a command is listed in two groups"
-    assert set(grouped) == _commands(), "ungrouped: %s, unknown: %s" % (
-        sorted(_commands() - set(grouped)), sorted(set(grouped) - _commands()))
+    assert set(grouped) - PENDING == _commands() - PENDING, "ungrouped: %s, unknown: %s" % (
+        sorted(_commands() - set(grouped)), sorted(set(grouped) - _commands() - PENDING))
+
+
+def _section(text: str, title: str) -> str:
+    return text.split(NL + title + ":" + NL, 1)[1].split(NL + NL, 1)[0]
+
+
+NL = "\n"
+
+
+def test_groups_put_everyday_first_and_developer_last():
+    text = cli.build_parser().format_help()
+    titles = [t for t, _ in cli.GROUPS]
+    assert titles[0] == "Everyday" and titles[-1] == "Developer" and "Advanced" in titles
+    at = [text.index(NL + t + ":" + NL) for t in titles]
+    assert at == sorted(at)
+    every = NL + _section(text, "Everyday")
+    for n in ("q", "show", "undo", "run", "setup"):
+        assert NL + "  " + n + " " in every, n
+    dev = _section(text, "Developer")
+    assert {x.strip() for x in dev.replace(NL, ",").split(",") if x.strip()} == {
+        "trial", "ab", "bench", "improve", "namecheck"}
+    adv = _section(text, "Advanced")
+    for n in ("where", "projects", "intake", "init", "uninstall", "repair", "agents"):
+        assert "  " + n + " " in adv, n
+    if "demo" not in _commands():
+        assert " demo " not in text                       # not listed before it exists
+
+
+@pytest.mark.parametrize("name", ["trial", "ab", "bench", "improve", "namecheck", "where", "intake", "agents"])
+def test_moved_commands_are_still_callable(name):
+    with pytest.raises(SystemExit) as e:
+        cli.parse([name, "-h"])
+    assert e.value.code == 0
 
 
 def test_help_shows_every_command_and_the_new_description():

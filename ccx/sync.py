@@ -136,13 +136,51 @@ def codex_memory_block(p: Paths) -> str:
 IMPORTS = {"claude"}       # context files that load `@path` themselves, so the block points at the live original
 
 
-def memory_targets() -> list[tuple[str, Path]]:
+def on_path(agent: str) -> bool:
+    """Installed where the person runs it: on PATH (or an explicit CCX_<AGENT>_BIN), not only found inside an
+    installed app (an adapter's `locate`, e.g. the DeepSeek desktop app's own dsh)."""
+    return bool(os.environ.get(f"CCX_{agent.upper()}_BIN") or shutil.which(agent)
+                or (os.name == "nt" and shutil.which(agent + ".cmd")))
+
+
+def _has_memory_block(f: Path) -> bool:
+    try:
+        return BEGIN.format(id="memory") in f.read_text(encoding="utf-8")
+    except OSError:
+        return False
+
+
+def memory_targets(include_located: bool = False) -> list[tuple[str, Path]]:
     """(agent, its context file) for every tool that can sit in the lead's chair (I6: from the adapters); a
-    community one only when it is installed, so no folder of a tool the person never installed is created."""
+    community one only when it is installed, so no folder of a tool the person never installed is created. One found
+    only inside an installed app, not on PATH, is not connected by default (walkthrough 2026-10-29: sync wrote
+    ~/.dsh/AGENTS.md for a dsh the person never ran): only when its file already has ccx's block (connected before),
+    or with include_located (uninstall, which takes blocks out)."""
     from . import agents
     from .runners import find_bin
-    return [(ad.name, ad.home() / ad.context_file) for ad in agents.all_adapters()
-            if ad.can_lead and ad.home and (ad.support == "official" or find_bin(ad.name))]
+    out = []
+    for ad in agents.all_adapters():
+        if not (ad.can_lead and ad.home):
+            continue
+        f = ad.home() / ad.context_file
+        if ad.support == "official" or on_path(ad.name):
+            out.append((ad.name, f))
+        elif find_bin(ad.name) and (include_located or _has_memory_block(f)):
+            out.append((ad.name, f))
+    return out
+
+
+def located_only() -> list[tuple[str, str]]:
+    """(agent, where) for lead-capable community tools found only inside an installed app and not connected."""
+    from . import agents
+    from .runners import find_bin
+    out = []
+    for ad in agents.all_adapters():
+        if ad.can_lead and ad.home and ad.support != "official" and not on_path(ad.name):
+            where = find_bin(ad.name)
+            if where and not _has_memory_block(ad.home() / ad.context_file):
+                out.append((ad.name, where))
+    return out
 
 
 def sync_memory(p: Paths, plan: Plan) -> None:
@@ -153,7 +191,8 @@ def sync_memory(p: Paths, plan: Plan) -> None:
             plan.warnings.append(f"external snapshot {p.memory_index} does not exist")
         plan.actions.append(f"(skip) snapshot {p.memory_index} is external: both tools already load it")
         from .runners import find_bin
-        for agent, cf in memory_targets():
+        # include_located: this only warns and writes nothing, so a dsh found only inside its app is still told
+        for agent, cf in memory_targets(include_located=True):
             if agent in ("claude", "codex") or not find_bin(agent):
                 continue
             text = cf.read_text(encoding="utf-8") if cf.exists() else ""
@@ -173,7 +212,12 @@ def sync_memory(p: Paths, plan: Plan) -> None:
         old = cf.read_text(encoding="utf-8") if cf.exists() else ""
         new = upsert_block(old, "memory", body)
         if new != old:
-            plan.do(f"update managed block in {cf}", lambda cf=cf, new=new: _write(cf, new))
+            plan.do(f"{'update managed block in' if cf.exists() else 'create'} {cf}"
+                    + ("" if cf.exists() else " with the managed block"), lambda cf=cf, new=new: _write(cf, new))
+    for agent, where in located_only():
+        plan.warnings.append(f"optional: {agent} was found at {where} (inside its installed app, not on PATH) and is "
+                             f"not connected; to let it lead with the shared memory, put it on PATH and run `ccx sync` "
+                             "again")
 
 
 # ------------------------------------------------------------ hooks
@@ -307,7 +351,9 @@ def sync_hooks(p: Paths, plan: Plan) -> None:
         except tomllib.TOMLDecodeError as e:
             plan.warnings.append(f"would make {ct} invalid TOML ({e}); Codex hook NOT added")
             return
-        plan.do(f"add SessionStart + UserPromptSubmit hook block to {ct} (trust each once via /hooks in Codex)",
+        what = (f"add SessionStart + UserPromptSubmit hook block to {ct}" if ct.exists() else
+                f"{'create' if plan.apply else 'will create'} {ct} with the SessionStart + UserPromptSubmit hook block")
+        plan.do(f"{what} (trust each once via /hooks in Codex)",
                 lambda: (_write(ct, new), _anchor_file(p).unlink(missing_ok=True)))
 
 
@@ -420,10 +466,12 @@ def load_registry(p: Paths) -> dict:
     return raw
 
 
-def import_codex_mcp(p: Paths, plan: Plan) -> None:
+def import_codex_mcp(p: Paths, plan: Plan, quiet_missing: bool = False) -> None:
+    """quiet_missing: the hooks part already says it will create config.toml; one line, not a second warning."""
     ct = codex_home() / "config.toml"
     if not ct.exists():
-        plan.warnings.append(f"no {ct}; nothing to import")
+        if not quiet_missing:
+            plan.warnings.append(f"no {ct}; nothing to import")
         return
     conf = tomllib.loads(ct.read_text(encoding="utf-8"))
     reg = load_registry(p)
@@ -504,7 +552,7 @@ def sync_all(p: Paths, apply: bool, parts: list[str]) -> Plan:
     if "hooks" in parts:
         sync_hooks(p, plan)
     if "mcp" in parts:
-        import_codex_mcp(p, plan)
+        import_codex_mcp(p, plan, quiet_missing="hooks" in parts)
         if apply:
             sync_mcp(p, plan)
         else:
@@ -542,7 +590,7 @@ def uninstall(p: Paths, apply: bool) -> Plan:
                     _anchor_file(p).parent.mkdir(parents=True, exist_ok=True)
                     _anchor_file(p).write_text(after, encoding="utf-8")
             plan.do(f"remove ccx hook block from {ct}", remove)
-    for _agent, f in memory_targets():
+    for _agent, f in memory_targets(include_located=True):
         if f.exists():
             old = f.read_text(encoding="utf-8")
             b, e = BEGIN.format(id="memory"), END.format(id="memory")

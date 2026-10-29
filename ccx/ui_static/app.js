@@ -171,6 +171,14 @@
     const bad = ((D && D.quota) || []).filter(w => w.used != null && !w.note && w.projected > 1).sort((a, b) => b.projected - a.projected)[0];
     return bad ? `<span class="warn">${t("ov_quota_bad", {a: agentName(bad.agent), p: Math.round(bad.projected * 100)})}</span>` : "";
   }
+  /* an empty hub: what to do first, the same first command as README and `ccx setup`, then the demo if this ccx has it */
+  function startHTML() {
+    const s = (D && D.start) || {};
+    if (!s.first) return "";
+    const code = c => ({__html: `<code>${esc(c)}</code>`});
+    return `<p class="start">${t("empty_first", {cmd: code(s.first)})}` +
+      (s.demo ? `<br>${t("empty_demo", {cmd: code(s.demo)})}` : "") + `</p>`;
+  }
   function renderOverview() {
     const todos = [];
     let running = 0, tasks = 0;
@@ -181,7 +189,7 @@
     const ct = convTodos();
     let h = banner() + `<h1>${t("ov_title")}</h1>`;
     if (!tasks) {
-      h += `<p class="lead">${t("empty")}</p>` + (ct.length ? `<h2>${t("todo_all")}</h2><div class="todo">${convTodoHTML(ct)}</div>` : "")
+      h += `<p class="lead">${t("empty")}</p>` + startHTML() + (ct.length ? `<h2>${t("todo_all")}</h2><div class="todo">${convTodoHTML(ct)}</div>` : "")
         + sugHTML() + leadsHTML() + discRecentHTML() + othersHTML() + weekHTML();
       return h;
     }

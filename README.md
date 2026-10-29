@@ -51,7 +51,7 @@ when a lead session calls ccx, a task that small is still turned back to it.
 The hub `ccx setup` asks about is one folder of your own for shared memory, skills and the record of every run.
 
 You need Python 3.11+ and the `claude` and `codex` CLIs, logged in; DeepSeek (`dsh`, or a key in
-`DEEPSEEK_API_KEY`) is optional. `ccx -h` lists the everyday commands first.
+`DEEPSEEK_API_KEY`) is optional. `ccx -h` lists the everyday commands first (run, resume, show, q, undo, ui, ...) and the developer ones (trial, ab, bench) last.
 
 **Switching leads.** Claude Code did the first half and Codex should do the rest (or the other way round)? On a
 project's page in `ccx ui`, "Continue with Codex" / "Continue with Claude" runs `ccx handoff` for that project

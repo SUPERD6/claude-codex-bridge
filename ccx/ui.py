@@ -376,6 +376,26 @@ LEAD_FIXES = ("Run {rid} still fails its independent review after one fix round:
               "then `ccx verify {rid} --ok 1|0`.")
 
 
+_START: dict | None = None
+
+
+def start_hint() -> dict:
+    """The empty overview's two lines: the same first delegation README and `ccx setup` suggest, and `ccx demo`
+    (only once that command exists in this ccx)."""
+    global _START
+    if _START is None:
+        from .setup import first_command
+        try:
+            from .cli import build_parser
+            import argparse
+            sub = next(a for a in build_parser()._actions if isinstance(a, argparse._SubParsersAction))
+            demo = "ccx demo" if "demo" in sub.choices else None
+        except Exception:  # noqa: BLE001 — the hint is a nicety
+            demo = None
+        _START = {"first": first_command("codex"), "demo": demo}
+    return _START
+
+
 def _act(rec: dict, verdict: dict | None, now: float, beat: float | None) -> dict | None:
     """What the person is asked to do about this run, or None. kind: decide (red) | review (amber)."""
     rid = rec["run_id"]
@@ -436,6 +456,15 @@ def _act(rec: dict, verdict: dict | None, now: float, beat: float | None) -> dic
     if rec.get("auth_problem"):
         return {"kind": "decide", "what": "a_auth", "why": ["w_auth", {"agent": rec.get("to")}],
                 "buttons": [_btn("b_login", f"{rec.get('to')} login", "primary")]}
+    if kind == "env":
+        # the machine, not the task (delegate.env_failure): trying again meets the same wall, so no "Try again";
+        # the fix (delegate.env_hint's, in the page's language) says what to do, doctor checks the setup (copy only,
+        # not run from the page), and ccx resume continues once it is fixed
+        agent = rec.get("to") or ""
+        return {"kind": "decide", "what": "a_env",
+                "why": ["w_env_codex" if agent == "codex" else "w_env",
+                        {"agent": agent, "err": rec.get("env_error") or "", "rid": rid}],
+                "buttons": [show, _btn("b_doctor", "ccx doctor", "primary")]}
     if not rec.get("ok") or res.get("status") in ("failed", "blocked"):
         return {"kind": "decide", "what": "a_failed", "why": ["w_failed", {}],
                 "buttons": [show, _btn("b_retry", ["ccx", "resume", rid, "Try again: " + (
@@ -561,7 +590,7 @@ def hist_of_run(rec: dict, title: str) -> list[dict]:
         k = rec.get("kind")
         st = (rec.get("result") or {}).get("status")
         key = ("h_" + k) if k in ("needs_write", "check_failed", "check_broken", "review_failed", "quota", "timeout",
-                                  "over_budget", "no_changes") \
+                                  "over_budget", "no_changes", "env") \
             else "h_done" if rec.get("ok") and st in ("done", "partial") else "h_failed"
         out.append({"ts": t, "k": key, "p": {"t": title}, "tone": "ok" if key == "h_done" else "bad"})
     v = rec.get("verdict") or {}
@@ -1207,6 +1236,8 @@ def collect(p: Paths, project: Path | None = None, days: float = 7, rd: Reader |
     from .demo import is_demo
     return {
         "v": 1, "generated": now, "lang": ui_lang(cfg), "poll_s": POLL_S, "beat_s": BEAT_S, "demo": is_demo(p),
+        "start": start_hint(),                   # what an empty overview tells a new user to do first
+
         "projects": projects, "running": running, "quota": quota_view(rd, quota_wait), "leads": current,
         "agents": agents,
         "discussions": talks, "conversations": convs[:CONV_PROJECTS_MAX], "track": track, "track_min": ways.MIN_JUDGED, "suggestions": sugs,
