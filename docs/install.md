@@ -131,6 +131,7 @@ ccx show <run_id> --wait [SECONDS]    # block until it (and a review fix round) 
 ccx stats [--summary]                 # per agent × tier; --summary: spend, savings, cache share
 ccx report [--days 30] [--publish]    # offline one-file dashboard; --publish commits it to your private repo
 ccx ui [--project DIR] [--no-open] [--export FILE]   # live page on 127.0.0.1 (never calls a model; writes only yes/no on suggested notes)
+ccx demo [--no-open] [--keep] [--export FILE]       # the same page on made-up data in a temp folder: no account, offline
 ccx config set ui.lang zh            # language of ccx ui and of the lines ccx writes into conversations
 ccx config set defaults.tradeoff 0.3  # the save <-> fast knob: save / balanced / fast, or 0..1
 ccx ab done <id> --ok 1               # close an A/B sample (the ~10% the lead does itself)

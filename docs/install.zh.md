@@ -100,6 +100,7 @@ ccx show <run_id> --wait [秒数]     # 等它（连同审查后的修改轮）�
 ccx stats [--summary]               # 按 agent×级别统计；--summary 给出花费、省了多少、缓存占比
 ccx report [--days 30] [--publish]  # 看板网页（离线单文件）；--publish 提交到你的私有用量仓库
 ccx ui [--project 文件夹] [--no-open] [--export 文件]   # 本机实时页面（127.0.0.1，不调用模型；只写“建议记下的事”的同意/拒绝）
+ccx demo [--no-open] [--keep] [--export 文件]       # 同一个页面，用临时目录里编好的数据：不用账号，离线可用
 ccx config set ui.lang zh          # ccx ui 和 ccx 写进会话的提示用中文
 ccx config set defaults.tradeoff 0.3   # 省钱↔快 的旋钮：save / balanced / fast，或 0..1
 ccx ab done <id> --ok 1             # 结束一次 A/B 抽样（主智能体自己做的那 10%）

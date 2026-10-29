@@ -33,6 +33,9 @@ A/B is that feature's best case by design. Delegating small tasks *alone* left t
 3.3× the tokens, about 23 s slower); the saving with a real, long lead conversation is extrapolated, not yet measured.
 Every number, the unfavourable ones too: [docs/measured.md](docs/measured.md).
 
+**Try it without accounts:** `ccx demo` opens `ccx ui` on made-up projects, runs and costs in a temporary
+folder (offline, no Claude or Codex login; your own setup is not touched).
+
 ## Quick start
 
 ```bash
@@ -44,6 +47,12 @@ ccx run --to codex --mode read "Summarise README.md in three lines"
 
 You need Python 3.11+ and the `claude` and `codex` CLIs, logged in; DeepSeek (`dsh`, or a key in
 `DEEPSEEK_API_KEY`) is optional. `ccx -h` lists the everyday commands first.
+
+**Switching leads.** Claude Code did the first half and Codex should do the rest (or the other way round)? On a
+project's page in `ccx ui`, "Continue with Codex" / "Continue with Claude" runs `ccx handoff` for that project
+after a second click: it writes what is done, the decisions and what comes next into the project (from the current
+lead's own conversation file when it is there) and gives you the one line to paste when you open the other tool
+there. The task timeline shows which lead worked when.
 
 <p align="center"><img alt="Animated demo: ccx route picks codex:gpt-6.1-sol:medium, ccx run finishes in one attempt and ccx reruns the check, ccx verify records the verdict" src="docs/assets/demo.svg" width="100%"></p>
 
