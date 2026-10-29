@@ -15,7 +15,7 @@ DESCRIPTION = ("A team of AI coding agents: Claude Code, Codex and DeepSeek hand
 
 # `ccx -h` lists commands by what they are for; every command stays callable, the last group is names only.
 GROUPS = (
-    ("Everyday", ("setup", "doctor", "run", "ask", "resume", "stop", "verify", "ui", "where", "projects",
+    ("Everyday", ("setup", "doctor", "run", "ask", "resume", "stop", "verify", "ui", "demo", "where", "projects",
                   "peek", "board", "say", "reply", "intake")),
     ("Memory and context", ("mem", "ctx", "project", "handoff", "fresh", "inbox", "skills")),
     ("Accounting and reports", ("stats", "report", "show", "quota", "lead", "trial", "ab", "bench")),
