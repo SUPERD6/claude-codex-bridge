@@ -31,8 +31,17 @@ continue, let it edit, change a queue's budget — first shows the exact `ccx` c
 on a second click; one that starts a sub-agent says it costs money and runs in the background. The page sends only
 which button, never a command; the server runs only a fixed list of ccx commands, as an argument list, from this page
 only (same origin, a token, a one-time confirmation). Suggested notes have a yes / no button. Showing the page reads
-only files ccx and the tools already write — no model is called — listens on 127.0.0.1 only, and exits a minute after
-the page is closed.
+only files ccx and the tools already write — no model is called — listens on 127.0.0.1 only, and exits about a minute after
+the page is closed (up to 5 minutes if it was a background tab).
+A review card shows, side by side, what the agent says (its summary and how it says it verified) and what ccx ran
+(the check command, its exit code and the last ~800 characters of output), then the files actually changed and the
+diff, computed from ccx's own snapshots of the run (the tree before it, `undo.json`, to the tree it left, `end.json`
+or `undo.json`'s `after`), never from the folder as it is now; when the files the agent named and the files actually
+changed differ, a red box lists the difference. Long diffs are cut with a visible "truncated" note; runs from before
+these snapshots show the agent's own list with a note. The home page lists every run going on now (agent, time so
+far, tokens when known) with its stop button, which asks for the same second click. A background tab says so in its
+"still open" signal, and the server then waits 5 minutes instead of one before it exits. To-do chips are buttons
+(keyboard reachable) and new to-dos are announced to screen readers.
 `ccx ui --export snapshot.html` writes a static copy; `ccx config set ui.lang zh|en` picks the language.
 Evaluations and tests (eval-* labels, `--no-ab`, ccx's probes, runs in the temporary folder or a project's `.ccx`
 folder) stay hidden until you press "show evaluations and tests"; `ccx verify RUN --dismiss --note why` clears a

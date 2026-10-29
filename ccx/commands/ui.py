@@ -18,7 +18,7 @@ def cmd_ui(a) -> int:
     srv = ui.UI(p, project, a.days, port=a.port)
     print(f"ccx ui: {srv.url}", flush=True)
     print("buttons that change something show their ccx command and run it on a second click; stops on its own "
-          "about a minute after the page is closed (or Ctrl+C)", file=sys.stderr, flush=True)
+          "about a minute after the page is closed, up to 5 minutes if it was a background tab (or Ctrl+C)", file=sys.stderr, flush=True)
     if not a.no_open:
         ui.open_browser(srv.url)
     try:
