@@ -13,17 +13,20 @@ DESCRIPTION = ("A team of AI coding agents: Claude Code, Codex and DeepSeek hand
                "sub-agent, sharing memory and working context, and route each piece to the cheapest agent likely "
                "to finish it.")
 
-# `ccx -h` lists commands by what they are for; every command stays callable, the last group is names only.
+# `ccx -h` lists commands by what they are for; every command stays callable. Groups in NAMES_ONLY list names
+# only; Developer (measuring ccx itself) comes last. A name not registered (e.g. `demo` before it lands) is skipped.
 GROUPS = (
-    ("Everyday", ("setup", "doctor", "run", "ask", "resume", "stop", "undo", "verify", "ui", "where", "projects",
-                  "peek", "board", "say", "reply", "intake")),
+    ("Everyday", ("setup", "doctor", "run", "ask", "resume", "stop", "undo", "verify", "show", "q", "ui", "demo",
+                  "peek", "board", "say", "reply")),
     ("Memory and context", ("mem", "ctx", "project", "handoff", "fresh", "inbox", "skills")),
-    ("Accounting and reports", ("stats", "report", "show", "quota", "lead", "trial", "ab", "bench")),
-    ("Maintenance and advanced", ("task", "send", "plan", "batch", "route", "propose", "way", "discuss", "q",
-                                  "turn", "sum", "namecheck", "archive", "config", "autonomy", "improve",
-                                  "selftest", "sync",
-                                  "init", "uninstall", "agents", "repair")),
+    ("Accounting and reports", ("stats", "report", "quota", "lead")),
+    ("Advanced", ("where", "projects", "intake", "init", "uninstall", "repair", "agents")),
+    ("Maintenance", ("task", "send", "plan", "batch", "route", "propose", "way", "discuss", "turn", "sum", "archive",
+                     "config", "autonomy", "selftest", "sync")),
+    ("Developer", ("trial", "ab", "bench", "improve", "namecheck")),
 )
+NAMES_ONLY = ("Maintenance", "Developer")
+UNGROUPED_TO = "Maintenance"        # a new command nobody grouped yet still shows up, here
 
 
 def _width() -> int:
@@ -34,14 +37,13 @@ def _grouped_help(sub: argparse._SubParsersAction) -> str:
     helps = {a.dest: a.help or "" for a in sub._choices_actions}
     width = _width()
     placed = {n for _, names in GROUPS for n in names}
-    groups = list(GROUPS)
-    rest = tuple(n for n in sub.choices if n not in placed)  # a new command nobody grouped yet still shows up
-    if rest:
-        groups[-1] = (groups[-1][0], groups[-1][1] + rest)
+    rest = tuple(n for n in sub.choices if n not in placed)
+    groups = [(title, tuple(n for n in names if n in sub.choices) + (rest if title == UNGROUPED_TO else ()))
+              for title, names in GROUPS]
     lines = []
-    for i, (title, names) in enumerate(groups):
+    for title, names in groups:
         lines.append(f"{title}:")
-        if i == len(groups) - 1:
+        if title in NAMES_ONLY:
             lines += textwrap.wrap(", ".join(names), width, initial_indent="  ", subsequent_indent="  ")
         else:
             for n in names:

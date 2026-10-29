@@ -5,3 +5,6 @@
 - Independent review: the brief says ccx already ran the acceptance check ("You need not run it yourself", with the
   end of its output when ccx has it), and a Claude reviewer is asked for one plain git command per Bash call. No new
   permission: in r6a the refused reviewer calls were compound reads (`| head`, `cd && grep`), not test commands.
+- `ccx -h`: show and q join Everyday; where, projects, intake, init, uninstall, repair and agents move to a new
+  Advanced group; trial, ab, bench, improve and namecheck move to a Developer group listed last. Every command is
+  still callable.
