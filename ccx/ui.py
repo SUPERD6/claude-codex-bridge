@@ -38,6 +38,14 @@ without that and the server exits, 5 minutes when the page's last word was that 
 
 The decision card (U1) asks /api/judge/<run> for the change from ccx's own snapshots (undo.json -> end.json or
 undo.json's `after`), never from the live folder; read-only `git diff` of two object ids, capped in size.
+
+The agents' conversation (U2, docs/board.md): each project's board (<project>/.ccx/board.jsonl, what `ccx say` /
+`ccx reply` write) is read incrementally, read only; /api/data carries what waits for the person (a thread stopped
+by the machine-message cap, a message that asks the person), /api/conv/<project> the threads, newest first, capped
+in size. Board text is written by agents: the page escapes it. The one write (I1): the person's reply, through the
+same two steps as a button (/api/say/prepare answers what will be written and a one-time nonce, /api/say/run
+writes it once), at most SAY_MAX characters (longer is refused, never cut), written by board.post as the person
+(from user, via ui) like `ccx reply`, never run: no command, no shell.
 """
 from __future__ import annotations
 
@@ -56,7 +64,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path, PureWindowsPath
 from urllib.parse import urlsplit
 
-from . import agents
+from . import agents, board
 from . import queue as wq
 from .config import Paths, claude_home, codex_home, load_config
 from .ledger import is_eval
@@ -1067,6 +1075,15 @@ def collect(p: Paths, project: Path | None = None, days: float = 7, rd: Reader |
         track = {}
     talks = [{**discuss.view(d), "test": is_scratch(d.get("cwd"), scratch)} for d in discuss.recent(p, since)
              if not proj or project_root(d.get("cwd")) == proj][:10]
+    convs = []                                                # U2: the agents' boards, what waits for the person
+    for pid, root in board_roots(rd, list(tasks_by_root), proj).items():
+        try:
+            c = conv_summary(rd, root, since, cfg, catalog.get(root), scratch)
+        except Exception:  # noqa: BLE001 — an odd board never breaks the page
+            c = None
+        if c:
+            convs.append(c)
+    convs.sort(key=lambda c: -(c["last"] or 0))
     from . import memsuggest
     try:                                                      # H5: notes that wait for the person's yes or no
         ranked = memsuggest.ranked(p)              # the first few only: the rules sift, the person judges
@@ -1078,7 +1095,7 @@ def collect(p: Paths, project: Path | None = None, days: float = 7, rd: Reader |
         "v": 1, "generated": now, "lang": ui_lang(cfg), "poll_s": POLL_S, "beat_s": BEAT_S,
         "projects": projects, "running": running, "quota": quota_view(rd, quota_wait), "leads": current,
         "agents": agents,
-        "discussions": talks, "track": track, "track_min": ways.MIN_JUDGED, "suggestions": sugs,
+        "discussions": talks, "conversations": convs[:CONV_PROJECTS_MAX], "track": track, "track_min": ways.MIN_JUDGED, "suggestions": sugs,
         "suggestions_total": n_sugs, "others": others, "others_total": len(quiet),
         "month": month_view(rd, quota_wait), "inbox": _inbox(rd),
         "week": {"usd": round(sum(_usd(r) for r in week), 4),
@@ -1319,6 +1336,148 @@ def judge(p: Paths, run_id: str) -> dict:
     return out
 
 
+# ------------------------------------------------------------------ U2 / I1: the agents' conversation (the board)
+SAY_MAX = 4000                # characters of one reply from the page; longer is refused (never cut)
+SAY_BODY_MAX = 64_000         # bytes of the JSON body that carries it (escapes included)
+CONV_PROJECTS_MAX = 30        # projects with a board in /api/data
+CONV_TODOS_MAX = 40           # to-dos of one project in /api/data
+CONV_THREADS_MAX = 40         # threads in /api/conv, newest first
+CONV_MSGS_MAX = 80            # the latest messages of one thread
+CONV_MSG_CHARS = 6000         # one message's text on the page; longer is cut there and marked (the board keeps it)
+CONV_TOTAL_CHARS = 400_000    # all the text of one /api/conv answer
+CONV_FIELD = 120              # from / to / via / thread names as shown (a thread's exact name goes as `key`)
+_PID = re.compile(r"p[0-9a-f]{10}")
+
+
+def _fold_board(state: list, line: str) -> list:
+    try:
+        e = json.loads(line)
+    except ValueError:
+        return state
+    if isinstance(e, dict) and isinstance(e.get("id"), int) and not isinstance(e.get("id"), bool):
+        state.append(e)
+    return state
+
+
+def _board_file(root: Path) -> Path:
+    return root / ".ccx" / "board.jsonl"
+
+
+def board_entries(rd: Reader, root: Path) -> list[dict]:
+    """The project's board, read from where the last read stopped (it is append-only). Never written here."""
+    f = _board_file(root)
+    return rd.lines(f, _fold_board, []) if f.exists() else []
+
+
+def _humans(rd: Reader, root: Path) -> dict:
+    h = rd.json_file(root / ".ccx" / "board.humans.json")
+    return {k: v for k, v in h.items() if isinstance(v, int)} if isinstance(h, dict) else {}
+
+
+def _max_machine(cfg: dict) -> int:
+    try:
+        return int((cfg.get("board") or {}).get("max_machine_turns", board.MAX_MACHINE))
+    except (TypeError, ValueError):
+        return board.MAX_MACHINE
+
+
+def _board_ts(s) -> float | None:
+    """board.jsonl's `ts` (local time, %Y-%m-%dT%H:%M:%S) as seconds."""
+    try:
+        return time.mktime(time.strptime(str(s)[:19], "%Y-%m-%dT%H:%M:%S"))
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def _field(v) -> str:
+    return _clip(v if isinstance(v, str) else "" if v is None else str(v), CONV_FIELD)
+
+
+def board_roots(rd: Reader, roots: list[Path], proj: Path | None) -> dict[str, Path]:
+    """The projects whose board the page reads: the ones it shows and the `ccx projects` catalog (or only --project),
+    each with a board file. Nothing else is ever opened."""
+    out: dict[str, Path] = {}
+    for r in ([proj] if proj else [*roots, *_catalog(rd)]):
+        if r is not None and _board_file(r).exists():
+            out.setdefault(_pid(r), r)
+    return out
+
+
+def _waits(rd: Reader, root: Path, es: list[dict], cfg: dict) -> list[dict]:
+    try:
+        return board.waiting_on_person(es, _humans(rd, root), _max_machine(cfg))
+    except Exception:  # noqa: BLE001 — an odd line never breaks the page
+        return []
+
+
+def conv_summary(rd: Reader, root: Path, since: float, cfg: dict, entry: dict | None,
+                 scratch: list[Path]) -> dict | None:
+    """One project's board for /api/data: counts, and the to-dos (U2) — a thread stopped by the machine-message cap,
+    a message that asks the person — each with the message's first line and the thread to open."""
+    es = board_entries(rd, root)
+    if not es:
+        return None
+    by_id = {e["id"]: e for e in es}
+    todos = []
+    for w in _waits(rd, root, es, cfg):
+        e = by_id.get(w["id"]) or {}
+        ts = _board_ts(e.get("ts"))
+        if ts is not None and ts < since:              # old: the to-do list is about now (the thread still shows)
+            continue
+        todos.append({"kind": w["kind"], "thread": _field(w["thread"]), "key": str(w["thread"]), "id": w["id"],
+                      "run": w["run"], "from": _field(e.get("from")), "ts": ts, "text": _short(str(e.get("text") or ""))})
+    todos.sort(key=lambda x: -x["id"])
+    return {"id": _pid(root), "name": (entry or {}).get("name") or root.name or str(root), "path": str(root),
+            "threads": len({str(e.get("thread")) for e in es}), "messages": len(es),
+            "last": _board_ts(es[-1].get("ts")), "todos": todos[:CONV_TODOS_MAX],
+            "test": is_scratch(root, scratch)}
+
+
+def _reply_address(parent: dict) -> str:
+    """Whom a reply to `parent` goes to: its writer, or everyone when the person wrote it (as `ccx reply`)."""
+    frm = str(parent.get("from") or "")
+    return frm if board.vendor_of(frm) != "user" else "all"
+
+
+def conversation(rd: Reader, root: Path, cfg: dict, pid: str, name: str) -> dict:
+    """/api/conv/<project>: the board's threads, newest first, each message with who, when, to whom and its text
+    (data written by agents: the page escapes it). Capped: CONV_THREADS_MAX threads, the last CONV_MSGS_MAX messages
+    of each, CONV_MSG_CHARS per message and CONV_TOTAL_CHARS in all, each cut marked."""
+    es = board_entries(rd, root)
+    waits = _waits(rd, root, es, cfg)
+    stuck = {w["thread"]: w["run"] for w in waits if w["kind"] == "stuck"}
+    asks = {w["id"] for w in waits if w["kind"] == "asks"}
+    by: dict[str, list[dict]] = {}
+    for e in es:
+        by.setdefault(str(e.get("thread")), []).append(e)
+    order = sorted(by, key=lambda th: -by[th][-1]["id"])
+    used, threads = 0, []
+    for th in order[:CONV_THREADS_MAX]:
+        msgs = by[th]
+        last = msgs[-1]
+        item = {"thread": _field(th), "key": th, "n": len(msgs), "last": _board_ts(last.get("ts")), "stuck": th in stuck,
+                "run": stuck.get(th, 0), "asks": [e["id"] for e in msgs if e["id"] in asks],
+                "reply": {"id": last["id"], "to": _field(_reply_address(last))},
+                "more": max(0, len(msgs) - CONV_MSGS_MAX), "clipped": False, "messages": []}
+        for e in msgs[-CONV_MSGS_MAX:]:
+            if used >= CONV_TOTAL_CHARS:
+                item["clipped"] = True
+                break
+            text = str(e.get("text") or "")
+            shown = text[:min(CONV_MSG_CHARS, CONV_TOTAL_CHARS - used)]
+            used += len(shown)
+            rt = e.get("reply_to")
+            item["messages"].append({
+                "id": e["id"], "ts": _board_ts(e.get("ts")), "from": _field(e.get("from")),
+                "who": _field(board.vendor_of(str(e.get("from") or ""))), "to": _field(e.get("to")),
+                "via": _field(e.get("via")), "reply_to": rt if isinstance(rt, int) and not isinstance(rt, bool) else None,
+                "text": shown, "cut": len(shown) < len(text), "chars": len(text), "asks": e["id"] in asks,
+                "remote": bool(e.get("remote"))})
+        threads.append(item)
+    return {"project": {"id": pid, "name": name, "path": str(root)}, "threads": threads, "threads_total": len(by),
+            "max_machine": _max_machine(cfg), "say_max": SAY_MAX, "generated": time.time()}
+
+
 # ------------------------------------------------------------------ running a button's ccx command (K6)
 def execute(p: Paths, argv: list[str], background: bool) -> dict:
     """Run one ccx command a button offers: this copy of ccx, an argument list (no shell), no console window.
@@ -1380,6 +1539,8 @@ class UI:
         self.reader = Reader(p)
         self.lock = threading.Lock()
         self.pending: dict[str, dict] = {}
+        self.says: dict[str, dict] = {}            # I1: prepared replies, by nonce
+        self.boards: dict[str, tuple[Path, str]] = {}   # U2: project id -> (folder, name) of the boards shown
         self.why_stopped = ""
         ui = self
 
@@ -1429,12 +1590,16 @@ class UI:
                     if path == "/api/data":
                         with ui.lock:
                             data = collect(ui.p, ui.project, ui.days, ui.reader, quota_wait=False)
+                            ui.remember_boards(data)
                         return self._send(200, json.dumps(data, ensure_ascii=False, default=list).encode("utf-8"))
                     if path.startswith("/api/run/"):
                         return self._send(200, json.dumps(run_detail(ui.p, path[len("/api/run/"):]),
                                                           ensure_ascii=False).encode("utf-8"))
                     if path.startswith("/api/judge/"):        # U1: read-only, one run's own records
                         return self._send(200, json.dumps(ui.judge(path[len("/api/judge/"):]),
+                                                          ensure_ascii=False).encode("utf-8"))
+                    if path.startswith("/api/conv/"):         # U2: read-only, one project's board
+                        return self._send(200, json.dumps(ui.conversation(path[len("/api/conv/"):]),
                                                           ensure_ascii=False).encode("utf-8"))
                 except (FileNotFoundError, ValueError) as e:
                     return self._send(404, json.dumps({"error": str(e)[:200]}).encode())
@@ -1454,6 +1619,8 @@ class UI:
                     return self._suggestion()
                 if urlsplit(self.path).path in ("/api/act/prepare", "/api/act/run"):
                     return self._act(urlsplit(self.path).path.rsplit("/", 1)[1])
+                if urlsplit(self.path).path in ("/api/say/prepare", "/api/say/run"):
+                    return self._act(urlsplit(self.path).path.rsplit("/", 1)[1], say=True)
                 return self._send(404, b'{"error":"not found"}')
 
             def _drain(self):
@@ -1474,22 +1641,26 @@ class UI:
                     raise ValueError("a JSON object")
                 return body
 
-            def _act(self, step: str):
+            def _act(self, step: str, say: bool = False):
                 """K6, a button that runs a ccx command, in two requests. prepare {project, task, piece|null, btn,
                 fill}: the server finds that button in what it shows now, fills and checks the form values and
                 answers the exact command with a one-time nonce. run {nonce}: the page's second click (the person
-                read the command) runs it once. The page never sends a command, only which button."""
+                read the command) runs it once. The page never sends a command, only which button.
+                say (I1): the person's reply to a board thread, the same two steps: prepare {project, thread,
+                reply_to|null, text} answers what will be written, run {nonce} writes it once (never runs it)."""
                 if not self._same_origin():
                     return self._deny("origin")
                 if not self.headers.get("Content-Type", "").startswith("application/json"):
                     return self._send(415, b'{"error":"json only"}')
                 try:
-                    body = self._body()
-                    if step == "prepare":
+                    body = self._body(SAY_BODY_MAX if say else 4000)
+                    if say:
+                        out = ui.prepare_say(body) if step == "prepare" else ui.run_say(str(body.get("nonce") or ""))
+                    elif step == "prepare":
                         out = ui.prepare(body)
                     else:
                         out = ui.run_prepared(str(body.get("nonce") or ""))
-                except LookupError as e:
+                except (LookupError, FileNotFoundError) as e:
                     return self._send(409, json.dumps({"error": str(e)[:300]}).encode())
                 except (ValueError, TypeError, KeyError) as e:
                     return self._send(400, json.dumps({"error": str(e)[:300]}).encode())
@@ -1572,6 +1743,82 @@ class UI:
             raise LookupError("this confirmation has expired or was used: press the button again")
         out = execute(self.p, job["argv"], background=job["spends"])
         return {**out, "cmd": " ".join(_q(x) for x in job["argv"])}
+
+    # ---------------------------------------------------------------- U2 / I1: the conversation and the reply
+    def remember_boards(self, data: dict) -> None:
+        self.boards = {c["id"]: (Path(c["path"]), c["name"]) for c in data.get("conversations") or []}
+
+    def conv_root(self, pid: str) -> tuple[Path, str]:
+        """The folder of a board the page shows (by project id): never a path the page sends."""
+        if not _PID.fullmatch(pid or ""):
+            raise ValueError("bad project id")
+        if pid not in self.boards:
+            with self.lock:
+                self.remember_boards(collect(self.p, self.project, self.days, self.reader, quota_wait=False))
+        if pid not in self.boards:
+            raise FileNotFoundError("no conversation for that project")
+        return self.boards[pid]
+
+    def conversation(self, pid: str) -> dict:
+        root, name = self.conv_root(pid)
+        with self.lock:
+            return conversation(self.reader, root, self.reader.cfg(), pid, name)
+
+    def prepare_say(self, want: dict) -> dict:
+        """The person's reply, first step: check it (a string, not empty, at most SAY_MAX characters: longer is
+        refused, nothing is cut), find the thread and the message it answers (default: the thread's last), and
+        answer what will be written, with a one-time nonce. Nothing is written yet."""
+        text = want.get("text")
+        if not isinstance(text, str):
+            raise ValueError("text: a string")
+        if not text.strip():
+            raise ValueError("an empty message")
+        if len(text) > SAY_MAX:
+            raise ValueError(f"at most {SAY_MAX} characters, this has {len(text)}: nothing was sent or cut")
+        root, _ = self.conv_root(str(want.get("project") or ""))
+        thread = want.get("thread")
+        if not isinstance(thread, str) or not thread:
+            raise ValueError("thread: a name")
+        msgs = [e for e in board.entries(root) if str(e.get("thread")) == thread]   # a fresh read, read only
+        if not msgs:
+            raise LookupError("that thread is not on the board: reload")
+        rid = want.get("reply_to")
+        if rid is None:
+            parent = msgs[-1]
+        else:
+            if isinstance(rid, bool) or not isinstance(rid, int):
+                raise ValueError("reply_to: a message id")
+            parent = next((e for e in msgs if e.get("id") == rid), None)
+            if parent is None:
+                raise LookupError("that message is not in this thread: reload")
+        to = board.norm(_reply_address(parent), allow_all=True)
+        nonce = secrets.token_urlsafe(18)
+        now = time.time()
+        with self.lock:
+            self.says = {k: v for k, v in self.says.items() if v["until"] > now}
+            if len(self.says) >= 20:
+                raise LookupError("too many unconfirmed replies: wait a minute")
+            self.says[nonce] = {"root": root, "thread": thread, "reply_to": parent["id"], "to": to, "text": text,
+                                "until": now + ACT_TTL_S}
+        return {"nonce": nonce, "thread": thread, "reply_to": parent["id"], "to": to, "chars": len(text),
+                "cmd": f"ccx reply {parent['id']}", "ttl_s": ACT_TTL_S}
+
+    def run_say(self, nonce: str) -> dict:
+        """Second step: write the prepared reply to the board once, as the person (from user, via ui), the way
+        `ccx reply` does: board.post, one JSON line; the text is never run."""
+        with self.lock:
+            job = self.says.pop(nonce, None)          # once
+        if not job or job["until"] < time.time():
+            raise LookupError("this confirmation has expired or was used: press reply again")
+        e = board.post(job["root"], "user", job["to"], job["text"], thread=job["thread"], reply_to=job["reply_to"],
+                       via="ui", max_machine=_max_machine(self.reader.cfg()))
+        log = self.p.state / "ui-actions.jsonl"
+        log.parent.mkdir(parents=True, exist_ok=True)
+        with open(log, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"ts": time.time(), "say": {"thread": e["thread"], "id": e["id"], "to": e["to"],
+                                                            "reply_to": e["reply_to"], "chars": len(e["text"])},
+                                 "via": "ui"}, ensure_ascii=False) + "\n")
+        return {"ok": True, "posted": {k: e[k] for k in ("id", "thread", "to", "reply_to", "via")}}
 
     @property
     def url(self) -> str:
