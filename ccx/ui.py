@@ -916,13 +916,18 @@ def lead_switch(rd: Reader, root: Path, tasks: list[dict]) -> dict:
     cands = [(h["ts"], h["to"]) for h in hist if h["to"] in LEAD_NAMES]
     cands += [(float(t.get("last") or t.get("asked") or 0), (t.get("lead") or {}).get("agent")) for t in tasks
               if (t.get("lead") or {}).get("agent") in LEAD_NAMES]
-    current = max(cands, key=lambda c: c[0])[1] if cands else None
+    newest = max(cands, key=lambda c: c[0]) if cands else None
+    current = newest[1] if newest else None
+    # the periods come from the handoff records; a task led by someone else after the last handoff starts one more
     periods, agent, since = [], (hist[0]["from"] if hist else current), None
     for h in hist:
         periods.append({"agent": agent, "since": since, "until": h["ts"]})
         agent, since = h["to"], h["ts"]
-    if agent or current:
-        periods.append({"agent": current or agent, "since": since, "until": None})
+    if hist and current and current != agent and newest[0] > since:
+        periods.append({"agent": agent, "since": since, "until": newest[0]})
+        agent, since = current, newest[0]
+    if agent:
+        periods.append({"agent": agent, "since": since, "until": None})
     targets = [a for a in ("claude", "codex") if a != current]
     if current != "dsh" and rd.every("dsh-bin", 60, _dsh_ready):
         targets.append("dsh")
@@ -1616,19 +1621,21 @@ def handoff_result(argv: list[str], out: str) -> dict | None:
         got = json.loads(out[out.index("{"):]) if "{" in out else None
     except ValueError:
         got = None
+    from .commands.memory import SHOWN_AT_START, paste_line
     if isinstance(got, dict) and got.get("handoff"):
+        # `note` is set when no text went in: a blank template the person must fill in before giving the line
         return {"file": str(got["handoff"]), "paste": str(got.get("paste") or ""), "to": to,
-                "root": str(root or ""), "from_transcript": got.get("from_transcript")}
+                "root": str(root or ""), "from_transcript": got.get("from_transcript"),
+                "blank": bool(got.get("note")), "shown_at_start": to in SHOWN_AT_START}
     if root is None:
         return None
-    from .commands.memory import FRESH_PROMPT
     from .project import _order
     d = root / ".ccx" / "handoffs"
     files = sorted(d.glob("*.md"), key=_order) if d.is_dir() else []
     if not files:
         return None
-    return {"file": str(files[-1]), "paste": FRESH_PROMPT.format(file=files[-1].relative_to(root).as_posix()),
-            "to": to, "root": str(root), "from_transcript": None}
+    return {"file": str(files[-1]), "paste": paste_line(to, files[-1].relative_to(root).as_posix()),
+            "to": to, "root": str(root), "from_transcript": None, "blank": False, "shown_at_start": to in SHOWN_AT_START}
 
 
 # ------------------------------------------------------------------ running a button's ccx command (K6)

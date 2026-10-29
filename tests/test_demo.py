@@ -40,19 +40,29 @@ def post(srv, path, body):
     return r.status, json.loads(r.read() or b"{}")
 
 
+HOMES = ("CCX_HUB", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "DSH_HOME")
+
+
+def listing(env):
+    return {k: sorted(str(f) for f in Path(env[k]).rglob("*")) for k in HOMES}
+
+
 @pytest.fixture
-def built():
+def built(monkeypatch):
     """The demo in a new folder of the temporary folder (as `ccx demo` makes it: a short path, as Claude Code's own
-    session folders need), this process pointed at it, and the test's own hub kept to check that nothing outside the
-    demo folder was written."""
-    own_hub = Path(os.environ["CCX_HUB"])
+    session folders need), built while this process still points at the test's own hub and tool homes (build()
+    scopes its environment itself), then pointed at the demo. The own homes are kept to check nothing was written."""
+    monkeypatch.setattr(ui, "_dsh_ready", lambda: False)        # whether this machine has dsh is no input
+    own = {k: os.environ[k] for k in HOMES}
+    before, env_before = listing(own), dict(os.environ)
     base = demo.new_base()
     try:
+        p = demo.build(base)
+        assert dict(os.environ) == env_before and listing(own) == before
         with mock.patch.dict(os.environ, demo.env(base)):
-            p = demo.build(base)
-            yield base, p, own_hub
+            yield base, p, own
     finally:
-        demo.remove(base)
+        assert demo.remove(base)
         assert not base.exists()
 
 
@@ -78,11 +88,10 @@ def project(data, name):
 
 
 def test_demo_hub_is_marked_and_stays_in_its_folder(built):
-    base, p, own_hub = built
+    base, p, own = built
     assert demo.is_demo(p) and p.hub == base / "hub"
-    assert list(own_hub.iterdir()) == []                         # the hub the process had before: untouched
-    for f in base.rglob("*"):                                    # every file the demo wrote is under its folder
-        assert base in f.parents
+    assert list(Path(own["CCX_HUB"]).iterdir()) == []            # the hub the process had before: untouched
+    assert sorted(x.name for x in base.iterdir()) == sorted(demo.DEMO_DIRS)
     assert "DEMO" in (p.hub / "README-DEMO.txt").read_text(encoding="utf-8")
 
 
@@ -171,6 +180,28 @@ def test_not_a_demo_hub_is_refused(tmp_path):
         demo.build(tmp_path / "x")
 
 
+def test_a_folder_with_other_files_is_refused_and_kept(tmp_path):
+    mine = tmp_path / "x" / "projects" / "mine" / "keep.txt"
+    mine.parent.mkdir(parents=True)
+    mine.write_text("mine", encoding="utf-8")
+    for _ in range(2):                                           # a first build and a "rebuild" both refuse
+        with pytest.raises(ValueError):
+            demo.build(tmp_path / "x")
+    assert mine.read_text(encoding="utf-8") == "mine" and not (tmp_path / "x" / "hub").exists()
+    assert not demo.remove(tmp_path / "x") and mine.exists()    # not a demo: remove() leaves it
+    (tmp_path / "empty").mkdir()
+    with mock.patch.dict(os.environ, demo.env(tmp_path / "empty")):
+        assert demo.is_demo(demo.build(tmp_path / "empty"))      # an empty folder is fine
+
+
+@pytest.mark.skipif(os.name != "nt", reason="the 260-character limit is Windows'")
+def test_remove_deletes_a_demo_past_260_characters(tmp_path):
+    base = tmp_path / ("d" * max(10, 140 - len(str(tmp_path))))
+    with mock.patch.dict(os.environ, demo.env(base)):
+        demo.build(base)
+    assert demo.remove(base) and not base.exists()
+
+
 def test_switch_lead_panel_and_timeline(server):
     srv, base, p = server
     d = json.loads(get(srv, "/api/data")[2])
@@ -178,7 +209,7 @@ def test_switch_lead_panel_and_timeline(server):
     sw = shop["lead_switch"]
     assert sw["current"] == "claude"
     assert [x["agent"] for x in sw["periods"]] == ["codex", "claude"]           # from the handoff record
-    assert [b["label"] for b in sw["ctl"]] == ["b_cont_codex"]                   # dsh is not installed here
+    assert [b["label"] for b in sw["ctl"]] == ["b_cont_codex"]                   # dsh: patched as not installed
     assert "handoff --to codex --by claude --cwd" in sw["ctl"][0]["cmd"] and sw["ctl"][0]["run"]
     lead_task = next(t for t in shop["tasks"] if t["kind"] == "lead")
     assert any(h["k"] == "h_lead_at" and h["p"]["w"] == "claude" for h in lead_task["hist"])
@@ -199,6 +230,7 @@ def test_hand_over_from_the_page(server):
     f = Path(h["file"])
     assert f.is_file() and base in f.parents and h["to"] == "codex"
     assert h["paste"].startswith("Continue the work described in the handoff at .ccx/handoffs/")
+    assert h["blank"] is False and h["shown_at_start"] is True
     assert "from=claude to=codex" in f.read_text(encoding="utf-8")
     assert post(srv, "/api/act/run", {"nonce": prep["nonce"]})[0] == 409          # once
     d = json.loads(get(srv, "/api/data")[2])
@@ -218,6 +250,50 @@ def test_demo_shows_but_never_runs_a_command_that_starts_an_agent(server):
     code, prep = post(srv, "/api/act/prepare", {"project": shop["id"], "task": t["id"], "piece": pc["id"], "btn": f"a{i}"})
     assert code == 200 and prep["demo"] and prep["nonce"] is None and "ccx resume demo-r-env" in prep["cmd"]
     assert len(list(p.runs.iterdir())) == 6                                       # nothing was started
+
+
+def test_demo_server_refuses_a_spending_job_even_if_prepared(server):
+    srv, base, p = server
+    srv.pending["forged"] = {"argv": ["ccx", "resume", "demo-r-env"], "spends": True, "until": time.time() + 60}
+    code, out = post(srv, "/api/act/run", {"nonce": "forged"})
+    assert code == 409 and "demo" in json.dumps(out)
+    assert len(list(p.runs.iterdir())) == 6
+
+
+def test_handoff_without_a_conversation_file_says_it_is_blank(server):
+    """docs-site is led by Codex and the demo seeds no Codex session file: the handoff is the blank template, and the
+    page is told so before (no transcript) and after (blank)."""
+    srv, base, p = server
+    d = json.loads(get(srv, "/api/data")[2])
+    docs = project(d, demo.DOCS)
+    i = next(i for i, b in enumerate(docs["lead_switch"]["ctl"]) if b["label"] == "b_cont_claude")
+    code, prep = post(srv, "/api/act/prepare", {"project": docs["id"], "task": "_lead", "piece": None, "btn": f"c{i}"})
+    assert code == 200 and "transcript" in prep and prep["transcript"] is None
+    code, out = post(srv, "/api/act/run", {"nonce": prep["nonce"]})
+    assert code == 200 and out["ok"], out
+    assert out["handoff"]["blank"] is True
+
+
+@pytest.mark.parametrize("to,shown", [("claude", True), ("codex", True), ("any", True), ("dsh", False),
+                                      ("gemini", False)])
+def test_paste_line_matches_what_the_tool_reads_at_start(to, shown):
+    from ccx.commands.memory import paste_line
+    line = paste_line(to, ".ccx/handoffs/x.md")
+    assert ".ccx/handoffs/x.md" in line and ("shown at start-up" in line) is shown
+    r = ui.handoff_result(["ccx", "handoff", "--to", to, "--by", "claude", "--cwd", "."],
+                          json.dumps({"handoff": "x.md", "paste": line}))
+    assert r["shown_at_start"] is shown and r["blank"] is False
+
+
+def test_lead_periods_follow_a_task_led_after_the_last_handoff(tmp_path):
+    rd = ui.Reader(Paths(tmp_path / "hub"))
+    from ccx import project as proj
+    proj.handoff(tmp_path, "claude", "codex", "done: x")
+    t_handoff = ui.handoff_history(rd, tmp_path)[-1]["ts"]
+    sw = ui.lead_switch(rd, tmp_path, [{"last": t_handoff + 3600, "lead": {"agent": "claude"}}])
+    assert sw["current"] == "claude"
+    assert [(x["agent"], x["until"] is None) for x in sw["periods"]] == [("claude", False), ("codex", False),
+                                                                         ("claude", True)]
 
 
 def test_lead_switch_without_a_known_lead_offers_nothing(tmp_path):
@@ -246,3 +322,15 @@ def test_cli_demo_export_writes_only_the_demo(tmp_path):
     r = subprocess.run([sys.executable, str(REPO / "ccx.py"), "handoff", "-h"], capture_output=True, text=True,
                        encoding="utf-8", timeout=60, stdin=subprocess.DEVNULL)
     assert "--cwd" in r.stdout
+
+
+def test_cli_demo_export_without_dir_leaves_no_folder(tmp_path):
+    tmp = tmp_path / "t"
+    tmp.mkdir()
+    env = {**os.environ, "TEMP": str(tmp), "TMP": str(tmp), "TMPDIR": str(tmp)}
+    out = tmp_path / "demo.html"
+    r = subprocess.run([sys.executable, str(REPO / "ccx.py"), "demo", "--export", str(out)], capture_output=True,
+                       text=True, encoding="utf-8", timeout=180, stdin=subprocess.DEVNULL, env=env)
+    assert r.returncode == 0, r.stderr
+    assert '"demo": true' in out.read_text(encoding="utf-8")
+    assert not list(tmp.glob("ccx-demo-*"))                      # the export needs no folder afterwards

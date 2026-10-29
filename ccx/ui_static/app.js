@@ -324,6 +324,7 @@
     if (ACT.stage === "err") return `<div class="k"><span class="warn">${t("act_failed", {e: ACT.msg || ""})}</span></div><div class="acts">${cancel}</div>`;
     if (ACT.stage === "confirm") return `<div class="k">${t(ACT.label)} — ${t("act_will")}</div><code class="mono" id="cmdtext">${esc(ACT.cmd)}</code>`
       + `<p class="${ACT.spends ? "warn" : "cost"}" style="margin:6px 0">${t(ACT.spends ? "act_spends" : "act_records")}</p>`
+      + (ACT.blank ? `<p class="warn" style="margin:6px 0">${t("sw_blank_pre")}</p>` : "")
       + `<div class="acts"><button class="btn ${ACT.spends ? "bad" : "primary"}" data-do="act-run">${t(ACT.spends ? "act_confirm_spend" : "act_confirm")}</button>${cancel}<button data-do="copy">${t("copy")}</button></div>`;
     return "";
   }
@@ -339,7 +340,8 @@
     ACT = {key, btn, b, label: b.label, stage: "busy"}; paintAct();
     try {
       const r = await post("/api/act/prepare", Object.assign(where(key), {btn, fill: fill || {}}));
-      Object.assign(ACT, {stage: r.demo ? "demo" : "confirm", cmd: r.cmd, nonce: r.nonce, spends: r.spends});
+      Object.assign(ACT, {stage: r.demo ? "demo" : "confirm", cmd: r.cmd, nonce: r.nonce, spends: r.spends,
+        blank: "transcript" in r && !r.transcript});      /* U7: a handoff with no conversation file: a blank template */
     } catch (e) { Object.assign(ACT, {stage: "err", msg: e.message}); }
     paintAct();
   }
@@ -551,7 +553,9 @@
         : `<div class="acts">${ctl.map((b, i) => `<button class="btn ${esc(b.style || "")}" data-lbtn="c${i}" data-key="${esc(key)}">${t(b.label)}</button>`).join("")}</div><div class="cmd" data-actbox="${esc(key)}" hidden></div>`;
     }
     const r = HANDOFF[pr.id];
-    if (r) h += `<div class="card handoff" role="status"><div class="k">${t("sw_done", {f: r.file})}</div><div class="k">${t("sw_paste", {w: agentName(r.to), d: r.root})}</div>`
+    if (r) h += `<div class="card handoff" role="status"><div class="k">${t("sw_done", {f: r.file})}</div>`
+      + (r.blank ? `<div class="k warn">${t("sw_blank", {f: r.file})}</div>` : "")
+      + `<div class="k">${t(r.shown_at_start === false ? "sw_paste_read" : "sw_paste", {w: agentName(r.to), d: r.root})}</div>`
       + `<code class="mono" id="hopaste">${esc(r.paste)}</code> <button data-do="copy-paste">${t("copy")}</button></div>`;
     return h;
   }

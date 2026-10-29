@@ -32,8 +32,9 @@ def cmd_handoff(a) -> int:
         by = a.by or a.from_transcript
         text = src[1] + (f"\n\n## Added by hand\n{text}" if text else "")
     out = project.handoff(root, by, a.to, text)
-    # the one line to give the incoming lead when it is opened in this folder (its session start shows the handoff too)
-    out["paste"] = FRESH_PROMPT.format(file=Path(out["handoff"]).relative_to(root).as_posix())
+    # the one line to give the incoming lead when it is opened in this folder (claude/codex: their session start
+    # shows the handoff too; a tool without that hook is told to read the file)
+    out["paste"] = paste_line(a.to, Path(out["handoff"]).relative_to(root).as_posix())
     if src:
         out["from_transcript"] = str(src[0])
         out["suggested_notes"] = _suggest_quietly(a.from_transcript, src[0])
@@ -72,6 +73,14 @@ def _suggest_quietly(agent: str, path: Path) -> int:
 
 
 FRESH_PROMPT = "Continue the work described in the handoff at {file} (it was shown at start-up)."
+# a tool with no session-start hook from ccx (dsh, gemini) does not see the handoff when it starts: it is told to read it
+READ_PROMPT = "Read the handoff at {file} and continue the work it describes."
+SHOWN_AT_START = ("claude", "codex", "any")      # ccx sync installs `ccx mem delta` at these tools' session start
+
+
+def paste_line(to: str, file: str) -> str:
+    """The one line to give the incoming lead `to` about the handoff `file` (relative to the project)."""
+    return (FRESH_PROMPT if to in SHOWN_AT_START else READ_PROMPT).format(file=file)
 
 
 def cmd_fresh(a) -> int:

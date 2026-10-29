@@ -48,14 +48,17 @@ handoff records in `.ccx/handoffs/`), and "Continue with Codex" / "Continue with
 installed). The button runs `ccx handoff --to <other> --by <current> --cwd <project>` through the same second click,
 adding `--from-transcript <current> --no-model` when the current lead's conversation file for that folder exists (by
 code, never a model); the answer is the handoff file and the one line to give the other tool when you open it there
-(its session start also shows the handoff once). The task timeline marks who was leading when the task was asked
-and every switch since. Nothing else on the page writes.
+(Claude Code and Codex also show the handoff once at session start; for DeepSeek the line tells it to read the file).
+Without that conversation file the handoff is a blank template, and the page says so before and after: fill it in
+first. The task timeline marks who was leading when the task was asked and every switch since. This is the only new
+write path on the page.
 **`ccx demo`** (or `ccx ui --demo`) shows all of this without an account: it writes made-up data (two projects, runs
 in every state with a real snapshot diff, a work queue, a stopped board thread and an `@person` question, a month of
 costs) into a new folder in the system's temporary folder, points only its own process there, and serves the same
 page, marked "demo data". It works offline and starts no agent: a button that would start one shows its command
 only; a verdict or a handoff is written into the demo folder, which is removed when the page closes (`--keep` or
-`--dir` keeps it; `--export FILE` writes a static copy).
+`--dir` keeps it; `--export FILE` writes a static copy and then deletes the folder too). `--dir` takes only a new or
+empty folder, or an earlier demo folder.
 Evaluations and tests (eval-* labels, `--no-ab`, ccx's probes, runs in the temporary folder or a project's `.ccx`
 folder) stay hidden until you press "show evaluations and tests"; `ccx verify RUN --dismiss --note why` clears a
 leftover from "waits for you" without counting it right or wrong, and routing never learns from it.
