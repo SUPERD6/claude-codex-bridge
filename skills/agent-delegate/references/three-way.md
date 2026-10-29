@@ -27,7 +27,9 @@ Split it once, then let the queue carry it: `ccx q add` each piece (`--dep` for 
 `--minutes` for size; or `ccx q add --plan plan.json` with task-split's plan), `ccx q run` routes and runs every
 ready piece in parallel, again and again until nothing is ready. Nothing ready is not always finished: read the
 output. Pieces under `waiting` wait for you: parallel writers in a clean git checkout each work in a worktree, so
-merge each listed branch (also those under `unmerged`), then `ccx q done <id> --ok 1` and `ccx q run` again.
+land each listed piece (also those under `unmerged`) with `ccx q accept <id>` (merge in dependency order, joint
+check after each merge, rollback when it fails), then `ccx q run` again; a piece that ran in this checkout is
+accepted with `ccx q done <id> --ok 1`.
 Pieces under `dep_blocked` wait on a piece that failed or got stuck: fix it, then accept it the same way. It lives in `.ccx/queue/` (append-only), so a crash or a closed window loses nothing — `ccx q resume` — and
 the next lead sees it at session start. A sub-agent that finds its piece too big replies `SPLIT:` with the parts;
 they become children (at most 3 levels, each with a share of the parent's `--budget`), routed and checked like the

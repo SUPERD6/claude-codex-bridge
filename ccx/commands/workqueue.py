@@ -41,6 +41,8 @@ def cmd_q(a) -> int:
         q = wq.view(wq.load(root))      # a stuck dependency shows on what waits for it (shown, not written)
         if a.q_cmd == "tree":
             print("\n".join(wq.tree(q)) or "(queue empty)")
+        elif not getattr(a, "long", False):
+            print(compact_ls(root, q, bool(getattr(a, "gate", False))))
         else:
             gate = bool(getattr(a, "gate", False))
             out = {"items": [q["items"][i] for i in q["order"]], "ready": [x["id"] for x in wq.ready(q, gate)],
@@ -58,17 +60,117 @@ def cmd_q(a) -> int:
         _out({"budget_usd": a.usd})
     elif a.q_cmd == "done":
         q = wq.load(root)
-        it = q["items"][a.id]
-        if it.get("run"):
-            verify(paths(), it["run"], bool(a.ok), a.note or "")
-        wq.update(root, a.id, status="done" if a.ok else "failed", verdict=bool(a.ok))
-        out = {"id": a.id, "closed_parents": wq.close_parents(root)}
+        ids = list(dict.fromkeys(wq.norm_id(x, q["items"]) for x in a.id))
+        notes = done_notes(paths(), q, ids, bool(a.ok), a.note or [])
+        for i in ids:
+            it = q["items"][i]
+            if it.get("run"):
+                verify(paths(), it["run"], bool(a.ok), notes[i])
+            wq.update(root, i, status="done" if a.ok else "failed", verdict=bool(a.ok))
+        out = {"id": ids[0]} if len(ids) == 1 else {"ids": ids}
+        if a.ok:
+            from ..accept import branch_landed
+            loose = [i for i in ids if q["items"][i].get("worktree") and not q["items"][i].get("merged")
+                     and not branch_landed(root, q["items"][i])]
+            if loose:   # recorded as asked; but their work is still only on their branches
+                out["not_merged"] = {"ids": loose, "next": "their branches are not in the checked-out branch: "
+                                     "land them with `ccx q accept " + " ".join(loose) + "`"}
+        out["closed_parents"] = wq.close_parents(root)
         moved = wq.propagate(root)
         out.update({k: v for k, v in moved.items() if v})
         _out(out)
+    elif a.q_cmd == "accept":
+        if not a.ids and not a.all_ready:
+            raise ValueError("name the pieces to accept (`ccx q accept q1 q2`) or give --all-ready")
+        if a.ids and a.all_ready:
+            raise ValueError("give piece ids or --all-ready, not both")
+        from ..accept import accept
+        p = paths()
+        out, code = accept(p, load_config(p), root, a.ids or [], all_ready=a.all_ready, check=a.check,
+                           dry_run=a.dry_run, into_protected=a.into_protected)
+        _out(out)
+        return code
     elif a.q_cmd in ("run", "resume"):
         return _run(a, root)
     return 0
+
+
+def _note_for(note: str, i: str, items: dict) -> bool:
+    """Does `q1: tests pass` (or `1: ...`) speak of piece i?"""
+    head, sep, _ = note.partition(":")
+    return bool(sep) and wq.norm_id(head, items) == i
+
+
+def done_notes(p, q: dict, ids: list[str], ok: bool, notes: list[str]) -> dict[str, str]:
+    """{id: the note kept with its verdict}. One id: every --note, joined (as before). Several ids accepted at
+    once: each needs evidence of its own, its run's passed check or review, or a `--note "<id>: why"` naming it;
+    otherwise nothing is recorded and the ones without are named."""
+    from ..accept import evidence
+    items = q["items"]
+    unknown = [i for i in ids if i not in items]
+    if unknown:
+        raise ValueError(f"no piece {', '.join(unknown)} in this queue (`ccx q ls` lists them)")
+    if len(ids) == 1:
+        return {ids[0]: " ".join(notes)}
+    out, lacking = {}, []
+    for i in ids:
+        own = [n.partition(":")[2].strip() for n in notes if _note_for(n, i, items)]
+        rec = _run_record(p, items[i]["run"]) if items[i].get("run") else None
+        ev = evidence(rec) if rec else None
+        if ok and not own and not ev:
+            lacking.append(i)
+        out[i] = "; ".join(own) or (ev or "")
+    if lacking:
+        raise ValueError(f"accepting several pieces at once needs evidence for each: {', '.join(lacking)} had no "
+                         "passed check or review; add --note \"<id>: what you checked\" for each (nothing was "
+                         "recorded)")
+    return out
+
+
+def compact_ls(root: Path, q: dict, gate: bool = False) -> str:
+    """`ccx q ls`: one line per piece (id, state, agent, seconds, $, then what to do or wait on, then the title)
+    and one line about the queue. A finished worktree piece not landed yet shows as `unmerged`. `--long` prints
+    the full JSON."""
+    if not q["order"]:
+        return "(queue empty)"
+    from ..accept import accepted_unmerged
+    p, now, lines = paths(), time.time(), []
+    loose = set(accepted_unmerged(root, q))
+    for i in q["order"]:
+        it = q["items"][i]
+        st = it["status"]
+        unm = (st == "done" and it.get("worktree") and it.get("verdict") is not True) or i in loose
+        if st == "doing":
+            secs = now - float(it.get("updated") or it.get("added") or now)
+        else:
+            rec = _run_record(p, it["run"]) if it.get("run") else None
+            secs = sum(float(x.get("seconds") or 0) for x in (rec or {}).get("attempts") or [])
+        row = (f"{i} {'unmerged' if unm else st} {it.get('agent') or '-'} {int(secs)}s "
+               f"${float(it.get('cost_usd') or 0):.3f}")
+        if st == "doing" and it.get("live"):
+            row += f" live {it['live']}"
+        elif unm:
+            row += f" next: ccx q accept {i}"
+        elif st == "dep_blocked" and it.get("blocked_by"):
+            row += f" fix {','.join(it['blocked_by'])} first"
+        elif st == "todo" and it.get("deps"):
+            row += f" after {','.join(it['deps'])}"
+        title = str(it.get("title") or "")
+        lines.append(row + (f"  {title[:30]}{'...' if len(title) > 30 else ''}" if title else ""))
+    tail = [f"spent ${wq.spent(q):.3f}" + (f" of ${q['budget_usd']}" if q["budget_usd"] is not None else "")]
+    ready = [x["id"] for x in wq.ready(q, gate)]
+    if ready:
+        tail.insert(0, "ready " + ",".join(ready))
+    held = runner(root)
+    if held:
+        tail.append(f"runner pid {held.get('pid')}")
+    try:
+        last = json.loads((wq.qdir(root) / LAST).read_text(encoding="utf-8"))
+        tail.append(f"last_run exit {last.get('code')}" + (f" stopped: {last['stopped']}" if last.get("stopped")
+                                                            else ""))
+    except (OSError, ValueError, AttributeError):
+        pass
+    return "\n".join(lines + [" | ".join(tail)])
 
 
 RESUME_NOTE = ("ccx was stopped while you were working on this piece. Go on from where you were: check what is "
@@ -476,12 +578,14 @@ def _finish(root: Path, done: list, stop: dict | None, gate: bool = False,
     waits = wq.waiting(q, gate)
     if waits:
         out["waiting"] = waits
-        out["next"] = ("they wait for your verdict on what they depend on: check it (merge its worktree branch "
-                       "first, if it has one), then `ccx q done <id> --ok 1` and `ccx q run` again")
+        out["next"] = ("they wait for your verdict on what they depend on: a piece on a worktree branch lands with "
+                       "`ccx q accept <id>` (merge + joint check), one in the project folder with "
+                       "`ccx q done <id> --ok 1`; then `ccx q run` again")
     waited_on = {x for w in waits for x in w["on"]}
     loose = [u for u in wq.unmerged(q) if u["id"] not in waited_on]
     if loose:
         out["unmerged"] = loose          # nothing waits on them, but their work is only on these branches
+        out.setdefault("next", "land the branches with `ccx q accept " + " ".join(u["id"] for u in loose) + "`")
     if shared:
         out["shared_folder"] = {"ids": list(dict.fromkeys(shared)), "why": SHARED_WHY}
     back = {r["id"]: r["restored"] for r in done if r.get("restored")}
@@ -576,16 +680,27 @@ def register(sub) -> None:
     ad.add_argument("--plan", help="plan JSON: {\"tasks\": [{id, title?, brief, deps?, check?, minutes?, mode?, kind?, "
                     "to?, files?}]} or task-split's {\"pieces\": [{id, title, depends_on?, files?}]}; a dependency may "
                     "name a later piece; an unknown id is an error")
-    for name, hlp in (("ls", "items as JSON"), ("tree", "items as a tree")):
+    for name, hlp in (("ls", "one line per piece (--long: items as JSON)"), ("tree", "items as a tree")):
         ls = qs.add_parser(name, help=hlp)
         if name == "ls":
             ls.add_argument("--gate", action="store_true", help="list as ready what `q run --gate` would start")
+            ls.add_argument("--long", action="store_true", help="every field of every item as JSON (the default is "
+                            "one line per piece: id, state, agent, seconds, $)")
     bu = qs.add_parser("budget", help="stop `q run` when the queue has spent this much (API-equivalent USD)")
     bu.add_argument("usd", type=float)
     dn = qs.add_parser("done", help="the lead's verdict on an item (also `ccx verify` on its run)")
-    dn.add_argument("id")
+    dn.add_argument("id", nargs="+", help="piece id(s), q1 or 1; several with --ok 1 need evidence for each")
     dn.add_argument("--ok", type=int, choices=[0, 1], required=True)
-    dn.add_argument("--note")
+    dn.add_argument("--note", action="append", help='why (repeat; with several ids, one each: "q1: what you checked")')
+    ac = qs.add_parser("accept", help="land finished worktree pieces: merge each branch in dependency order, run "
+                       "the joint check after each merge, roll that merge back if it fails (never pushes)")
+    ac.add_argument("ids", nargs="*", help="piece ids (q1 or 1)")
+    ac.add_argument("--all-ready", action="store_true", help="every finished piece still on a worktree branch")
+    ac.add_argument("--check", metavar="CMD", help="the joint check run on the merged tree after each merge "
+                    "(default: each piece's own check)")
+    ac.add_argument("--dry-run", action="store_true", help="show the order and what would be refused; change nothing")
+    ac.add_argument("--into-protected", action="store_true", help="the project is on a protected branch (main and "
+                    "the like) and the person said yes to merging into it")
     for name, hlp in (("run", "route and run every ready item, in parallel, until nothing is ready"),
                       ("resume", "after a crash or a closed window: items left 'doing' continue, then run")):
         r = qs.add_parser(name, help=hlp)
@@ -599,7 +714,7 @@ def register(sub) -> None:
         r.add_argument("--bg", action="store_true", help="run detached; its output goes to a log in the queue "
                        "folder; `ccx q ls` shows each running item's run id (`live`), the runner and how the last "
                        "run ended")
-    for x in (ad, bu, dn):
+    for x in (ad, bu, dn, ac):
         x.add_argument("--cwd")
     qp.add_argument("--cwd")
     qp.set_defaults(fn=cmd_q)

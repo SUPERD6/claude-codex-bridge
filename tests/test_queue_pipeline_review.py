@@ -155,8 +155,8 @@ class TestWorktreeBranches(QEnv):
         a = self.q("add", "a", "--brief", "look at a", "--minutes", "5")
         b = self.q("add", "b", "--brief", "look at b", "--minutes", "5", "--dep", a["id"])
         self.q("run", "--gate")
-        self.assertEqual(self.q("ls", "--gate")["ready"], [])
-        self.assertEqual(self.q("ls")["ready"], [b["id"]])
+        self.assertEqual(self.q("ls", "--gate", "--long")["ready"], [])
+        self.assertEqual(self.q("ls", "--long")["ready"], [b["id"]])
 
     def test_resume_of_a_finished_worktree_piece_keeps_its_branch(self):
         self.git_init()

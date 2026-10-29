@@ -401,16 +401,16 @@ class TestQueueBackground(test_adapters.AdapterEnv):
         deadline = time.time() + 90
         status = None
         while time.time() < deadline:
-            status = {i["id"]: i for i in self.j("q", "ls")["items"]}[a["id"]]["status"]
+            status = {i["id"]: i for i in self.j("q", "ls", "--long")["items"]}[a["id"]]["status"]
             if status in ("done", "failed"):
                 break
             time.sleep(0.5)
         self.assertEqual(status, "done", Path(out["log"]).read_text(encoding="utf-8", errors="replace")
                          if Path(out["log"]).exists() else "no log")
-        ls = self.j("q", "ls")
+        ls = self.j("q", "ls", "--long")
         while time.time() < deadline and ("runner" in ls or "last_run" not in ls):
             time.sleep(0.5)                 # let the detached runner finish writing before the folder is removed
-            ls = self.j("q", "ls")
+            ls = self.j("q", "ls", "--long")
         self.assertNotIn("runner", ls)
         self.assertEqual(ls["last_run"]["code"], 0)
         self.assertIsNone(ls["items"][0]["live"])
