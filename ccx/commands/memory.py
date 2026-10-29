@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from .. import leadmodel, learn, memory
-from ..config import AGENTS, DELEGATE_AGENTS, data_dir, load_config, paths
+from ..config import AGENTS, DELEGATE_AGENTS, data_dir, lead_name, load_config, paths
 from ..agents import leads
 from .common import _caller, _out, hook_text
 
@@ -471,8 +471,11 @@ def register(sub) -> None:
     fr.set_defaults(fn=cmd_fresh)
     ho = sub.add_parser("handoff", help="pass the baton to the other lead (what's done, decisions, next)")
     ho.add_argument("text", nargs="*", help="the handoff text (or --file); empty = write the template")
-    ho.add_argument("--to", choices=[*DELEGATE_AGENTS, "any"], required=True)
-    ho.add_argument("--by", choices=list(DELEGATE_AGENTS))
+    # a lead is a tool: `deepseek` names DeepSeek's own agent, dsh (what the page calls "DeepSeek (dsh)"). Only here:
+    # `ccx run --to deepseek` stays the deepseek provider (Claude Code on DeepSeek's API), as before
+    ho.add_argument("--to", type=lead_name, choices=[*DELEGATE_AGENTS, "any"], required=True,
+                    help="the incoming lead (deepseek = dsh)")
+    ho.add_argument("--by", type=lead_name, choices=list(DELEGATE_AGENTS), help="the outgoing lead (deepseek = dsh)")
     ho.add_argument("--file")
     ho.add_argument("--next", action="append", help="a next task; repeat. Creates a task-checkpoint plan")
     ho.add_argument("--title", help="title for that plan")

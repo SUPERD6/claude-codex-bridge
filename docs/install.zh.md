@@ -30,7 +30,7 @@ codex plugin marketplace add SUPERD6/relayline && codex plugin add relayline@rel
   文档提示。hook 运行插件里自带的 ccx（`bin/ccx`，经 `sh` 运行；Windows 上就是 Claude Code 跑 hook 用的 Git Bash），所以要有 Python 3.11+，但不用另装。
   没 `ccx init` 之前它们什么都不输出。
 - **Codex** 只得到五个技能。它的 hook 仍由 `ccx sync` 写（Codex 的插件 hook 要用户手动信任，这里不提供）。
-- **DeepSeek Harness（`dsh`）** 目前没有插件市场或技能安装方式（看的是它的 README，2026-10-25）；`dsh` 在 PATH 上时，组长说明照旧由
+- **DeepSeek Harness（`dsh`）** 目前没有插件市场或技能安装方式（看的是它的 README，2026-10-25）；`dsh` 在 PATH 上时，主导说明照旧由
   `ccx sync` 写。只在已安装的桌面应用里找到的 `dsh` 默认不接入；sync 只提一次，说明是可选的（把它加到 PATH 后再跑 `ccx sync`）。
 - **ccx 本体仍要装**（`pipx install git+https://github.com/SUPERD6/relayline`，再 `ccx init` 或 `ccx setup`），才能在
   终端或 Codex 里派活。插件已启用、但 ccx 没单独装时，`ccx doctor` 会提示。
@@ -65,17 +65,17 @@ ccx run "任务" --model gpt-6.1-sol --effort high                       # 自�
 ccx run "任务" --tier T2                                               # 按固定分级
 ccx run "任务" --check "pytest -q" --review on                        # ccx 自己重跑验收；另一家的模型独立审查改动
      [--mode read] [--check CMD] [--review auto|on|off] [--worktree] [--task <id> --step <n>] [--minutes 60] [--no-fallback] [--force] [--no-ab]
-ccx verify <run_id> --ok 1|0 [--note "说明"]  # 主智能体验收结论：校准选模型/拆分，并关掉 checkpoint 这一步
+ccx verify <run_id> --ok 1|0 [--note "说明"]  # 主导验收结论：校准选模型/拆分，并关掉 checkpoint 这一步
 ccx resume <run_id> "追问"          # 在同一个子会话里继续；中断后也用它接着做
 ccx stop <run_id>                   # 停掉正在跑的委派（连同它开的所有进程）；resume 能接上
 ccx task status | resume <任务>     # 长任务：一条命令接着做中断的那一步（额度用完时自动换另一边）
-ccx handoff --by claude --to codex "做完了什么/定了什么/接下来做什么" [--next "任务5" ...]   # 换主智能体接力
+ccx handoff --by claude --to codex "做完了什么/定了什么/接下来做什么" [--next "任务5" ...]   # 换主导接力
 ccx lead                                     # 主会话每一轮要重读多少 token、花多少钱
-ccx lead --breakdown | --cache | --suggest   # 每轮重读的东西逐项拆开 / 缓存断在哪 / 主智能体自己该用哪档
-ccx sum -- python -m pytest -q               # 跑命令，只给主智能体看要紧的（测试只看失败），完整输出留在 .ccx/sum/
+ccx lead --breakdown | --cache | --suggest   # 每轮重读的东西逐项拆开 / 缓存断在哪 / 主导自己该用哪档
+ccx sum -- python -m pytest -q               # 跑命令，只给主导看要紧的（测试只看失败），完整输出留在 .ccx/sum/
 ccx fresh [--launch]                         # 长对话交给同一工具的新对话：从这段对话的文件生成交接
 ccx propose --lead claude:opus:high --minutes 30 "…"  # 提议派活前：估算、一句话怎么说、记一笔（--no ID、--stats）
-ccx trial start | stop | report              # 一周正式对比：一半可派的活主智能体自己做，一半派出去，同样口径量
+ccx trial start | stop | report              # 一周正式对比：一半可派的活主导自己做，一半派出去，同样口径量
 ccx trial tag --arm native --session ID      # 把用了 Claude Code 自带子智能体 / workflow 的对话记为第三组
 ccx agents                                   # 每家命令行：厂商、能做什么、测过的版本、官方还是社区
 ccx way "任务" --risk low|visible|critical   # 按风险选合作方式：一家做 / 规划+实现+验收 / 两版比较（--yes）
@@ -83,7 +83,7 @@ ccx way --stats [--include-evals]           # 每类活每家（分档位）的�
 ccx discuss "问题" [--dry-run]              # 2-3 家不同厂商讨论选错代价高的决定：出方案、挑错、裁判
 ccx verify <run_id> --ok 0 --reason wrong     # 你的判断（没人判断的，12 小时后按证据自动记“大概率对/错”）
 ccx verify --sample 5                        # 抽查本周 5 个自动判定：看改动，回答对 / 错
-ccx handoff --from-transcript codex --to claude   # 原主智能体写不了（额度用完）：从它的会话文件生成交接
+ccx handoff --from-transcript codex --to claude   # 原主导写不了（额度用完）：从它的会话文件生成交接
                                                   # （先用代码提取；格式认不出时交给自动选出的子智能体整理，--no-model 不用模型）
 ccx undo <run_id> [--apply] [--wrong]   # 撤回某次可写运行改动的文件（新建的挪到一边）；--wrong 同时记成做错
 ccx ask "问题"                       # 让另一个模型快速给个第二意见（只读、低强度）
@@ -96,7 +96,8 @@ ccx q run [--gate] | resume | tree | done q3 --ok 1   # 就绪的块并行跑；
                                     # 等你合并并 q done --ok 1；--gate（默认关）让所有下游都等你的结论；
                                     # 依赖失败的块标成 dep_blocked，不再一直卡着
 ccx q ls [--long]                   # 一块一行：id、状态、智能体、秒数、$（worktree 里做完还没落地的块显示 `unmerged`，
-                                    # 附 `next: ccx q accept qN`）；--long 是完整 JSON
+                                    # 附 `next: ccx q done qN --ok 1, then ccx q accept qN`，先给结论
+                                    # 再合并；已给结论的只附 `next: ccx q accept qN`）；--long 是完整 JSON
 ccx q accept q1 q2 | --all-ready [--check CMD] [--dry-run]   # 把 worktree 里的块落地：按依赖顺序合并，每合并一块
                                     # 跑一次联合验收，失败就撤回这次合并；没做完、no_changes、没验证的块拒绝，
                                     # 冲突的块停下；从不 push，没有 --into-protected（用户同意）不合进 main；
@@ -112,7 +113,7 @@ ccx ui [--project 文件夹] [--no-open] [--export 文件]   # 本机实时页�
 ccx demo [--no-open] [--keep] [--export 文件]       # 同一个页面，用临时目录里编好的数据：不用账号，离线可用
 ccx config set ui.lang zh          # ccx ui 和 ccx 写进会话的提示用中文
 ccx config set defaults.tradeoff 0.3   # 省钱↔快 的旋钮：save / balanced / fast，或 0..1
-ccx ab done <id> --ok 1             # 结束一次 A/B 抽样（主智能体自己做的那 10%）
+ccx ab done <id> --ok 1             # 结束一次 A/B 抽样（主导自己做的那 10%）
 ccx run "任务" --to gemini --tier T2                       # 派给 Gemini CLI
 ccx run "任务" --to deepseek      # 通过 Claude Code 用 DeepSeek flash（密钥放环境变量 DEEPSEEK_API_KEY），思考强度按难度选
 ccx run "任务" --provider deepseek-codex   # 同一个模型经 Codex（用 -c 设 model provider，密钥从环境变量读）
@@ -126,7 +127,7 @@ ccx send --list | --thread <id> "消息"   # 发消息给正在运行的 Codex �
 ccx say --to codex|claude|deepseek|all "消息"   # 对话板：本项目开着的会话下一轮就能看到
 ccx board [--thread T] / ccx reply <id> "消息"  # 看给我的新留言 / 回某一条（docs/board.zh.md）
 ccx peek codex|claude|deepseek        # 共享工作上下文：看另一家在本项目开着的会话最近在做什么
-ccx run --context auto|on|off ...     # 派活时附上组长最近的工作（auto：只给可写任务）
+ccx run --context auto|on|off ...     # 派活时附上主导最近的工作（auto：只给可写任务）
 ccx say --to codex --now "消息"   # 同时推进开着的 Codex 桌面对话（Claude Code 桌面端只能下一轮看到）
 ccx config set board.github owner/repo   # 可选：对话板同步到你自己的私人仓库（ccx board --sync）
 ccx skills find pdf 表格             # 先在共享技能库里找，别重复写

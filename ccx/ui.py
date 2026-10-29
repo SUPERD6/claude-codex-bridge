@@ -1,7 +1,7 @@
 """`ccx ui`: a live view on this machine (proposal G1) and the manager's board (K6). Showing it never writes and
 never calls a model. Two kinds of clicks change something, both same-origin only: yes or no on a suggested note
-(H5, POST /api/suggestion), and a button that runs one of a fixed set of ccx commands (stop, verify, resume, q done /
-budget / resume, run --mode write for a needs_write run; RUNS). Such a button is two requests: /api/act/prepare
+(H5, POST /api/suggestion), and a button that runs one of a fixed set of ccx commands (stop, verify, resume, undo,
+q done / budget / accept / resume, run --mode write for a needs_write run; RUNS). Such a button is two requests: /api/act/prepare
 names the button (never a command), the server answers the exact command and a one-time nonce, the page shows it
 and asks again, and /api/act/run with the nonce runs it once (execute: argv, no shell, no window).
 
@@ -346,15 +346,19 @@ def _q(s: str) -> str:
 
 # K6: the ccx commands a button may run from the page (`run: true`); anything else is shown to copy. Each spends
 # (starts a sub-agent: runs in the background) or only records something (runs at once, waits for its answer).
+# `undo` puts back the files of one write run (from ccx's own snapshot; new files are moved aside, never deleted)
+# and starts nothing; `q accept` merges finished worktree pieces and runs their checks, so it runs in the
+# background like a spending one, but it starts no agent (a demo hub may run it: it only touches demo data).
 RUNS = {("verify",): "record", ("stop",): "record", ("q", "done"): "record", ("q", "budget"): "record",
         ("handoff",): "record",       # U7: the switch-lead panel; writes a note in the project, starts nothing
+        ("undo",): "record", ("q", "accept"): "long",
         ("resume",): "spend", ("run",): "spend", ("q", "resume"): "spend"}
 FILLS = ("{reason}", "{note}", "{usd}")          # filled in by the page's form, checked by the server (fill())
 REASONS = ("unfinished", "wrong", "overreach", "other")
 
 
 def _op(argv: list[str]) -> str | None:
-    """'record' | 'spend' for a ccx command a button may run, else None (shown to copy only)."""
+    """'record' | 'long' | 'spend' for a ccx command a button may run, else None (shown to copy only)."""
     if not argv or argv[0] != "ccx":
         return None
     words = [x for x in argv[1:] if not x.startswith("-")]
@@ -363,13 +367,20 @@ def _op(argv: list[str]) -> str | None:
     return RUNS.get(tuple(words[:2])) or RUNS.get(tuple(words[:1]))
 
 
-def _btn(label: str, cmd, style: str = "") -> dict:
-    """A button. cmd is an argv list (a ccx command: maybe runnable from the page) or a string (copy only)."""
+def _btn(label: str, cmd, style: str = "", prose: bool = False) -> dict:
+    """A button. cmd is an argv list (a ccx command: maybe runnable from the page) or a string (copy only). prose:
+    the string is a message for the person to give the lead, not a command (the page labels it so)."""
     if isinstance(cmd, str):
-        return {"label": label, "cmd": cmd, "style": style, "run": False}
+        out = {"label": label, "cmd": cmd, "style": style, "run": False}
+        if prose:
+            out["prose"] = True
+        return out
     op = _op(cmd)
-    return {"label": label, "cmd": " ".join(x if x in FILLS else _q(x) for x in cmd), "argv": cmd, "style": style,
-            "run": op is not None, "spends": op == "spend"}
+    out = {"label": label, "cmd": " ".join(x if x in FILLS else _q(x) for x in cmd), "argv": cmd, "style": style,
+           "run": op is not None, "spends": op == "spend"}
+    if op == "long":
+        out["bg"] = True                             # runs in the background, spends nothing (q accept)
+    return out
 
 
 LEAD_FIXES = ("Run {rid} still fails its independent review after one fix round: check each [must] item in "
@@ -425,9 +436,12 @@ def _act(rec: dict, verdict: dict | None, now: float, beat: float | None) -> dic
                 "issues": (rec.get("review") or {}).get("issues") or [],
                 # the same rule as the run's hint and the agent-delegate skill: the lead checks each [must] against
                 # the diff and fixes the real ones itself (a message to paste to the lead, copy only); another round
-                # is the secondary choice, as it costs a run
-                "buttons": [show, _btn("b_lead_fixes", LEAD_FIXES.format(rid=rid), "primary"),
+                # is the secondary choice, as it costs a run. The person may also overrule the review: an ok verdict
+                # with a note saying so (ccx verify), which starts nothing
+                "buttons": [show, _btn("b_lead_fixes", LEAD_FIXES.format(rid=rid), "primary", prose=True),
                             _btn("b_one_more", ["ccx", "resume", rid, "The review still finds: " + issues]),
+                            _btn("b_accept_anyway", ["ccx", "verify", rid, "--ok", "1", "--note",
+                                                     "review overruled: the person accepted it"], "good"),
                             _btn("b_myself", ["ccx", "verify", rid, "--ok", "0", "--reason", "wrong", "--note",
                                               "handled by hand"])]}
     if kind == "check_broken":                       # the command tested nothing: fix the check, not the code
@@ -462,9 +476,14 @@ def _act(rec: dict, verdict: dict | None, now: float, beat: float | None) -> dic
         # the fix (delegate.env_hint's, in the page's language) says what to do, doctor checks the setup (copy only,
         # not run from the page), and ccx resume continues once it is fixed
         agent = rec.get("to") or ""
+        err = rec.get("env_error") or ""
+        if not err:                                  # no reason kept: the exit code, else no empty brackets
+            ex = ((rec.get("attempts") or [{}])[-1]).get("exit")
+            err = f"exit {ex}" if ex not in (None, "") else ""
+        why = (("w_env_codex" if agent == "codex" else "w_env") if err else
+               ("w_env_codex_noerr" if agent == "codex" else "w_env_noerr"))
         return {"kind": "decide", "what": "a_env",
-                "why": ["w_env_codex" if agent == "codex" else "w_env",
-                        {"agent": agent, "err": rec.get("env_error") or "", "rid": rid}],
+                "why": [why, {"agent": agent, "err": err, "rid": rid}],
                 "buttons": [show, _btn("b_doctor", "ccx doctor", "primary")]}
     if not rec.get("ok") or res.get("status") in ("failed", "blocked"):
         return {"kind": "decide", "what": "a_failed", "why": ["w_failed", {}],
@@ -522,6 +541,105 @@ def _who_rung(rung: str | None) -> str:
 STEP = {"sent": 0, "working": 1, "self": 2, "check": 3, "review": 4, "verdict": 5, "done": 6}
 
 
+def _undo_state(rd: Reader, rec: dict) -> tuple[bool, float | None]:
+    """(can be undone, when it was undone): a finished write run with ccx's undo snapshot (undo.json) can be put
+    back from the page (`ccx undo <id> --apply`) until it has been (undone.json). Two file checks, no git."""
+    if rec.get("state") == "running" or rec.get("mode") != "write":
+        return False, None
+    run_dir = rd.p.runs / str(rec["run_id"])
+    done = rd.json_file(run_dir / "undone.json")
+    if isinstance(done, dict):
+        return False, float(done.get("ts") or 0) or None
+    return (run_dir / "undo.json").is_file(), None
+
+
+UNDO_LIST_MAX = 30                 # files named in the page's undo confirm box
+
+
+def _chain_running(p: Paths, run_id: str) -> str | None:
+    """A running run that goes on from this one (a resume or review fix round: resumed_from, followed back a few
+    links, or its undo snapshot's chain_from), or None. Undoing then would change files under a working agent."""
+    if not p.runs.exists():
+        return None
+    for d in p.runs.iterdir():
+        rec = _read_json(d / "run.json")
+        if not isinstance(rec, dict) or rec.get("state") != "running" or d.name == run_id:
+            continue
+        snap = _read_json(d / "undo.json")
+        if isinstance(snap, dict) and snap.get("chain_from") == run_id:
+            return d.name
+        cur, seen = rec, 0
+        while isinstance(cur, dict) and cur.get("resumed_from") and seen < 6:
+            if cur["resumed_from"] == run_id:
+                return d.name
+            cur, seen = _read_json(p.runs / str(cur["resumed_from"]) / "run.json"), seen + 1
+    return None
+
+
+def undo_preview(p: Paths, run_id: str) -> dict:
+    """What the page's "Undo this run" would do now, from `ccx undo <id>`'s own dry run, for the confirm box.
+    LookupError (said on the page) when the page must not offer it: the run or a link going on from it is running,
+    it was undone already, git cannot list the files, or the undo would also put back files this run did not leave
+    changed (a later commit, the person's own edits elsewhere, other runs' work: `ccx undo` restores everything
+    that differs from the run's base). Those go to the terminal, where the dry run lists them first. Checked when
+    the button is prepared and again just before it runs."""
+    from .workspace import undo
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", run_id or ""):
+        raise LookupError("bad run id")
+    run_dir = p.runs / run_id
+    rec = _read_json(run_dir / "run.json")
+    if not isinstance(rec, dict):
+        raise LookupError(f"no ccx run {run_id}")
+    if rec.get("state") == "running":
+        raise LookupError("this run is running again: undo it after it has finished")
+    if (run_dir / "undone.json").exists():
+        raise LookupError("this run was undone already: reload")
+    busy = _chain_running(p, run_id)
+    if busy:
+        raise LookupError(f"run {busy} goes on from this one and is running: undo after it has finished")
+    try:
+        dry = undo(p, run_id, apply=False)
+    except (OSError, ValueError, KeyError) as e:
+        raise LookupError(f"ccx undo could not read this run's snapshot: {e}") from e
+    if dry.get("git_error"):
+        raise LookupError(dry["git_error"])
+    if dry.get("nothing_to_undo"):
+        raise LookupError(dry["nothing_to_undo"])
+    own = judge(p, run_id).get("changed")
+    if own is None:
+        raise LookupError(f"ccx has no record of the tree this run left, so the page cannot check what undo would "
+                          f"touch: `ccx undo {run_id}` in a terminal lists it first")
+    fold = (lambda s: s.casefold()) if os.name == "nt" else (lambda s: s)
+    mine = {fold(c["path"]) for c in own}
+    touched = [_unquote(x) for x in [*dry["restore"], *dry["move_aside"]]]
+    extra = [x for x in touched if fold(x) not in mine]
+    if extra:
+        more = f" and {len(extra) - 5} more" if len(extra) > 5 else ""
+        raise LookupError(f"undo would also put back files this run did not leave changed ({', '.join(extra[:5])}"
+                          f"{more}): a later commit, your own edits or another run's work. `ccx undo {run_id}` in a "
+                          "terminal lists everything first; undo there if that is what you want")
+    return {"restore": [_unquote(x) for x in dry["restore"]][:UNDO_LIST_MAX],
+            "move_aside": [_unquote(x) for x in dry["move_aside"]][:UNDO_LIST_MAX],
+            "chain_from": dry.get("chain_from")}
+
+
+def merge_preview(p: Paths, argv: list[str]) -> None:
+    """The page's Merge button (`ccx q accept <id> --cwd <root>`, run in the background): `q accept --dry-run`
+    first, so a refusal (a protected branch checked out, uncommitted changes, another writer, ...) comes back to
+    the page at once instead of only into the background job's log. LookupError with its reasons."""
+    from .accept import accept
+    try:
+        root = Path(argv[argv.index("--cwd") + 1])
+    except (ValueError, IndexError):
+        raise LookupError("the Merge button names no project folder: reload") from None
+    out, _ = accept(p, load_config(p), root, [argv[3]], dry_run=True)
+    if out.get("refused"):
+        raise LookupError("ccx q accept would refuse: " + "; ".join(f"{r.get('id')}: {r.get('why')}"
+                                                                   for r in out["refused"]))
+    if not out.get("plan"):
+        raise LookupError("there is nothing to merge for this piece: reload")
+
+
 def piece_of_run(rd: Reader, rec: dict, verdict: dict | None, now: float, title: str) -> dict:
     atts = rec.get("attempts") or []
     last = atts[-1] if atts else {}
@@ -569,6 +687,12 @@ def piece_of_run(rd: Reader, rec: dict, verdict: dict | None, now: float, title:
         "act": act,
         "ctl": [_btn("b_stop", ["ccx", "stop", rec["run_id"]], "bad")] if running and not act else [],
     }
+    can_undo, undone = _undo_state(rd, rec)
+    if can_undo:                                     # shown beside the change on the card (U1), two steps as always
+        piece["ctl"].append({**_btn("b_undo", ["ccx", "undo", rec["run_id"], "--apply"], "bad"),
+                             "note": "act_undo_note"})
+    if undone:
+        piece["undone"] = undone
     return piece
 
 
@@ -996,6 +1120,13 @@ def lead_hist(sw: dict, task: dict) -> list[dict]:
 
 
 # ------------------------------------------------------------------ the whole page's data
+def _unmerged(it: dict) -> bool:
+    """A finished worktree piece whose branch was not merged by `ccx q accept` and whose worktree is still there
+    (no git here: a branch merged by hand whose worktree is gone shows no Merge button)."""
+    wt = it.get("worktree")
+    return bool(wt) and not it.get("merged") and Path(wt).exists()
+
+
 def _queue_pieces(rd: Reader, root: Path, q: dict, recs: dict, verdicts: dict, now: float) -> list[dict]:
     items = q["items"]
 
@@ -1019,11 +1150,17 @@ def _queue_pieces(rd: Reader, root: Path, q: dict, recs: dict, verdicts: dict, n
             pc["status"] = "run"
         elif st == "done" and it.get("verdict") is not None:
             pc.update(status="done" if it["verdict"] else "fail", step=STEP["done"], act=None)
+            if it["verdict"] is True and _unmerged(it):
+                # one order in the CLI (`ccx q ls`) and here: the verdict first, then the merge (`ccx q accept`)
+                pc["ctl"] = [{**_btn("b_q_merge", ["ccx", "q", "accept", it["id"], "--cwd", str(root)], "primary"),
+                              "note": "act_merge_note"}, *pc.get("ctl", [])]
         elif st == "done" and pc.get("act") and pc["act"]["kind"] == "review":
             b = pc["act"]["buttons"]
             b[0] = _btn(b[0]["label"], ["ccx", "q", "done", it["id"], "--ok", "1", "--cwd", str(root)], b[0]["style"])
             b[1] = _btn(b[1]["label"], ["ccx", "q", "done", it["id"], "--ok", "0", "--note", "{note}", "--cwd",
                                         str(root)], b[1]["style"])
+            if it.get("worktree") and not it.get("merged"):     # after the verdict comes the merge: said now, too
+                pc["act"]["then"] = f"ccx q accept {it['id']}"
         elif st == "dep_blocked":
             # waits on a piece that did not finish: the lead settles that one (`ccx q done <id> --ok 1`)
             pc.update(status="decide", act={"kind": "decide", "what": "a_q_dep_blocked",
@@ -1035,6 +1172,20 @@ def _queue_pieces(rd: Reader, root: Path, q: dict, recs: dict, verdicts: dict, n
                                                                                              {"s": it.get("summary") or ""}],
                                             "buttons": [show, _btn("b_q_resume", ["ccx", "q", "--cwd", str(root),
                                                                                   "resume"], "primary")]})
+        act = pc.get("act")
+        if act and act.get("what") == "a_review_failed" and it.get("verdict") is None:
+            # overruling the review, or handling it by hand, is a verdict on the queue piece (`ccx q done`, which
+            # records the run's verdict too): a run verdict alone leaves the piece failed, unmergeable, still listed
+            for i, b in enumerate(act["buttons"]):
+                if b["label"] == "b_accept_anyway":
+                    act["buttons"][i] = _btn(b["label"], ["ccx", "q", "done", it["id"], "--ok", "1", "--note",
+                                                          "review overruled: the person accepted it", "--cwd",
+                                                          str(root)], b["style"])
+                elif b["label"] == "b_myself":
+                    act["buttons"][i] = _btn(b["label"], ["ccx", "q", "done", it["id"], "--ok", "0", "--note",
+                                                          "handled by hand", "--cwd", str(root)], b["style"])
+            if it.get("worktree") and not it.get("merged"):
+                act["then"] = f"ccx q accept {it['id']}"
         kids = wq.children(q, it["id"])
         if kids:
             pc["children"] = [one(k) for k in kids]
@@ -1927,6 +2078,10 @@ class UI:
         extra = {}
         if b.get("handoff"):                          # U7: from the current lead's session file when there is one
             argv, extra["transcript"] = handoff_argv(self.p, argv, b["handoff"]["by"])
+        if argv[1:2] == ["undo"]:                     # the dry run's lists in the confirm box; refused when unsafe
+            extra["undo"] = undo_preview(self.p, argv[2])
+        if argv[1:3] == ["q", "accept"]:              # a refusal (protected branch, ...) said now, not in a log
+            merge_preview(self.p, argv)
         cmd = " ".join(_q(x) for x in argv)
         if self.demo and b["spends"]:                 # U6: a demo hub never starts an agent; the command is shown
             return {"nonce": None, "cmd": cmd, "spends": True, "demo": True, "ttl_s": 0}
@@ -1936,7 +2091,8 @@ class UI:
             self.pending = {k: v for k, v in self.pending.items() if v["until"] > now}
             if len(self.pending) >= 20:
                 raise LookupError("too many unconfirmed actions: wait a minute")
-            self.pending[nonce] = {"argv": argv, "spends": b["spends"], "until": now + ACT_TTL_S}
+            self.pending[nonce] = {"argv": argv, "spends": b["spends"], "bg": bool(b.get("bg")),
+                                   "until": now + ACT_TTL_S}
         return {"nonce": nonce, "cmd": cmd, "spends": b["spends"], "ttl_s": ACT_TTL_S, **extra}
 
     def run_prepared(self, nonce: str) -> dict:
@@ -1946,7 +2102,9 @@ class UI:
             raise LookupError("this confirmation has expired or was used: press the button again")
         if self.demo and job["spends"]:
             raise LookupError("demo data: a command that starts an agent is shown, not run")
-        out = execute(self.p, job["argv"], background=job["spends"])
+        if job["argv"][1:2] == ["undo"]:              # again: a resume may have started since it was prepared
+            undo_preview(self.p, job["argv"][2])
+        out = execute(self.p, job["argv"], background=job["spends"] or bool(job.get("bg")))
         if job["argv"][1:2] == ["handoff"] and out.get("ok"):
             out["handoff"] = handoff_result(job["argv"], out.get("out") or "")
         return {**out, "cmd": " ".join(_q(x) for x in job["argv"])}

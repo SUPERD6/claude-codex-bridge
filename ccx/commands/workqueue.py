@@ -1,6 +1,7 @@
 """ccx q — the project's durable work queue (ccx/queue.py): add pieces, see them, run every ready one."""
 from __future__ import annotations
 
+import argparse
 import functools
 import json
 import os
@@ -149,6 +150,11 @@ def compact_ls(root: Path, q: dict, gate: bool = False) -> str:
                f"${float(it.get('cost_usd') or 0):.3f}")
         if st == "doing" and it.get("live"):
             row += f" live {it['live']}"
+        elif unm and it.get("verdict") is None and i not in loose:
+            # one order, the same as ccx ui: your verdict first, then the merge
+            row += f" next: ccx q done {i} --ok 1, then ccx q accept {i}"
+        elif unm and it.get("verdict") is False:
+            row += " rejected: not merged"
         elif unm:
             row += f" next: ccx q accept {i}"
         elif st == "dep_blocked" and it.get("blocked_by"):
@@ -690,7 +696,7 @@ def register(sub) -> None:
     bu.add_argument("usd", type=float)
     dn = qs.add_parser("done", help="the lead's verdict on an item (also `ccx verify` on its run)")
     dn.add_argument("id", nargs="+", help="piece id(s), q1 or 1; several with --ok 1 need evidence for each")
-    dn.add_argument("--ok", type=int, choices=[0, 1], required=True)
+    dn.add_argument("--ok", type=int, choices=[0, 1], required=True, help="1 = right, 0 = wrong")
     dn.add_argument("--note", action="append", help='why (repeat; with several ids, one each: "q1: what you checked")')
     ac = qs.add_parser("accept", help="land finished worktree pieces: merge each branch in dependency order, run "
                        "the joint check after each merge, roll that merge back if it fails (never pushes)")
@@ -714,7 +720,9 @@ def register(sub) -> None:
         r.add_argument("--bg", action="store_true", help="run detached; its output goes to a log in the queue "
                        "folder; `ccx q ls` shows each running item's run id (`live`), the runner and how the last "
                        "run ended")
-    for x in (ad, bu, dn, ac):
-        x.add_argument("--cwd")
-    qp.add_argument("--cwd")
+    # --cwd before or after the subcommand (`ccx q --cwd D ls` and `ccx q ls --cwd D`): SUPPRESS keeps a subcommand
+    # that was not given it from overwriting the one given before it with None
+    for x in qs.choices.values():
+        x.add_argument("--cwd", default=argparse.SUPPRESS, help="the project folder (default: the current folder)")
+    qp.add_argument("--cwd", help="the project folder (default: the current folder)")
     qp.set_defaults(fn=cmd_q)

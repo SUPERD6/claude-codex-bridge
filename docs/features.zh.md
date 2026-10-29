@@ -6,11 +6,11 @@
 
 | | 做什么 | 现在的状态 |
 |---|---|---|
-| **1. 互为主子** | Claude Code 当主、Codex 干活，或者反过来；DeepSeek 也能当组长（`dsh`，或跑 DeepSeek 模型的 Claude Code），也能接活（经 Claude Code、经 Codex 或 `dsh`）；Gemini CLI 可以接活（未实测）。每家一个适配器，`ccx agents` 列出每家能做什么、测过哪个版本、官方还是社区。 | 两个方向真机跑通；DeepSeek 当组长（dsh、跑 DeepSeek 的 Claude Code）和当子智能体（三条路）都真跑过；Gemini 未实测 |
+| **1. 互为主子** | Claude Code 当主、Codex 干活，或者反过来；DeepSeek 也能当主导（`dsh`，或跑 DeepSeek 模型的 Claude Code），也能接活（经 Claude Code、经 Codex 或 `dsh`）；Gemini CLI 可以接活（未实测）。每家一个适配器，`ccx agents` 列出每家能做什么、测过哪个版本、官方还是社区。 | 两个方向真机跑通；DeepSeek 当主导（dsh、跑 DeepSeek 的 Claude Code）和当子智能体（三条路）都真跑过；Gemini 未实测 |
 | **2. 两个模型直接对话** | `ccx ask` 让另一家快速给个第二意见；`ccx resume` 在同一个子会话里追问；`ccx send` 把消息发进正在运行的 Codex 会话；`ccx say` / `ccx board` 让同一项目里开着的 Claude Code、Codex、DeepSeek 会话互相留言（每轮只看到给自己的新内容；Claude Code 桌面端只能下一轮看到，DeepSeek 会话要自己跑 `ccx board`）；`ccx discuss` 让 2–3 家不同厂商的模型把选错代价高的决定讨论清楚（出方案、挑错、裁判，最多 3 轮），在 `ccx ui` 里显示成对话。从外面派活：手机用 Remote Control，或用 `ccx intake` 把你在私人仓库开的带标签 issue 当任务取走、做完在 issue 里回报（[说明](intake.zh.md)）。 | 前三个真机可用；`ccx discuss` 真跑过两次，先两家、后三家（Codex、Claude、DeepSeek；[记录](research/2026-10-25-discuss-three-vendors.zh.md)）；`ccx intake` 只用假 `gh` 测过 |
-| **3. 共享记忆** | 个人层（你的 hub：记忆、技能、MCP、账本）和项目层（`.ccx/`：背景、日志、交接、断点）。开局 hook 只推对方新写的几行；`ccx handoff` 换主智能体接力，`ccx fresh` 把长对话交给同一工具的新对话。**共享工作上下文**（[说明](shared-context.zh.md)）：用代码从各家会话记录摘出“最近在做什么”，派活时附上（`ccx run --context`）、按需看（`ccx peek`）、每轮推一行——各家仍各有自己的上下文。 | 真机可用；共享工作上下文：在专门需要它的任务上一次做对 36/36，不带 7/36（[A/B](research/2026-10-25-shared-context-ab.zh.md)） |
+| **3. 共享记忆** | 个人层（你的 hub：记忆、技能、MCP、账本）和项目层（`.ccx/`：背景、日志、交接、断点）。开局 hook 只推对方新写的几行；`ccx handoff` 换主导接力，`ccx fresh` 把长对话交给同一工具的新对话。**共享工作上下文**（[说明](shared-context.zh.md)）：用代码从各家会话记录摘出“最近在做什么”，派活时附上（`ccx run --context`）、按需看（`ccx peek`）、每轮推一行——各家仍各有自己的上下文。 | 真机可用；共享工作上下文：在专门需要它的任务上一次做对 36/36，不带 7/36（[A/B](research/2026-10-25-shared-context-ab.zh.md)） |
 | **4. 分工合作** | 5 个问题打出难度 → 选智能体、模型、强度并给出成功率；算下来自己做更划算或该先拆，就直接说不派。`ccx batch` / `ccx q` 并行（`--lanes N`，默认关：同一家的小活续在几个热会话里，不再每块开新会话），长任务断了 `ccx task resume` 接着做。 | 选模型真机可用，但先验没校准；队列只有模拟测试 |
-| **5. 省和高效** | 子智能体精简启动；`ccx lead` 看主智能体每轮重读多少（`--breakdown` 拆开看、`--cache` 找缓存断在哪、`--suggest` 给主智能体自己的档位建议）；`ccx sum` 只把大段输出里要紧的给主智能体。 | 工具都在；省多少取决于主智能体怎么用（见实测） |
+| **5. 省和高效** | 子智能体精简启动；`ccx lead` 看主导每轮重读多少（`--breakdown` 拆开看、`--cache` 找缓存断在哪、`--suggest` 给主导自己的档位建议）；`ccx sum` 只把大段输出里要紧的给主导。 | 工具都在；省多少取决于主导怎么用（见实测） |
 | **6. 不掉质量** | ccx 自己重跑验收命令（`--check`）；另一家的模型独立审查改动（`--review`）；每次记对错（`ccx verify --ok 0 --reason wrong`），没人判的 12 小时后按证据记“大概对/错”；`ccx trial` 做一周正式对比。 | 真机可用；自动结论还没被抽查过 |
 | **7. 不丢可控** | 改配置先预演、真改前备份；`ccx undo` 撤回某次运行的改动；`--mode read` / `--worktree` 不动工作区；子智能体不能再派子智能体；`ccx ui` 在本机显示谁在干什么、什么等你拍板，按钮（停下、记对错、再改一轮、改预算）先给你看要运行的 `ccx` 命令，再点一次才运行。 | 真机可用；`ccx ui` 在 Edge 和桌面端内置浏览器里开过 |
 
@@ -27,7 +27,7 @@
 
 <img alt="按钮的第二次确认：要运行的完整命令，以及会不会花钱（演示数据）" src="assets/ui/k6-confirm-zh.png" width="100%">
 
-<img alt="ccx ui 总览：等你处理的 9 件事、现在的主智能体、两个项目和额度预测（演示数据）" src="assets/ui/overview-zh.png" width="100%">
+<img alt="ccx ui 总览：等你处理的 9 件事、现在的主导、两个项目和额度预测（演示数据）" src="assets/ui/overview-zh.png" width="100%">
 
 <img alt="ccx ui 任务页：一件任务画成组织图，每个干活的一列，右边是为什么要你拍板（演示数据）" src="assets/ui/task-zh.png" width="100%">
 
@@ -44,16 +44,16 @@
 你在 Claude Code 里说："把 `loader.py` 支持自定义分隔符，并补测试。"
 
 1. Claude（主）按 5 项给任务打分（改 2 个文件、单模块、目标清楚、风险低、有现成写法），写一段不到 200 字的简报，只写目标、要看的文件、怎样算完成。
-2. 执行 `ccx run --from claude --files 2 --coupling one --clarity goal "…"`。ccx 调用 task-routing 技能，算出每个“智能体:模型:强度”的成功率和每次成功的花费，挑出 `codex:gpt-6.1-sol:medium`。如果算下来自己做更划算、或者应该先拆开，就直接告诉主智能体，不派。
+2. 执行 `ccx run --from claude --files 2 --coupling one --clarity goal "…"`。ccx 调用 task-routing 技能，算出每个“智能体:模型:强度”的成功率和每次成功的花费，挑出 `codex:gpt-6.1-sol:medium`。如果算下来自己做更划算、或者应该先拆开，就直接告诉主导，不派。
 3. ccx 在后台调用 `codex exec -m gpt-6.1-sol -c model_reasoning_effort="medium" …`。会话 ID 一出现就存盘。Codex 自己读文件、改代码、跑测试，这部分 token 花的是 Codex 账号的额度。
 4. Codex 必须按 JSON schema 回报：`status / summary / files_changed / verification / …`。Claude 只读这一小段，再自己看一眼 `git diff`，确认测试真的跑过，然后 `ccx verify <run_id> --ok 1`。
 5. 如果 Codex 回报 `blocked`，ccx 会在**同一个 Codex 会话**里升一档（high）继续，不用重新喂背景。Codex 说做完了、但 ccx 自己重跑的 `--check` 没过，也会升一档（同一家时在同一会话里）；`ccx config set defaults.focused_retry true` 之后，这一次会拿到失败的命令和输出的最后约 2000 字，只修失败处（默认关，等实测确认再开）。如果 Codex 额度用完，自动换 Claude 做；超时或崩溃，`ccx resume <run_id>` 接着做（有检查点的长任务用 `ccx task resume`），沿用原来的标签、验收命令和 review 设置（`ccx resume` 可以用 `--check` / `--review` 改；`ccx task resume` 总是沿用）。想让它停：`ccx stop <run_id>` 结束子智能体和它开的所有进程，之后 `ccx resume` 能接上。
 6. 每次运行都写进账本，结果自动记回 task-routing / task-split，下次选得更准。`ccx report` 生成看板网页：谁花了多少 token、什么类型的 token、额度用了多少，先给花费，再给带标签的节省估算。
 
 反过来，在 Codex 里用同样的命令加 `--to claude`，就是 Codex 当主、Claude Code 当子。
-能不能用要看 Codex 的沙箱：ccx 要把运行记录写进 hub，子智能体要联网。`ccx doctor --codex-lead` 会检查这一点（“Codex as lead (sandbox)”那一行；普通 `ccx doctor` 里只占一行提示）。在 Windows 上真跑只有 `danger-full-access` 能用（codex-cli 0.164）：`workspace-write` 下命令用一个单独的沙箱账号运行，在里面启动的 Claude 子智能体每次改文件都被拒，把 hub 和 `~/.claude` 加进可写目录、打开网络也一样。**安全提醒：**完全访问意味着 Codex 组长跑的每条命令都带着你的全部权限、没有沙箱（你的文件、网络、凭据）；只在你愿意让它像你本人一样操作电脑时用。更窄的做法（按 Codex 官方文档可行，**还没真跑验证**）：保持 `workspace-write`，用一条 Codex 规则只让 ccx 派活的命令（`run`、`ask`、`resume`、`discuss`）在沙箱外运行：`ccx doctor --codex-rule >> ~/.codex/rules/ccx.rules`（Codex 的 rules 还是实验功能；装上后 `ccx doctor` 显示 Unknown 而不是 ok）。
+能不能用要看 Codex 的沙箱：ccx 要把运行记录写进 hub，子智能体要联网。`ccx doctor --codex-lead` 会检查这一点（“Codex as lead (sandbox)”那一行；普通 `ccx doctor` 里只占一行提示）。在 Windows 上真跑只有 `danger-full-access` 能用（codex-cli 0.164）：`workspace-write` 下命令用一个单独的沙箱账号运行，在里面启动的 Claude 子智能体每次改文件都被拒，把 hub 和 `~/.claude` 加进可写目录、打开网络也一样。**安全提醒：**完全访问意味着 Codex 主导跑的每条命令都带着你的全部权限、没有沙箱（你的文件、网络、凭据）；只在你愿意让它像你本人一样操作电脑时用。更窄的做法（按 Codex 官方文档可行，**还没真跑验证**）：保持 `workspace-write`，用一条 Codex 规则只让 ccx 派活的命令（`run`、`ask`、`resume`、`discuss`）在沙箱外运行：`ccx doctor --codex-rule >> ~/.codex/rules/ccx.rules`（Codex 的 rules 还是实验功能；装上后 `ccx doctor` 显示 Unknown 而不是 ok）。
 
-**子智能体知道你和主智能体聊过什么吗？** 不直接知道：把一长段对话塞给每个子智能体太贵，而且 Claude 和 Codex 本来就不能共享上下文。子智能体拿到的是简报（主智能体浓缩的结论）、项目背景、共享记忆和原文件。连续性靠**子会话**：同一个对话、同一个目录、同一个智能体，1 小时内的下一个任务会自动接回上一个子会话，它记得已经读过、做过什么（`--new` 强制新开）。从 Claude Code 派给 Claude 子智能体时，还可以用 `--fork` 让它从你整段对话的副本开始。
+**子智能体知道你和主导聊过什么吗？** 不直接知道：把一长段对话塞给每个子智能体太贵，而且 Claude 和 Codex 本来就不能共享上下文。子智能体拿到的是简报（主导浓缩的结论）、项目背景、共享记忆和原文件。连续性靠**子会话**：同一个对话、同一个目录、同一个智能体，1 小时内的下一个任务会自动接回上一个子会话，它记得已经读过、做过什么（`--new` 强制新开）。从 Claude Code 派给 Claude 子智能体时，还可以用 `--fork` 让它从你整段对话的副本开始。
 
 ## 共享的东西放在哪
 

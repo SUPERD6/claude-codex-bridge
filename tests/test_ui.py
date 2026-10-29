@@ -347,6 +347,30 @@ class TestStrings(unittest.TestCase):
             for lg in ("zh", "en"):
                 self.assertTrue(k in self.s[lg], f"{lg}: {k} missing")
 
+    def test_one_word_for_the_lead_in_chinese_and_new_words_in_both(self):
+        """zh: the lead is 主导 everywhere on the page (not 组长 / 主智能体); every new word exists in both languages."""
+        for k, v in self.s["zh"].items():
+            text = " ".join(v) if isinstance(v, list) else v
+            self.assertNotIn("组长", text, k)
+            self.assertNotIn("主智能体", text, k)
+        for k in ("k_decide", "k_review", "k_answer", "ago_d", "ago_w", "b_undo", "b_accept_anyway", "b_q_merge",
+                  "paste_lead", "act_undo_note", "act_merge_note", "next_wait", "queue_box", "ov_lead"):
+            for lg in ("zh", "en"):
+                self.assertIn(k, self.s[lg], f"{lg}: {k}")
+        self.assertIn("(dsh)", self.s["en"]["b_cont_dsh"])
+        self.assertIn("(dsh)", self.s["zh"]["b_cont_dsh"])
+        js = (STATIC / "app.js").read_text(encoding="utf-8")
+        self.assertIn('dsh: "DeepSeek (dsh)"', js)
+        # the queue's top box: the whole `const top = ...;` statement, both branches; no invented quote of the person
+        top = js.split('const top = tk.kind === "queue"', 1)[1].split(";", 1)[0]
+        q_branch = top.split("\n", 1)[0]                     # `? (queue: budget ? box_b : box)`, then `: you_asked`
+        self.assertIn('t("queue_box_b"', q_branch)
+        self.assertIn('t("queue_box"', q_branch)
+        self.assertNotIn("you_asked", q_branch)
+        for k in ("undo_restore", "undo_aside", "undo_chain", "act_started_bg"):
+            for lg in ("zh", "en"):
+                self.assertIn(k, self.s[lg], f"{lg}: {k}")
+
     def test_no_inline_handlers_in_the_page(self):
         for name in ("index.html", "app.js"):
             text = (STATIC / name).read_text(encoding="utf-8")

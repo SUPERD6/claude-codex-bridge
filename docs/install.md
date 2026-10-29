@@ -130,7 +130,8 @@ ccx q run --gate                      # dependents start only after `ccx q done 
                                       # writers get worktrees (clean checkout only), and what waits on one waits for
                                       # your merge + verdict; a piece whose dependency failed is marked dep_blocked
 ccx q ls [--long]                     # one line a piece: id, state, agent, seconds, $ (a worktree piece not landed
-                                      # yet shows `unmerged` with `next: ccx q accept qN`); --long = the full JSON
+                                      # yet shows `unmerged` with `next: ccx q done qN --ok 1, then ccx q
+                                      # accept qN`, or `next: ccx q accept qN` once judged); --long = the full JSON
 ccx q accept q1 q2 | --all-ready [--check CMD] [--dry-run]   # land worktree pieces: merge in dependency order,
                                       # joint check after each merge, roll that merge back if it fails; refuses
                                       # unfinished / no_changes / unverified pieces and stops a piece at a conflict;

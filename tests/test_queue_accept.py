@@ -171,7 +171,10 @@ class TestAccept(AcceptEnv):
         q1 = self.piece("one", {"a.txt": "a\n"})
         out = json.loads(self.ccx("q", "done", q1, "--ok", "1").stdout)
         self.assertEqual(out["not_merged"]["ids"], [q1])                    # recorded, with a pointer to accept
-        self.assertIn(f"{q1} unmerged", self.ccx("q", "ls").stdout)
+        ls = self.ccx("q", "ls").stdout
+        self.assertIn(f"{q1} unmerged", ls)
+        self.assertIn(f"next: ccx q accept {q1}", ls)                        # the verdict is in: the merge is next
+        self.assertNotIn(f"ccx q done {q1}", ls)
         out = self.accept("--all-ready")
         self.assertEqual([x["id"] for x in out["accepted"]], [q1])
         self.assertTrue((self.work / "a.txt").exists())
@@ -271,7 +274,7 @@ class TestPipelineEndToEnd(AcceptEnv):
         self.assertLess(len(ls.encode("utf-8")), 400 + 80)                  # 3 lines of pieces + the queue line
         for i in w:
             self.assertIn(f"{i} unmerged codex", ls)
-            self.assertIn(f"next: ccx q accept {i}", ls)
+            self.assertIn(f"next: ccx q done {i} --ok 1, then ccx q accept {i}", ls)   # verdict first, as in ccx ui
         acc = self.accept("--all-ready")
         self.assertEqual([x["id"] for x in acc["accepted"]], w)
         self.assertIn("ccx q run", acc["next"])

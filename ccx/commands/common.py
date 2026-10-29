@@ -458,8 +458,11 @@ def _spec_from_args(a, text: str) -> dict:
             "cwd": getattr(a, "cwd", None)}
 
 
-def _routing_args(ap) -> None:
-    g = ap.add_argument_group("routing rubric (task-routing; any of these switches on the calibrated pick)")
+def _routing_args(ap, into=None) -> None:
+    """The routing rubric options, in their own help group, or in `into` (run's "advanced" group; --tradeoff then
+    stays with the main options)."""
+    g = into if into is not None else ap.add_argument_group(
+        "routing rubric (task-routing; any of these switches on the calibrated pick)")
     g.add_argument("--files", type=int, default=0, help="files touched")
     g.add_argument("--coupling", choices=["one", "cross", "system"])
     g.add_argument("--clarity", choices=["spec", "goal", "unknown"])
@@ -468,7 +471,7 @@ def _routing_args(ap) -> None:
     g.add_argument("--b", type=float, help="difficulty 0-10 directly instead of the rubric")
     g.add_argument("--kind", choices=["code", "read", "research", "write"],
                    help="kind of work: decides which public benchmarks count (default: read-only -> read, else code)")
-    g.add_argument("--tradeoff", choices=["save", "balanced", "fast", "cheapest"],
+    (ap if into is not None else g).add_argument("--tradeoff", choices=["save", "balanced", "fast", "cheapest"],
                    help="tier: save | balanced | fast | cheapest (task-routing). Picks the models; `ccx propose` "
                         "also shows who would do the task (self, ccx, or ccx unchecked for cheapest). Passing it "
                         "authorises nothing. Default models: config defaults.tradeoff (shipped: save); default tier "

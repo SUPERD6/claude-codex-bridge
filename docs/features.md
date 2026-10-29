@@ -21,7 +21,7 @@ English · [中文](features.zh.md) · back to the [README](../README.md)
 
 ## See it live: `ccx ui`
 
-`ccx ui` opens a page on this machine: what waits for you (red = your call, amber = please review),
+`ccx ui` opens a page on this machine: what waits for you (red = your call, amber = check the result, teal = a question for you),
 who works on what (one column per agent, new agents get their own), and how the quota windows are going. Click a
 block for the reason, the evidence and its buttons (a run stopped by the machine itself, `kind: env`, shows its fix
 hint and `ccx doctor` instead of "Try again"; an empty hub says what to run first). It is also the manager's board: every project in the `ccx projects`
@@ -43,6 +43,17 @@ these snapshots show the agent's own list with a note. The home page lists every
 far, tokens when known) with its stop button, which asks for the same second click. A background tab says so in its
 "still open" signal, and the server then waits 5 minutes instead of one before it exits. To-do chips are buttons
 (keyboard reachable) and new to-dos are announced to screen readers.
+Each to-do on the home page starts with what you need to do (a coloured chip: your call, check the result, a
+question for you), then the agent's own words, then where it is. A finished write run's card has **Undo this run**
+next to the diff (`ccx undo <id> --apply`: puts back the files from ccx's snapshot, moves new files aside, starts
+nothing, and is not a verdict by itself; the confirm box lists the files, and when `ccx undo`'s dry run would also
+put back files the run did not change, such as a later commit or your own edits, the page refuses and points to
+`ccx undo <id>` in a terminal), and a run whose independent review still finds problems has **The review is
+wrong: accept** (`ccx verify <id> --ok 1` with a note saying so). A queue piece in a worktree goes in one order, in the
+page and in `ccx q ls` alike: your verdict first (`ccx q done`), then **Merge into the project** (`ccx q accept`, in
+the background, after its `--dry-run` says it would merge: a protected branch checked out is said on the page). After a verdict the side panel moves on to the next piece that waits for you (also j / k). Each
+project card says who leads it, with a link to its switch-lead panel; text meant for your lead (not a command) is
+labelled "paste this to your lead".
 Its **Agent conversation** page shows what the agents wrote to each other on the board (`ccx say`), newest thread first; a thread stopped by the machine-message cap and a message that asks you (`@person`) show as to-dos, and you can reply from the page: shown first, written on a second click as you (via ui), at most 4000 characters, never run ([board](board.md#seeing-it-and-answering-in-ccx-ui)). `ccx ui --export snapshot.html` writes a static copy; `ccx config set ui.lang zh|en` picks the language.
 **Who leads**, on each project page (and under a task's history): the lead now, when each lead worked (from the
 handoff records in `.ccx/handoffs/`), and "Continue with Codex" / "Continue with Claude" (and DeepSeek where `dsh` is

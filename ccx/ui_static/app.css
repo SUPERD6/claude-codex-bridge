@@ -43,7 +43,7 @@ button{font:inherit}
 .nav .task.cur{color:var(--ink)}
 .nav .sub{font-size:13.5px;color:var(--muted)}
 .nav .hit{padding-left:22px;font-size:13.5px}
-.badge{margin-left:auto;background:var(--red);color:#fff;border-radius:10px;font-size:11.5px;padding:0 7px;line-height:18px;font-weight:650;flex:none}
+.badge{margin-left:auto;background:var(--ink);color:var(--panel);border-radius:10px;font-size:11.5px;padding:0 7px;line-height:18px;font-weight:650;flex:none}
 .mini{margin-left:auto;width:46px;height:5px;border-radius:3px;background:var(--soft);overflow:hidden;flex:none}
 .mini i{display:block;height:100%;background:var(--teal)}
 .side .foot{margin-top:16px;padding-top:12px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
@@ -165,6 +165,16 @@ details.hist summary{cursor:pointer;color:var(--muted);font-weight:650;font-size
 .todo{display:flex;flex-direction:column;gap:8px}
 .todo a{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;padding:10px 12px;border:1px solid var(--line);border-left:4px solid var(--red);border-radius:10px;background:var(--panel);color:var(--ink)}
 .todo a.rv{border-left-color:var(--amber)}
+.todo a.ask{border-left-color:var(--teal)}
+.todo a .said{color:var(--muted);font-size:13.5px;flex-basis:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.kchip{font-size:11.5px;font-weight:700;padding:0 8px;border-radius:999px;line-height:20px;flex:none}
+.kchip.k-decide{background:var(--redSoft);color:var(--red)}.kchip.k-review{background:var(--amberSoft);color:var(--amber)}
+.kchip.k-answer{background:var(--soft);color:var(--teal)}
+.pwrap{display:flex;flex-direction:column;gap:4px}.pwrap .pcard{flex:1}
+.leadline{font-size:13px;color:var(--muted);padding:0 4px}
+.nextnote{margin:0 0 8px;color:var(--ok);font-size:13.5px;font-weight:650}
+.nextrow{margin:0 0 8px}
+.acts.undo{align-items:center;margin-top:8px}
 .todo a .where{margin-left:auto;font-size:12.5px;color:var(--muted)}
 .leads{display:flex;flex-wrap:wrap;gap:8px}
 .leads .card{padding:8px 12px;font-size:14px}
@@ -190,7 +200,6 @@ details.hist summary{cursor:pointer;color:var(--muted);font-weight:650;font-size
 .outcome{max-width:820px}.outcome p{margin:0 0 8px}
 
 /* U2: the agents' conversation (the board) and the person's reply */
-.todo a.conv{border-left-color:var(--amber)}
 .chat .msg.bmsg{align-self:flex-start}
 .chat .msg.bmsg.you{align-self:flex-end;border-color:var(--teal)}
 .chat .msg.bmsg.asks{border-color:var(--amber)}
