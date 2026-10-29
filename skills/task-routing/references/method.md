@@ -126,7 +126,7 @@ that makes the model expect those successes (smoothed by +½ success in n+1, so 
 by `weight` (0.5) and caps it at `max_shift` (1.5). It is a rung's offset **only until the hub records its first outcome
 for that rung**; the update then starts from it, and decay pulls it back toward the hand-set prior. A hub that already
 learned a rung is not affected. With round 1: luna low +0.67 (p at 5 minutes 0.55 → 0.74; measured 38/45), sonnet
-medium +0.78 (42/42). `ccx doctor` prints where routing starts ("routing prior"). The round's tasks are small Python
+medium +0.78 (42/42). `ccx doctor --verbose` prints where routing starts ("routing prior"). The round's tasks are small Python
 tasks from one person's evaluation; that is why the weight is low.
 
 ## 7. Why not call an existing router library directly

@@ -191,7 +191,8 @@ def sync_memory(p: Paths, plan: Plan) -> None:
             plan.warnings.append(f"external snapshot {p.memory_index} does not exist")
         plan.actions.append(f"(skip) snapshot {p.memory_index} is external: both tools already load it")
         from .runners import find_bin
-        for agent, cf in memory_targets():
+        # include_located: this only warns and writes nothing, so a dsh found only inside its app is still told
+        for agent, cf in memory_targets(include_located=True):
             if agent in ("claude", "codex") or not find_bin(agent):
                 continue
             text = cf.read_text(encoding="utf-8") if cf.exists() else ""

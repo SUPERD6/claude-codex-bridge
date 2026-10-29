@@ -457,9 +457,12 @@ def _act(rec: dict, verdict: dict | None, now: float, beat: float | None) -> dic
                 "buttons": [_btn("b_login", f"{rec.get('to')} login", "primary")]}
     if kind == "env":
         # the machine, not the task (delegate.env_failure): trying again meets the same wall, so no "Try again";
-        # the run's own hint says how to fix it, and doctor checks the setup (copy only, not run from the page)
-        from .delegate import env_hint
-        return {"kind": "decide", "what": "a_env", "why": ["w_env", {"hint": env_hint(rec)}],
+        # the fix (delegate.env_hint's, in the page's language) says what to do, doctor checks the setup (copy only,
+        # not run from the page), and ccx resume continues once it is fixed
+        agent = rec.get("to") or ""
+        return {"kind": "decide", "what": "a_env",
+                "why": ["w_env_codex" if agent == "codex" else "w_env",
+                        {"agent": agent, "err": rec.get("env_error") or "", "rid": rid}],
                 "buttons": [show, _btn("b_doctor", "ccx doctor", "primary")]}
     if not rec.get("ok") or res.get("status") in ("failed", "blocked"):
         return {"kind": "decide", "what": "a_failed", "why": ["w_failed", {}],

@@ -114,7 +114,7 @@ The end of its output:
 {tail}
 ```
 {model_line}Fix only what makes this check fail; keep the rest of your change and every part of the original task as it is.
-Re-run only the failing test(s) (one test id or -k NAME), not the whole check: ccx runs it again afterwards. Return the JSON result."""
+If the check's command lets you select part of it (one test, one target), re-run only the failing part, not the whole check: ccx runs it again afterwards. Return the JSON result."""
 
 CHECK_RETRY_SAME = "Same model as before, same session: you already know the task and the code.\n"
 CHECK_RETRY_STRONGER = "You now run on a stronger model, in the same session.\n"

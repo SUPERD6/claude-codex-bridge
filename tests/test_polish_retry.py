@@ -4,6 +4,9 @@ import json
 
 from test_adapters import AdapterEnv
 
+from ccx.config import Paths
+from ccx.prompts import CHECK_TAIL_CHARS
+
 MARK = "BOOM-the-failing-assert"
 
 
@@ -14,8 +17,8 @@ def counting_check(counter, noise: int = 1500) -> str:
 
 
 class TestFocusedRetry(AdapterEnv):
-    def run_t1(self, env=None):
-        check = counting_check(self.work / "check-runs.txt")
+    def run_t1(self, env=None, noise: int = 1500):
+        check = counting_check(self.work / "check-runs.txt", noise)
         return self.j("run", "--from", "claude", "--to", "codex", "--tier", "T1", "--review", "off", "--check", check,
                       "fix it", env=env)
 
@@ -32,7 +35,7 @@ class TestFocusedRetry(AdapterEnv):
 
     def test_on_resumes_the_session_with_the_check_output(self):
         self.assertEqual(self.ccx("config", "set", "defaults.focused_retry", "true").returncode, 0)
-        out = self.run_t1()
+        out = self.run_t1(noise=3000)                  # more output than the cap, so the cap itself is tested
         self.assertTrue(out["ok"])
         first, second = self.codex_calls()[-2:]
         rec = self.rec(out["run_id"])
@@ -44,11 +47,31 @@ class TestFocusedRetry(AdapterEnv):
         self.assertIn("check-runs.txt", p)                                       # the failing command
         self.assertIn("(exit 1)", p)
         self.assertIn(MARK, p)                                                   # the end of its output
-        self.assertGreater(p.count("x" * 100), 0)                                # ... ~2000 characters of it
+        fenced = p.split("```")[1]                                               # the tail, between the fences
+        n = fenced.count("x")
+        self.assertGreater(n, 800)                    # more than run_check's default 800 (and the old 400) ...
+        self.assertLessEqual(len(fenced.strip()), CHECK_TAIL_CHARS)              # ... and no more than the cap
+        self.assertGreater(n, CHECK_TAIL_CHARS - 100)                            # ~2000: the cap, not less
         self.assertIn("Fix only what makes this check fail", p)
         self.assertNotIn("you said done, but", p)
         self.assertEqual(rec["attempts"][0]["retry"], "focused")
         self.assertIn("stronger model", p)                    # T1 -> T2 is another model: the note says so
+
+    def test_same_model_next_rung_says_so(self):
+        # r6a q-killed-spend: T2 and T3 were the same codex model and effort, one session; the note must not
+        # claim a stronger model
+        Paths(self.hub).user_tiers.parent.mkdir(parents=True, exist_ok=True)
+        Paths(self.hub).user_tiers.write_text(
+            '[tiers.T2]\ncodex = { model = "gpt-6-luna", effort = "low" }\n', encoding="utf-8")
+        self.ccx("config", "set", "defaults.focused_retry", "true")
+        out = self.run_t1()
+        self.assertTrue(out["ok"])
+        rec = self.rec(out["run_id"])
+        self.assertEqual([a["rung"] for a in rec["attempts"]][:2], ["codex:gpt-6-luna:low"] * 2)
+        second = self.codex_calls()[-1]
+        self.assertEqual(second["argv"][:3], ["exec", "resume", rec["attempts"][0]["session_id"]])
+        self.assertIn("Same model as before", second["prompt"])
+        self.assertNotIn("stronger model", second["prompt"])
 
     def test_ladder_is_the_same_on_and_off(self):
         off = self.run_t1()
@@ -170,8 +193,19 @@ class TestUiEnvAndStart(Env):
         p = pieces(ui.collect(Paths(self.hub)))[0]
         act = p["act"]
         self.assertEqual(act["what"], "a_env")
-        self.assertEqual(act["why"][0], "w_env")
-        self.assertIn("ShellExecuteExW failed: 1223", act["why"][1]["hint"])        # the run's own fix hint
+        self.assertEqual(act["why"][0], "w_env_codex")                             # codex's own fix, localised
+        self.assertEqual(act["why"][1], {"agent": "codex", "err": "ShellExecuteExW failed: 1223", "rid": "r-env"})
+        strings = json.loads((STATIC / "strings.json").read_text(encoding="utf-8"))
+        for lg in ("zh", "en"):                     # no English hint inside the zh sentence; it ends in ccx resume
+            for k in ("w_env", "w_env_codex"):
+                self.assertIn("{err}", strings[lg][k])
+                self.assertIn("ccx resume {rid}", strings[lg][k])
+                self.assertIn("ccx doctor", strings[lg][k])
+        self.assertNotIn("Fix:", strings["zh"]["w_env_codex"])
+        put_run(self.hub, "r-env2", self.work, kind="env", ok=False, to="claude", env_error="spawn failed",
+                result={"status": "blocked", "summary": "x"})
+        acts = {x["run_id"]: x["act"] for x in pieces(ui.collect(Paths(self.hub)))}
+        self.assertEqual(acts["r-env2"]["why"][0], "w_env")                        # other agents: the general fix
         labels = [b["label"] for b in act["buttons"]]
         self.assertNotIn("b_retry", labels)
         doctor = next(b for b in act["buttons"] if b["label"] == "b_doctor")
@@ -248,6 +282,20 @@ def test_dsh_found_only_inside_its_app_is_not_connected_by_default(tmp_path, mon
     assert "dsh" in {a for a, _ in sync.memory_targets()}
     assert not [w for w in sync.sync_all(Paths(tmp_path / "hub"), apply=False, parts=["memory"]).warnings
                 if w.startswith("optional: dsh")]
+
+
+def test_external_snapshot_still_warns_about_a_dsh_found_only_inside_its_app(tmp_path, monkeypatch):
+    # an external snapshot: ccx writes no blocks, so the file never has one; the warning must not be lost
+    from ccx import sync
+    from ccx.config import Paths
+    _located_dsh(monkeypatch)
+    hub = tmp_path / "hub"
+    (hub / "ccx").mkdir(parents=True)
+    (hub / "ccx" / "layout.toml").write_text('[layout]\nsnapshot_mode = "external"\n', encoding="utf-8")
+    plan = sync.sync_all(Paths(hub), apply=False, parts=["memory"])
+    assert any(w.startswith("dsh leads with") for w in plan.warnings), plan.warnings
+    from ccx.agents.dsh import dsh_home
+    assert not any(str(dsh_home() / "AGENTS.md") in x for x in plan.actions)   # still nothing written
 
 
 def test_dsh_on_path_is_connected_as_before(tmp_path, monkeypatch):
