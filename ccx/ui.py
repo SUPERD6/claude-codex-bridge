@@ -1237,7 +1237,6 @@ def collect(p: Paths, project: Path | None = None, days: float = 7, rd: Reader |
     return {
         "v": 1, "generated": now, "lang": ui_lang(cfg), "poll_s": POLL_S, "beat_s": BEAT_S, "demo": is_demo(p),
         "start": start_hint(),                   # what an empty overview tells a new user to do first
-
         "projects": projects, "running": running, "quota": quota_view(rd, quota_wait), "leads": current,
         "agents": agents,
         "discussions": talks, "conversations": convs[:CONV_PROJECTS_MAX], "track": track, "track_min": ways.MIN_JUDGED, "suggestions": sugs,
