@@ -101,7 +101,7 @@ FRESH_HOMES = ("config-dir", "ccx-home")
 CCX_HOOK_EVENTS = ("SessionStart", "UserPromptSubmit")
 # arms whose units start Codex (ccx routes to it); r5's tier arms balanced / save may delegate through ccx and
 # cheapest runs ccx straight to Codex (r5.CHEAPEST; fast never delegates)
-CODEX_ARMS = ("ccx", "ccx2", "ccx2-skill", "direct", "balanced", "save", "cheapest")
+CODEX_ARMS = ("ccx", "ccx2", "ccx2nc", "ccx2-skill", "direct", "balanced", "save", "cheapest")
 # arms whose lead hands the work to Claude Code's own Agent-tool worker (no Codex: no eval CODEX_HOME needed)
 BUILTIN_ARMS = ("builtin", "builtin2", "builtin2r")
 # arms whose lead loads skills (no --disable-slash-commands; needs --claude-isolation ccx-home; r5.SKILL_ARMS)
@@ -176,10 +176,11 @@ def _norm(s) -> str:
 
 
 def _has(marker: str, text: str) -> bool:
-    """`marker` in `text` as a whole path or label: /w/1-t-ccx matches /w/1-t-ccx/x but not /w/1-t-ccx2."""
+    """`marker` in `text` as a whole path or label: /w/1-t-ccx matches /w/1-t-ccx/x but not /w/1-t-ccx2, and
+    /w/1-t-ccx2 not /w/1-t-ccx2@auto-medium (an `<arm>@auto` unit of the same task, r6a)."""
     if not marker:
         return False
-    tail = "" if marker[-1] in "/:" else r"(?![A-Za-z0-9_.-])"     # "eval-r5:<tag>:" is a prefix on purpose
+    tail = "" if marker[-1] in "/:" else r"(?![A-Za-z0-9_.@-])"     # "eval-r5:<tag>:" is a prefix on purpose
     return re.search(re.escape(marker) + tail, text) is not None
 
 
