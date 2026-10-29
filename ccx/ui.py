@@ -33,7 +33,11 @@ ui_static/strings.json; data (titles, summaries) is sent as plain text and the p
 Server: standard-library HTTP on 127.0.0.1, a random port. The token rides after '#' in the URL (never sent to the
 server, never in a request line) and comes back in an X-CCX-Token header on every data request; Host must be
 127.0.0.1 or localhost with this port (DNS rebinding), there are no CORS headers, and the page loads only its own
-files (CSP). The page polls every 3 s and says 'still open' every 10 s; 60 s without that and the server exits.
+files (CSP). The page polls every 3 s and says 'still open' every 10 s (and when it is shown again or focused); 60 s
+without that and the server exits, 5 minutes when the page's last word was that its tab is hidden.
+
+The decision card (U1) asks /api/judge/<run> for the change from ccx's own snapshots (undo.json -> end.json or
+undo.json's `after`), never from the live folder; read-only `git diff` of two object ids, capped in size.
 """
 from __future__ import annotations
 
@@ -62,6 +66,7 @@ INTERNAL = ("review:", "quota-probe", "selftest", "handoff-from-transcript")
 STALE_MIN = 10                # a running run with no write for this long may be stuck
 LEAD_MIN = 15                 # a lead conversation counts as current when written to this recently
 POLL_S, BEAT_S, IDLE_S, FIRST_BEAT_S = 3, 10, 60, 120
+HIDDEN_IDLE_S = 300           # a page that said it is hidden (browsers beat ~1/min there): idle this long, then exit
 QUOTA_EVERY_S, LEADS_EVERY_S, MONTH_EVERY_S = 60, 15, 300
 ACT_TTL_S = 120               # a prepared action must be confirmed within this long, once
 TITLE_MAX = 90
@@ -513,7 +518,8 @@ def piece_of_run(rd: Reader, rec: dict, verdict: dict | None, now: float, title:
         "live": running, "beat": lv["beat"], "ts": rec.get("ts"),
         "reviewer": _who_rung(rv.get("by")) if rv.get("verdict") not in (None, "not-run") else None,
         "summary": res.get("summary") or rec.get("error") or "", "files": res.get("files_changed") or [],
-        "check": ({"cmd": rec["check"].get("cmd"), "passed": rec["check"].get("passed")} if rec.get("check") else None),
+        "verification": _clip(res.get("verification"), JUDGE_TEXT_MAX),     # U1: what the agent says it checked
+        "check": check_view(rec.get("check")),                              # ... and what ccx ran (cmd, exit, tail)
         "review": ({"verdict": rv.get("verdict"), "issues": rv.get("issues") or []} if rv else None),
         "verdict": ({"ok": v.get("ok"), "soft": bool(v.get("soft")), "reason": v.get("reason")} if v else None),
         "attempts": len(atts), "rungs": [a.get("rung") for a in atts],
@@ -1011,7 +1017,7 @@ def collect(p: Paths, project: Path | None = None, days: float = 7, rd: Reader |
                 last = max(last, float(shown[x].get("ts") or 0) + sum(a.get("seconds") or 0 for a in shown[x].get("attempts") or []))
         tasks_by_root.setdefault(root, []).append({
             "id": _sid(key), "kind": "lead" if first.get("lead_session") else "run",
-            "title": lead.get("title") or (pieces[0]["title"] if len(pieces) == 1 else ""),
+            "title": lead.get("title") or pieces[0]["title"],     # no lead title: its first piece's (never blank)
             "asked": min(float(shown[h].get("ts") or now) for h in heads), "last": last,
             "lead": {"agent": lead.get("agent"), "model": lead.get("model")}, "helpers": [],
             "spent": round(sum(x["usd"] for x in pieces), 6), "budget": None, "pieces": pieces, "ctl": [],
@@ -1040,6 +1046,7 @@ def collect(p: Paths, project: Path | None = None, days: float = 7, rd: Reader |
                          "rules": _rules(rd, e) if e else [], "level": _level(rd, e)})
     projects.sort(key=lambda pr: -max(t["last"] or t["asked"] or 0 for t in pr["tasks"]))
     shown_roots = {Path(pr["path"]) for pr in projects}
+    running = running_now(projects)
     quiet = sorted((e for root, e in catalog.items() if root not in shown_roots and not proj),
                    key=lambda e: -float(e.get("last_active") or 0))
     others = [{"name": e.get("name"), "path": e.get("path"), "last": e.get("last_active"),
@@ -1067,7 +1074,8 @@ def collect(p: Paths, project: Path | None = None, days: float = 7, rd: Reader |
         sugs, n_sugs = [], 0
     return {
         "v": 1, "generated": now, "lang": ui_lang(cfg), "poll_s": POLL_S, "beat_s": BEAT_S,
-        "projects": projects, "quota": quota_view(rd, quota_wait), "leads": current, "agents": agents,
+        "projects": projects, "running": running, "quota": quota_view(rd, quota_wait), "leads": current,
+        "agents": agents,
         "discussions": talks, "track": track, "track_min": ways.MIN_JUDGED, "suggestions": sugs,
         "suggestions_total": n_sugs, "others": others, "others_total": len(quiet),
         "month": month_view(rd, quota_wait), "inbox": _inbox(rd),
@@ -1075,6 +1083,32 @@ def collect(p: Paths, project: Path | None = None, days: float = 7, rd: Reader |
                  "cash_usd": round(sum(_usd(r) for r in week if r.get("to") in providers or r.get("provider")), 4),
                  "runs": len(week), "verdicts": len(hard), "verdicts_needed": VERDICTS_TO_KNOW},
     }
+
+
+def running_now(projects: list[dict]) -> list[dict]:
+    """U4, the home page's "running now" strip: every piece whose run record says running (a queue item marked
+    doing without a live run is not one), with its agent, time so far, tokens when the session file told us, and the
+    stop button the piece already offers (its control, or for a stale run its act), addressed like any other button
+    so the same prepare / confirm path runs it. Oldest first."""
+    out = []
+    for pr in projects:
+        for t in pr["tasks"]:
+            for pc in _walk(t["pieces"]):
+                if not pc.get("live"):
+                    continue
+                btn, cmd = None, None
+                for group, tag in (((pc.get("ctl") or []), "c"), (((pc.get("act") or {}).get("buttons") or []), "a")):
+                    i = next((i for i, b in enumerate(group) if b.get("label") == "b_stop"), None)
+                    if i is not None:
+                        btn, cmd = f"{tag}{i}", group[i]["cmd"]
+                        break
+                out.append({"project": pr["id"], "task": t["id"], "piece": pc["id"], "run_id": pc.get("run_id"),
+                            "title": pc.get("title") or t.get("title") or pc.get("run_id") or "",
+                            "worker": pc.get("worker"), "model": pc.get("model") or "", "secs": pc.get("secs") or 0,
+                            "tokens": pc.get("tokens") or None, "ts": pc.get("ts"),
+                            "stale": ((pc.get("act") or {}).get("what") == "a_stale"), "btn": btn, "cmd": cmd,
+                            "test": bool(pc.get("test"))})
+    return sorted(out, key=lambda r: float(r.get("ts") or 0))
 
 
 def _walk(pieces: list[dict]):
@@ -1098,6 +1132,176 @@ def run_detail(p: Paths, run_id: str) -> dict:
     out = compact(rec)
     out["cwd"], out["mode"], out["ts"] = rec.get("cwd"), rec.get("mode"), rec.get("ts")
     out["logs"] = str(p.runs / run_id)
+    return out
+
+
+# ------------------------------------------------------------------ U1: is the sub-agent's work right? (the card)
+JUDGE_DIFF_MAX = 60_000       # bytes of diff the card gets; beyond, it says "truncated"
+JUDGE_FILES_MAX = 300         # file names on either side
+JUDGE_TEXT_MAX = 2000         # the agent's own verification text
+TAIL_MAX = 800                # the check's last output (run_check keeps the same)
+JUDGE_EXCLUDE_MAX = 200       # pre-existing untracked files left out of the diff by name
+GIT_TIMEOUT_S = 20
+_OID = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
+
+
+def _clip(s, n: int) -> str:
+    s = str(s or "")
+    return s if len(s) <= n else s[:n] + "…"
+
+
+def check_view(c: dict | None) -> dict | None:
+    """What ccx ran after the sub-agent said it was done: the command, its exit, the last output, and ccx's notes on
+    it (broken, weak, ran on an unchanged tree). Plain data; the page escapes it."""
+    if not c:
+        return None
+    return {"cmd": c.get("cmd"), "passed": c.get("passed"), "exit": c.get("exit"),
+            "tail": str(c.get("tail") or "")[-TAIL_MAX:], "broken": c.get("broken") or None,
+            "weak": c.get("weak") or None, "unchanged_tree": bool(c.get("unchanged_tree")),
+            "reason": c.get("reason") or None}
+
+
+def _read_json(f: Path):
+    try:
+        return json.loads(f.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+
+
+def _git_read(repo: str, args: list[str], cap: int) -> tuple[bytes, bool, bool]:
+    """(output, truncated, ok) of one read-only git command in `repo`: at most `cap` bytes are kept, then git is
+    stopped. No pager, no prompt, no optional locks (git diff takes no lock on the index then), no window."""
+    import subprocess
+    from .winproc import CREATE_NO_WINDOW
+    env = {**os.environ, "GIT_OPTIONAL_LOCKS": "0", "GIT_TERMINAL_PROMPT": "0", "GIT_PAGER": "cat", "PAGER": "cat"}
+    flags = {"creationflags": CREATE_NO_WINDOW} if os.name == "nt" else {}
+    try:
+        proc = subprocess.Popen(["git", "-C", repo, "-c", "core.quotepath=off", "--no-pager", *args],
+                                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                env=env, **flags)
+    except OSError:
+        return b"", False, False
+    timer = threading.Timer(GIT_TIMEOUT_S, proc.kill)
+    timer.start()
+    try:
+        data = proc.stdout.read(cap + 1)
+        truncated = len(data) > cap
+        if truncated:
+            proc.kill()
+        proc.stdout.close()
+        rc = proc.wait(GIT_TIMEOUT_S)
+    except Exception:  # noqa: BLE001 — a hung or odd git gives the card a note, not a 500
+        proc.kill()
+        return b"", False, False
+    finally:
+        timer.cancel()
+    return data[:cap], truncated, truncated or rc == 0
+
+
+def _said_path(f: str, cwd: str | None, repo: str) -> str:
+    """A file name the sub-agent reported, spelled like git's (relative to the repo top, forward slashes). Only a
+    string operation: the file is never opened."""
+    s = str(f).strip().replace("\\", "/")
+    while s.startswith("./"):
+        s = s[2:]
+    top = _resolved(repo)
+    try:
+        if Path(s).is_absolute():
+            return _resolved(s).relative_to(top).as_posix()
+        if cwd:
+            rel = _resolved(cwd).relative_to(top).as_posix()
+            if rel not in ("", "."):
+                return f"{rel}/{s}"
+    except ValueError:
+        pass
+    return s
+
+
+def judge(p: Paths, run_id: str) -> dict:
+    """The decision card's evidence for one run, read only from that run's own records under <hub>/ccx/runs/<id>:
+    what the agent says (summary, verification, the files it names), what ccx ran (the check, its exit and last
+    output), and the change itself, from ccx's own snapshots: undo.json's base (the tree before the run, a chain's
+    first one for a fix round) to end.json's full tree (new files included) or else undo.json's `after` tree (tracked
+    files; new untracked files by name only). Never a diff against the live working tree; only `git diff` of two
+    object ids, which changes nothing. Old runs without snapshots get a note and the page keeps today's view."""
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", run_id or ""):
+        raise ValueError("bad run id")
+    runs = p.runs.resolve()
+    run_dir = (p.runs / run_id).resolve()
+    if run_dir.parent != runs:
+        raise ValueError("bad run id")
+    rec = _read_json(run_dir / "run.json")
+    if not isinstance(rec, dict):
+        raise FileNotFoundError(f"no ccx run {run_id!r}")
+    res = rec.get("result") or {}
+    said = [str(x) for x in (res.get("files_changed") or []) if str(x).strip()][:JUDGE_FILES_MAX]
+    out = {"run_id": run_id,
+           "says": {"summary": _clip(res.get("summary") or rec.get("error"), JUDGE_TEXT_MAX),
+                    "verification": _clip(res.get("verification"), JUDGE_TEXT_MAX), "files": said},
+           "ran": check_view(rec.get("check")),
+           "changed": None, "diff": None, "truncated": False, "mismatch": None, "untracked_before": [],
+           "note": None, "chain_from": None, "source": None}
+    if rec.get("state") == "running":
+        out["note"] = "j_running"
+        return out
+    snap = _read_json(run_dir / "undo.json")
+    if not isinstance(snap, dict) or not snap.get("base"):
+        out["note"] = "j_read_only" if rec.get("mode") == "read" else "j_no_snapshot"
+        return out
+    end = _read_json(run_dir / "end.json")
+    after = snap.get("after") if isinstance(snap.get("after"), dict) else {}
+    base = str(snap.get("base") or "")
+    if isinstance(end, dict) and _OID.fullmatch(str(end.get("tree") or "")):
+        end_tree, out["source"] = str(end["tree"]), "end"
+    elif _OID.fullmatch(str(after.get("tree") or "")):
+        end_tree, out["source"] = str(after["tree"]), "after"
+    else:
+        out["note"] = "j_no_end"
+        return out
+    repo = str(snap.get("repo") or "")
+    if not _OID.fullmatch(base) or not repo or not Path(repo).is_dir():
+        out["note"] = "j_repo_gone"
+        return out
+    out["chain_from"] = snap.get("chain_from")
+    before_untracked = {str(x) for x in snap.get("untracked") or []}
+    raw, _, ok = _git_read(repo, ["diff", "--name-status", "-z", "--no-renames", base, end_tree], 1_000_000)
+    if not ok:
+        out["note"] = "j_repo_gone"
+        return out
+    bits = raw.decode("utf-8", errors="replace").split("\0")
+    changed, was_untracked = [], []
+    for st, path in zip(bits[0::2], bits[1::2]):
+        if not st:
+            continue
+        if out["source"] == "end" and st == "A" and path in before_untracked:
+            was_untracked.append(path)                # there before the run, untracked: can't tell if it changed
+            continue
+        changed.append({"path": path, "status": st[:1]})
+    if out["source"] == "after":                       # new untracked files: names only (contents not snapshotted)
+        now_untracked = {str(x) for x in after.get("untracked") or []}
+        changed += [{"path": x, "status": "?"} for x in sorted(now_untracked - before_untracked)]
+        if now_untracked - before_untracked:
+            out["note"] = "j_untracked_names"
+    out["changed"] = changed[:JUDGE_FILES_MAX]
+    out["untracked_before"] = sorted(was_untracked)[:JUDGE_FILES_MAX]
+    spec = []
+    if was_untracked:
+        if len(was_untracked) <= JUDGE_EXCLUDE_MAX:
+            spec = ["--", ".", *[f":(exclude,literal){x}" for x in was_untracked]]
+        else:
+            out["note"] = "j_untracked_many"
+    diff, cut, ok = _git_read(repo, ["diff", "--no-color", "--no-ext-diff", "--no-textconv", "--no-renames", base,
+                                     end_tree, *spec], JUDGE_DIFF_MAX)
+    if ok:
+        out["diff"], out["truncated"] = diff.decode("utf-8", errors="replace"), cut
+    fold = (lambda s: s.casefold()) if os.name == "nt" else (lambda s: s)
+    real = {fold(c["path"]): c["path"] for c in changed}
+    named = {fold(_said_path(f, rec.get("cwd"), repo)): f for f in said}
+    skip = {fold(x) for x in was_untracked}
+    extra = [f for k, f in named.items() if k not in real and k not in skip]
+    missing = [v for k, v in real.items() if k not in named]
+    if extra or missing:
+        out["mismatch"] = {"said_not_changed": extra[:JUDGE_FILES_MAX], "changed_not_said": missing[:JUDGE_FILES_MAX]}
     return out
 
 
@@ -1151,12 +1355,14 @@ class UI:
     """The running server. `serve()` blocks until the page has been gone for IDLE_S (or stop())."""
 
     def __init__(self, p: Paths, project: Path | None = None, days: float = 7, port: int = 0,
-                 idle_s: float = IDLE_S, first_beat_s: float = FIRST_BEAT_S):
+                 idle_s: float = IDLE_S, first_beat_s: float = FIRST_BEAT_S, hidden_idle_s: float = HIDDEN_IDLE_S):
         self.p, self.project, self.days = p, project, days
         self.token = secrets.token_urlsafe(24)
-        self.idle_s, self.first_beat_s = idle_s, first_beat_s
+        self.idle_s, self.first_beat_s, self.hidden_idle_s = idle_s, first_beat_s, hidden_idle_s
         self.started = time.time()
         self.last_beat: float | None = None
+        self.hidden = False                       # the last heartbeat came from a hidden tab
+        self.judged: dict[str, tuple] = {}        # run id -> (run record's mtime/size, judge())
         self.reader = Reader(p)
         self.lock = threading.Lock()
         self.pending: dict[str, dict] = {}
@@ -1213,6 +1419,9 @@ class UI:
                     if path.startswith("/api/run/"):
                         return self._send(200, json.dumps(run_detail(ui.p, path[len("/api/run/"):]),
                                                           ensure_ascii=False).encode("utf-8"))
+                    if path.startswith("/api/judge/"):        # U1: read-only, one run's own records
+                        return self._send(200, json.dumps(ui.judge(path[len("/api/judge/"):]),
+                                                          ensure_ascii=False).encode("utf-8"))
                 except (FileNotFoundError, ValueError) as e:
                     return self._send(404, json.dumps({"error": str(e)[:200]}).encode())
                 except Exception as e:  # noqa: BLE001 — an odd record answers 500, the server keeps going
@@ -1225,7 +1434,7 @@ class UI:
                 if not self._token_ok():
                     return self._deny("token")
                 if urlsplit(self.path).path == "/api/alive":
-                    ui.last_beat = time.time()
+                    ui.beat(hidden=urlsplit(self.path).query == "hidden=1")
                     return self._send(200, b'{"ok":true}')
                 if urlsplit(self.path).path == "/api/suggestion":
                     return self._suggestion()
@@ -1354,12 +1563,41 @@ class UI:
     def url(self) -> str:
         return f"http://127.0.0.1:{self.port}/#k={self.token}"
 
+    def judge(self, run_id: str) -> dict:
+        """judge(), kept while the run's record is unchanged (the page asks again on every redraw of the card)."""
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", run_id or ""):
+            raise ValueError("bad run id")
+        try:
+            st = (self.p.runs / run_id / "run.json").stat()
+            key = (st.st_mtime_ns, st.st_size)
+        except OSError:
+            raise FileNotFoundError(f"no ccx run {run_id!r}") from None
+        hit = self.judged.get(run_id)
+        if hit and hit[0] == key:
+            return hit[1]
+        out = judge(self.p, run_id)
+        with self.lock:
+            if len(self.judged) > 200:
+                self.judged.clear()
+            self.judged[run_id] = (key, out)
+        return out
+
+    def beat(self, now: float | None = None, hidden: bool = False) -> None:
+        """The page says it is still open; `hidden` when its tab is in the background (U3)."""
+        self.last_beat = now or time.time()
+        self.hidden = bool(hidden)
+
     def idle_for(self, now: float | None = None) -> float:
         now = now or time.time()
         return now - (self.last_beat or self.started)
 
     def should_stop(self, now: float | None = None) -> bool:
-        limit = self.idle_s if self.last_beat else max(self.idle_s, self.first_beat_s)
+        """60 s without a heartbeat and the server exits; a page whose last word was "hidden" gets HIDDEN_IDLE_S
+        (browsers wake a background tab's timers about once a minute), so a closed tab still ends it, later."""
+        if not self.last_beat:
+            limit = max(self.idle_s, self.first_beat_s)
+        else:
+            limit = max(self.idle_s, self.hidden_idle_s) if self.hidden else self.idle_s
         return self.idle_for(now) > limit
 
     def _watch(self):

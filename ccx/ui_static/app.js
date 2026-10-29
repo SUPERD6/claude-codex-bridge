@@ -192,7 +192,7 @@
       for (const x of todos) h += `<a class="${x.p.act.kind === "review" ? "rv" : ""}" href="${href([x.pr.id, x.tk.id].concat(x.ch.map(c => c.id)), x.p.id)}"><b>${esc(x.p.title)}</b><span>${t(x.p.act.what)}</span><span class="where">${esc(x.pr.name)} › ${esc(taskTitle(x.tk))}</span></a>`;
       h += `</div>`;
     }
-    h += sugHTML() + leadsHTML() + discRecentHTML();
+    h += runningHTML() + sugHTML() + leadsHTML() + discRecentHTML();
     h += `<h2>${t("projects")}</h2><div class="grid">`;
     for (const pr of D.projects) {
       let n = 0, d = 0, need = 0; const ws = new Set();
@@ -202,6 +202,22 @@
         <div class="whos">${[...ws].map(w => who(w)).join("")}</div></a>`;
     }
     return h + `</div>` + othersHTML() + weekHTML();
+  }
+  /* U4: every run going on now, with its agent, time so far, tokens when known, and the piece's own stop button
+     (the same prepare -> exact command -> second click as everywhere; a snapshot shows the command) */
+  function runningHTML() {
+    const rs = ((D && D.running) || []).filter(r => TESTS || !r.test);
+    if (!rs.length) return "";
+    let h = `<h2>${t("run_now")}</h2><div class="runs">`;
+    for (const r of rs) {
+      const key = r.project + "|" + r.task + "|" + r.piece;
+      h += `<div class="runrow${r.stale ? " stale" : ""}"><div class="rt"><a href="${href([r.project, r.task], r.piece)}">${esc(r.title)}</a> ${who(r.worker, r.model)}</div>`
+        + `<span class="rm"><span data-rsecs="${esc(r.piece)}">${t("run_for", {t: dur(r.secs)})}</span>${r.tokens ? " · " + t("run_tokens", {n: tok(r.tokens)}) : ""}${r.stale ? ` · <span class="warn">${t("run_stale")}</span>` : ""}</span>`;
+      if (r.btn && !SNAP) h += `<button class="btn bad" data-rbtn="${esc(r.btn)}" data-key="${esc(key)}">${t("b_stop")}</button>`;
+      else if (r.cmd) h += `<code class="mono">${esc(r.cmd)}</code>`;
+      h += `<div class="cmd" data-actbox="${esc(key)}" hidden></div></div>`;
+    }
+    return h + `</div>`;
   }
   /* H5: notes ccx suggests keeping, each waiting for a yes or no (the page's one write; a snapshot shows the command) */
   const SUG_KINDS = {preference: "sug_preference", decision: "sug_decision", pitfall: "sug_pitfall"};
@@ -457,8 +473,8 @@
     const needs = list.filter(p => p.act).sort((a, b) => (a.act.kind === "review") - (b.act.kind === "review"));
     if (needs.length) {
       const first = needs.slice(0, NEEDS_SHOWN);
-      h += `<div class="needs"><span style="color:var(--muted);font-size:13.5px;align-self:center">${t("needs_here")}</span>${first.map(p => `<a data-sel="${esc(p.id)}" class="${p.act.kind === "review" ? "rv" : ""}${sel === p.id ? " sel" : ""}" title="${esc(p.title)}">${esc(p.title)} · ${t(p.act.what)}</a>`).join("")}`
-        + (needs.length > first.length ? `<a data-filt="mine" class="rv">${t("needs_more", {n: needs.length - first.length})}</a>` : "") + `</div>`;
+      h += `<div class="needs"><span style="color:var(--muted);font-size:13.5px;align-self:center">${t("needs_here")}</span>${first.map(p => `<button type="button" data-sel="${esc(p.id)}" class="chip-todo ${p.act.kind === "review" ? "rv" : ""}${sel === p.id ? " sel" : ""}" aria-pressed="${sel === p.id}" title="${esc(p.title)}">${esc(p.title)} · ${t(p.act.what)}</button>`).join("")}`
+        + (needs.length > first.length ? `<button type="button" data-filt="mine" class="chip-todo rv">${t("needs_more", {n: needs.length - first.length})}</button>` : "") + `</div>`;
     }
     h += `<div class="filters">${[["all", "f_all"], ["mine", "f_mine"], ["run", "f_run"]].map(([k, l]) => `<button class="${filt === k ? "on" : ""}" data-filt="${k}">${t(l)}</button>`).join("")}</div>`;
     h += `<div class="layout"><div class="card"><div class="orgwrap"><div class="org">`;
@@ -513,7 +529,8 @@
   function renderDrawer(list, base, old, busy) {
     const d = $("drawer"); if (!d) return;
     const f = sel ? findPiece(list, sel) : null;
-    const sig = JSON.stringify([LANG, sel, f && f.p]), stable = JSON.stringify([LANG, sel, f && stableOf(f.p)]);
+    const jd = f && JUDGE[judgeKey(f.p)] ? 1 : 0;
+    const sig = JSON.stringify([LANG, sel, f && f.p, jd]), stable = JSON.stringify([LANG, sel, f && stableOf(f.p), jd]);
     if (old && (sig === drawerSig || (busy && stable === drawerStable))) { d.replaceWith(old); return; }
     drawerSig = sig; drawerStable = stable;
     if (!f) { d.innerHTML = `<p class="empty">${t("pick")}</p>`; return; }
@@ -532,8 +549,7 @@
     if (p.children) h += `<dt>${t("d_inside")}</dt><dd>${t("in_split", {n: p.children.length, d: p.children.filter(x => x.status === "done").length, r: p.children.filter(x => x.status === "run").length, k: below(p)})}<br><a href="${href(base.concat([p.id]))}">${t("open_level")}</a></dd>`;
     if (p.run_id) h += `<dt>${t("d_run")}</dt><dd class="mono" style="font-size:12px">${esc(p.run_id)}</dd>`;
     h += `</dl>`;
-    if (p.summary) h += `<h3>${t("ev_says")}</h3><p class="says">${esc(p.summary)}</p>`;
-    if (p.files && p.files.length) h += `<h3>${t("ev_changed")}</h3><ul class="files mono">${p.files.slice(0, 12).map(x => `<li>${esc(x)}</li>`).join("")}</ul>`;
+    h += judgeHTML(p);
     if (p.review && p.review.issues && p.review.issues.length) h += `<h3>${t("issues")}</h3><ul class="files">${p.review.issues.map(x => `<li>${esc(x)}</li>`).join("")}</ul>`;
     if (p.native && p.native.length) h += `<h3>${t("d_native", {w: agentName(p.worker)})}</h3><ul class="nlist">${p.native.map(x => `<li><span class="mono">${esc(x.id)}</span><div class="m">${tok(x.tokens)} tokens</div></li>`).join("")}</ul>`;
     const ctl = p.ctl || [], key = base[0] + "|" + base[1] + "|" + p.id;
@@ -544,10 +560,71 @@
       h += `<div id="reasons"></div><div class="cmd" data-actbox="${esc(key)}" hidden></div><div class="cmd" id="cmd" hidden></div>`;
     }
     d.innerHTML = h;
+    wantJudge(p);
     paintAct();
     if (ACT && ACT.key === key) return;
     if (a && chosen && chosen.sel === p.id) fillCmd(chosen.label, chosen.cmd);
     else if (a && (SNAP || !a.buttons[0].run)) showCmd(p, 0, true);
+  }
+  /* ---------- U1: is it right? what the agent says beside what ccx ran, and the change from ccx's own snapshots ----------
+     Every name, output and diff line is data written by others (a file may be called <img onerror=...>): esc() always. */
+  const JUDGE = {}, JBUSY = {}, JFILES = 40;
+  function judgeKey(p) { return p && p.run_id ? p.run_id + ":" + p.status + ":" + (p.attempts || 0) + ":" + (p.rounds || 0) : ""; }
+  function wantJudge(p) {
+    const k = judgeKey(p);
+    if (SNAP || !k || p.live || JUDGE[k] || JBUSY[k]) return;
+    JBUSY[k] = 1;
+    api("/api/judge/" + encodeURIComponent(p.run_id))
+      .then(j => { JUDGE[k] = j; }, e => { JUDGE[k] = {error: (e && e.message) || "?"}; })
+      .then(() => {
+        delete JBUSY[k];
+        const cur = currentList(), d = $("drawer");
+        if (cur && sel === p.id && d && !d.contains(document.activeElement)) { drawerSig = ""; renderDrawer(cur.list, cur.base, null, false); }
+      });
+  }
+  function diffLines(s) {
+    return String(s).split("\n").map(l => {
+      const c = l.startsWith("+++") || l.startsWith("---") ? "" : l.startsWith("+") ? "add" : l.startsWith("-") ? "del" : l.startsWith("@@") ? "hunk" : "";
+      return c ? `<span class="${c}">${esc(l)}</span>` : esc(l);
+    }).join("\n");
+  }
+  function fileList(list) {
+    const more = list.length - JFILES;
+    return `<ul class="files mono">${list.slice(0, JFILES).map(x => `<li>${esc(x)}</li>`).join("")}</ul>` + (more > 0 ? `<p class="cost">${t("j_more", {n: more})}</p>` : "");
+  }
+  function judgeHTML(p) {
+    const j = JUDGE[judgeKey(p)] || null, c = p.check;
+    let h = `<div class="judge"><div class="jcol"><h3>${t("j_says")}</h3>`;
+    if (p.summary) h += `<p class="says">${esc(p.summary)}</p>`;
+    h += p.verification ? `<div class="k">${t("j_verified")}</div><p class="says">${esc(p.verification)}</p>` : `<p class="cost">${t("j_no_verif")}</p>`;
+    h += `</div><div class="jcol"><h3>${t("j_ran")}</h3>`;
+    if (c) {
+      const cls = c.passed ? "pass" : c.passed === false ? "fail" : "cost", word = c.passed ? "passed" : c.passed === false ? "failed" : "j_not_judged";
+      h += `<p class="says"><span class="${cls}">${t(word)}</span>${c.exit != null ? " · " + t("j_exit", {e: c.exit}) : ""}</p><code class="mono jcmd">${esc(c.cmd || "")}</code>`;
+      if (c.broken) h += `<p class="warn">${esc(c.broken)}</p>`;
+      if (c.unchanged_tree) h += `<p class="warn">${t("j_unchanged")}</p>`;
+      if (c.weak) h += `<p class="warn">${esc(c.weak)}</p>`;
+      h += c.tail ? `<div class="k">${t("j_tail")}</div><pre class="tail mono">${esc(c.tail)}</pre>` : `<p class="cost">${t("j_no_tail")}</p>`;
+    } else h += `<p class="cost">${t("j_no_check")}</p>`;
+    h += `</div></div>`;
+    if (j && j.changed) {
+      const mm = j.mismatch;
+      if (mm) {
+        h += `<div class="mismatch"><b>${t("j_mismatch")}</b>`;
+        if ((mm.said_not_changed || []).length) h += `<div class="k">${t("j_said_not")}</div>` + fileList(mm.said_not_changed);
+        if ((mm.changed_not_said || []).length) h += `<div class="k">${t("j_changed_not")}</div>` + fileList(mm.changed_not_said);
+        h += `</div>`;
+      } else if (j.changed.length) h += `<p class="good-note">${t("j_match")}</p>`;
+      h += `<h3>${t("j_changed", {n: j.changed.length})}</h3>` + fileList(j.changed.map(x => x.status + "  " + x.path));
+      if (j.chain_from) h += `<p class="cost">${t("j_chain", {r: j.chain_from})}</p>`;
+      if ((j.untracked_before || []).length) h += `<p class="cost">${t("j_untracked_before", {n: j.untracked_before.length})}</p>`;
+      if (j.diff != null) h += `<details class="diffbox"><summary>${t("j_diff")}</summary><pre class="diff mono">${diffLines(j.diff)}</pre>${j.truncated ? `<p class="warn">${t("j_truncated")}</p>` : ""}</details>`;
+      if (j.truncated) h += `<p class="warn">${t("j_truncated")}</p>`;
+    } else if (p.files && p.files.length) h += `<h3>${t("ev_changed")}</h3>` + fileList(p.files);
+    if (j && j.note) h += `<p class="cost">${t(j.note)}</p>`;
+    if (j && j.error) h += `<p class="cost">${t("j_failed", {e: j.error})}</p>`;
+    if (!j && p.run_id && !p.live) h += `<p class="cost">${t(SNAP ? "j_snap" : "j_loading")}</p>`;
+    return h;
   }
   function whyText(why) {
     const [k, p] = why; const q = Object.assign({}, p || {});
@@ -608,7 +685,7 @@
     if (r[0] === "discuss") { main.innerHTML = discHTML(r[1]); return; }
     const pr = r.length ? findProject(r[0]) : null;
     const tk = pr && r[1] ? findTask(pr, r[1]) : null;
-    if (!pr) { main.innerHTML = renderOverview(); return; }
+    if (!pr) { main.innerHTML = renderOverview(); paintAct(); return; }
     if (!tk) { main.innerHTML = renderProject(pr); return; }
     const keep = window.scrollY;
     renderTask(pr, tk, r.slice(2));
@@ -622,7 +699,7 @@
 
   /* ---------- events (one listener; no inline handlers, the page's CSP forbids them) ---------- */
   document.addEventListener("click", (e) => {
-    const el = e.target.closest("[data-sel],[data-filt],[data-more],[data-btn],[data-tbtn],[data-reason],[data-do],[data-sug]");
+    const el = e.target.closest("[data-sel],[data-filt],[data-more],[data-btn],[data-tbtn],[data-rbtn],[data-reason],[data-do],[data-sug]");
     if (!el) return;
     if (el.dataset.sug !== undefined) { if (!SNAP && !el.disabled) decideSug(el.dataset.sug, el.dataset.ok === "1"); return; }
     if (el.dataset.do === "act-cancel") { ACT = null; paintAct(); return; }
@@ -635,6 +712,11 @@
     if (el.dataset.tbtn !== undefined) {           /* a task's own control (the queue's budget) */
       const w = where(el.dataset.key), tk = findTask(findProject(w.project), w.task);
       if (tk) pressBtn(el.dataset.key, tk, el.dataset.tbtn);
+      return;
+    }
+    if (el.dataset.rbtn !== undefined) {           /* the "running now" strip's stop: that piece's own button */
+      const w = where(el.dataset.key), tk = findTask(findProject(w.project), w.task), f = tk && findPiece(tk.pieces, w.piece);
+      if (f) pressBtn(el.dataset.key, f.p, el.dataset.rbtn);
       return;
     }
     if (el.dataset.do === "lang") { LANG = LANG === "zh" ? "en" : "zh"; try { localStorage.setItem("ccx-lang", LANG); } catch (x) { /* ok */ } render(); return; }
@@ -689,6 +771,7 @@
   function patchLive() {
     const live = $("side") && $("side").querySelector(".brand .live");
     if (live && D) live.innerHTML = `<span class="dot"></span>${t("updated", {a: raw(ago(D.generated))})}`;
+    for (const r of (D && D.running) || []) for (const el of document.querySelectorAll("[data-rsecs]")) if (el.dataset.rsecs === r.piece) el.innerHTML = t("run_for", {t: dur(r.secs)});
     const cur = currentList(); if (!cur) return;
     walk(cur.list, p => {
       if (p.status !== "run") return;
@@ -706,19 +789,37 @@
     ALL = got; D = view(got); OFFLINE = false; lastOk = Date.now();
     return changed;
   }
+  /* U5: new to-dos are read out by screen readers through the one live region outside the redrawn page */
+  let SEEN = null;
+  function announce() {
+    const now = new Set(), fresh = [];
+    for (const pr of (D && D.projects) || []) for (const tk of pr.tasks) walk(tk.pieces, p => {
+      if (!p.act) return;
+      const k = pr.id + "|" + tk.id + "|" + p.id + "|" + p.act.what;
+      now.add(k);
+      if (SEEN && !SEEN.has(k)) fresh.push(p.title + " — " + t(p.act.what));
+    });
+    SEEN = now;
+    const el = $("announce");
+    if (el && fresh.length) el.textContent = t("todo_new", {n: fresh.length}) + " " + fresh.slice(0, 3).join("; ");
+  }
   async function poll() {
     try {
-      if (await refresh()) render(); else patchLive();
+      if (await refresh()) { render(); announce(); } else patchLive();
     } catch (e) {
       if (!OFFLINE && Date.now() - lastOk > 8000) { OFFLINE = true; render(); }
     }
     setTimeout(poll, ((D && D.poll_s) || 3) * 1000);
   }
+  /* "still open"; hidden=1 from a background tab, whose timers the browser wakes about once a minute: the server then
+     waits several minutes instead of one before it decides the page is gone */
+  function alive() { if (!SNAP && TOKEN) api("/api/alive" + (document.hidden ? "?hidden=1" : ""), {method: "POST"}).catch(() => {}); }
   function beat() {
-    if (!OFFLINE || Date.now() - lastOk < 60000) api("/api/alive", {method: "POST"}).catch(() => {});
+    if (!OFFLINE || Date.now() - lastOk < 60000) alive();
     setTimeout(beat, ((D && D.beat_s) || 10) * 1000);
   }
-  document.addEventListener("visibilitychange", () => { if (!document.hidden && !SNAP) api("/api/alive", {method: "POST"}).catch(() => {}); });
+  document.addEventListener("visibilitychange", alive);      /* hidden: say so now; shown again: at once, not in 10 s */
+  addEventListener("focus", alive);
 
   async function start() {
     try { const th = localStorage.getItem("ccx-theme"); if (th === "dark" || th === "light") document.documentElement.dataset.theme = th; } catch (e) { /* ok */ }
@@ -740,7 +841,7 @@
     try { STR = await (await fetch("/strings.json", {cache: "no-store"})).json(); } catch (e) { /* keys show */ }
     LANG = chooseLang();
     if (!TOKEN) { $("main").innerHTML = `<h1>ccx ui</h1><p class="lead">${t("no_token")}</p>`; return; }
-    api("/api/alive", {method: "POST"}).catch(() => {});
+    alive();
     await poll();
     setTimeout(beat, ((D && D.beat_s) || 10) * 1000);
   }
