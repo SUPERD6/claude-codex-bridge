@@ -228,7 +228,7 @@ def test_hand_over_from_the_page(server):
     assert code == 200 and out["ok"], out
     h = out["handoff"]
     f = Path(h["file"])
-    assert f.is_file() and base in f.parents and h["to"] == "codex"
+    assert f.is_file() and base.resolve() in f.resolve().parents and h["to"] == "codex"
     assert h["paste"].startswith("Continue the work described in the handoff at .ccx/handoffs/")
     assert h["blank"] is False and h["shown_at_start"] is True
     assert "from=claude to=codex" in f.read_text(encoding="utf-8")
