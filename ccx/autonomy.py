@@ -242,18 +242,13 @@ def merge(p: Paths, run_id: str, info: dict, cfg: dict | None = None, rules: lis
         return {**out, "why_not": no}
     if not apply:
         return {**out, "next": f"ccx autonomy merge {run_id} --apply"}
-    _, wdirty = _git(wt, "status", "--porcelain")
-    if wdirty:
-        _git(wt, "add", "-A")
-        rc, msg = _git(wt, "commit", "-qm", f"ccx run {run_id}: {rec.get('label') or 'sub-agent changes'}")
-        if rc != 0:
-            return {**out, "can_merge": False, "why_not": [f"could not commit the worktree: {msg[-300:]}"]}
-    _, prev = _git(repo, "rev-parse", "HEAD")
-    rc, msg = _git(repo, "merge", "--no-ff", "-m", f"Merge {branch} (ccx autonomy L2)", branch)
-    if rc != 0:
-        _git(repo, "merge", "--abort")
-        return {**out, "can_merge": False, "why_not": [f"merge failed, aborted: {msg[-300:]}"]}
-    _, head = _git(repo, "rev-parse", "HEAD")
+    err = commit_worktree(wt, f"ccx run {run_id}: {rec.get('label') or 'sub-agent changes'}")
+    if err:
+        return {**out, "can_merge": False, "why_not": [f"could not commit the worktree: {err}"]}
+    m = merge_branch(repo, branch, f"Merge {branch} (ccx autonomy L2)")
+    if not m["merged"]:
+        return {**out, "can_merge": False, "why_not": [f"merge failed, aborted: {m['error']}"]}
+    prev, head = m["prev"], m["head"]
     row = {"type": "auto_merge", "run_id": run_id, "repo": str(repo), "into": target, "from": prev, "head": head,
            "lines": lines, "files": len(files), "ts": time.time()}
     ledger.append_event(p, row)
@@ -261,3 +256,42 @@ def merge(p: Paths, run_id: str, info: dict, cfg: dict | None = None, rules: lis
     return {**out, "merged": True, "head": head,
             "undo": f"git -C \"{repo}\" reset --keep {prev}",
             "note": "merged locally only: pushing and any PR into main still follow the project's rules"}
+
+
+# ---------------------------------------------------------------- merge steps shared with `ccx q accept`
+def _ident(repo: Path) -> list[str]:
+    """`-c user.name/-c user.email` for a merge commit only where git has no identity (a fresh CI machine);
+    otherwise the person's own identity signs it."""
+    rc, email = _git(repo, "config", "user.email")
+    return [] if rc == 0 and email else ["-c", "user.name=ccx", "-c", "user.email=ccx@localhost"]
+
+
+def commit_worktree(wt: Path, message: str, ident: bool = False) -> str | None:
+    """Commit whatever the worktree still has uncommitted (a piece's work is normally committed already).
+    -> None, or why it could not."""
+    _, wdirty = _git(wt, "status", "--porcelain")
+    if not wdirty:
+        return None
+    _git(wt, "add", "-A")
+    rc, msg = _git(wt, *(_ident(wt) if ident else []), "commit", "-qm", message)
+    return None if rc == 0 else msg[-300:]
+
+
+def merge_branch(repo: Path, branch: str, message: str, ident: bool = False) -> dict:
+    """`git merge --no-ff branch` into what repo has checked out; on failure the merge is aborted, so the
+    project is as it was. -> {merged, prev, head, conflicts: [files], error}"""
+    _, prev = _git(repo, "rev-parse", "HEAD")
+    rc, msg = _git(repo, *(_ident(repo) if ident else []), "merge", "--no-ff", "-m", message, branch)
+    if rc != 0:
+        _, unmerged = _git(repo, "diff", "--name-only", "--diff-filter=U")
+        _git(repo, "merge", "--abort")
+        return {"merged": False, "prev": prev, "head": prev, "error": msg[-300:],
+                "conflicts": [x for x in unmerged.splitlines() if x.strip()]}
+    _, head = _git(repo, "rev-parse", "HEAD")
+    return {"merged": True, "prev": prev, "head": head, "error": None, "conflicts": []}
+
+
+def rollback(repo: Path, prev: str) -> str | None:
+    """Undo a merge just made (`git reset --keep prev`: never drops an uncommitted edit). -> None, or why not."""
+    rc, msg = _git(repo, "reset", "--keep", prev)
+    return None if rc == 0 else msg[-300:]
