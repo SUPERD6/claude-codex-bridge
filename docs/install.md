@@ -142,7 +142,7 @@ ccx plan size --minutes 240 --rung codex:gpt-6.1-sol:medium # how many pieces fo
 ccx show <run_id> [--full]            # compact result by default
 ccx show <run_id> --wait [SECONDS]    # block until it (and a review fix round) is done, default 540 s; then the
                                       # same result as ccx run, else status=running: call it again
-ccx stats [--summary]                 # per agent × tier; --summary: spend, savings, cache share
+ccx stats [--summary]                 # per agent × tier; --summary: spend first, then a labelled saving estimate, cache share
 ccx report [--days 30] [--publish]    # offline one-file dashboard; --publish commits it to your private repo
 ccx ui [--project DIR] [--no-open] [--export FILE]   # live page on 127.0.0.1 (never calls a model; writes only yes/no on suggested notes)
 ccx demo [--no-open] [--keep] [--export FILE]       # the same page on made-up data in a temp folder: no account, offline

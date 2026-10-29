@@ -37,7 +37,8 @@ after the round-5 fixes (the first run, before them, was 17/20 at $0.248).
   given ccx's lean recipe) cost **$0.114** per success and beat our latest ccx run (r5h, **$0.135**); ccx's range
   is $0.116–0.135. Both are cheaper per success than the lead doing these larger tasks itself.
 - **Speed: ccx is slower than doing it yourself**, 2.5–2.8× the lead's own wall time here, about 3× on the small
-  tasks of round 1 (34 s vs 11 s) and more on very small ones (round 3: 63 s vs 14 s). On smaller tasks the total
+  tasks of round 1 (34 s vs 11 s) and about 4.5× on round 3's harder, vaguer small-package tasks with fresh short
+  leads (63 s vs 14 s): 2.5–4.5× in all. On smaller tasks the total
   spend was about even with doing it yourself in rounds 1 and 4 and higher in round 3 ($0.071 vs $0.045 per success).
 - **What ccx adds over the built-in sub-agent:** the work runs on another vendor's model and quota; ccx re-runs your
   `--check` itself instead of trusting the report; a different vendor reviews the diff; every run's cost goes into a
@@ -63,10 +64,10 @@ From your own terminal, `--to` delegates even a very small task (stderr notes th
 when a lead session calls ccx, a task that small is still turned back to it.
 The hub `ccx setup` asks about is one folder of your own for shared memory, skills and the record of every run.
 
-Then the job ccx is for, a chore with a check that says whether it is done (in your project, with your test command):
+Then the job ccx is for, a chore with a check that says whether it is done (in your project, with your test command; the test file the `--check` names must already exist, or ccx stops before starting the sub-agent):
 
 ```bash
-ccx run --to codex --check "python -m pytest -q tests/test_dates.py" --review on "parse_date() rejects ISO dates that end in Z; make it accept them and add a test for it"
+ccx run --to codex --check "python -m pytest -q tests/test_dates.py" --review on "parse_date() rejects ISO dates that end in Z; make it accept them and add a case for it to tests/test_dates.py"
 ccx undo <run_id>            # if you don't want it: shows what would be restored; --apply restores it
 ```
 

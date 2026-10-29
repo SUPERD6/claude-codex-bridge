@@ -35,8 +35,8 @@ gpt-6-luna low。内置子智能体：每一轮都算，包括精简做法的 bu
 - **花费：两种派活方式分不出胜负。** 精简做法的内置子智能体（builtin2，给内置子智能体用 ccx 的精简做法）每次成功
   **$0.114**，比我们最近一轮 ccx（r5h，**$0.135**）便宜；ccx 的范围是 $0.116–0.135。在这些较大的任务上，两者每次成功
   都比组长自己做便宜。
-- **速度：ccx 比自己做慢**，这里是组长自己做的 2.5–2.8 倍；第 1 轮的小任务约 3 倍（34 秒对 11 秒），很小的任务更多
-  （第 3 轮：63 秒对 14 秒）。小一些的任务上，总花费和自己做相比第 1、4 轮基本持平，第 3 轮更贵（每次成功 $0.071 对 $0.045）。
+- **速度：ccx 比自己做慢**，这里是组长自己做的 2.5–2.8 倍；第 1 轮的小任务约 3 倍（34 秒对 11 秒），第 3 轮更难、
+  更含糊的小包任务（组长是新开的短对话）约 4.5 倍（63 秒对 14 秒）：合起来 2.5–4.5 倍。小一些的任务上，总花费和自己做相比第 1、4 轮基本持平，第 3 轮更贵（每次成功 $0.071 对 $0.045）。
 - **ccx 比内置子智能体多给的：** 活跑在另一家的模型和额度上；ccx 自己重跑你的 `--check`，不只信报告；另一家审查改动；
   每次运行的花费进账本；`ccx undo` 撤回一次运行。
 - **局限：** 这些任务也在修 ccx 时用过；组长自己做只跑了第一轮；第 5 轮早于干净环境检查。全部数字（包括不利的，
@@ -57,10 +57,10 @@ ccx run --to codex --mode read "Summarise README.md in three lines for a new use
 最后一行是只读的第一次试用：Codex 读这份 README，用最便宜的模型三行作答（命令和英文版一致。你在自己的终端里用 `--to`
 点名时，再小的任务也会派出去，只在 stderr 提示一句自己做更省；主会话代为调用时，太小的任务仍会被建议自己做）。`ccx setup` 问到的 hub 是你自己的一个文件夹，放共享记忆、技能和每次运行的记录。
 
-然后是 ccx 真正要做的事：一件有验收命令、能判断做没做完的杂活（在你的项目里，用你自己的测试命令）：
+然后是 ccx 真正要做的事：一件有验收命令、能判断做没做完的杂活（在你的项目里，用你自己的测试命令；`--check` 里点名的测试文件必须已经存在，否则 ccx 在启动子智能体之前就会停下）：
 
 ```bash
-ccx run --to codex --check "python -m pytest -q tests/test_dates.py" --review on "parse_date() rejects ISO dates that end in Z; make it accept them and add a test for it"
+ccx run --to codex --check "python -m pytest -q tests/test_dates.py" --review on "parse_date() rejects ISO dates that end in Z; make it accept them and add a case for it to tests/test_dates.py"
 ccx undo <run_id>            # 不想要：先显示会还原什么；加 --apply 才真还原
 ```
 
