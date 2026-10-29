@@ -57,12 +57,15 @@ def test_codex_isolation_is_opt_in(monkeypatch, tmp_path):
     monkeypatch.delenv("CCX_CODEX_ISOLATE", raising=False)
     plain = codex_invocation(**kw).argv
     assert "--ignore-user-config" not in plain and "--ignore-rules" not in plain
+    assert not any(x.startswith("features.") for x in plain)          # ccx's own defaults: no feature turned off
     monkeypatch.setenv("CCX_CODEX_ISOLATE", "1")
     for lean in (False, True):
         for resume in (None, "sid"):
             a = codex_invocation(**kw, lean=lean, resume_id=resume).argv
             assert a.count("--ignore-user-config") == 1 and "--ignore-rules" in a
             assert "features.memories=false" in a and "memories.use_memories=false" in a
+            # --ignore-user-config skips the eval config.toml: the plugin / connector features go on the line
+            assert {f"features.{f}=false" for f in PF.CODEX_FEATURES_OFF} <= set(a)
 
 
 def test_agent_home_is_opt_in_and_only_for_codex_and_dsh(monkeypatch, tmp_path):
@@ -465,6 +468,136 @@ def test_codex_home_check(machine):
     assert any("overlaps ccx home" in p for p in PF.check_codex_home(inside, True, real)[0])
 
 
+def test_codex_home_is_made_absolute_when_parsed(machine, tmp_path, monkeypatch):
+    """r6a: `--codex-home ../x` passed every check (they ran from the eval's start dir) while each Codex resolved it
+    from its unit's own work dir and failed to start."""
+    monkeypatch.chdir(machine["work"])
+    want = str((machine["work"] / ".." / "eval-codex").resolve())
+    assert PF.parser().parse_args(["--workdir", "w", "--codex-home", "../eval-codex"]).codex_home == want
+    a = r5.parser().parse_args(["run", "--codex-home", "../eval-codex"])
+    assert a.codex_home == want and Path(a.codex_home).is_absolute()
+    assert PF.options_from(a, ["ccx"], tmp_path / "w", False).codex_home == Path(want)
+    assert PF.parser().parse_args(["--workdir", "w"]).codex_home == ""      # none given: still none
+    real = PF.real_paths()
+    probs, _ = PF.check_codex_home(Path("../eval-codex"), True, real)      # a caller that skipped the parser
+    assert "relative path" in probs[0]
+    probs, _ = PF.check_codex_home(tmp_path / "missing", True, real)
+    assert "does not exist" in probs[0]
+    probs, _ = PF.check_codex_home(machine["codex"], True, real)
+    assert any("no login" in p for p in probs)
+
+
+def _synced_home(d: Path) -> None:
+    """What codex-cli 0.164 left in a fresh eval home after a start with the plugin features on."""
+    (d / "auth.json").write_text("{}", encoding="utf-8")                   # stands for a login; never read
+    (d / "plugins" / "cache" / "openai-curated-remote" / "gmail").mkdir(parents=True)
+    (d / "plugins" / ".remote-plugin-install-staging").mkdir()
+    (d / "sessions").mkdir()
+    (d / "sessions" / "s.jsonl").write_text("x", encoding="utf-8")
+    (d / "config.toml").write_text('[windows]\nsandbox = "elevated"\n', encoding="utf-8")
+
+
+def test_a_starting_run_removes_the_synced_plugins_and_turns_the_features_off(machine):
+    real, d = PF.real_paths(), machine["codex"]
+    _synced_home(d)
+    probs, info = PF.check_codex_home(d, True, real)                       # checking alone changes nothing
+    assert any("has plugins" in p and str(d / "plugins") in p for p in probs)
+    assert (d / "plugins").exists() and "features" not in (d / "config.toml").read_text(encoding="utf-8")
+    assert info["features_off"] == []
+    probs, info = PF.check_codex_home(d, True, real, write=True)
+    assert probs == [] and info["removed"] == ["plugins"] and info["features_off"] == list(PF.CODEX_FEATURES_OFF)
+    assert not (d / "plugins").exists()
+    assert (d / "auth.json").exists() and (d / "sessions" / "s.jsonl").exists()     # only plugins/ goes
+    cfg = PF.tomllib.loads((d / "config.toml").read_text(encoding="utf-8"))
+    assert cfg["windows"] == {"sandbox": "elevated"}
+    assert cfg["features"] == {"apps": False, "plugins": False, "remote_plugin": False}
+    assert PF.check_codex_home(d, True, real, write=True)[0] == []           # a second start: nothing to do
+    assert (d / "config.toml").read_text(encoding="utf-8").count("[features]") == 1
+    # a [features] table the person wrote, turning one back on: refused with what to change, never edited
+    (d / "config.toml").write_text("[features]\nplugins = true\napps = false\n", encoding="utf-8")
+    probs, _ = PF.check_codex_home(d, True, real, write=True)
+    assert any("plugins = false, remote_plugin = false" in p for p in probs)
+    assert "plugins = true" in (d / "config.toml").read_text(encoding="utf-8")
+    # a fresh home: the config a start writes has the features off as well
+    fresh = machine["home"].parent / "fresh-codex"
+    fresh.mkdir()
+    (fresh / "auth.json").write_text("{}", encoding="utf-8")
+    assert PF.check_codex_home(fresh, True, real, write=True)[0] == []
+    assert PF.tomllib.loads((fresh / "config.toml").read_text(encoding="utf-8"))["features"]["remote_plugin"] is False
+
+
+def test_plugins_coming_back_are_seen_after_every_unit(monkeypatch, tmp_path):
+    monkeypatch.setattr(PF, "snapshot", lambda: [])
+    monkeypatch.setattr(PF, "commit_state", lambda: {"commit": "a" * 40, "dirty": []})
+    monkeypatch.setattr(PF, "sha256_file", lambda f: "t" * 64 if f == PF.TASKS_FILE else None)
+    monkeypatch.setattr(PF, "cli_versions", lambda agents=None: dict(REP["cli"]))
+    d = tmp_path / "codex"
+    d.mkdir()
+    (d / "config.toml").write_text(PF.codex_features_toml(), encoding="utf-8")
+    (d / "cache" / "remote_plugin_catalog").mkdir(parents=True)
+    (d / "cache" / "remote_plugin_catalog" / "a.json").write_text("{}", encoding="utf-8")
+    rep = {**REP, "codex": {**REP["codex"], "remote_cache": PF.codex_remote_cache_sig(d)}, "codex_home": str(d)}
+    assert PF.between_units(rep, True) == [] and PF.codex_home_drift(d) == []
+    assert PF.codex_home_state(d) == {"plugins_dir": False, "plugins": [],
+                                      "features_off": ["apps", "plugins", "remote_plugin"]}
+    (d / "plugins" / "cache" / "openai-curated-remote" / "github").mkdir(parents=True)
+    assert "eval CODEX_HOME has plugins now (it would reach every later Codex run)" in PF.between_units(rep, True)
+    assert PF.codex_home_state(d)["plugins"] == ["openai-curated-remote/github"]
+    PF.rmtree(d / "plugins")
+    (d / "cache" / "codex_apps_tools").mkdir()                             # the connectors were fetched again
+    (d / "cache" / "codex_apps_tools" / "h.json").write_text("{}", encoding="utf-8")
+    assert any("fetched apps" in p for p in PF.between_units(rep, True))
+    PF.rmtree(d / "cache" / "codex_apps_tools")
+    assert PF.between_units(rep, True) == []
+    (d / "config.toml").write_text("[features]\nplugins = false\n", encoding="utf-8")
+    assert PF.codex_home_drift(d) == ["eval CODEX_HOME config.toml no longer turns off [features] apps, remote_plugin"]
+    assert PF.codex_home_drift(d, starting=False) == [
+        "eval CODEX_HOME config.toml no longer turns off [features] apps, remote_plugin"]   # a table of its own
+    assert PF.codex_home_after(rep, True) == PF.codex_home_state(d)          # the row field of r5.py and batch.py
+    assert PF.codex_home_after(rep, False) is None
+    assert PF.codex_home_after({**rep, "codex": {"mode": "real"}}, True) is None
+
+
+def test_a_check_only_preflight_agrees_with_itself_on_a_home_not_yet_given_features(machine):
+    # check_codex_home(write=False) accepts a config.toml with no [features] table (a starting run writes it), so
+    # the check after the canary must accept it too; a starting run requires the table
+    real, d = PF.real_paths(), machine["codex"]
+    (d / "auth.json").write_text("{}", encoding="utf-8")
+    (d / "config.toml").write_text('model = "x"\n', encoding="utf-8")
+    assert PF.check_codex_home(d, True, real, write=False)[0] == []
+    assert PF.codex_home_drift(d, starting=False) == []
+    assert PF.codex_home_drift(d, starting=True) == [
+        "eval CODEX_HOME config.toml no longer turns off [features] apps, plugins, remote_plugin"]
+
+
+def test_a_codex_run_stops_when_plugins_reappear_and_rows_record_the_home(machine, tmp_path, monkeypatch):
+    _stub_machine(monkeypatch)
+    monkeypatch.setattr(PF, "cli_versions", lambda agents=None: {"claude": "2.1.309 (fake)",
+                                                                  "codex": "codex-cli 0.164.0", "dsh": None})
+    d = machine["codex"]
+    _synced_home(d)
+    calls = []
+
+    def fake_unit(u, a, work):
+        calls.append(u["label"])
+        (d / "plugins" / "cache" / "openai-curated-remote" / "gmail").mkdir(parents=True)   # a start synced them
+        return {"ok": True, "usd": 0.0, "wall_s": 0}
+    monkeypatch.setattr(r5, "run_unit", fake_unit)
+    out = tmp_path / "r.jsonl"
+    assert r5.main(["run", "--rounds", "1", "--tasks", ",".join(r5.IDS[:2]), "--arms", "ccx2", "--jobs", "1",
+                    "--out", str(out), "--workdir", str(tmp_path / "w"), "--no-canary",
+                    "--codex-home", str(d)]) == 2                      # 2: stopped
+    rows = [json.loads(x) for x in out.read_text(encoding="utf-8").splitlines()]
+    assert len(calls) == 1 and len(rows) == 1                              # the run stopped after that unit
+    row = rows[0]
+    assert any("has plugins now" in b for b in row["between_units"]) and row["env_clean"] is False
+    assert row["codex_home_after"]["plugins"] == ["openai-curated-remote/gmail"]
+    assert row["fingerprint"]["codex_cli"] == "codex-cli 0.164.0"
+    assert row["fingerprint"]["codex_features_off"] == ["apps", "plugins", "remote_plugin"]
+    rep = json.loads((tmp_path / "w" / "preflight.json").read_text(encoding="utf-8"))
+    assert rep["codex"]["removed"] == ["plugins"] and Path(rep["codex_home"]).is_absolute()
+
+
 def test_model_list_hash_ignores_refresh_fields(tmp_path):
     f = tmp_path / "models_cache.json"
     f.write_text(json.dumps({"fetched_at": "1", "etag": "a", "models": [{"slug": "m"}]}), encoding="utf-8")
@@ -587,6 +720,7 @@ def test_between_units_sees_moved_code_versions_and_the_watcher(monkeypatch, tmp
     monkeypatch.setattr(PF, "commit_state", lambda: {"commit": "a" * 40, "dirty": []})
     d = tmp_path / "codex"
     d.mkdir()
+    (d / "config.toml").write_text(PF.codex_features_toml(), encoding="utf-8")    # what a starting run writes
     rep = {**REP, "codex": dict(REP["codex"]), "codex_home": str(d)}
     monkeypatch.setattr(PF, "sha256_file", lambda f: "t" * 64 if f == PF.TASKS_FILE else None)
     (d / "models_cache.json").write_text(json.dumps({"etag": "1", "models": ["m"]}), encoding="utf-8")

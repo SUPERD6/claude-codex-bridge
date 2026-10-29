@@ -1107,7 +1107,7 @@ def unit_of(u: dict, a, work: Path) -> PF.Unit:
     key = unit_key(u)
     return PF.Unit(key=key, work=work, repo=work / key, hub=work / f"h-{key}", label=u["label"],
                    claude=a.claude_isolation, ccx_home=a.claude_isolation == "ccx-home" and u["arm"] in CCX_ARMS,
-                   codex_home=Path(a.codex_home).expanduser() if a.codex_home else None,
+                   codex_home=Path(PF.codex_home_arg(a.codex_home)) if a.codex_home else None,
                    dsh=a.dsh_home, agents=tuple(r3.WORKER), **ext_guard(by_id(u["task"]), a, work))
 
 
@@ -1621,6 +1621,9 @@ def cmd_run(a) -> int:
         between = PF.between_units(rep, need_codex, ours, watch.take())
         if between:
             row["between_units"] = between
+        after = PF.codex_home_after(rep, need_codex)     # the eval Codex home after this unit
+        if after is not None:
+            row["codex_home_after"] = after
         row["env_clean"] = PF.env_clean(row, rep)
         why = list(between)
         if (row.get("ext") or {}).get("venv_changed"):

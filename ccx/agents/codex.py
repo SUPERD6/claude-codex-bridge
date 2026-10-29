@@ -18,9 +18,13 @@ from .base import Adapter
 CODEX_KEEP = (("windows", "sandbox"),)
 
 
-# What CCX_CODEX_ISOLATE=1 turns off besides the user's config.toml (belt and braces: config.toml is not loaded)
+# What CCX_CODEX_ISOLATE=1 turns off besides the user's config.toml (belt and braces: config.toml is not loaded).
+# plugins / remote_plugin / apps (codex-cli 0.164.0 `codex features list`: stable, on by default): with the plugin
+# features on, a start syncs the account's remote curated plugins (gmail, google-drive, github, ...) into CODEX_HOME
+# and offers them to the run; apps are the account's ChatGPT connectors. Not part of ccx's defaults: only this opt-in.
 ISOLATE_SETTINGS = ("-c", "features.memories=false", "-c", "memories.use_memories=false",
-                    "-c", "memories.generate_memories=false")
+                    "-c", "memories.generate_memories=false",
+                    "-c", "features.plugins=false", "-c", "features.remote_plugin=false", "-c", "features.apps=false")
 
 
 def _codex_kept_settings() -> list[str]:
