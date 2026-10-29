@@ -274,7 +274,8 @@
   function shortPath(p) { if (!p) return ""; const s = String(p).replace(/\\/g, "/").split("/").filter(Boolean); return s[s.length - 1] || p; }
   function weekHTML() {
     const w = (D && D.week) || {runs: 0};
-    let h = `<h2>${t("worth")}</h2>` + monthHTML() + `<p class="stat">${t("week_spent", {u: usd(w.usd || 0), n: w.runs || 0})}${w.cash_usd ? " " + t("week_cash", {u: usd(w.cash_usd)}) : ""}</p>`;
+    /* spend first (month, then week); the saving after it, as the estimate it is (PM review 2026-10-29) */
+    let h = `<h2>${t("worth")}</h2>` + monthSpentHTML() + `<p class="stat">${t("week_spent", {u: usd(w.usd || 0), n: w.runs || 0})}${w.cash_usd ? " " + t("week_cash", {u: usd(w.cash_usd)}) : ""}</p>` + monthSavingHTML();
     return h + trackHTML();
   }
   /* H9: who is right the first time, per kind of work (judged pieces only) */
@@ -296,15 +297,22 @@
   }
 
   /* ---------- K6: this month, the other projects, optional slots (autonomy level, inbox) ---------- */
-  function monthHTML() {
+  function monthSpentHTML() {
     const m = D && D.month;
     if (!m) return `<p class="stat">${t("month_wait")}</p>`;
     const since = new Date(m.since * 1000), day = t("date_md", {m: since.getMonth() + 1, d: since.getDate()});
-    let h = `<p class="stat">${t("month_spent", {d: day, u: usd(m.sub_usd || 0), n: m.runs || 0})}</p>`;
-    if (m.saving == null) return h + `<p class="stat">${t("month_saving_none")}</p>`;
+    return `<p class="stat">${t("month_spent", {d: day, u: usd(m.sub_usd || 0), n: m.runs || 0})}</p>`;
+  }
+  /* secondary: a model estimate says so, with the measured totals (about even) one link away; never bold */
+  function monthSavingHTML() {
+    const m = D && D.month;
+    if (!m) return "";
+    if (m.saving == null) return `<p class="stat cost">${t("month_saving_none")}</p>`;
     const ci = m.ci95 && m.ci95.length === 2 ? t("month_ci", {a: usd(Math.abs(m.ci95[0])) , b: usd(Math.abs(m.ci95[1])), neg: m.ci95[0] < 0 ? "−" : ""}) : "";
-    h += `<p class="stat"><b>${t(m.saving >= 0 ? "month_saving" : "month_extra", {u: usd(Math.abs(m.saving)), ci, n: m.n || 0})}</b></p>`;
-    return h + `<p class="stat cost">${t(m.kind === "measured" ? "month_measured" : "month_model")}</p>`;
+    const link = {__html: `<a href="${esc(t("measured_url"))}" target="_blank" rel="noopener">docs/measured.md</a>`};   /* the address lives in strings.json: no URL in the page code */
+    const key = (m.saving >= 0 ? "month_saving" : "month_extra") + (m.kind === "measured" ? "_m" : "");
+    return `<p class="stat cost">${t(key, {u: usd(Math.abs(m.saving)), ci, n: m.n || 0, link})}</p>`
+      + `<p class="stat cost">${t(m.kind === "measured" ? "month_measured" : "month_model")}</p>`;
   }
   function othersHTML() {
     const os = ((D && D.others) || []).filter(o => TESTS || !o.test);
