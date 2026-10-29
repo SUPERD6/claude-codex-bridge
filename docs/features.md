@@ -42,7 +42,7 @@ these snapshots show the agent's own list with a note. The home page lists every
 far, tokens when known) with its stop button, which asks for the same second click. A background tab says so in its
 "still open" signal, and the server then waits 5 minutes instead of one before it exits. To-do chips are buttons
 (keyboard reachable) and new to-dos are announced to screen readers.
-`ccx ui --export snapshot.html` writes a static copy; `ccx config set ui.lang zh|en` picks the language.
+Its **Agent conversation** page shows what the agents wrote to each other on the board (`ccx say`), newest thread first; a thread stopped by the machine-message cap and a message that asks you (`@person`) show as to-dos, and you can reply from the page: shown first, written on a second click as you (via ui), at most 4000 characters, never run ([board](board.md#seeing-it-and-answering-in-ccx-ui)). `ccx ui --export snapshot.html` writes a static copy; `ccx config set ui.lang zh|en` picks the language.
 Evaluations and tests (eval-* labels, `--no-ab`, ccx's probes, runs in the temporary folder or a project's `.ccx`
 folder) stay hidden until you press "show evaluations and tests"; `ccx verify RUN --dismiss --note why` clears a
 leftover from "waits for you" without counting it right or wrong, and routing never learns from it.

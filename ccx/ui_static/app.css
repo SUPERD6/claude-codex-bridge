@@ -185,6 +185,18 @@ details.hist summary{cursor:pointer;color:var(--muted);font-weight:650;font-size
 .chat .msg ul,.outcome ul{margin:4px 0;padding-left:20px;font-size:14px;overflow-wrap:anywhere}
 .outcome{max-width:820px}.outcome p{margin:0 0 8px}
 
+/* U2: the agents' conversation (the board) and the person's reply */
+.todo a.conv{border-left-color:var(--amber)}
+.chat .msg.bmsg{align-self:flex-start}
+.chat .msg.bmsg.you{align-self:flex-end;border-color:var(--teal)}
+.chat .msg.bmsg.asks{border-color:var(--amber)}
+.btext{white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
+.who.you{background:var(--soft);color:var(--ink)}
+.reply{max-width:820px;margin-top:14px;padding:12px 14px}
+.reply textarea{display:block;width:100%;box-sizing:border-box;margin:6px 0;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);font:inherit;font-size:14px;resize:vertical}
+.reply .acts{display:flex;gap:8px;align-items:center;justify-content:space-between}
+.reply pre.says{margin:6px 0;max-height:320px;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:6px 8px}
+
 @media (max-width:1100px){.layout{grid-template-columns:1fr}.drawer{position:static}}
 .track{border-collapse:collapse;font-size:14px;max-width:820px;width:100%}
 .track th,.track td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
