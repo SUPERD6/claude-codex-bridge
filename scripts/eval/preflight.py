@@ -1479,10 +1479,16 @@ def canary(work: Path, u_kw: dict, timeout: int = 300) -> dict:
     out, err, rc, _left = run(argv, cwd=repo, env=env, timeout=timeout, input=prompt, job=job)
     probs, info = check_init(out, [u.x, u.repo, u.hub] + ([u.claude_dir] if u.fresh_home else []),
                              u.own_project_dirs())
-    answer = ""
+    # every text the lead wrote, not only the result (its last message): it may answer, then Read, then end with a
+    # line about the Read alone (haiku, 2026-10-28: the check failed on an isolated lead)
+    texts = []
     for ev in _events(out):
-        if ev.get("type") == "result":
-            answer = str(ev.get("result") or "")
+        if ev.get("type") == "assistant":
+            texts += [str(c.get("text") or "") for c in (ev.get("message") or {}).get("content") or []
+                      if isinstance(c, dict) and c.get("type") == "text"]
+        elif ev.get("type") == "result":
+            texts.append(str(ev.get("result") or ""))
+    answer = "\n".join(t for t in texts if t)
     if rc:
         probs.append(f"canary lead failed rc={rc}: {(answer or err)[-160:]}")
     if "PROJECT-ONLY" not in answer or "OTHER:" in answer:

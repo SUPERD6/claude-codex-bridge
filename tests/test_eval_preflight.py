@@ -226,6 +226,18 @@ def test_canary_passes_isolated_and_fails_without_the_flags(machine, monkeypatch
     assert not (machine["work"] / "canary").exists()
 
 
+def test_canary_reads_every_message_not_only_the_result(machine, monkeypatch):
+    # the lead answered PROJECT-ONLY <word>, then Read, then ended on a line about the Read: still isolated
+    monkeypatch.setenv("CCX_CLAUDE_BIN", str(FAKE))
+    monkeypatch.setenv("FAKE_SPLIT_ANSWER", "1")
+    kw = {"claude": "flags", "codex_home": machine["codex"], "dsh": "unit"}
+    ok = PF.canary(machine["work"], kw)
+    assert ok["ok"], ok["problems"]
+    monkeypatch.setattr(PF, "lead_flags", lambda u: [])
+    bad = PF.canary(machine["work"], kw)
+    assert not bad["ok"] and any("other than the project's" in p for p in bad["problems"])
+
+
 def test_env_is_an_allow_list(machine, monkeypatch):
     monkeypatch.setenv("CLAUDE_CODE_SESSION_ID", "s")
     monkeypatch.setenv("CLAUDE_CODE_SDK_HAS_HOST_AUTH_REFRESH", "1")
