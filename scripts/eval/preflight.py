@@ -26,8 +26,13 @@ What it guarantees, by mechanism (command-line flags, environment, settings file
                             its ccx sub-agents keep hooks off and that CLAUDE.md excluded. No credential is copied
                             in: the login is the person's CLAUDE_CODE_OAUTH_TOKEN, by name, as with config-dir.
                             Codex: a dedicated eval CODEX_HOME the person
-                            logged in to once (`--codex-home`), and CCX_CODEX_ISOLATE=1 (--ignore-user-config,
-                            --ignore-rules, memories off on every Codex run).
+                            logged in to once (`--codex-home`, made absolute when parsed), and CCX_CODEX_ISOLATE=1
+                            (--ignore-user-config, --ignore-rules, memories, plugins, remote plugins and apps off on
+                            every Codex run). Its config.toml turns plugins, remote_plugin and apps off too (for the
+                            Codex commands that read it), a starting run removes the plugin cache Codex synced into
+                            it (plugins/, nothing else), and after the canary and after every unit the home is
+                            checked again (no plugins, rules, memories, AGENTS.md, skills; the features still off;
+                            the connector and plugin catalog caches untouched): a change stops the run.
   E2 no leftovers           every process a unit starts runs in a Windows Job Object (started suspended, so nothing
                             escapes before it is in the job; POSIX: its own session, plus a marker variable
                             CCX_EVAL_UNIT); after the unit the job's survivors (killed by closing the job, never by a
@@ -121,6 +126,15 @@ CLAUDE_BUNDLED_SKILLS = frozenset({
 # (skills/ is checked separately: Codex installs its own system skills in skills/.system by itself.)
 CODEX_FORBIDDEN = ("AGENTS.md", "AGENTS.override.md", "memories", "rules", "plugins", "hooks")
 CODEX_FORBIDDEN_TABLES = ("mcp_servers", "plugins", "hooks", "profiles", "marketplaces")
+# Codex features the eval CODEX_HOME runs without (codex-cli 0.164.0 `codex features list`: all three "stable, true").
+# plugins / remote_plugin: with either on, Codex syncs the account's remote curated plugins (gmail, google-drive,
+# github, ...: "installed, enabled" in `codex plugin list`) into a fresh home's plugins/cache on its first start, and
+# the prompt gets a <recommended_plugins> list; turning off either one empties `codex plugin list` ("No marketplace
+# plugins found"). apps: ChatGPT apps (connectors), which Codex reaches through its own apps MCP server whatever the
+# plugins; turning it off alone changes neither the plugin list nor the rendered prompt, so it is off as a guard for
+# the connector tools, not for the plugin cache. Set as -c on every isolated Codex run (ccx/agents/codex.py
+# ISOLATE_SETTINGS: --ignore-user-config skips config.toml) and in the eval config.toml (Codex commands that read it).
+CODEX_FEATURES_OFF = ("apps", "plugins", "remote_plugin")
 # Allow-list of inherited variables. Everything else (session ids, host auth helpers, TASK_ROUTING_HOME, ...) is
 # dropped; what a unit needs is set explicitly in prepare().
 ENV_KEEP = {
@@ -232,6 +246,13 @@ def real_paths(env=None) -> dict[str, Path]:
             hub = None
     out["hub"] = Path(hub).expanduser() if hub else home / ".ccx-hub"       # ccx/config.py hub_dir()'s default
     return out
+
+
+def codex_home_arg(s: str) -> str:
+    """--codex-home as an absolute path, resolved once against the folder the eval starts in. Codex resolves a
+    relative CODEX_HOME against each unit's own work dir, where it does not exist (r6a's first start: every Codex
+    run failed), while every check here looked at the folder relative to the eval's start dir."""
+    return str(Path(s).expanduser().resolve()) if s else ""
 
 
 def _inside(p: Path, root: Path) -> bool:
@@ -1228,6 +1249,9 @@ def check_codex_home(d: Path | None, need: bool, real: dict, write: bool = False
                  "codex login`), then pass --codex-home <dir> (or set CCX_EVAL_CODEX_HOME)")], {"mode": "real"}
     probs = []
     d = Path(d).expanduser()
+    if not d.is_absolute():         # never checked here and started elsewhere: see codex_home_arg
+        return [f"eval CODEX_HOME {d} is a relative path: Codex would resolve it from each unit's own work dir; "
+                "pass an absolute one"], {"mode": "eval"}
     if not d.is_dir():
         return [f"eval CODEX_HOME {d} does not exist"], {"mode": "eval"}
     for name in ("codex_home", "home_codex", "home_claude", "claude_home", "ccx_home", "hub", "dsh_home",
@@ -1239,20 +1263,38 @@ def check_codex_home(d: Path | None, need: bool, real: dict, write: bool = False
                          "have to go; pick a separate folder")
     if not (d / "auth.json").exists():            # existence only; never opened
         probs.append("the eval CODEX_HOME has no login: run `codex login` with CODEX_HOME set to it yourself")
+    removed = []
+    plug = d / "plugins"
+    if write and not probs and plug.exists():
+        # the remote plugins Codex synced in on a start with the plugin features on; only this folder, never
+        # auth.json or anything else here (a link is not followed: it is reported below instead)
+        if not (plug.is_symlink() or _is_junction(plug)) and rmtree(plug):
+            removed.append("plugins")
     for n in CODEX_FORBIDDEN:
         if (d / n).exists():
-            probs.append(f"the eval CODEX_HOME has {n} (it would reach every Codex run)")
+            probs.append(f"the eval CODEX_HOME has {n} (it would reach every Codex run)"
+                         + (f": Codex synced the account's remote plugins into it; remove {d / n} (that folder only)"
+                            " or let a starting run remove it" if n == "plugins" else ""))
     if codex_skills(d):
         probs.append(f"the eval CODEX_HOME has skills of its own: {codex_skills(d)[:5]}")
     cfg = d / "config.toml"
     if not cfg.exists() and write:
         cfg.write_text("# eval CODEX_HOME (scripts/eval/preflight.py): only what ccx carries over on a lean start\n"
-                       + codex_kept_toml(real["codex_home"]), encoding="utf-8")
+                       + codex_kept_toml(real["codex_home"]) + codex_features_toml(), encoding="utf-8")
     try:
         data = tomllib.loads(cfg.read_text(encoding="utf-8")) if cfg.exists() else {}
     except (OSError, tomllib.TOMLDecodeError) as e:
         data = {}
         probs.append(f"eval CODEX_HOME config.toml unreadable: {e}")
+    if write and cfg.exists() and "features" not in data and not probs:
+        with cfg.open("a", encoding="utf-8") as f:           # a table of its own at the end: valid after any other
+            f.write("\n" + codex_features_toml())
+        data = tomllib.loads(cfg.read_text(encoding="utf-8"))
+    feats = data.get("features") if isinstance(data.get("features"), dict) else {}
+    on = [f for f in CODEX_FEATURES_OFF if feats.get(f) is not False]
+    if on and (write or "features" in data):     # checking alone: a missing [features] table is written at start
+        probs.append(f"eval CODEX_HOME config.toml does not turn off [features] {', '.join(on)}: set "
+                     f"{', '.join(f'{x} = false' for x in on)} under [features] in {cfg}")
     for t in CODEX_FORBIDDEN_TABLES:
         if data.get(t):
             probs.append(f"eval CODEX_HOME config.toml has [{t}]")
@@ -1260,8 +1302,80 @@ def check_codex_home(d: Path | None, need: bool, real: dict, write: bool = False
         probs.append("eval CODEX_HOME config.toml turns Codex memories on")
     names = sorted(p.name for p in d.iterdir() if p.name not in ("sessions", "archived_sessions", "log", "tmp"))
     info = {"mode": "eval", "files_sha256": hashlib.sha256("\n".join(names).encode()).hexdigest()[:16],
-            "models_cache_sha256": models_sha(d / "models_cache.json") if (d / "models_cache.json").exists() else None}
+            "models_cache_sha256": models_sha(d / "models_cache.json") if (d / "models_cache.json").exists() else None,
+            "features_off": [f for f in CODEX_FEATURES_OFF if feats.get(f) is False],
+            "remote_cache": codex_remote_cache_sig(d)}
+    if removed:
+        info["removed"] = removed
     return probs, info
+
+
+def _is_junction(p: Path) -> bool:
+    f = getattr(os.path, "isjunction", None)          # Python 3.12+
+    return bool(f and f(p))
+
+
+def _codex_features(d: Path) -> dict:
+    try:
+        data = tomllib.loads((Path(d) / "config.toml").read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return {}
+    return data.get("features") if isinstance(data.get("features"), dict) else {}
+
+
+def codex_features_toml() -> str:
+    return ("# features off for the eval (scripts/eval/preflight.py CODEX_FEATURES_OFF)\n[features]\n"
+            + "".join(f"{f} = false\n" for f in CODEX_FEATURES_OFF))
+
+
+# What Codex fetches from the account when those features are on (codex-cli 0.164.0, seen in an eval home after a
+# start with them on): the apps server's connector tools (cache/codex_apps_tools: 395 tools) and the remote plugin
+# catalog. Never read; a run with the features off leaves them as they are (checked with one real `codex exec`).
+CODEX_REMOTE_CACHES = ("cache/codex_apps_tools", "cache/codex_apps_server_info", "cache/remote_plugin_catalog")
+
+
+def codex_remote_cache_sig(d: Path) -> str | None:
+    """Names, sizes and modification times of CODEX_REMOTE_CACHES (never their content); None when there are none."""
+    seen = []
+    for sub in CODEX_REMOTE_CACHES:
+        f0 = Path(d) / sub
+        if f0.is_dir():
+            for f in sorted(f0.iterdir()):
+                try:
+                    st = f.stat()
+                except OSError:
+                    continue
+                seen.append(f"{sub}/{f.name}:{st.st_size}:{st.st_mtime_ns}")
+    return hashlib.sha256("\n".join(seen).encode()).hexdigest()[:16] if seen else None
+
+
+def codex_home_drift(d: Path) -> list[str]:
+    """What must still hold of the eval CODEX_HOME while the run goes on, checked after the canary and after every
+    unit: nothing of CODEX_FORBIDDEN (plugins/ above all: codex-cli 0.164 syncs the account's remote plugins into it on
+    a start with the plugin features on), no skills of its own, and config.toml still turning CODEX_FEATURES_OFF off.
+    The preflight check alone runs before any Codex has started, so it cannot see what a start brings in."""
+    d = Path(d)
+    probs = [f"eval CODEX_HOME has {n} now (it would reach every later Codex run)" for n in CODEX_FORBIDDEN
+             if (d / n).exists()]
+    if codex_skills(d):
+        probs.append(f"eval CODEX_HOME has skills of its own now: {codex_skills(d)[:5]}")
+    feats = _codex_features(d)
+    on = [f for f in CODEX_FEATURES_OFF if feats.get(f) is not False]
+    if on:
+        probs.append(f"eval CODEX_HOME config.toml no longer turns off [features] {', '.join(on)}")
+    return probs
+
+
+def codex_home_state(d: Path) -> dict:
+    """Recorded in every row of a run that starts Codex: the eval home's plugin cache after the unit (names only)
+    and which of CODEX_FEATURES_OFF its config.toml turns off."""
+    d = Path(d)
+    cache = d / "plugins" / "cache"
+    feats = _codex_features(d)
+    return {"plugins_dir": (d / "plugins").exists(),
+            "plugins": sorted(f"{m.name}/{p.name}" for m in cache.iterdir() if m.is_dir() for p in m.iterdir())
+            if cache.is_dir() else [],
+            "features_off": [f for f in CODEX_FEATURES_OFF if feats.get(f) is False]}
 
 
 def _user_homes(real: dict) -> set[Path]:
@@ -1477,6 +1591,9 @@ def run_checks(o: Options) -> dict:
             if not o.start:
                 rmtree(cw)
         probs += scan["problems"]
+    if (can is not None or scan is not None) and need_codex and codex.get("mode") == "eval" and o.codex_home:
+        # the canaries start no Codex today; checked anyway, so a canary that does is covered
+        probs += [f"after the canary: {p}" for p in codex_home_drift(o.codex_home)]
     rep = {"ok": not probs, "problems": probs, "commit": cs["commit"], "dirty": bool(cs["dirty"]),
            "tasks_file": Path(o.tasks_file).name,
            "tasks_sha256": (sha256_file(o.tasks_file) or "")[:16], "tiers_sha256": (sha256_file(TIERS_FILE) or "")[:16],
@@ -1500,7 +1617,10 @@ def fingerprint(rep: dict, u: Unit | None, env: dict | None, models: dict | None
           "preflight": rep["result"], "force_unclean": rep["force_unclean"], "canary": rep.get("canary"),
           "python": rep.get("python"), "pytest": rep.get("pytest"), "os": rep.get("os"), "models": models or {},
           "codex_home_files": rep["codex"].get("files_sha256"), "models_cache": rep["codex"].get("models_cache_sha256"),
-          "env_keys_sha256": env_keys_sha(env) if env else None}
+          "env_keys_sha256": env_keys_sha(env) if env else None,
+          "codex_cli": (rep.get("cli") or {}).get("codex")}       # also in cli; named so comparisons see it
+    if rep["codex"].get("mode") == "eval":
+        fp["codex_features_off"] = rep["codex"].get("features_off")
     if rep.get("lead"):                  # the run's lead model / effort (r5 --lead-model / --lead-effort)
         fp["lead"] = rep["lead"]
     if rep.get("pinned_commit"):         # the one commit this tag (round) runs on (r5 pin_check)
@@ -1548,8 +1668,10 @@ def between_units(rep: dict, need_codex: bool, ours: list[str] | None = None, se
             rep["codex"]["models_cache_sha256"] = m          # the first Codex run fetched it: that is the baseline
         elif m != base:
             probs.append("eval CODEX_HOME model list changed")
-        if codex_skills(d):
-            probs.append(f"eval CODEX_HOME has skills of its own now: {codex_skills(d)[:5]}")
+        probs += codex_home_drift(d)
+        if "remote_cache" in rep["codex"] and codex_remote_cache_sig(d) != rep["codex"]["remote_cache"]:
+            probs.append("eval CODEX_HOME fetched apps (connectors) or the remote plugin catalog again: a Codex run "
+                         "had those features on")
     probs += [f"busy: {x}" for x in busy(snapshot(), ours=ours, exclude=job_pids_all())]
     probs += [f"busy (seen while running): {x}" for x in seen]
     return sorted(set(probs), key=probs.index)
@@ -1601,8 +1723,9 @@ def add_options(ap: argparse.ArgumentParser) -> None:
                          "config-dir: a fresh CLAUDE_CONFIG_DIR per unit; ccx-home: the same, holding only ccx's "
                          "marked block, hooks and skills for the leads that use ccx (the ccx2-skill arm needs it). "
                          "Both need CLAUDE_CODE_OAUTH_TOKEN, which you export yourself (`claude setup-token`)")
-    ap.add_argument("--codex-home", default=os.environ.get("CCX_EVAL_CODEX_HOME", ""),
-                    help="a dedicated CODEX_HOME you logged in to once (default: $CCX_EVAL_CODEX_HOME)")
+    ap.add_argument("--codex-home", default=os.environ.get("CCX_EVAL_CODEX_HOME", ""), type=codex_home_arg,
+                    help="a dedicated CODEX_HOME you logged in to once (default: $CCX_EVAL_CODEX_HOME); made absolute "
+                         "here, against the folder you start in")
     ap.add_argument("--dsh-home", choices=("unit", "real"), default="unit",
                     help="unit: a fresh DSH_HOME (no dsh login: a `--to dsh` run fails); real: the person's")
     ap.add_argument("--force-unclean", action="store_true",
@@ -1612,7 +1735,7 @@ def add_options(ap: argparse.ArgumentParser) -> None:
 def options_from(a, arms: list[str], work: Path, canary_on: bool, start: bool = False,
                  tasks_file: Path = TASKS_FILE) -> Options:
     return Options(work=work, arms=arms, jobs=getattr(a, "jobs", 2), claude=a.claude_isolation,
-                   codex_home=Path(a.codex_home).expanduser() if a.codex_home else None, dsh=a.dsh_home,
+                   codex_home=Path(codex_home_arg(a.codex_home)) if a.codex_home else None, dsh=a.dsh_home,
                    canary=canary_on, force_unclean=a.force_unclean, start=start, tasks_file=tasks_file)
 
 

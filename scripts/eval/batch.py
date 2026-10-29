@@ -708,7 +708,7 @@ def unit_of(u: dict, a, b: dict, work: Path) -> PF.Unit:
     key = unit_key(u)
     guard = r5.ext_guard(batch_tasks(b)[0], a, work) if spec_of(b) else {}
     return PF.Unit(key=key, work=work, repo=work / key, hub=work / f"h-{key}", label=u["label"],
-                   claude=a.claude_isolation, codex_home=Path(a.codex_home).expanduser() if a.codex_home else None,
+                   claude=a.claude_isolation, codex_home=Path(PF.codex_home_arg(a.codex_home)) if a.codex_home else None,
                    dsh=a.dsh_home, agents=tuple(r3.WORKER), **guard)
 
 
