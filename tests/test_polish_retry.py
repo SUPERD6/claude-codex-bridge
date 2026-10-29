@@ -87,3 +87,67 @@ def test_check_retry_prompt_names_same_or_stronger_model():
     text = CHECK_RETRY.format(run_id="r1", cmd="pytest -q", exit=1, tail="E assert 1 == 2", model_line=CHECK_RETRY_SAME)
     assert "pytest -q" in text and "E assert 1 == 2" in text and "Same model as before" in text
     json.dumps(text)
+
+
+# ---- 2. the reviewer is told ccx's own check result; no new permission
+import subprocess  # noqa: E402
+
+from test_ccx import Env  # noqa: E402
+
+
+class _ReviewEnv(Env):
+    """test_review.TestReviewRun's set-up and helpers (copied, so its tests do not run twice)."""
+    def setUp(self):
+        super().setUp()
+        g = ["git", "-c", "user.name=t", "-c", "user.email=t@t"]
+        subprocess.run(["git", "init", "-q"], cwd=self.work, check=True)
+        (self.work / "a.py").write_text("x = 1\n", encoding="utf-8")
+        subprocess.run([*g, "add", "a.py"], cwd=self.work, check=True)
+        subprocess.run([*g, "commit", "-qm", "init"], cwd=self.work, check=True)
+
+    def go(self, *extra):
+        env = {"FAKE_WRITE": f"{self.work / 'a.py'}=x = 2\n", "FAKE_REVIEW": "pass"}
+        r = self.ccx("run", "--to", "codex", "--model", "gpt-6-luna", "--effort", "low", "--mode", "write",
+                     "--no-fallback", *extra, "change x to 2 in a.py", env=env)
+        self.assertIn(r.returncode, (0, 2), r.stderr)
+        return json.loads(r.stdout)
+
+    def reviews(self):
+        return [c for c in self.calls() if c["agent"] == "claude" and "[ccx review" in c["prompt"]]
+
+
+class TestReviewerNeedsNoTests(_ReviewEnv):
+    def test_no_new_permission_and_the_check_is_named(self):
+        from ccx import prompts
+        from ccx.config import Paths, load_config
+        self.go("--check", "exit 0")
+        call = self.reviews()[0]
+        rev, argv = call["prompt"], call["argv"]
+        allowed = argv[argv.index("--allowed-tools") + 1]
+        read = load_config(Paths(self.hub))["permissions"]["claude"]["read"]
+        self.assertEqual(allowed, read[read.index("--allowed-tools") + 1])          # nothing added, not the check
+        self.assertNotIn("exit 0", allowed)
+        self.assertIn("ccx ran the acceptance command `exit 0`", rev)
+        self.assertIn("You need not run it yourself.", rev)
+        self.assertIn("one plain command per call", prompts.REVIEW_PERMISSION_CLAUDE)
+        self.assertIn("Permission: " + prompts.REVIEW_PERMISSION_CLAUDE, rev)
+
+
+def test_brief_shows_the_end_of_the_check_output_when_it_ran():
+    from ccx import review
+    chk = {"cmd": "pytest -q", "passed": True, "exit": 0, "tail": "noise\n" * 300 + "7 passed in 1.2s"}
+    text = review.brief("r1", "do x", "did x", "+x = 1", 4000, chk, [])
+    checks = text.split("## Checks\n", 1)[1].split("## Answer", 1)[0]
+    assert checks.startswith("ccx ran the acceptance command `pytest -q` after the change: passed.")
+    assert "7 passed in 1.2s" in checks and "You need not run it yourself." in checks
+    assert len(checks) < review.CHECK_TAIL_IN_BRIEF + 300                        # only the end of it
+    # the recorded-brief parser (scripts/eval/review_replay.py) still reads the check line
+    import importlib.util
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location(
+        "review_replay", Path(__file__).resolve().parent.parent / "scripts" / "eval" / "review_replay.py")
+    rr = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(rr)
+    assert rr.parse_brief(text)["check"] == {"cmd": "pytest -q", "passed": True, "exit": 0}
+    none = review.brief("r1", "do x", "did x", "+x = 1", 4000, None, [])
+    assert "nobody ran the tests for you" in none and "need not run it" not in none

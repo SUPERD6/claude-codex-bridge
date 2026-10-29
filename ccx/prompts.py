@@ -58,9 +58,14 @@ REVIEW_PERMISSION = ("read-only review: read and search files with your file too
 # Claude's read-only allow-list ([permissions.claude] read, config/tiers.toml) has Read/Grep/Glob and Bash only for
 # git status/diff/log and ls: the "cat / rg are fine" above was refused there, and `cd <repo> && git diff` is
 # refused as a whole. Its own wording asks for nothing the allow-list turns down; Codex keeps REVIEW_PERMISSION.
+# r6a (2026-10-29): 4 of 10 ccx2 units had one reviewer Bash call refused, and none of the four was a test: each was a
+# compound read (`git diff ... | head`, `cd <dir> && grep ... && sed -n`, `git show ... | grep; sed -n`). So the fix is
+# this wording (one plain git command per call; Grep/Read for the rest) and ccx's check result in the brief, not a new
+# allow-list entry: the reviewer needs to run nothing.
 REVIEW_PERMISSION_CLAUDE = ("read-only review: read and search files with Read, Grep and Glob; use Bash only for "
-                            "git diff, git log and git status; you are already in the repository, so do not cd. "
-                            "Run no tests or builds and modify nothing")
+                            "git diff, git log and git status, one plain command per call (no |, ;, && or cd: "
+                            "anything else is refused; use Grep and Read instead of grep, sed, head or cat). "
+                            "You are already in the repository. Run no tests or builds and modify nothing")
 
 
 def review_permission(cli: str) -> str:
