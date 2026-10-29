@@ -49,9 +49,11 @@ written from the CLI's `--help` and docs and tested with a stand-in only. `ccx d
 version's major.minor differs from `tested_version`: for an official one, run the release check before relying on
 it; for a community one it means not verified on that version.
 
-**Can two models discuss directly?** One way, for now: `ccx ask` for a second opinion, `ccx resume` to follow up in
-the same sub-session, `ccx send` into a live Codex session. For a costly decision, `ccx discuss` runs up to three rounds between models from different vendors (one proposes,
-one finds faults, one judges), passing only the points between turns; the lead asks you before starting one.
+**Can two models discuss directly?** Yes, in a few ways: `ccx ask` for a one-off second opinion, `ccx resume` to
+follow up in the same sub-session, `ccx send` into a live Codex session (delivered when it is between turns), and the
+board (`ccx say`) for open sessions in one project. For a costly decision, `ccx discuss` runs up to three rounds
+between models from different vendors (one proposes, one finds faults, one judges), passing only the points between
+turns; the lead asks you before starting one.
 
 ## Similar projects
 
@@ -60,6 +62,7 @@ Checked 2026-10-24 (stars and dates from the GitHub API; they change). Details, 
 
 | Project | What it does | Stars · last push · license | How ccx differs |
 |---|---|---|---|
+| Claude Code's built-in sub-agent (Task tool) | Claude Code hands a sub-task to a sub-agent of its own, on its own quota; nothing to install | built in | The closest alternative, measured in rounds 3–5 (dev set; hold-out pending): about as often right; cost per success round 3 built-in $0.069 vs ccx $0.071, round 5 built-in $0.114–0.202 vs ccx $0.116–0.135 (the lean builtin2 arm, $0.114, beat ccx's r5h, $0.135); wall time round 3 41 s vs 63 s, round 5 276–316 s vs 236–267 s ([measured](measured.md)). What ccx adds: another vendor's model and quota, ccx re-running your `--check`, a cross-vendor review, a ledger, `ccx undo`. |
 | [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) | OpenAI's official Claude Code plugin (2026-03-30): Codex reviews, delegated tasks, moving a session to Codex, background jobs | 34.5k · 2026-07 · Apache-2.0 | It is Claude → Codex only and doesn't pick models or record cost. ccx works both ways and adds model choice by cost, a ledger and the lead's own cost. Meant to work side by side (different commands and hooks), but not tested together yet; `ccx doctor` says when it is installed. |
 | [PAL MCP](https://github.com/BeehiveInnovations/pal-mcp-server) (`clink`) | An MCP server bringing many model providers into one CLI; `clink` starts another CLI as a sub-agent | 11.8k · 2025-12 · Apache-2.0 | PAL offers more models and tools via API keys; ccx uses the two CLIs' subscriptions, picks by success odds and cost, and calibrates on real outcomes. |
 | [CCB](https://github.com/SeemSeam/claude_codex_bridge) (`SeemSeam/claude_codex_bridge`) | A visible multi-agent terminal workspace for 16 CLI families, with message queues and take-over | 3.6k · 2026-10 · AGPL-3.0 | CCB is about watching and steering agents together; ccx is headless delegation focused on cost. A different project despite the similar name. |
@@ -67,5 +70,6 @@ Checked 2026-10-24 (stars and dates from the GitHub API; they change). Details, 
 | [umum-ai](https://github.com/umum-ai/claude-codex-bridge) / [Jayden-X-L](https://github.com/Jayden-X-L/claude-codex-bridge) `claude-codex-bridge` | Codex from Claude with mid-run instructions / two-way review loops | 10 / 16 · 2026 · MIT | Each focuses on one part (steering, review); no model choice or accounting. |
 | [claude-codex-memory-sync](https://github.com/DaizeDong/claude-codex-memory-sync), [mycelium](https://github.com/conradomateu/mycelium), [memorize](https://github.com/shakystar/memorize) | Sync skills, instructions, MCP and memory between the tools | 1–31 · 2026 · MIT | Config and memory only; in ccx shared memory supports delegation. |
 
-What ccx doesn't have: a visible split-screen view, instructions added mid-run, multi-provider consensus, moving a whole
-conversation into Codex. What it is still missing: a saving measured with real, long lead conversations (see the top of this page).
+What ccx doesn't have: a visible split-screen view; instructions added to a sub-agent while it is working (`ccx send`
+reaches a live Codex session only between its turns); a vote among providers (`ccx discuss` ends with one judge);
+moving a whole conversation into Codex. What it is still missing: a saving measured with real, long lead conversations (see the top of this page).

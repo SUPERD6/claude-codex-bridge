@@ -6,7 +6,7 @@
     {
       "name": "relayline",
       "source": "./",
-      "description": "The four relayline skills and ccx's start-of-session and per-turn hooks (ccx itself ships inside the plugin)."
+      "description": "The five relayline skills (delegation, routing, splitting, checkpoints and the project manager) and ccx's start-of-session and per-turn hooks (ccx itself ships inside the plugin)."
     }
   ]
 }

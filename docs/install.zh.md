@@ -107,7 +107,7 @@ ccx plan size --minutes 240 --rung codex:gpt-6.1-sol:medium   # 大任务拆几�
 ccx show <run_id> [--full]          # 默认只显示压缩结果
 ccx show <run_id> --wait [秒数]     # 等它（连同审查后的修改轮）跑完，默认 540 秒；跑完给出和 ccx run 一样的结果，
                                     # 没跑完返回 status=running，再调一次即可
-ccx stats [--summary]               # 按 agent×级别统计；--summary 给出花费、省了多少、缓存占比
+ccx stats [--summary]               # 按 agent×级别统计；--summary 先给花费，再给带标签的节省估算、缓存占比
 ccx report [--days 30] [--publish]  # 看板网页（离线单文件）；--publish 提交到你的私有用量仓库
 ccx ui [--project 文件夹] [--no-open] [--export 文件]   # 本机实时页面（127.0.0.1，不调用模型；只写“建议记下的事”的同意/拒绝）
 ccx demo [--no-open] [--keep] [--export 文件]       # 同一个页面，用临时目录里编好的数据：不用账号，离线可用

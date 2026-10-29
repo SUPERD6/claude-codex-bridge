@@ -6,8 +6,9 @@ names the button (never a command), the server answers the exact command and a o
 and asks again, and /api/act/run with the nonce runs it once (execute: argv, no shell, no window).
 
 Across projects: the runs of every project (as before), plus the queue of every project in the `ccx projects`
-catalog, its approval lines, and the catalog's other projects as one quiet list. This month: report.summarize's
-saving (measured or a model estimate, said which), read in the background every 5 minutes.
+catalog, its approval lines, and the catalog's other projects as one quiet list. This month: what sub-agents spent
+first, then report.summarize's saving below it (measured, or a model estimate labelled as one, measured totals so
+far about even), read in the background every 5 minutes.
 
 What it shows, all read from files ccx and the two tools already write — no model is ever called and the quota
 probe is never started (an open page must not cost anything):

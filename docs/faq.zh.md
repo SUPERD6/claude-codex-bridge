@@ -20,7 +20,7 @@
 
 **官方还是社区？** *官方*（Claude Code、Codex CLI）：每次发版都在适配器 `tested_version` 写的版本上真跑只读、可写和续接任务（发版检查）。*社区*（Gemini CLI、`dsh`、新加的适配器）：按命令行的 `--help` 和文档写成，只用模拟程序测过。装的版本主次版本号和 `tested_version` 不一样时，`ccx doctor` 会给 WARN：官方的请先跑发版检查再用，社区的表示在这个版本上没验证过。
 
-**两个模型能直接讨论吗？** 现在能做的是单向的：`ccx ask` 问一次第二意见，`ccx resume` 在同一个子会话里追问，`ccx send` 发消息进正在运行的 Codex 会话。选错代价高的决定可以用 `ccx discuss`：不同厂商的模型最多讨论 3 轮（一家出方案、一家挑错、一家裁判），轮与轮之间只传要点；主导开之前会先问你。
+**两个模型能直接讨论吗？** 能，有几种方式：`ccx ask` 问一次第二意见，`ccx resume` 在同一个子会话里追问，`ccx send` 发消息进正在运行的 Codex 会话（在它两轮之间送到），同一项目里开着的会话用留言板（`ccx say`）互相留言。选错代价高的决定可以用 `ccx discuss`：不同厂商的模型最多讨论 3 轮（一家出方案、一家挑错、一家裁判），轮与轮之间只传要点；主导开之前会先问你。
 
 ## 同类项目对比
 
@@ -29,6 +29,7 @@
 
 | 项目 | 做什么 | 星数 · 最近推送 · 许可证 | 和 ccx 的区别 |
 |---|---|---|---|
+| Claude Code 自带的子智能体（Task 工具） | Claude Code 把子任务交给自己的子智能体，用的是它自己的额度；不用装任何东西 | 自带 | 最接近的替代，第 3–5 轮实测过（开发集，留出集待测）：做对的次数差不多；每次成功的花费第 3 轮内置 $0.069 对 ccx $0.071，第 5 轮内置 $0.114–0.202 对 ccx $0.116–0.135（精简做法的 builtin2 $0.114 比 ccx 的 r5h $0.135 便宜）；用时第 3 轮 41 秒对 63 秒，第 5 轮 276–316 秒对 236–267 秒（[实测](measured.zh.md)）。ccx 多给的：另一家的模型和额度、ccx 自己重跑你的 `--check`、另一家审查、账本、`ccx undo`。 |
 | [openai/codex-plugin-cc](https://github.com/openai/codex-plugin-cc) | OpenAI 官方的 Claude Code 插件（2026-03-30）：让 Codex 审查、接活、把会话转给 Codex、管后台任务 | 3.45 万 · 2026-07 · Apache-2.0 | 只做 Claude → Codex，不选模型、不记花费。ccx 两个方向都做，另有按成本选模型、账本和主导成本。按设计可以一起用（命令和 hook 各是各的），但还没实测过一起用；装了它时 `ccx doctor` 会提示。 |
 | [PAL MCP](https://github.com/BeehiveInnovations/pal-mcp-server)（`clink`） | MCP 服务器，把多家模型接进一个 CLI；`clink` 能启动另一个 CLI 当子智能体 | 1.18 万 · 2025-12 · Apache-2.0 | PAL 用 API key 接更多模型和工具；ccx 用两个 CLI 的订阅额度，按成功率和成本选，并用实际结果校准。 |
 | [CCB](https://github.com/SeemSeam/claude_codex_bridge)（`SeemSeam/claude_codex_bridge`） | 可见的多智能体终端工作区，支持 16 类 CLI，代理间有消息队列，可随时接管 | 3,595 · 2026-10 · AGPL-3.0 | CCB 重在一起看、一起指挥多个代理；ccx 是无界面的派活工具，重在成本。名字相近，但是不同的项目。 |
@@ -36,5 +37,5 @@
 | [umum-ai](https://github.com/umum-ai/claude-codex-bridge) / [Jayden-X-L](https://github.com/Jayden-X-L/claude-codex-bridge) 的 `claude-codex-bridge` | 在 Claude 里调 Codex 并可中途追加指令 / 双向互相审查 | 10 / 16 · 2026 · MIT | 各做一部分（插话、审查），不选模型、不记账。 |
 | [claude-codex-memory-sync](https://github.com/DaizeDong/claude-codex-memory-sync)、[mycelium](https://github.com/conradomateu/mycelium)、[memorize](https://github.com/shakystar/memorize) | 在工具之间同步技能、指令、MCP 和记忆 | 1–31 · 2026 · MIT | 只管配置和记忆；ccx 的共享记忆是为派活服务的。 |
 
-ccx 没有的：可见的分屏界面、任务运行中追加指令、多家模型共识、把整段对话搬进 Codex。ccx 还欠的：用真实的长对话主导测出来的节省
+ccx 没有的：可见的分屏界面；子智能体干活途中追加指令（`ccx send` 只能在一个开着的 Codex 会话两轮之间送到）；多家模型投票（`ccx discuss` 最后由一家裁判）；把整段对话搬进 Codex。ccx 还欠的：用真实的长对话主导测出来的节省
 （见本页开头）。

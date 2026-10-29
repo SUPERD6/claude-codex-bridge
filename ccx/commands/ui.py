@@ -63,7 +63,7 @@ def cmd_demo(a) -> int:
 
 def register(sub) -> None:
     u = sub.add_parser("ui", help="a live page on this machine: who works on what across projects, what waits "
-                       "for you, quota, this month's saving; buttons run ccx commands after a second click")
+                       "for you, quota, this month's spend; buttons run ccx commands after a second click")
     u.add_argument("--project", help="only this project folder (default: every project with recent runs)")
     u.add_argument("--no-open", action="store_true", help="print the address, don't open a browser")
     u.add_argument("--port", type=int, default=0, help="default: a random free port")

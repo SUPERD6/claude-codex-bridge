@@ -2,7 +2,28 @@
 
 English · [中文](measured.zh.md) · back to the [README](../README.md) · all [research reports](research/README.md)
 
-## Behind the README's four numbers
+## The README's comparison: self, built-in sub-agent, ccx (round 5, dev set)
+
+The README's first table, from the [round-5 report](research/2026-10-26-r5.md) §1 and §7 and the r5h row below.
+**Dev set; hold-out confirmation pending**: when the hold-out run is read, its result (better or worse for ccx)
+fills the README's hold-out row, and the dev-set rows stay as they are.
+
+| | Lead does it itself | Claude Code built-in sub-agent | ccx → Codex (luna low) |
+|---|---|---|---|
+| Runs counted | r5 (one run, older ccx) | r5 builtin, r5d builtin2 (lean recipe), r5f builtin | r5e, r5f, r5g, r5h (after the fixes) |
+| Right | 19/20 | 19, 17, 17 of 20 | 19, 20, 18, 19 of 20 |
+| Cost per success | $0.211 | $0.155, **$0.114**, $0.202 | $0.131, $0.116, –, **$0.135** |
+| Wall time, median | 94 s | 278, 276, 316 s | 251, 267, –, 236 s |
+
+The lean built-in arm (builtin2, $0.114) beat r5h ($0.135) on cost per success; the first ccx run, before the
+round-5 fixes, was 17/20 at $0.248 and 460 s. Wall time on smaller tasks: round 1 self 10.9 s vs ccx 33.7 s, round 3
+self 14 s vs ccx 63 s. Total spend against the lead doing it itself: about even in round 1 (ratio 1.02) and round 4
+($0.595 vs $0.567 per success), higher in round 3 ($0.071 vs $0.045, fresh short leads; the same as the built-in
+sub-agent there, ratio 1.02), lower in round 5 (above).
+
+## Best-case numbers of single features (formerly the README's four pillars)
+
+Each comes from an A/B built to test one feature; none of them is the saving a user should expect in general.
 
 | Pillar | Number | Source | Limits |
 |---|---|---|---|
@@ -16,7 +37,7 @@ English · [中文](measured.zh.md) · back to the [README](../README.md) · all
 Ten real changes from this repository × 2, a sonnet-medium lead, hidden tests; details and every arm in the
 [round-5 report](research/2026-10-26-r5.md). **Dev set, signal only**: the tasks were also used while fixing ccx,
 and this run came before the clean-environment checks ([r5 plan §8](research/2026-10-26-r5-plan.md)). It does not
-change the four numbers above.
+change the feature numbers above.
 
 | Run | Arm | Right | Cost per success | Wall, median |
 |---|---|---|---|---|
@@ -55,8 +76,16 @@ measured or extrapolated.
 - **AE$ (API-equivalent USD):** tokens × list price, per bucket (fresh input, cache write, cache read, output).
   Subscriptions don't bill per token, so AE$ is the common yardstick. Against one real run it was 1.5% from
   Claude's own reported cost.
-- **Estimated saving per delegated run:** the same tokens at the lead model's price, minus what the sub-agent cost,
-  minus the brief/review overhead. Reported with a bootstrap 95% CI.
+- **Estimated saving per delegated run (a model, not measured):** the task-sized part of the sub-agent's tokens
+  (fresh input and output, minus its own start-up: its cache reads and cache writes, ~93k tokens a run in round 2,
+  and for Codex, which reports no cache writes, the ~20k tokens a run reads fresh before it touches the task, per
+  docs/research/2026-10-25-warm-lanes.md; Gemini is assumed to be the same) at the lead model's price, minus what the sub-agent cost, minus the brief/review
+  overhead. Reported with a bootstrap 95% CI. Until 2026-10-29 all the sub-agent's tokens were priced at the lead's
+  price; that put the demo at about $2.97 "saved" on $0.49 spent while the measured totals were about even, so it
+  is kept only for comparison (`saving_old_model`, left out when a trial measured the saving). It is not an upper
+  bound: a lead with a long conversation re-reads its whole context on every request, so doing a task itself can
+  cost more than either figure. `ccx ui`, `ccx report` and `ccx stats --summary` show the spend
+  first and this estimate after it, labelled. A `ccx trial` with enough tasks replaces it with a measured value.
 - **Measured A/B:** about 10% of tasks that would have been delegated are randomly handed back to the lead
   (`defaults.ab_self_rate`; 0 turns it off). Costs are compared at the same difficulty, which tests the estimate
   above.

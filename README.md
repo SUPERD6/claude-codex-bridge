@@ -15,23 +15,37 @@
 
 # relayline
 
-**One promise: spend less on AI coding.** Claude Code, Codex and DeepSeek become one team that hands work to each
-other: each piece goes to the cheapest agent likely to get it right, every piece is checked, and all of them share
-memory and working context. The command is `ccx`; Python standard library only.
+**From Claude Code, hand a checkable chore to Codex on a cheaper model.** ccx re-runs your check itself, another
+vendor's model reviews the diff, the cost of the run is recorded, and undoing it is one command. It works the other
+ways round too (Codex or DeepSeek leading, Claude Code taking work), with shared memory and working context. The
+command is `ccx`; Python standard library only.
 
-## Four pillars
+## Compared with doing it yourself and with Claude Code's own sub-agent
 
-| | What ccx does | Measured |
-|---|---|---|
-| **Save money** | Routes each piece to the cheapest agent, model and effort likely to finish it (or says "do it yourself"); slim sub-agent start-up; `ccx lead` shows what every turn of your lead re-reads. | Delegated tasks that carried the lead's recent work cost **63 % less in all**, with 0 reworks instead of 29 ([A/B](docs/research/2026-10-25-shared-context-ab.md)) |
-| **More accurate** | ccx reruns the acceptance check itself, another vendor can review the diff, every run gets a verdict that calibrates routing. | First try right **36/36 with the shared work context vs 7/36 without** ([A/B](docs/research/2026-10-25-shared-context-ab.md)) |
-| **Split the work** | A five-question difficulty score picks agent, model and effort; the lead keeps only the summary; any of the three can lead. | The lead made **one request fewer on every task, 21/21**, after delegating ([seven-cores A/B](docs/research/2026-10-24-seven-cores-ab.md)) |
-| **Share** | Project and personal memory, handoffs between leads, a shared work context (`ccx run --context`, `ccx peek`), a board open sessions write to. | A project note reached the sub-agent and was followed: **9/9 right with it, 0/9 without** ([seven-cores A/B](docs/research/2026-10-24-seven-cores-ab.md)) |
+**Dev set; hold-out confirmation pending.** Round 5: ten real changes from this repository × 2, a sonnet lead,
+hidden tests, the sub-agent Codex gpt-6-luna low. Built-in: every run, the lean builtin2 included; ccx: the four runs
+after the round-5 fixes (the first run, before them, was 17/20 at $0.248).
 
-**Read the numbers with their limits.** They come from small, controlled tasks on one machine. The shared-context
-A/B is that feature's best case by design. Delegating small tasks *alone* left the total spend about even (ratio 1.02,
-3.3× the tokens, about 23 s slower); the saving with a real, long lead conversation is extrapolated, not yet measured.
-Every number, the unfavourable ones too: [docs/measured.md](docs/measured.md).
+| | Lead does it itself | Claude Code built-in sub-agent | ccx → Codex |
+|---|---|---|---|
+| Right | 19/20 (one run) | 17–19/20 (three runs) | 18–20/20 (four runs, r5e–r5h) |
+| Cost per success | $0.211 | $0.114–0.202 | $0.116–0.135 |
+| Wall time, median | 94 s | 276–316 s | 236–267 s |
+| Hold-out set (tasks not used while building ccx) | pending | pending | pending |
+
+- **Cost: no clear winner between the two ways to delegate.** The lean built-in arm (builtin2, the built-in sub-agent
+  given ccx's lean recipe) cost **$0.114** per success and beat our latest ccx run (r5h, **$0.135**); ccx's range
+  is $0.116–0.135. Both are cheaper per success than the lead doing these larger tasks itself.
+- **Speed: ccx is slower than doing it yourself**, 2.5–2.8× the lead's own wall time here, about 3× on the small
+  tasks of round 1 (34 s vs 11 s) and about 4.5× on round 3's harder, vaguer small-package tasks with fresh short
+  leads (63 s vs 14 s): 2.5–4.5× in all. On smaller tasks the total
+  spend was about even with doing it yourself in rounds 1 and 4 and higher in round 3 ($0.071 vs $0.045 per success).
+- **What ccx adds over the built-in sub-agent:** the work runs on another vendor's model and quota; ccx re-runs your
+  `--check` itself instead of trusting the report; a different vendor reviews the diff; every run's cost goes into a
+  ledger; `ccx undo` reverts a run.
+- **Limits:** the tasks were also used while fixing ccx, the lead doing it itself was not re-run after the first run,
+  and round 5 came before the clean-environment checks. Every number, the unfavourable ones and the best-case
+  feature A/Bs too: [docs/measured.md](docs/measured.md).
 
 **Try it without accounts:** `ccx demo` opens `ccx ui` on made-up projects, runs and costs in a temporary
 folder (offline, no Claude or Codex login; your own setup is not touched).
@@ -45,13 +59,32 @@ ccx setup                    # guided: explains each step and asks before changi
 ccx run --to codex --mode read "Summarise README.md in three lines for a new user: what this project does, how to install it, and the first command to try"
 ```
 
-Your first delegation is the last line: Codex reads this README and answers in three lines, on the cheapest model.
+The last line is a read-only first try: Codex reads this README and answers in three lines, on the cheapest model.
 From your own terminal, `--to` delegates even a very small task (stderr notes that doing it yourself is cheaper);
 when a lead session calls ccx, a task that small is still turned back to it.
 The hub `ccx setup` asks about is one folder of your own for shared memory, skills and the record of every run.
 
+Then the job ccx is for, a chore with a check that says whether it is done (in your project, with your test command; the test file the `--check` names must already exist, or ccx stops before starting the sub-agent):
+
+```bash
+ccx run --to codex --check "python -m pytest -q tests/test_dates.py" --review on "parse_date() rejects ISO dates that end in Z; make it accept them and add a case for it to tests/test_dates.py"
+ccx undo <run_id>            # if you don't want it: shows what would be restored; --apply restores it
+```
+
+ccx passes the run only when your `--check` passes when ccx runs it itself; `--review on` has another vendor's model
+read the diff; the JSON result carries the run id, the check, the review and the cost. A run that may edit files and
+has no `--check` gets a one-line reminder on stderr.
+
 You need Python 3.11+ and the `claude` and `codex` CLIs, logged in; DeepSeek (`dsh`, or a key in
 `DEEPSEEK_API_KEY`) is optional. `ccx -h` lists the commands you type (run, resume, show, q, undo, ui, ...); `ccx -h --all` also lists the ones agents call to each other (board, say, reply, peek), the advanced and maintenance ones, and the developer ones (trial, ab, bench) last.
+
+## What else it does
+
+The same seven things as [docs/features.md](docs/features.md), in one line each: (1) Claude Code, Codex and
+DeepSeek as each other's lead and sub-agent; (2) models talking directly (`ccx ask`, `ccx discuss`, the board);
+(3) shared memory and working context; (4) splitting the work and routing each piece by difficulty and cost;
+(5) a slim sub-agent start-up and `ccx lead` for what the lead re-reads; (6) checks, cross-vendor review and a verdict
+for every run; (7) you stay in control (`ccx undo`, `--worktree`, `ccx ui` with confirmed buttons).
 
 **Switching leads.** Claude Code did the first half and Codex should do the rest (or the other way round)? On a
 project's page in `ccx ui`, "Continue with Codex" / "Continue with Claude" runs `ccx handoff` for that project
@@ -79,7 +112,7 @@ what is verified and how is in [docs/STATUS.md](docs/STATUS.md).
 |---|---|
 | [What it does, and how](docs/features.md) | the seven things in detail, `ccx ui`, one example end to end, where shared things live, tiers, safety |
 | [Install and commands](docs/install.md) | install from a clone, plugging in your own setup, every command |
-| [Measured](docs/measured.md) | all measurements with their limits, how savings are counted, external facts checked |
+| [Measured](docs/measured.md) | all measurements with their limits (the round-5 comparison, the best-case feature A/Bs), how a saving is estimated, external facts checked |
 | [Shared work context](docs/shared-context.md) · [The board](docs/board.md) | what open sessions share with each other, and how |
 | [Questions and similar projects](docs/faq.md) | cost, subscriptions, safety, which tools work; how ccx differs from similar projects |
 | [Design](docs/DESIGN.md) · [Decisions](docs/DECISIONS.md) · [Changes](CHANGELOG.md) | the inside |
