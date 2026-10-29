@@ -346,6 +346,7 @@ def _q(s: str) -> str:
 # K6: the ccx commands a button may run from the page (`run: true`); anything else is shown to copy. Each spends
 # (starts a sub-agent: runs in the background) or only records something (runs at once, waits for its answer).
 RUNS = {("verify",): "record", ("stop",): "record", ("q", "done"): "record", ("q", "budget"): "record",
+        ("handoff",): "record",       # U7: the switch-lead panel; writes a note in the project, starts nothing
         ("resume",): "spend", ("run",): "spend", ("q", "resume"): "spend"}
 FILLS = ("{reason}", "{note}", "{usd}")          # filled in by the page's form, checked by the server (fill())
 REASONS = ("unfinished", "wrong", "overreach", "other")
@@ -889,6 +890,110 @@ def month_view(rd: Reader, wait: bool = True) -> dict | None:
     return _later(rd, "month", MONTH_EVERY_S, make, wait, None)
 
 
+# ------------------------------------------------------------------ U7: who leads a project, and switching
+LEAD_NAMES = ("claude", "codex", "dsh")          # `ccx handoff --to` choices that can sit in the lead's chair
+LEAD_LABEL = {"claude": "b_cont_claude", "codex": "b_cont_codex", "dsh": "b_cont_dsh"}
+HANDOFFS_MAX = 50
+
+
+def handoff_history(rd: Reader, root: Path) -> list[dict]:
+    """The project's handoffs between leads, oldest first, from the header ccx writes on each file in
+    .ccx/handoffs/ (project.handoff): {ts, from, to, file}. Read only; each file's first line only."""
+    from .project import _HEAD, _order
+
+    def look():
+        d = root / ".ccx" / "handoffs"
+        try:
+            files = sorted(d.glob("*.md"), key=_order)[-HANDOFFS_MAX:] if d.is_dir() else []
+        except OSError:
+            return []
+        out = []
+        for f in files:
+            try:
+                with open(f, encoding="utf-8", errors="replace") as fh:
+                    m = _HEAD.match(fh.readline())
+            except OSError:
+                continue
+            if not m:
+                continue
+            try:
+                ts = time.mktime(time.strptime(m.group(3)[:19], "%Y-%m-%dT%H:%M:%S"))
+            except (ValueError, OverflowError):
+                continue
+            out.append({"ts": ts, "from": _field(m.group(1)), "to": _field(m.group(2)),
+                        "file": f.relative_to(root).as_posix()})
+        return sorted(out, key=lambda h: h["ts"])
+    d = root / ".ccx" / "handoffs"
+    try:                                          # read again only when a handoff was added or removed
+        key = ("handoffs", d.stat().st_mtime_ns)
+    except OSError:
+        return []
+    hit = rd._json.get(d)
+    if hit and hit[0] == key:
+        return hit[1]
+    val = look()
+    rd._json[d] = (key, val)
+    return val
+
+
+def lead_switch(rd: Reader, root: Path, tasks: list[dict]) -> dict:
+    """U7, a project's switch-lead panel: the current lead (the newest of: the last handoff's receiver, the lead of
+    the most recent task), when each lead worked (from the handoff records), and one button per other lead that runs
+    `ccx handoff --to <it> --by <current> --cwd <project>` through the usual prepare / confirm (the server adds
+    --from-transcript when the current lead's session file for this folder exists). No lead known: no buttons."""
+    hist = handoff_history(rd, root)
+    cands = [(h["ts"], h["to"]) for h in hist if h["to"] in LEAD_NAMES]
+    cands += [(float(t.get("last") or t.get("asked") or 0), (t.get("lead") or {}).get("agent")) for t in tasks
+              if (t.get("lead") or {}).get("agent") in LEAD_NAMES]
+    newest = max(cands, key=lambda c: c[0]) if cands else None
+    current = newest[1] if newest else None
+    # the periods come from the handoff records; a task led by someone else after the last handoff starts one more
+    periods, agent, since = [], (hist[0]["from"] if hist else current), None
+    for h in hist:
+        periods.append({"agent": agent, "since": since, "until": h["ts"]})
+        agent, since = h["to"], h["ts"]
+    if hist and current and current != agent and newest[0] > since:
+        periods.append({"agent": agent, "since": since, "until": newest[0]})
+        agent, since = current, newest[0]
+    if agent:
+        periods.append({"agent": agent, "since": since, "until": None})
+    targets = [a for a in ("claude", "codex") if a != current]
+    if current != "dsh" and rd.every("dsh-bin", 60, _dsh_ready):
+        targets.append("dsh")
+    ctl = []
+    if current:
+        for i, a in enumerate(targets):
+            b = _btn(LEAD_LABEL[a], ["ccx", "handoff", "--to", a, "--by", current, "--cwd", str(root)],
+                     "primary" if i == 0 else "")
+            b["handoff"] = {"to": a, "by": current}
+            ctl.append(b)
+    return {"current": current, "ctl": ctl, "periods": periods[-12:], "switches": hist[-12:]}
+
+
+def _dsh_ready() -> bool:
+    """DeepSeek's own agent (dsh) is offered as a lead only where it is installed."""
+    try:
+        from .runners import find_bin
+        return bool(find_bin("dsh"))
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def lead_hist(sw: dict, task: dict) -> list[dict]:
+    """The task timeline's lead lines: who led when it was asked, and every switch since (read only)."""
+    asked = float(task.get("asked") or 0)
+    out = []
+    at = next((p["agent"] for p in sw.get("periods") or []
+               if (p["since"] is None or p["since"] <= asked) and (p["until"] is None or asked < p["until"])), None)
+    if at:
+        out.append({"ts": asked, "k": "h_lead_at", "p": {"w": at}})
+    for h in sw.get("switches") or []:
+        if h["ts"] >= asked:
+            out.append({"ts": h["ts"], "k": "h_lead_switch", "p": {"w": h["from"], "w2": h["to"], "f": h["file"]},
+                        "tone": "lead"})
+    return out
+
+
 # ------------------------------------------------------------------ the whole page's data
 def _queue_pieces(rd: Reader, root: Path, q: dict, recs: dict, verdicts: dict, now: float) -> list[dict]:
     items = q["items"]
@@ -1080,9 +1185,17 @@ def collect(p: Paths, project: Path | None = None, days: float = 7, rd: Reader |
                     t["lead"]["model"] = t["lead"]["model"] or cur["model"]
         tasks.sort(key=lambda t: -(t["last"] or t["asked"] or 0))
         e = catalog.get(root)
+        try:
+            sw = lead_switch(rd, root, tasks)
+        except Exception:  # noqa: BLE001 — an odd handoff file never breaks the page
+            sw = {"current": None, "ctl": [], "periods": [], "switches": []}
+        for t in tasks:
+            extra = lead_hist(sw, t)
+            if extra:
+                t["hist"] = sorted(t["hist"] + extra, key=lambda h: h.get("ts") or 0)[-40:]
         projects.append({"id": _pid(root), "name": (e or {}).get("name") or root.name or str(root), "path": str(root),
                          "tasks": tasks[:30], "test": is_scratch(root, scratch) or all(t["test"] for t in tasks),
-                         "rules": _rules(rd, e) if e else [], "level": _level(rd, e)})
+                         "rules": _rules(rd, e) if e else [], "level": _level(rd, e), "lead_switch": sw})
     projects.sort(key=lambda pr: -max(t["last"] or t["asked"] or 0 for t in pr["tasks"]))
     shown_roots = {Path(pr["path"]) for pr in projects}
     running = running_now(projects)
@@ -1120,8 +1233,9 @@ def collect(p: Paths, project: Path | None = None, days: float = 7, rd: Reader |
         n_sugs = len(ranked)
     except Exception:  # noqa: BLE001 — the page still shows the rest
         sugs, n_sugs = [], 0
+    from .demo import is_demo
     return {
-        "v": 1, "generated": now, "lang": ui_lang(cfg), "poll_s": POLL_S, "beat_s": BEAT_S,
+        "v": 1, "generated": now, "lang": ui_lang(cfg), "poll_s": POLL_S, "beat_s": BEAT_S, "demo": is_demo(p),
         "start": start_hint(),                   # what an empty overview tells a new user to do first
         "projects": projects, "running": running, "quota": quota_view(rd, quota_wait), "leads": current,
         "agents": agents,
@@ -1508,6 +1622,52 @@ def conversation(rd: Reader, root: Path, cfg: dict, pid: str, name: str) -> dict
             "max_machine": _max_machine(cfg), "say_max": SAY_MAX, "generated": time.time()}
 
 
+# ------------------------------------------------------------------ U7: the switch-lead button's command and answer
+def handoff_argv(p: Paths, argv: list[str], by: str) -> tuple[list[str], str | None]:
+    """The handoff button's argv, with `--from-transcript <current lead> --no-model` when that lead's session file for
+    the project folder exists (the handoff is then assembled by code from it, never by a model: the page spends
+    nothing); and that file, or None."""
+    if by not in ("claude", "codex") or "--cwd" not in argv:
+        return argv, None
+    i = argv.index("--cwd")
+    root = Path(argv[i + 1])
+    try:
+        from . import ledger, transcript
+        mine = {s for r in ledger.rows(p) for s in [r.get("session_id"), *(r.get("sessions") or [])] if s}
+        f = transcript.find_session(by, root, mine)
+    except Exception:  # noqa: BLE001 — no session file found: a handoff without the transcript
+        f = None
+    if not f:
+        return argv, None
+    return [*argv[:i], "--from-transcript", by, "--no-model", *argv[i:]], str(f)
+
+
+def handoff_result(argv: list[str], out: str) -> dict | None:
+    """What the page shows after the handoff ran: the file and the one line to give the incoming lead (`paste`, from
+    `ccx handoff`'s JSON; else the project's newest handoff file and the same line)."""
+    to = argv[argv.index("--to") + 1] if "--to" in argv else ""
+    root = Path(argv[argv.index("--cwd") + 1]) if "--cwd" in argv else None
+    try:
+        got = json.loads(out[out.index("{"):]) if "{" in out else None
+    except ValueError:
+        got = None
+    from .commands.memory import SHOWN_AT_START, paste_line
+    if isinstance(got, dict) and got.get("handoff"):
+        # `note` is set when no text went in: a blank template the person must fill in before giving the line
+        return {"file": str(got["handoff"]), "paste": str(got.get("paste") or ""), "to": to,
+                "root": str(root or ""), "from_transcript": got.get("from_transcript"),
+                "blank": bool(got.get("note")), "shown_at_start": to in SHOWN_AT_START}
+    if root is None:
+        return None
+    from .project import _order
+    d = root / ".ccx" / "handoffs"
+    files = sorted(d.glob("*.md"), key=_order) if d.is_dir() else []
+    if not files:
+        return None
+    return {"file": str(files[-1]), "paste": paste_line(to, files[-1].relative_to(root).as_posix()),
+            "to": to, "root": str(root), "from_transcript": None, "blank": False, "shown_at_start": to in SHOWN_AT_START}
+
+
 # ------------------------------------------------------------------ running a button's ccx command (K6)
 def execute(p: Paths, argv: list[str], background: bool) -> dict:
     """Run one ccx command a button offers: this copy of ccx, an argument list (no shell), no console window.
@@ -1572,6 +1732,8 @@ class UI:
         self.says: dict[str, dict] = {}            # I1: prepared replies, by nonce
         self.boards: dict[str, tuple[Path, str]] = {}   # U2: project id -> (folder, name) of the boards shown
         self.why_stopped = ""
+        from .demo import is_demo
+        self.demo = is_demo(p)                    # U6: a `ccx demo` hub: commands that start an agent are not run
         ui = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -1737,7 +1899,11 @@ class UI:
         with self.lock:
             data = collect(self.p, self.project, self.days, self.reader, quota_wait=False)
         pr = next((x for x in data["projects"] if x["id"] == want.get("project")), None)
-        tk = next((x for x in (pr or {}).get("tasks") or [] if x["id"] == want.get("task")), None)
+        if want.get("task") == "_lead":              # U7: the project's switch-lead panel (its buttons are c<i>)
+            tk = (pr or {}).get("lead_switch")
+            want = {**want, "piece": None}
+        else:
+            tk = next((x for x in (pr or {}).get("tasks") or [] if x["id"] == want.get("task")), None)
         if tk is None:
             raise LookupError("that task is no longer on the page: reload")
         holder = tk
@@ -1757,6 +1923,12 @@ class UI:
     def prepare(self, want: dict) -> dict:
         b = self.find_button(want)
         argv = fill(b["argv"], want.get("fill"))
+        extra = {}
+        if b.get("handoff"):                          # U7: from the current lead's session file when there is one
+            argv, extra["transcript"] = handoff_argv(self.p, argv, b["handoff"]["by"])
+        cmd = " ".join(_q(x) for x in argv)
+        if self.demo and b["spends"]:                 # U6: a demo hub never starts an agent; the command is shown
+            return {"nonce": None, "cmd": cmd, "spends": True, "demo": True, "ttl_s": 0}
         nonce = secrets.token_urlsafe(18)
         now = time.time()
         with self.lock:
@@ -1764,14 +1936,18 @@ class UI:
             if len(self.pending) >= 20:
                 raise LookupError("too many unconfirmed actions: wait a minute")
             self.pending[nonce] = {"argv": argv, "spends": b["spends"], "until": now + ACT_TTL_S}
-        return {"nonce": nonce, "cmd": " ".join(_q(x) for x in argv), "spends": b["spends"], "ttl_s": ACT_TTL_S}
+        return {"nonce": nonce, "cmd": cmd, "spends": b["spends"], "ttl_s": ACT_TTL_S, **extra}
 
     def run_prepared(self, nonce: str) -> dict:
         with self.lock:
             job = self.pending.pop(nonce, None)       # once: a second run of the same nonce finds nothing
         if not job or job["until"] < time.time():
             raise LookupError("this confirmation has expired or was used: press the button again")
+        if self.demo and job["spends"]:
+            raise LookupError("demo data: a command that starts an agent is shown, not run")
         out = execute(self.p, job["argv"], background=job["spends"])
+        if job["argv"][1:2] == ["handoff"] and out.get("ok"):
+            out["handoff"] = handoff_result(job["argv"], out.get("out") or "")
         return {**out, "cmd": " ".join(_q(x) for x in job["argv"])}
 
     # ---------------------------------------------------------------- U2 / I1: the conversation and the reply

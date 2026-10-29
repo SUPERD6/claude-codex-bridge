@@ -17,7 +17,8 @@ def cmd_handoff(a) -> int:
     from .. import project
     import contextlib
     import io
-    root = project.find_root() or learn.cp_root(Path.cwd())
+    here = Path(a.cwd).resolve() if getattr(a, "cwd", None) else Path.cwd()     # --cwd: ccx ui's switch-lead button
+    root = project.find_root(here) or learn.cp_root(here)
     by = a.by or a.from_transcript or _caller(None)    # from a transcript, the old lead is the one handing off
     if by == "user":
         raise ValueError("say who hands off: --by claude|codex|gemini")
@@ -25,12 +26,15 @@ def cmd_handoff(a) -> int:
     src = None
     if a.from_transcript:
         src = transcript_handoff(paths(), root, a.from_transcript, a.session, a.max_chars, not a.no_model,
-                                 where=Path.cwd())
+                                 where=here)
         if src is None:
             raise ValueError(f"no {a.from_transcript} session file found for {root} (give --session ID)")
         by = a.by or a.from_transcript
         text = src[1] + (f"\n\n## Added by hand\n{text}" if text else "")
     out = project.handoff(root, by, a.to, text)
+    # the one line to give the incoming lead when it is opened in this folder (claude/codex: their session start
+    # shows the handoff too; a tool without that hook is told to read the file)
+    out["paste"] = paste_line(a.to, Path(out["handoff"]).relative_to(root).as_posix())
     if src:
         out["from_transcript"] = str(src[0])
         out["suggested_notes"] = _suggest_quietly(a.from_transcript, src[0])
@@ -69,6 +73,14 @@ def _suggest_quietly(agent: str, path: Path) -> int:
 
 
 FRESH_PROMPT = "Continue the work described in the handoff at {file} (it was shown at start-up)."
+# a tool with no session-start hook from ccx (dsh, gemini) does not see the handoff when it starts: it is told to read it
+READ_PROMPT = "Read the handoff at {file} and continue the work it describes."
+SHOWN_AT_START = ("claude", "codex", "any")      # ccx sync installs `ccx mem delta` at these tools' session start
+
+
+def paste_line(to: str, file: str) -> str:
+    """The one line to give the incoming lead `to` about the handoff `file` (relative to the project)."""
+    return (FRESH_PROMPT if to in SHOWN_AT_START else READ_PROMPT).format(file=file)
 
 
 def cmd_fresh(a) -> int:
@@ -471,6 +483,7 @@ def register(sub) -> None:
     ho.add_argument("--no-model", action="store_true", help="with --from-transcript: code only; when the code "
                     "can't read the session file's format, don't fall back to a routed sub-agent reading it")
     ho.add_argument("--max-chars", type=int, help="with --from-transcript: size cap (default about one page)")
+    ho.add_argument("--cwd", help="the project folder (default: the current folder)")
     leadmodel.add_args(ho, short_b=False)     # --b would take over the --b abbreviation of --by
     ho.set_defaults(fn=cmd_handoff)
     m = sub.add_parser("mem", help="shared incremental memory")

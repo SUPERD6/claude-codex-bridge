@@ -31,6 +31,9 @@
 只是把小任务派出去，总花费基本持平（比值 1.02，token 3.3 倍，慢约 23 秒）；换成真实的长对话组长能省多少，目前是外推、
 还没测。全部数字（包括不利的）：[docs/measured.zh.md](docs/measured.zh.md)。
 
+**不用账号先看看：** `ccx demo` 用临时目录里编好的项目、运行和花费打开 `ccx ui`（离线可用，不用登录 Claude
+或 Codex，不动你自己的设置）。
+
 ## 快速开始
 
 ```bash
@@ -45,6 +48,10 @@ ccx run --to codex --mode read "Summarise README.md in three lines for a new use
 
 需要 Python 3.11+，以及登录好的 `claude` 和 `codex` 命令行；DeepSeek（`dsh`，或 `DEEPSEEK_API_KEY` 里的密钥）可选。
 `ccx -h` 先列常用命令（run、resume、show、q、undo、ui 等），开发者用的（trial、ab、bench 等）放在最后。
+
+**换主导。** 前一半是 Claude Code 做的，后面想交给 Codex（或反过来）？在 `ccx ui` 的项目页点“交给 Codex 继续”/
+“交给 Claude 继续”，再点一次确认，就会为这个项目运行 `ccx handoff`：把做完了什么、定了什么、下一步写进项目（当前主导的
+对话文件在的话就从它整理），并给你一行话，在那个工具里打开这个项目时贴给它。任务时间线会显示每段时间由谁主导。
 
 <p align="center"><img alt="演示动画：ccx route 选出 codex:gpt-6.1-sol:medium，ccx run 一次完成并由 ccx 重跑验收命令，ccx verify 记下结论" src="docs/assets/demo.svg" width="100%"></p>
 

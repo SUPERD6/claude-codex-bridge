@@ -9,7 +9,7 @@
   let LANG = "en", D = null, ALL = null, TOKEN = "", SNAP = false, OFFLINE = false, lastOk = 0, TESTS = false, HIDDEN = 0;
   let filt = "all", sel = null, expanded = {}, query = "", histOpen = {}, drawerSig = "", drawerStable = "", pending = null, chosen = null;
   let ACT = null, FLASH = null;     /* the one button being prepared / confirmed, and the last outcome line */
-  const KNOWN = {claude: "Claude", codex: "Codex", deepseek: "DeepSeek", gemini: "Gemini"};
+  const KNOWN = {claude: "Claude", codex: "Codex", deepseek: "DeepSeek", dsh: "DeepSeek", gemini: "Gemini"};
   const FIXED = {claude: "claude", codex: "codex", deepseek: "deepseek"};
   const SPARE = 4;
   const $ = (id) => document.getElementById(id);
@@ -124,7 +124,7 @@
     all.push(...convTodos());
     let state = SNAP ? `<span class="dot snap"></span>${t("snapshot")}` : OFFLINE ? `<span class="dot off"></span>${t("offline")}` :
       `<span class="dot"></span>${D ? t("updated", {a: raw(ago(D.generated))}) : "…"}`;
-    let h = `<div class="brand"><b>ccx</b><span style="color:var(--muted)">${t("now")}</span><span class="live">${state}</span></div>
+    let h = `<div class="brand"><b>ccx</b><span style="color:var(--muted)">${t("now")}</span>${D && D.demo ? `<span class="demo-tag">${t("demo_tag")}</span>` : ""}<span class="live">${state}</span></div>
       <input class="search" id="search" placeholder="${esc(t("search"))}" value="${esc(query)}" aria-label="${esc(t("search"))}">
       <nav class="nav" id="nav"><a href="#/" class="${route.length ? "" : "cur"}">${t("overview")}${all.length ? `<span class="badge">${all.length}</span>` : ""}</a>`;
     const talks = (D && D.discussions) || [];
@@ -288,10 +288,11 @@
     return `<h2>${t("track_title")}</h2><table class="track"><thead><tr><th>${t("track_kind")}</th><th>${t("track_who")}</th><th>${t("track_judged")}</th><th>${t("track_first")}</th><th>${t("track_rework")}</th></tr></thead><tbody>${rows.join("")}</tbody></table>`;
   }
   function banner() {
-    if (SNAP) return `<div class="banner snap">${t("snap_banner", {at: clock(D.generated)})}</div>`;
-    if (OFFLINE) return `<div class="banner">${t("offline_banner")}</div>`;
-    if (FLASH && Date.now() - FLASH.at < 20000) return `<div class="banner ${FLASH.ok ? "ok" : ""}" role="status">${FLASH.html}</div>`;
-    return "";
+    const demo = D && D.demo ? `<div class="banner demo">${t("demo_banner")}</div>` : "";    /* U6: always, on every page */
+    if (SNAP) return demo + `<div class="banner snap">${t("snap_banner", {at: clock(D.generated)})}</div>`;
+    if (OFFLINE) return demo + `<div class="banner">${t("offline_banner")}</div>`;
+    if (FLASH && Date.now() - FLASH.at < 20000) return demo + `<div class="banner ${FLASH.ok ? "ok" : ""}" role="status">${FLASH.html}</div>`;
+    return demo;
   }
 
   /* ---------- K6: this month, the other projects, optional slots (autonomy level, inbox) ---------- */
@@ -327,9 +328,11 @@
     const cancel = `<button class="btn" data-do="act-cancel">${t("act_cancel")}</button>`;
     if (ACT.stage === "usd") return `<div class="k">${t(b ? b.label : "b_budget")} — ${t("act_usd")}</div><div class="acts"><input type="number" id="usdin" min="0.01" max="10000" step="0.5" value="${esc(ACT.usd)}" aria-label="${esc(t("act_usd"))}"><button class="btn primary" data-do="act-usd">${t("act_next")}</button>${cancel}</div>`;
     if (ACT.stage === "busy") return `<div class="k">${t("act_busy")}</div>`;
+    if (ACT.stage === "demo") return `<div class="k">${t(ACT.label)} — ${t("act_demo")}</div><code class="mono" id="cmdtext">${esc(ACT.cmd)}</code><div class="acts">${cancel}<button data-do="copy">${t("copy")}</button></div>`;
     if (ACT.stage === "err") return `<div class="k"><span class="warn">${t("act_failed", {e: ACT.msg || ""})}</span></div><div class="acts">${cancel}</div>`;
     if (ACT.stage === "confirm") return `<div class="k">${t(ACT.label)} — ${t("act_will")}</div><code class="mono" id="cmdtext">${esc(ACT.cmd)}</code>`
       + `<p class="${ACT.spends ? "warn" : "cost"}" style="margin:6px 0">${t(ACT.spends ? "act_spends" : "act_records")}</p>`
+      + (ACT.blank ? `<p class="warn" style="margin:6px 0">${t("sw_blank_pre")}</p>` : "")
       + `<div class="acts"><button class="btn ${ACT.spends ? "bad" : "primary"}" data-do="act-run">${t(ACT.spends ? "act_confirm_spend" : "act_confirm")}</button>${cancel}<button data-do="copy">${t("copy")}</button></div>`;
     return "";
   }
@@ -345,7 +348,8 @@
     ACT = {key, btn, b, label: b.label, stage: "busy"}; paintAct();
     try {
       const r = await post("/api/act/prepare", Object.assign(where(key), {btn, fill: fill || {}}));
-      Object.assign(ACT, {stage: "confirm", cmd: r.cmd, nonce: r.nonce, spends: r.spends});
+      Object.assign(ACT, {stage: r.demo ? "demo" : "confirm", cmd: r.cmd, nonce: r.nonce, spends: r.spends,
+        blank: "transcript" in r && !r.transcript});      /* U7: a handoff with no conversation file: a blank template */
     } catch (e) { Object.assign(ACT, {stage: "err", msg: e.message}); }
     paintAct();
   }
@@ -357,7 +361,8 @@
       const html = r.started ? t("act_started", {c: raw(`<code class="mono">${esc(r.cmd)}</code>`)})
         : r.ok ? t("act_done", {c: raw(`<code class="mono">${esc(r.cmd)}</code>`)})
         : t("act_exit", {c: raw(`<code class="mono">${esc(r.cmd)}</code>`), e: String(r.exit), m: (r.err || r.out || "").slice(-300)});
-      FLASH = {at: Date.now(), ok: !!r.ok, html}; ACT = null;
+      if (r.handoff) HANDOFF[where(a.key).project] = r.handoff;      /* U7: kept on the panel, not only flashed */
+      FLASH = {at: Date.now(), ok: !!r.ok, html: r.handoff ? t("sw_done", {f: r.handoff.file}) : html}; ACT = null;
       await refresh(); render();
     } catch (e) { Object.assign(a, {stage: "err", msg: e.message}); paintAct(); }
   }
@@ -540,9 +545,32 @@
     } catch (e) { Object.assign(s, {stage: "err", msg: e.message}); paintSay(); }
   }
 
+  /* ---------- U7: who leads this project, when the lead changed, and handing it to another lead ----------
+     The buttons run `ccx handoff` through the same prepare -> exact command -> second click; the answer (the handoff
+     file and the one line to give the other tool) stays on the panel. Names and paths are data: esc() always. */
+  const HANDOFF = {};
+  function leadPanelHTML(pr) {
+    const sw = pr.lead_switch; if (!sw) return "";
+    let h = `<h2>${t("sw_title")}</h2><p class="stat">${sw.current ? t("sw_current", {w: raw(who(sw.current))}) : t("sw_unknown")}</p>`;
+    const ps = sw.periods || [];
+    if (ps.length > 1) h += `<ul class="tl leadtl">${ps.map(p => `<li><time>${p.since ? clock(p.since) : t("sw_start")}</time>${who(p.agent)} <span class="cost">${p.until ? t("sw_until", {at: clock(p.until)}) : t("sw_now")}</span></li>`).join("")}</ul>`;
+    const key = pr.id + "|_lead|_", ctl = sw.ctl || [];
+    if (ctl.length) {
+      h += `<p class="cost">${t("sw_lead")}</p>`;
+      h += SNAP ? ctl.map(b => `<div><code class="mono">${esc(b.cmd)}</code></div>`).join("")
+        : `<div class="acts">${ctl.map((b, i) => `<button class="btn ${esc(b.style || "")}" data-lbtn="c${i}" data-key="${esc(key)}">${t(b.label)}</button>`).join("")}</div><div class="cmd" data-actbox="${esc(key)}" hidden></div>`;
+    }
+    const r = HANDOFF[pr.id];
+    if (r) h += `<div class="card handoff" role="status"><div class="k">${t("sw_done", {f: r.file})}</div>`
+      + (r.blank ? `<div class="k warn">${t("sw_blank", {f: r.file})}</div>` : "")
+      + `<div class="k">${t(r.shown_at_start === false ? "sw_paste_read" : "sw_paste", {w: agentName(r.to), d: r.root})}</div>`
+      + `<code class="mono" id="hopaste">${esc(r.paste)}</code> <button data-do="copy-paste">${t("copy")}</button></div>`;
+    return h;
+  }
+
   /* ---------- a project page ---------- */
   function renderProject(pr) {
-    let h = banner() + `<div class="crumbs"><a href="#/">${t("overview")}</a> › ${esc(pr.name)}</div><h1>${esc(pr.name)}${levelHTML(pr)}</h1><p class="lead mono" style="font-size:13px">${esc(pr.path)}</p>${convLinkHTML(pr.id)}${rulesHTML(pr)}<h2>${t("tasks")}</h2><div class="grid">`;
+    let h = banner() + `<div class="crumbs"><a href="#/">${t("overview")}</a> › ${esc(pr.name)}</div><h1>${esc(pr.name)}${levelHTML(pr)}</h1><p class="lead mono" style="font-size:13px">${esc(pr.path)}</p>${convLinkHTML(pr.id)}${rulesHTML(pr)}${leadPanelHTML(pr)}<h2>${t("tasks")}</h2><div class="grid">`;
     for (const tk of pr.tasks) {
       const s = stats(tk.pieces), k = acts(tk.pieces).length, ws = new Set();
       walk(tk.pieces, p => { if (p.worker) ws.add(p.worker); });
@@ -644,6 +672,7 @@
       const hk = pr.id + "/" + tk.id;
       h += `<details class="hist" data-hist="${esc(hk)}"${histOpen[hk] ? " open" : ""}><summary>${t("hist")}</summary><ul class="tl">${hist.map(x => `<li class="${esc(x.tone || "")}"><time>${clock(x.ts)}</time>${histText(x)}</li>`).join("")}</ul></details>`;
     }
+    if (!node) h += leadPanelHTML(pr);
     h += `</div><aside class="drawer card" id="drawer"></aside></div>`;
     if (!sel || !findPiece(list, sel)) sel = needs.length ? needs[0].id : null;
     const old = $("drawer");
@@ -657,6 +686,7 @@
   function histText(x) {
     const p = Object.assign({}, x.p || {});
     if (p.w) p.w = agentName(p.w);
+    if (p.w2) p.w2 = agentName(p.w2);
     p.soft = p.soft ? "(" + t("soft") + ")" : "";
     return t(x.k, p);
   }
@@ -829,7 +859,7 @@
     const pr = r.length ? findProject(r[0]) : null;
     const tk = pr && r[1] ? findTask(pr, r[1]) : null;
     if (!pr) { main.innerHTML = renderOverview(); paintAct(); return; }
-    if (!tk) { main.innerHTML = renderProject(pr); return; }
+    if (!tk) { main.innerHTML = renderProject(pr); paintAct(); return; }
     const keep = window.scrollY;
     renderTask(pr, tk, r.slice(2));
     window.scrollTo(0, keep);
@@ -842,7 +872,7 @@
 
   /* ---------- events (one listener; no inline handlers, the page's CSP forbids them) ---------- */
   document.addEventListener("click", (e) => {
-    const el = e.target.closest("[data-sel],[data-filt],[data-more],[data-btn],[data-tbtn],[data-rbtn],[data-reason],[data-do],[data-sug]");
+    const el = e.target.closest("[data-sel],[data-filt],[data-more],[data-btn],[data-tbtn],[data-rbtn],[data-lbtn],[data-reason],[data-do],[data-sug]");
     if (!el) return;
     if (el.dataset.do === "say-prep") { prepSay(); return; }
     if (el.dataset.do === "say-run") { runSay(); return; }
@@ -860,6 +890,12 @@
       if (tk) pressBtn(el.dataset.key, tk, el.dataset.tbtn);
       return;
     }
+    if (el.dataset.lbtn !== undefined) {           /* U7: the project's switch-lead panel */
+      const pr = findProject(where(el.dataset.key).project);
+      if (pr && pr.lead_switch) pressBtn(el.dataset.key, pr.lead_switch, el.dataset.lbtn);
+      return;
+    }
+    if (el.dataset.do === "copy-paste") { const c = $("hopaste"); if (c) copy(c.textContent, el); return; }
     if (el.dataset.rbtn !== undefined) {           /* the "running now" strip's stop: that piece's own button */
       const w = where(el.dataset.key), tk = findTask(findProject(w.project), w.task), f = tk && findPiece(tk.pieces, w.piece);
       if (f) pressBtn(el.dataset.key, f.p, el.dataset.rbtn);

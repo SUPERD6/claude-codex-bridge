@@ -59,6 +59,10 @@ button{font:inherit}
 main{padding:18px 24px 48px;min-width:0}
 .banner{background:var(--redSoft);color:var(--red);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:14px}
 .banner.snap{background:var(--soft);color:var(--muted)}
+.banner.demo{background:var(--amberSoft);color:var(--amber);font-weight:600}
+.demo-tag{font-size:11px;font-weight:700;letter-spacing:.04em;padding:2px 7px;border-radius:999px;background:var(--amberSoft);color:var(--amber)}
+.handoff{margin-top:10px;padding:10px 12px}.handoff code{display:block;margin:6px 0;overflow-wrap:anywhere}
+.tl li.lead::before{background:var(--teal)}
 .crumbs{font-size:13.5px;color:var(--muted);margin-bottom:6px;overflow-wrap:anywhere}
 .crumbs a{color:var(--muted)}
 h1{font-size:24px;line-height:1.3;margin:0 0 4px;overflow-wrap:anywhere}
