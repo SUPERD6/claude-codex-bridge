@@ -254,8 +254,8 @@ class TestLockRetries(unittest.TestCase):
                 except OSError:
                     pass
                 time.sleep(0.02)
-            self.lock.unlink()
-            stop.set()
+            stop.set()                                 # before the unlink: a waiter can take the lock only after it
+            self.lock.unlink()                         # (CI ubuntu 3.13 took it in between and saw stop unset)
         th = threading.Thread(target=other_writers, daemon=True)
         th.start()
         self.addCleanup(th.join)
