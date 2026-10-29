@@ -19,6 +19,9 @@ class TestNoChanges(Env):
     def setUp(self):
         super().setUp()
         subprocess.run(["git", "init", "-q"], cwd=self.work, check=True)
+        # no background gc/maintenance: on macOS it wrote objects/maintenance.lock while a test removed .git
+        for k, v in (("gc.auto", "0"), ("maintenance.auto", "false")):
+            subprocess.run(["git", "config", k, v], cwd=self.work, check=True)
         (self.work / "a.py").write_text("x = 1\n", encoding="utf-8")
         subprocess.run([*G, "add", "a.py"], cwd=self.work, check=True)
         subprocess.run([*G, "commit", "-qm", "init"], cwd=self.work, check=True)
@@ -90,8 +93,11 @@ class TestNoChanges(Env):
         import stat
 
         def writable(fn, path, _exc):              # git's objects are read-only on Windows
-            os.chmod(path, stat.S_IWRITE)
-            fn(path)
+            try:
+                os.chmod(path, stat.S_IWRITE)
+                fn(path)
+            except FileNotFoundError:              # a git process removed it meanwhile (its lock file)
+                pass
         shutil.rmtree(self.work / ".git", onerror=writable)
         out = self.run_ccx()
         self.assertEqual((out["ok"], out.get("kind")), (True, None), out)

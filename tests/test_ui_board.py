@@ -75,8 +75,10 @@ class TestButtons(Env):
         self.assertEqual([(b["label"], b["run"]) for b in rv], [("b_ok", True), ("b_bad", True), ("b_see_change", False)])
         self.assertEqual(rv[0]["cmd"], "ccx verify r-done --ok 1")
         self.assertFalse(rv[0]["spends"])
-        fix = by["r-rf"]["act"]["buttons"][1]
-        self.assertEqual((fix["label"], fix["run"], fix["spends"]), ("b_one_more", True, True))
+        rf = by["r-rf"]["act"]["buttons"]           # primary: a message for the lead (copy); one more round: second
+        self.assertEqual((rf[1]["label"], rf[1]["run"], rf[1]["style"]), ("b_lead_fixes", False, "primary"))
+        fix = rf[2]
+        self.assertEqual((fix["label"], fix["run"], fix["spends"], fix["style"]), ("b_one_more", True, True, ""))
         self.assertEqual(by["r-run"]["act"], None)
         self.assertEqual([(b["label"], b["argv"]) for b in by["r-run"]["ctl"]], [("b_stop", ["ccx", "stop", "r-run"])])
         _, qt = task_of(data, "queue")
@@ -135,11 +137,11 @@ class TestActServer(Env):
             self.assertEqual(calls, [(["ccx", "verify", "r1", "--ok", "1"], False)])
             self.assertEqual(post(self.srv, "/api/act/run", {"nonce": prep["nonce"]})[0], 409)    # once
             self.assertEqual(post(self.srv, "/api/act/run", {"nonce": "made-up"})[0], 409)
-            code, prep = post(self.srv, "/api/act/prepare", self.want("r-rf", "a1"))           # one more fix round
+            code, prep = post(self.srv, "/api/act/prepare", self.want("r-rf", "a2"))           # one more fix round
             self.assertTrue(prep["spends"])
             with mock.patch.object(ui.time, "time", return_value=time.time() + ui.ACT_TTL_S + 5):
                 self.assertEqual(post(self.srv, "/api/act/run", {"nonce": prep["nonce"]})[0], 409)   # too late
-            code, prep = post(self.srv, "/api/act/prepare", self.want("r-rf", "a1"))
+            code, prep = post(self.srv, "/api/act/prepare", self.want("r-rf", "a2"))
             post(self.srv, "/api/act/run", {"nonce": prep["nonce"]})
             self.assertEqual(calls[-1][1], True)                                 # a sub-agent: in the background
             self.assertEqual(len(calls), 2)

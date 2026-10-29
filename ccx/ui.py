@@ -355,6 +355,11 @@ def _btn(label: str, cmd, style: str = "") -> dict:
             "run": op is not None, "spends": op == "spend"}
 
 
+LEAD_FIXES = ("Run {rid} still fails its independent review after one fix round: check each [must] item in "
+              "`ccx show {rid}` (review.issues) against the diff, fix the real ones yourself and drop the wrong ones, "
+              "then `ccx verify {rid} --ok 1|0`.")
+
+
 def _act(rec: dict, verdict: dict | None, now: float, beat: float | None) -> dict | None:
     """What the person is asked to do about this run, or None. kind: decide (red) | review (amber)."""
     rid = rec["run_id"]
@@ -381,15 +386,18 @@ def _act(rec: dict, verdict: dict | None, now: float, beat: float | None) -> dic
         return {"kind": "decide", "what": "a_review_failed", "why": ["w_review_failed", {"by": _who_rung(
             (rec.get("review") or {}).get("by"))}],
                 "issues": (rec.get("review") or {}).get("issues") or [],
-                "buttons": [show, _btn("b_one_more", ["ccx", "resume", rid, "The review still finds: " + issues],
-                                       "primary"),
+                # the same rule as the run's hint and the agent-delegate skill: the lead checks each [must] against
+                # the diff and fixes the real ones itself (a message to paste to the lead, copy only); another round
+                # is the secondary choice, as it costs a run
+                "buttons": [show, _btn("b_lead_fixes", LEAD_FIXES.format(rid=rid), "primary"),
+                            _btn("b_one_more", ["ccx", "resume", rid, "The review still finds: " + issues]),
                             _btn("b_myself", ["ccx", "verify", rid, "--ok", "0", "--reason", "wrong", "--note",
                                               "handled by hand"])]}
     if kind == "check_broken":                       # the command tested nothing: fix the check, not the code
         c = rec.get("check") or {}
         return {"kind": "decide", "what": "a_check_broken", "why": ["w_check_broken", {"cmd": c.get("cmd") or "",
                                                                                          "why": c.get("broken") or ""}],
-                "buttons": [show]}
+                "buttons": [show, _btn("b_new_check", f'ccx resume {rid} "what to test" --check "..."', "primary")]}
     if kind == "no_changes":                         # said done/partial, changed nothing: met already, or not done
         return {"kind": "decide", "what": "a_no_changes", "why": ["w_no_changes", {}],
                 "buttons": [show, _btn("b_make_change", ["ccx", "resume", rid, "nothing was changed: make the change"],

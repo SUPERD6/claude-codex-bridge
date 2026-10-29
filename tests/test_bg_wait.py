@@ -49,10 +49,10 @@ class TestBgWait(Env):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         out = json.loads(r.stdout)
         rid = out["run_id"]
-        self.assertEqual(set(out), {"run_id", "state", "check", "log", "next"})      # plain --bg's keys, no more
+        self.assertEqual(set(out), {"run_id", "state", "peek", "log", "next"})      # plain --bg's keys, no more
         self.assertEqual(out["state"], "started")
         self.assertEqual(out["next"], f"ccx show {rid} --wait")
-        self.assertEqual(out["check"], f"ccx show {rid}")
+        self.assertEqual(out["peek"], f"ccx show {rid}")
         self.ccx("stop", rid)
         self.wait_done(rid)
 
