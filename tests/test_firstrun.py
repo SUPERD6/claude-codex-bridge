@@ -95,12 +95,25 @@ class TestEnvFailure(FirstEnv):
         helper = "orchestrator_helper_launch_canceled: ShellExecuteExW failed to launch setup helper: 1223"
         self.assertTrue(env_failure("blocked", True, "ok", helper))
         self.assertTrue(env_failure(None, False, "error", "CreateProcessWithLogonW failed: 267"))
-        self.assertTrue(env_failure("failed", True, "ok", "", "Windows error 1223 while starting the shell"))
+        self.assertTrue(env_failure("failed", True, "ok", "", "ERROR helper: orchestrator_helper_launch failed"))
         self.assertIsNone(env_failure("done", True, "ok", helper))           # a finished attempt never is
         policy = ('error=exec_command failed: CreateProcess { message: "Rejected(\\"`powershell.exe` rejected: '
                   'blocked by policy\\")" }')
         self.assertIsNone(env_failure("blocked", True, "ok", policy))         # the sandbox policy: retried, not env
         self.assertIsNone(env_failure("blocked", True, "ok", "the tests fail on line 3"))
+        # the task's own failures about processes are the model's to get past: they still climb
+        for line in ("CreateProcess failed (os error 2) for program pytest",
+                     'WARN exec_command failed: CreateProcess { message: "program not found: rg" }',
+                     "The CreateProcess call fails with ERROR_FILE_NOT_FOUND when the path has spaces",
+                     "Windows error 1223 handling in installer still broken"):
+            self.assertIsNone(env_failure("failed", True, "ok", line), line)
+
+    def test_a_failed_task_about_createprocess_still_climbs(self):
+        out = self.j("run", "--from", "claude", "--to", "codex", "--tier", "T1", "fix the launcher",
+                     env={"FAKE_STATUS": "blocked_then_done",
+                          "FAKE_SUMMARY": "I could not fix the CreateProcess error handling in launcher.c"})
+        self.assertIn("escalated", out)
+        self.assertNotEqual(out.get("kind"), "env")
 
     def test_blocked_is_not_ok_but_the_exit_code_is_unchanged(self):
         rec = {"run_id": "r1", "to": "codex", "tier": "T1", "ok": True, "kind": "ok", "cwd": "",
@@ -110,6 +123,14 @@ class TestEnvFailure(FirstEnv):
         self.assertTrue(exit_ok(rec))
         rec["result"]["status"] = "done"
         self.assertIs(compact(rec)["ok"], True)
+
+    def test_selftest_reports_a_blocked_answer_as_not_ok_with_the_old_exit_code(self):
+        r = self.ccx("selftest", env={"FAKE_STATUS": "blocked"})
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)    # exit code as before
+        out = json.loads(r.stdout)
+        self.assertTrue(out["selftest"])
+        self.assertTrue(all(row["ok"] is False for row in out["selftest"]), out)   # same as `ccx run` says
+        self.assertIs(out["all_ok"], False)
 
     def test_auth_recap_points_at_the_login(self):
         rec = {"run_id": "r2", "to": "codex", "tier": "T1", "ok": False, "kind": "auth", "auth_problem": True,
@@ -124,6 +145,11 @@ class TestEnvFailure(FirstEnv):
         self.assertIn("still working", r.stderr)
         self.assertNotIn("still working", r.stdout)
         json.loads(r.stdout)                                     # stdout: the JSON alone, as before
+
+    def test_a_lead_piping_stderr_gets_no_progress_lines(self):
+        r = self.ccx("run", "--from", "claude", "--to", "codex", "--tier", "T2", "--mode", "read", "look at x",
+                     env={"FAKE_STATUS": "hang", "FAKE_HANG_S": "1.5", "CCX_PROGRESS_SEC": ""})
+        self.assertNotIn("still working", r.stdout + r.stderr)   # stderr is not a terminal: nothing added
 
 
 # ------------------------------------------------------------------ 3 + 4: setup
@@ -244,6 +270,14 @@ class TestUndoFirstRun(FirstEnv):
         self.assertEqual((u["restore"], u["move_aside"]), ([], []))
         self.assertIn("nothing to undo", u["nothing_to_undo"])
         self.assertNotIn("warning", u)
+        snap = self.hub / "ccx" / "runs" / out["run_id"] / "undo.json"
+        data = json.loads(snap.read_text(encoding="utf-8"))
+        data["base"] = "0" * 40                                  # the base commit is gone (gc, rebase)
+        snap.write_text(json.dumps(data), encoding="utf-8")
+        u = self.j("undo", out["run_id"])
+        self.assertNotIn("nothing_to_undo", u)                   # a git failure is never "nothing to undo"
+        self.assertIn("git could not list", u["git_error"])
+        self.assertIn("warning", u)
 
 
 # ------------------------------------------------------------------ 9: a one-line edit starts cheap
@@ -256,8 +290,24 @@ class TestOneLineEdit(unittest.TestCase):
     def test_real_work_keeps_its_tier(self):
         for brief, tier in (("Add a line-by-line diff viewer to the report page", "T2"),
                             ("Implement retry with exponential backoff in the HTTP client and add tests for it", "T2"),
-                            ("Fix the race condition in the queue worker that sometimes drops items", "T3")):
+                            ("Fix the race condition in the queue worker that sometimes drops items", "T3"),
+                            # "a line" next to hard or critical work is not a one-line edit (tiers as before it)
+                            ("Add a line to the scheduler that acquires the lock before reading the shared queue "
+                             "to fix the race condition", "T3"),
+                            ("Remove the line that disables CSRF verification in the auth middleware and fix the "
+                             "failing tests across the API", "T3"),
+                            ("Replace the line in the migration that drops the users table; make it idempotent and "
+                             "test on the database schema", "T3"),
+                            ("Remove the line that swallows the exception and fix the concurrency bug in the queue "
+                             "across modules", "T4"),
+                            ("Add a line to the CLI that validates --port and add tests for the parser", "T2"),
+                            ("Insert a sentence in docs/api.md about rate limits and implement the endpoint", "T2")):
             self.assertEqual(router.classify(brief).tier, tier, brief)
+
+    def test_the_pull_down_alone_never_makes_it_do_it_yourself(self):
+        for brief in ("Add a sentence to the docs about installing on Windows",
+                      "Add a line to handle an empty list in parser.py"):
+            self.assertEqual(router.classify(brief).tier, "T1", brief)     # was T2; delegated, never T0
 
 
 if __name__ == "__main__":

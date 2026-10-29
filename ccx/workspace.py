@@ -377,8 +377,9 @@ def undo(p: Paths, run_id: str, apply: bool = False, wrong: bool = False) -> dic
         raise FileNotFoundError(f"run {run_id} has no undo snapshot (read-only run, worktree run, or not a git repo)")
     snap = json.loads(f.read_text(encoding="utf-8"))
     repo, base = Path(snap["repo"]), snap["base"]
-    _, changed = _git(repo, "diff", "--name-only", base)
-    _, untracked = _git(repo, "ls-files", "--others", "--exclude-standard")
+    rc_d, changed = _git(repo, "diff", "--name-only", base)
+    rc_u, untracked = _git(repo, "ls-files", "--others", "--exclude-standard")
+    git_failed = rc_d != 0 or rc_u != 0
     new_files = sorted(set(untracked.splitlines()) - set(snap["untracked"]))
     restore = [x for x in changed.splitlines() if x]
     out = {"run_id": run_id, "restore": restore, "move_aside": new_files, "applied": False,
@@ -390,7 +391,11 @@ def undo(p: Paths, run_id: str, apply: bool = False, wrong: bool = False) -> dic
                           "these files after the run")
         if wrong:
             out["wrong_scope"] = f"only {run_id} is recorded as wrong; `ccx verify` the earlier runs yourself"
-    if not restore and not new_files:
+    if git_failed:
+        # git could not list them (base commit gone after a gc or rebase, repo moved): say so, never "nothing to undo"
+        out["git_error"] = (f"git could not list the run's files (diff exit {rc_d}, ls-files exit {rc_u}; base "
+                            f"{base[:12]}): the lists above may be incomplete")
+    elif not restore and not new_files:
         # nothing to put back: one line instead of a warning about files that are not there (walkthrough 2026-10-29)
         del out["warning"]
         out["nothing_to_undo"] = "this run left no changed or new files: there is nothing to undo"

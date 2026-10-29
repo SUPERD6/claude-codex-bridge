@@ -40,8 +40,8 @@ ccx setup                    # 向导：每一步都说明，改东西前先问
 ccx run --to codex --mode read "Summarise README.md in three lines for a new user: what this project does, how to install it, and the first command to try"
 ```
 
-最后一行就是第一次派活：Codex 读这份 README，用最便宜的模型三行作答（命令和英文版一致，任务写长一点才会真的派出去，
-太短的任务 ccx 会建议你自己做）。`ccx setup` 问到的 hub 是你自己的一个文件夹，放共享记忆、技能和每次运行的记录。
+最后一行就是第一次派活：Codex 读这份 README，用最便宜的模型三行作答（命令和英文版一致。你在自己的终端里用 `--to`
+点名时，再小的任务也会派出去，只在 stderr 提示一句自己做更省；主会话代为调用时，太小的任务仍会被建议自己做）。`ccx setup` 问到的 hub 是你自己的一个文件夹，放共享记忆、技能和每次运行的记录。
 
 需要 Python 3.11+，以及登录好的 `claude` 和 `codex` 命令行；DeepSeek（`dsh`，或 `DEEPSEEK_API_KEY` 里的密钥）可选。
 `ccx -h` 先列常用命令。

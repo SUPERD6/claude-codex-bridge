@@ -43,6 +43,8 @@ ccx run --to codex --mode read "Summarise README.md in three lines for a new use
 ```
 
 Your first delegation is the last line: Codex reads this README and answers in three lines, on the cheapest model.
+From your own terminal, `--to` delegates even a very small task (stderr notes that doing it yourself is cheaper);
+when a lead session calls ccx, a task that small is still turned back to it.
 The hub `ccx setup` asks about is one folder of your own for shared memory, skills and the record of every run.
 
 You need Python 3.11+ and the `claude` and `codex` CLIs, logged in; DeepSeek (`dsh`, or a key in

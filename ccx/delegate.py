@@ -576,7 +576,7 @@ def run(req: Request, p: Paths) -> dict:
             if beat.wait(float(os.environ.get("CCX_BEAT_SEC", "60"))):
                 return
     threading.Thread(target=_beat, daemon=True).start()
-    if req.progress:
+    if req.progress and _progress_wanted():
         threading.Thread(target=_progress, args=(record, beat), daemon=True).start()
 
     while i < len(plan):
@@ -727,7 +727,7 @@ def run(req: Request, p: Paths) -> dict:
             oc.kind = "needs_write"
             record["attempts"][-1]["kind"] = "needs_write"
             break
-        env_why = env_failure(status, oc.ok, oc.kind, se, (oc.result or {}).get("summary"), oc.error)
+        env_why = env_failure(status, oc.ok, oc.kind, se, oc.error)   # the CLI's own lines, never the task summary
         if env_why:
             # the machine, not the model: a stronger model meets the same wall (2026-10-29 walkthrough: T1 -> T2,
             # 29x the price, 265 s, nothing read). No climb, no retry, no fallback: back to the person with a fix
@@ -954,16 +954,17 @@ def run(req: Request, p: Paths) -> dict:
 # Environment failures: the agent CLI could not start a process on this machine. Seen on Windows (2026-10-29
 # new-user walkthrough, codex-cli 0.164): "orchestrator_helper_launch_canceled: ShellExecuteExW failed to launch setup
 # helper: 1223" (1223 = the operation was cancelled, e.g. a UAC prompt), and CreateProcessWithLogonW error 267 (the
-# folder name is invalid). Matched only on an attempt that already failed (blocked / failed / an error).
-ENV_MARKERS = ("shellexecuteexw", "createprocesswithlogonw", "helper_launch", "windows error 1223",
+# folder name is invalid). Matched only on an attempt that already failed (blocked / failed / an error), and only in
+# the CLI's own stderr / error, never in the sub-agent's summary: a task *about* CreateProcess that a cheap model
+# fails must still climb. Only the launcher's own markers count; a generic "CreateProcess ... failed" (one command
+# the model picked that could not start, say a missing `rg`) is the model's problem and still climbs.
+ENV_MARKERS = ("shellexecuteexw", "createprocesswithlogonw", "orchestrator_helper_launch",
                "failed to launch setup helper")
-_CREATEPROCESS = re.compile(r"createprocess\w*[^\n]{0,60}?(?:fail|error)|(?:fail|error)[^\n]{0,60}?createprocess",
-                            re.I)
 
 
 def env_failure(status: str | None, ok: bool, kind: str | None, *texts: str | None) -> str | None:
-    """The line that shows a failed attempt was the machine's doing (see ENV_MARKERS), else None. A successful
-    attempt that merely mentions such words (a task about CreateProcess, say) is never one."""
+    """The line of the CLI's own output (stderr, its error) that shows a failed attempt was the machine's doing (see
+    ENV_MARKERS), else None. A successful attempt that merely mentions such words is never one."""
     if not ((not ok and kind == "error") or status in ("blocked", "failed")):
         return None
     for text in texts:
@@ -971,8 +972,9 @@ def env_failure(status: str | None, ok: bool, kind: str | None, *texts: str | No
             low = line.lower()
             # "exec_command failed: CreateProcess { ... rejected: blocked by policy }" is the sandbox's policy saying
             # no (a policy retry below), not a process that could not start
-            policy = "rejected" in low or "blocked by policy" in low
-            if any(m in low for m in ENV_MARKERS) or (_CREATEPROCESS.search(low) and not policy):
+            if "rejected" in low or "blocked by policy" in low:
+                continue
+            if any(m in low for m in ENV_MARKERS):
                 return line.strip()[:240]
     return None
 
@@ -989,6 +991,17 @@ def env_hint(record: dict) -> str:
 
 
 PROGRESS_SEC = 30.0
+
+
+def _progress_wanted() -> bool:
+    """Only a person at a terminal gets the progress line: a lead's Bash tool captures stderr into its context, which
+    is the lead's main cost. CCX_PROGRESS_SEC set turns it on regardless (tests)."""
+    if os.environ.get("CCX_PROGRESS_SEC"):
+        return True
+    try:
+        return sys.stderr.isatty()
+    except (AttributeError, ValueError, OSError):
+        return False
 
 
 def _progress(record: dict, done: threading.Event) -> None:

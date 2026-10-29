@@ -9,7 +9,7 @@ from pathlib import Path
 
 from .. import __version__, memory
 from ..config import DELEGATE_AGENTS, data_dir, load_config, paths
-from ..delegate import Request, compact, run
+from ..delegate import Request, compact, exit_ok, run
 from ..runners import find_bin
 from .common import _caller, _out, installed_agents
 
@@ -45,12 +45,13 @@ def cmd_selftest(a) -> int:
                 results.append({"agent": ag, "ok": False, "error": str(e)})
                 continue
             c = compact(rec)
-            results.append({"agent": ag, **({"provider": provider} if provider else {}), "model": c["model"], "ok": rec["ok"], "kind": rec.get("kind"),
+            results.append({"agent": ag, **({"provider": provider} if provider else {}), "model": c["model"], "ok": c["ok"], "exit_ok": exit_ok(rec), "kind": rec.get("kind"),
                             "session": bool(rec.get("session_id")), "tokens": c["tokens"],
                             "ae_usd": (rec["attempts"][-1] or {}).get("ae_usd"),
                             "seconds": round(time.time() - t0, 1), "summary": (c.get("summary") or "")[:160]})
     _out({"selftest": results, "all_ok": all(r["ok"] for r in results)})
-    return 0 if all(r["ok"] for r in results) else 2
+    # the exit code keeps its old rule (a blocked answer still exits 0); "ok" above is the same as `ccx run`'s
+    return 0 if all(r.get("exit_ok", r["ok"]) for r in results) else 2
 
 
 def tier_spec_safe(cfg: dict, tier: str, agent: str) -> dict | None:

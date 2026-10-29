@@ -18,9 +18,10 @@ SIGNALS: list[tuple[str, int, str]] = [
     (r"\b(summari[sz]e|grep|find where|list all|locate)\b|总结|找出|列出|定位在哪", -1, "lookup/summary"),
     # a one-line edit ("add a line ... at the end of README.md"): its "add" alone scored it standard dev (T2, a
     # mid-price model) in the 2026-10-29 new-user walkthrough. Only the edit verb directly followed by a/one/the
-    # line|sentence|word; "line-by-line" does not count, and any other signal in the brief still adds up as before
+    # line|sentence; "line-by-line" does not count. classify() drops it when a hard, design or critical signal also
+    # fired, and it never makes a brief T0 (do it yourself) on its own
     (r"\b(?:add|append|insert|remove|delete|change|replace|edit)\s+(?:a|one|the|this|that)\s+(?:single\s+)?"
-     r"(?:line|sentence|word)\b(?![-\w])|\bone[- ]line (?:fix|change|edit)\b|加一行|删一行|改一行|加一句",
+     r"(?:line|sentence)\b(?![-\w])|\bone[- ]line (?:fix|change|edit)\b|加一行|删一行|改一行|加一句",
      -2, "one-line edit"),
     # standard work
     (r"\b(add|implement|write|fix|test|script|endpoint|function)\b|实现|新增|修复|写一个|补测试|脚本|函数", 1, "standard dev"),
@@ -30,6 +31,9 @@ SIGNALS: list[tuple[str, int, str]] = [
     # critical
     (r"\b(security|vulnerab\w*|auth\w*|crypto\w*|prove|proof|correctness|production|data loss|concurren\w*|novel algorithm)\b|安全|漏洞|鉴权|加密|证明|正确性|生产环境|数据丢失|并发|新算法|论文|科研结论", 3, "critical"),
 ]
+
+ONE_LINE = "one-line edit"
+BIG = ("hard/multi-module", "design/diagnosis", "critical")      # with any of these, a "one line" is not trivial
 
 UNCERTAIN = re.compile(r"\b(not sure|unknown|somehow|sometimes)\b|不知道|不确定|有时候|莫名", re.I)
 
@@ -48,12 +52,17 @@ def classify(text: str, files: int = 0) -> Route:
     """Map a task description to T0..T4 with human-readable reasons."""
     score, reasons = 0, []
     low = text.lower()
-    for pat, pts, name in SIGNALS:
-        hits = len(re.findall(pat, low, flags=re.I))
-        if hits:
-            add = pts * min(hits, 2)
+    hit = {name: len(re.findall(pat, low, flags=re.I)) for pat, _, name in SIGNALS}
+    if any(hit[n] for n in BIG):       # "add a line that takes the lock to fix the race" is not a one-line edit
+        hit[ONE_LINE] = 0
+    one_line = 0
+    for _, pts, name in SIGNALS:
+        if hit[name]:
+            add = pts * min(hit[name], 2)
             score += add
             reasons.append(f"{name} ({add:+d})")
+            if name == ONE_LINE:
+                one_line = add
     if UNCERTAIN.search(low):
         score += 1
         reasons.append("unclear cause (+1)")
@@ -64,7 +73,7 @@ def classify(text: str, files: int = 0) -> Route:
         score += 1
         reasons.append(f"{files} files (+1)")
     words = len(re.findall(r"\w+", text)) + len(re.findall(r"[一-鿿]", text)) // 2
-    if words < 12 and score <= 0:
+    if words < 12 and score - one_line <= 0:      # the one-line pull-down alone never makes it do-it-yourself
         reasons.append("very short, mechanical -> do it yourself")
         return Route("T0", score, reasons)
     if score <= -1:
