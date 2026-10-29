@@ -81,6 +81,9 @@ In Claude Code you say: "make `loader.py` accept a custom delimiter and add test
    Claude reads only that, glances at `git diff`, and records its verdict with `ccx verify <run_id> --ok 1`.
 5. **Recover from problems.**
    - Codex reports `blocked`: ccx continues **in the same Codex session** one rung up (high), with no re-briefing.
+   - Codex says done but ccx's own `--check` fails: it climbs a rung too (in the same session when the agent stays
+     the same). With `ccx config set defaults.focused_retry true` that attempt is handed the failing command and the
+     last ~2000 characters of its output and told to fix only that (default off until a measured round backs it).
    - Codex is out of quota: Claude takes over.
    - A timeout or crash: `ccx resume <run_id>` continues (as does `ccx task resume` for a checkpointed task),
      keeping the run's label, acceptance check and review setting (`ccx resume` takes `--check` / `--review` to

@@ -47,7 +47,7 @@
 2. 执行 `ccx run --from claude --files 2 --coupling one --clarity goal "…"`。ccx 调用 task-routing 技能，算出每个“智能体:模型:强度”的成功率和每次成功的花费，挑出 `codex:gpt-6.1-sol:medium`。如果算下来自己做更划算、或者应该先拆开，就直接告诉主智能体，不派。
 3. ccx 在后台调用 `codex exec -m gpt-6.1-sol -c model_reasoning_effort="medium" …`。会话 ID 一出现就存盘。Codex 自己读文件、改代码、跑测试，这部分 token 花的是 Codex 账号的额度。
 4. Codex 必须按 JSON schema 回报：`status / summary / files_changed / verification / …`。Claude 只读这一小段，再自己看一眼 `git diff`，确认测试真的跑过，然后 `ccx verify <run_id> --ok 1`。
-5. 如果 Codex 回报 `blocked`，ccx 会在**同一个 Codex 会话**里升一档（high）继续，不用重新喂背景。如果 Codex 额度用完，自动换 Claude 做；超时或崩溃，`ccx resume <run_id>` 接着做（有检查点的长任务用 `ccx task resume`），沿用原来的标签、验收命令和 review 设置（`ccx resume` 可以用 `--check` / `--review` 改；`ccx task resume` 总是沿用）。想让它停：`ccx stop <run_id>` 结束子智能体和它开的所有进程，之后 `ccx resume` 能接上。
+5. 如果 Codex 回报 `blocked`，ccx 会在**同一个 Codex 会话**里升一档（high）继续，不用重新喂背景。Codex 说做完了、但 ccx 自己重跑的 `--check` 没过，也会升一档（同一家时在同一会话里）；`ccx config set defaults.focused_retry true` 之后，这一次会拿到失败的命令和输出的最后约 2000 字，只修失败处（默认关，等实测确认再开）。如果 Codex 额度用完，自动换 Claude 做；超时或崩溃，`ccx resume <run_id>` 接着做（有检查点的长任务用 `ccx task resume`），沿用原来的标签、验收命令和 review 设置（`ccx resume` 可以用 `--check` / `--review` 改；`ccx task resume` 总是沿用）。想让它停：`ccx stop <run_id>` 结束子智能体和它开的所有进程，之后 `ccx resume` 能接上。
 6. 每次运行都写进账本，结果自动记回 task-routing / task-split，下次选得更准。`ccx report` 生成看板网页：谁花了多少 token、什么类型的 token、额度用了多少、估计省了多少。
 
 反过来，在 Codex 里用同样的命令加 `--to claude`，就是 Codex 当主、Claude Code 当子。

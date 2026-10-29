@@ -37,7 +37,8 @@ resuming = argv[:2] == ["exec", "resume"]
 tid = argv[2] if resuming else str(uuid.uuid4())
 out_file = argv[argv.index("-o") + 1] if "-o" in argv else None
 
-print(json.dumps({"type": "thread.started", "thread_id": tid}), flush=True)
+if not os.environ.get("FAKE_NO_THREAD"):      # FAKE_NO_THREAD: a run that never says its session id
+    print(json.dumps({"type": "thread.started", "thread_id": tid}), flush=True)
 print(json.dumps({"type": "turn.started"}), flush=True)
 model = argv[argv.index("-m") + 1] if "-m" in argv else ""
 if model and model in os.environ.get("FAKE_UNSUPPORTED", "").split(","):

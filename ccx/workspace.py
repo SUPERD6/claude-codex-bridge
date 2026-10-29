@@ -115,15 +115,16 @@ def missing_test_paths(cmd: str, cwd: Path) -> list[dict]:
     return out
 
 
-def run_check(cmd: str, cwd: Path, timeout: int = 900) -> dict:
+def run_check(cmd: str, cwd: Path, timeout: int = 900, tail_chars: int = 800) -> dict:
     """The lead's acceptance command, run by ccx after the sub-agent says it is done (not trusting its report).
-    `broken` (status check_broken) = the command could not test anything, which is not a verdict on the work."""
+    `broken` (status check_broken) = the command could not test anything, which is not a verdict on the work.
+    `tail_chars`: how much of the end of its output is kept (a focused retry hands the sub-agent ~2000)."""
     t0 = time.time()
     ran = _expand_globs(cmd, cwd) if os.name == "nt" else cmd
     try:
         r = subprocess.run(ran, shell=True, cwd=cwd, capture_output=True, text=True, timeout=timeout,
                            stdin=subprocess.DEVNULL, encoding="utf-8", errors="replace")
-        code, tail = r.returncode, (r.stdout + r.stderr)[-800:]
+        code, tail = r.returncode, (r.stdout + r.stderr)[-tail_chars:]
     except subprocess.TimeoutExpired:
         code, tail = -1, f"timed out after {timeout}s"
     out = {"cmd": cmd, "exit": code, "passed": code == 0, "seconds": round(time.time() - t0, 1), "tail": tail}

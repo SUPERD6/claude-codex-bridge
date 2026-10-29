@@ -98,6 +98,23 @@ ESCALATE = """[ccx escalation {run_id}] The previous attempt ended with status={
 You now run on a stronger model. Re-check the earlier reasoning, finish the original task, and return the JSON result."""
 
 
+# [defaults] focused_retry (default off): after ccx's own check failed on an attempt that said done, the next attempt
+# on the same agent resumes the same session (as ESCALATE does) but is told exactly what failed and to fix only that.
+# r6a (2026-10-29): such a retry got 400 characters and "re-check the earlier reasoning", and took longer than the
+# first attempt (median 389 s). Off until a measured round shows it does not lower the right-rate.
+CHECK_TAIL_CHARS = 2000
+CHECK_RETRY = """[ccx retry {run_id}] You said done, but ccx's acceptance check failed: `{cmd}` (exit {exit}).
+The end of its output:
+```
+{tail}
+```
+{model_line}Fix only what makes this check fail; keep the rest of your change and every part of the original task as it is.
+Re-run only the failing test(s) (one test id or -k NAME), not the whole check: ccx runs it again afterwards. Return the JSON result."""
+
+CHECK_RETRY_SAME = "Same model as before, same session: you already know the task and the code.\n"
+CHECK_RETRY_STRONGER = "You now run on a stronger model, in the same session.\n"
+
+
 POLICY_RETRY = """[ccx retry {run_id}] The sandbox policy rejected a command before it ran; this is not a permission problem with the task:
 {rejected}
 Do the same task with a different command or tool (e.g. a short python one-liner to read files), and return the JSON result."""
