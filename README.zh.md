@@ -1,6 +1,6 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.svg">
-  <img alt="relayline（命令 ccx）：几个编码智能体互为组长和子智能体；一次真实运行：选了 Codex luna/low，一次完成，已验收，$0.0023" src="docs/assets/banner-light.svg" width="100%">
+  <img alt="relayline（命令 ccx）：几个编码智能体互为主导和子智能体；一次真实运行：选了 Codex luna/low，一次完成，已验收，$0.0023" src="docs/assets/banner-light.svg" width="100%">
 </picture>
 
 <p align="center">
@@ -22,13 +22,13 @@
 
 | | ccx 做什么 | 实测 |
 |---|---|---|
-| **省钱** | 每块活按“最便宜、又最可能做完”选智能体、模型和强度（不值得派就让你自己做）；子智能体精简启动；`ccx lead` 显示组长每轮重读了多少。 | 带上组长最近工作的派活，**总花费少 63%**，返工 0 次（不带时 29 次）（[A/B](docs/research/2026-10-25-shared-context-ab.zh.md)） |
+| **省钱** | 每块活按“最便宜、又最可能做完”选智能体、模型和强度（不值得派就让你自己做）；子智能体精简启动；`ccx lead` 显示主导每轮重读了多少。 | 带上主导最近工作的派活，**总花费少 63%**，返工 0 次（不带时 29 次）（[A/B](docs/research/2026-10-25-shared-context-ab.zh.md)） |
 | **更准** | ccx 自己重跑验收命令，可请另一家审查改动，每次运行都记对错、用来校准选模型。 | 带共享工作上下文**一次做对 36/36，不带 7/36**（[A/B](docs/research/2026-10-25-shared-context-ab.zh.md)） |
-| **分工** | 5 个问题打出难度，选智能体、模型、强度；组长只看总结；三家谁当组长都行。 | 派出去后组长**每个任务都少 1 次请求，21/21**（[七核心 A/B](docs/research/2026-10-24-seven-cores-ab.zh.md)） |
-| **共享** | 项目记忆和个人记忆、组长之间交接、共享工作上下文（`ccx run --context`、`ccx peek`）、开着的会话互相留言的留言板。 | 项目记忆送到子智能体手里并被照做：**有记忆 9/9 做对，没有 0/9**（[七核心 A/B](docs/research/2026-10-24-seven-cores-ab.zh.md)） |
+| **分工** | 5 个问题打出难度，选智能体、模型、强度；主导只看总结；三家谁当主导都行。 | 派出去后主导**每个任务都少 1 次请求，21/21**（[七核心 A/B](docs/research/2026-10-24-seven-cores-ab.zh.md)） |
+| **共享** | 项目记忆和个人记忆、主导之间交接、共享工作上下文（`ccx run --context`、`ccx peek`）、开着的会话互相留言的留言板。 | 项目记忆送到子智能体手里并被照做：**有记忆 9/9 做对，没有 0/9**（[七核心 A/B](docs/research/2026-10-24-seven-cores-ab.zh.md)） |
 
 **看数字要连同局限一起看。** 这些都是一台电脑上的小型受控任务。共享工作上下文的 A/B 按设计就是这个功能的最好情况。
-只是把小任务派出去，总花费基本持平（比值 1.02，token 3.3 倍，慢约 23 秒）；换成真实的长对话组长能省多少，目前是外推、
+只是把小任务派出去，总花费基本持平（比值 1.02，token 3.3 倍，慢约 23 秒）；换成真实的长对话主导能省多少，目前是外推、
 还没测。全部数字（包括不利的）：[docs/measured.zh.md](docs/measured.zh.md)。
 
 **不用账号先看看：** `ccx demo` 用临时目录里编好的项目、运行和花费打开 `ccx ui`（离线可用，不用登录 Claude
@@ -47,7 +47,7 @@ ccx run --to codex --mode read "Summarise README.md in three lines for a new use
 点名时，再小的任务也会派出去，只在 stderr 提示一句自己做更省；主会话代为调用时，太小的任务仍会被建议自己做）。`ccx setup` 问到的 hub 是你自己的一个文件夹，放共享记忆、技能和每次运行的记录。
 
 需要 Python 3.11+，以及登录好的 `claude` 和 `codex` 命令行；DeepSeek（`dsh`，或 `DEEPSEEK_API_KEY` 里的密钥）可选。
-`ccx -h` 先列常用命令（run、resume、show、q、undo、ui 等），开发者用的（trial、ab、bench 等）放在最后。
+`ccx -h` 列出你自己会敲的命令（run、resume、show、q、undo、ui 等）；`ccx -h --all` 还列出智能体之间互相调用的（board、say、reply、peek）、进阶和维护用的，开发者用的（trial、ab、bench 等）放在最后。
 
 **换主导。** 前一半是 Claude Code 做的，后面想交给 Codex（或反过来）？在 `ccx ui` 的项目页点“交给 Codex 继续”/
 “交给 Claude 继续”，再点一次确认，就会为这个项目运行 `ccx handoff`：把做完了什么、定了什么、下一步写进项目（当前主导的
@@ -57,7 +57,7 @@ ccx run --to codex --mode read "Summarise README.md in three lines for a new use
 
 ## 谁和谁配合
 
-| | 当组长 | 接活 |
+| | 当主导 | 接活 |
 |---|---|---|
 | Claude Code | 能 | 能 |
 | Codex | 能 | 能 |

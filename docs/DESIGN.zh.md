@@ -21,7 +21,7 @@
    - Claude Code：`claude -p --output-format stream-json --verbose`；
    - Gemini CLI：`gemini -p -o stream-json`。
 
-   子智能体必须按 JSON schema 交回结果，主智能体只读这一段压缩结果，完整日志留在硬盘上。
+   子智能体必须按 JSON schema 交回结果，主导只读这一段压缩结果，完整日志留在硬盘上。
    - 会话 ID 一出现就写盘，崩溃或超时后可以 `ccx resume`。
    - 失败分为 ok / quota / auth / timeout / error 五类：额度用完时换另一个智能体重试一次；`blocked` 或 `failed` 时在同一会话里升一档。
    - “模型来源”（provider）＝同一个工具换一个 API，比如 DeepSeek 通过 Claude Code，或通过 Codex（用 `-c model_providers.<id>` 覆盖），密钥只从环境变量读取。
@@ -51,7 +51,7 @@
    - 已有共享配置时用外部模式接入，不重复造。
 7. **记账与看板**（`ccx/ledger.py`、`ccx/usage.py`、`ccx/report.py`）：
    - token 统一成 4 类（新输入、写缓存、读缓存、输出），按价格表折算成 API 等价美元（AE$）。
-   - 主智能体自己的用量从工具自带的会话记录里读，并排除子智能体会话。
+   - 主导自己的用量从工具自带的会话记录里读，并排除子智能体会话。
    - 节省有两个来源：每个任务的估算（附置信区间），以及约 10% 的 A/B 实测。
    - `ccx report` 生成离线单文件看板；`--publish` 提交到私有仓库。
 
@@ -60,7 +60,7 @@
 ```
 ccx run（按打分选模型）→ 子智能体执行 → 结果写进账本
    → 明确失败 / 子智能体自己检查过的成功：马上记回 task-routing（θ、成本系数）和 task-split（h50）
-   → 主智能体 ccx verify：以它为准；和之前的自动记录不一致时纠正，一致时不重复记
+   → 主导 ccx verify：以它为准；和之前的自动记录不一致时纠正，一致时不重复记
    → 下一次选模型、拆任务用的就是更新后的参数（两边共用同一份）
 ```
 

@@ -8,7 +8,7 @@
 
 ## 怎么算的
 
-1. **任务打分**：主智能体按 5 项给任务打分，加起来是难度 b（0–10）。这 5 项是：改几个文件、跨几个模块、目标清不清楚、风险高不高、要不要新设计。
+1. **任务打分**：主导按 5 项给任务打分，加起来是难度 b（0–10）。这 5 项是：改几个文件、跨几个模块、目标清不清楚、风险高不高、要不要新设计。
 2. **成功率**：P = 1 / (1 + e^(−1.2·(θ − b)))。θ 是某个“模型 × 强度”组合的能力值，这个公式来自项目反应理论（IRT），也是 IRT-Router 用的方法。
 3. **单次成本**：按价格表折算成美元。
 4. **怎么选**：能检查对错的任务，先用便宜的，失败了在同一个会话里升级（级联规则）；在“最终成功率 ≥ 门槛”的选项里，挑“每成功一次花费”最低的。不能检查对错的任务，直接选“成功率 ≥ 门槛”里最便宜的。
@@ -24,16 +24,16 @@ python scripts/task_routing.py record --rung codex:gpt-6.1-sol:medium --b 4 --ok
 
 ## 档位（整个流程）
 
-`--tradeoff` 也是档位：决定每块活谁做。分档看主智能体的简报，加上 `--minutes` 和 `--files`（`ccx propose`，或
+`--tradeoff` 也是档位：决定每块活谁做。分档看主导的简报，加上 `--minutes` 和 `--files`（`ccx propose`，或
 `scripts/task_routing.py tier`）。文件数、分钟数、简报长度任一项达到某档就算该档；`--minutes` 和 `--files` 都没给时
 算大小拿不准。阈值是暂定值，在 ccx 的 `config/tiers.toml [policy.*]`。
 
 | 档 | 谁做 |
 |---|---|
-| `save` | 全部经 ccx 委派（`ccx2`）；主智能体按 check + 审查验收 |
+| `save` | 全部经 ccx 委派（`ccx2`）；主导按 check + 审查验收 |
 | `balanced` | 小、中自己做，大的交 `ccx2`；大小拿不准、状态机/续跑类自己做 |
 | `fast` | 全部自己做 |
-| `cheapest` | `direct`：交 ccx，主智能体不验收；要告诉用户结果可能做错 |
+| `cheapest` | `direct`：交 ccx，主导不验收；要告诉用户结果可能做错 |
 
 只有用户自己能选档，而且是在设置里选：`ccx config set policy.picked <档>`（`none` = 关，出厂即关）。选了以后，
 `ccx propose`（不带 `--tradeoff`，或带同一档）等于预先授权按该档委派：返回 `authorized: true` 和 `worth_offering: true`；
@@ -41,12 +41,12 @@ python scripts/task_routing.py record --rung codex:gpt-6.1-sol:medium --b 4 --ok
 （L0/L1）改文件前仍会停下；这次回答记成档位决定的，不算用户点了头。不要自己设 `policy.picked`。你传的 `--tradeoff`
 不授权任何事：只是选模型，照旧“先提议一句”（agent-delegate 第 0 节），A/B 和试验不变，档位结果只展示。用户在对话里说了
 档位，就是对该档要委派的那些块点了头：用普通的 `ccx run` 派（已获准的委派）。`cheapest` 经你跑仍要花你自己的轮次，
-只有脚本或 CI 直接调用 `ccx run` 才省掉主智能体。你自己发起的 `ccx run --tradeoff balanced|fast` 按该档选模型；
+只有脚本或 CI 直接调用 `ccx run` 才省掉主导。你自己发起的 `ccx run --tradeoff balanced|fast` 按该档选模型；
 `policy.picked` 只改谁做，不改选模型（不带 `--tradeoff` 的运行和以前一样选）。一次预先授权只管这个任务按你提议的大小跑一次：
 用同一个 id 再跑，或跑得比提议小，都会被拒绝。
 默认档仍是 `save`，等确认实验再定。
 
-**按任务选主智能体模型**（用户执行 `ccx config set lead.model_by_task on` 才开，默认关）：正在跑的对话不换模型（换了缓存作废）。用同一个难度 b，`ccx route` / `ccx propose` 多给 `new_lead`（新对话用的模型：b 不超过 `easy_max_b` 用 `[lead_by_task]` 的便宜模型，否则用你的：按你平时的模型开）；`choice` 没推荐自带子智能体时，再给 `builtin_model`（你自带子智能体的备用模型，只在简单档给）；`ccx fresh` / `ccx handoff` 带 `--minutes` 时照它选。
+**按任务选主导模型**（用户执行 `ccx config set lead.model_by_task on` 才开，默认关）：正在跑的对话不换模型（换了缓存作废）。用同一个难度 b，`ccx route` / `ccx propose` 多给 `new_lead`（新对话用的模型：b 不超过 `easy_max_b` 用 `[lead_by_task]` 的便宜模型，否则用你的：按你平时的模型开）；`choice` 没推荐自带子智能体时，再给 `builtin_model`（你自带子智能体的备用模型，只在简单档给）；`ccx fresh` / `ccx handoff` 带 `--minutes` 时照它选。
 
 ## 自动校准
 

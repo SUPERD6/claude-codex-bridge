@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>relayline（ccx）</title>
-<meta name="description" content="让几个编码智能体互相当主智能体和子智能体：共享记忆、按难度分工、每块活有人验收、花了多少有账可查。">
+<meta name="description" content="让几个编码智能体互相当主导和子智能体：共享记忆、按难度分工、每块活有人验收、花了多少有账可查。">
 <meta property="og:title" content="relayline：编码智能体互为主子">
 <meta property="og:description" content="Claude Code 和 Codex 谁当主都行，Gemini CLI 也能接活；共享记忆、验收、审查、记账。命令 ccx。">
 <meta property="og:image" content="../assets/social-preview.png">
@@ -28,7 +28,7 @@
 
   <section class="hero">
     <div>
-      <h1>编码智能体，互为主智能体和子智能体</h1>
+      <h1>编码智能体，互为主导和子智能体</h1>
       <p class="sub">共享记忆、按难度分工、每块活有人验收、花了多少有账可查。Claude Code 和 Codex 谁当主都行，Gemini CLI 也能接活。命令是 <code>ccx</code>，只用 Python 标准库。</p>
       <div class="install">
         <code>pipx install git+https://github.com/SUPERD6/relayline</code>
@@ -64,7 +64,7 @@
     <div><h3>2 · 两个模型直接对话</h3><p><code>ccx ask</code> 问另一家第二意见，<code>ccx resume</code> 在同一个子会话追问，<code>ccx send</code> 发消息进正在跑的 Codex 会话；<code>ccx discuss</code> 让 2–3 家不同厂商讨论选错代价高的决定（目前只有模拟测试）。</p></div>
     <div><h3>3 · 共享记忆</h3><p>个人层（hub）和项目层（<code>.ccx/</code>）；开局只推对方新写的几行；<code>ccx handoff</code> 换主接力，<code>ccx fresh</code> 换新对话。</p></div>
     <div><h3>4 · 分工合作</h3><p>5 个问题打出难度 → 选智能体、模型、强度；自己做更划算或该先拆就直说。<code>ccx batch</code>、<code>ccx q</code> 并行，断了能续。</p></div>
-    <div><h3>5 · 省和高效</h3><p>子智能体精简启动；<code>ccx lead</code>（<code>--breakdown</code> / <code>--cache</code> / <code>--suggest</code>）看主智能体每轮重读什么；<code>ccx sum</code> 压缩大段输出。</p></div>
+    <div><h3>5 · 省和高效</h3><p>子智能体精简启动；<code>ccx lead</code>（<code>--breakdown</code> / <code>--cache</code> / <code>--suggest</code>）看主导每轮重读什么；<code>ccx sum</code> 压缩大段输出。</p></div>
     <div><h3>6 · 不掉质量</h3><p>ccx 自己重跑验收（<code>--check</code>）；另一家模型独立审查（<code>--review</code>）；每次记对错（<code>--reason</code>），没人判的按证据记“大概对/错”；<code>ccx trial</code> 一周对比。</p></div>
     <div><h3>7 · 不丢可控</h3><p>改配置先预演、先备份；<code>ccx undo</code> 撤回；<code>--mode read</code>、<code>--worktree</code> 不动工作区；子智能体不能再派；<code>ccx ui</code> 只读看全局。</p></div>
     <div><h3>有账可查</h3><p>每次运行的 token 和花费；<code>ccx report</code> 生成看板。<a href="../demo/">看示例看板</a>（假数据）。</p></div>
@@ -91,9 +91,9 @@
     <div class="tablewrap"><table>
       <thead><tr><th>问题</th><th>结果</th><th>把握</th></tr></thead>
       <tbody>
-        <tr><td>小任务派给 Codex，主智能体省没省？</td><td><b>看主智能体信不信 ccx 的验收。</b>sonnet 当主：每个任务少 1 次请求（6/6，p = 0.031），总花费持平；haiku 当主：派完还自己再跑测试，总花费反而多（中位数 $0.0024 → $0.0056，p = 0.008）。都慢约 16–18 秒；做对率都是 14/14。</td><td>小任务有把握，样本小</td></tr>
-        <tr><td>换成真实长对话的主智能体？</td><td>每个小任务约省 $0.04、多等约 16 秒（少读一次约 22 万 token）</td><td>外推，不是测量</td></tr>
-        <tr><td>钱花在哪？（本机 7 天）</td><td>主智能体每次请求中位数 35.2 万 token、$0.11，缓存读占 99%；同期子任务共 $0.42</td><td>读数</td></tr>
+        <tr><td>小任务派给 Codex，主导省没省？</td><td><b>看主导信不信 ccx 的验收。</b>sonnet 当主：每个任务少 1 次请求（6/6，p = 0.031），总花费持平；haiku 当主：派完还自己再跑测试，总花费反而多（中位数 $0.0024 → $0.0056，p = 0.008）。都慢约 16–18 秒；做对率都是 14/14。</td><td>小任务有把握，样本小</td></tr>
+        <tr><td>换成真实长对话的主导？</td><td>每个小任务约省 $0.04、多等约 16 秒（少读一次约 22 万 token）</td><td>外推，不是测量</td></tr>
+        <tr><td>钱花在哪？（本机 7 天）</td><td>主导每次请求中位数 35.2 万 token、$0.11，缓存读占 99%；同期子任务共 $0.42</td><td>读数</td></tr>
         <tr><td>Codex 自带子智能体会被用上吗？</td><td>gpt-6-luna low 上 5/5 次都没启动，明确要求也没有</td><td>只测了 luna low</td></tr>
         <tr><td>只凭交接能接上吗？</td><td>受控 3/3 说对；真实长会话第一次说错，修好后说对</td><td>真实会话 1 个</td></tr>
         <tr><td>精简启动 Claude 子智能体</td><td>每次请求固定上下文 4.6 万 → 1.36 万 token</td><td>单次</td></tr>
@@ -113,7 +113,7 @@
     </div>
     <div class="figure shot">
       <img src="../assets/ui/overview-zh.png" width="1440" height="1000" loading="lazy"
-           alt="ccx ui 总览：等你处理的事、现在的主智能体、项目和额度预测（演示数据）">
+           alt="ccx ui 总览：等你处理的事、现在的主导、项目和额度预测（演示数据）">
     </div>
   </section>
 
@@ -124,7 +124,7 @@
 
   <section id="faq">
     <h2>常见问题</h2>
-    <details><summary>多一个智能体，不是更费 token 吗？</summary><p>有可能。实测里，小任务只有在主智能体看到 ccx 验收通过就直接答复时才省；主智能体再自己跑一遍测试，就是多花子任务的钱、多等十几秒。钱主要花在主智能体每轮重读自己的对话上，<code>ccx lead</code>、<code>ccx sum</code>、<code>ccx fresh</code> 管的是这一块。</p></details>
+    <details><summary>多一个智能体，不是更费 token 吗？</summary><p>有可能。实测里，小任务只有在主导看到 ccx 验收通过就直接答复时才省；主导再自己跑一遍测试，就是多花子任务的钱、多等十几秒。钱主要花在主导每轮重读自己的对话上，<code>ccx lead</code>、<code>ccx sum</code>、<code>ccx fresh</code> 管的是这一块。</p></details>
     <details><summary>我用的是订阅，不是 API，也适用吗？</summary><p>适用。花费按 API 价格折算，方便比较；看板也会显示每个工具的额度用在了哪里。一边额度用完了，任务会换到另一边。</p></details>
     <details><summary>让子智能体改文件安全吗？</summary><p>只能改任务所在的文件夹；每次可写运行都会拍快照，可以 <code>ccx undo</code>；<code>--mode read</code> 或 <code>--worktree</code> 不会动你的工作区。详见 <a href="https://github.com/SUPERD6/relayline/blob/main/SECURITY.zh.md">SECURITY.zh.md</a>。</p></details>
     <details><summary>支持哪些工具？</summary><p>Claude Code 和 Codex CLI 可以当主也可以当子，两个方向都在真机上测过。通过 Claude Code 用 DeepSeek 在真实任务上校准过；Gemini CLI 已适配但没真跑过；这两个只当子智能体。</p></details>
