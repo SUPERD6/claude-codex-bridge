@@ -32,7 +32,7 @@ NL = "\n"
 
 
 def test_groups_put_everyday_first_and_developer_last():
-    text = cli.build_parser().format_help()
+    text = cli.build_parser(full=True).format_help()
     titles = [t for t, _ in cli.GROUPS]
     assert titles[0] == "Everyday" and titles[-1] == "Developer" and "Advanced" in titles
     at = [text.index(NL + t + ":" + NL) for t in titles]
@@ -58,12 +58,81 @@ def test_moved_commands_are_still_callable(name):
 
 
 def test_help_shows_every_command_and_the_new_description():
-    text = cli.build_parser().format_help()
+    text = cli.build_parser(full=True).format_help()
     for n in _commands():
         assert f" {n}" in text, n
     assert "DeepSeek" in text and "Claude Code <-> Codex bridge" not in text
     assert "cost-saving" not in text            # not an unconditional promise; docs/measured.md has the numbers
     assert text.startswith("usage: ccx [-h] [--version] <command> ...")
+
+
+def test_default_help_is_the_persons_commands_and_all_lists_the_rest(capsys):
+    """`ccx -h`: the person's groups; the agent-facing board commands left Everyday but stay listed under --all and
+    callable; `ccx -h --all` (either order) prints every group."""
+    short = cli.build_parser().format_help()
+    every = _section(short, "Everyday")
+    for n in ("peek", "board", "say", "reply"):
+        assert NL + "  " + n + " " not in NL + every, n
+    for t in cli.SHORT:
+        assert NL + t + ":" + NL in short
+    for t in ("Between agents", "Advanced", "Maintenance", "Developer"):
+        assert NL + t + ":" + NL not in short
+    assert "`ccx -h --all` lists" in short and "between agents (peek, board, say, reply)" in short
+    for argv in (["-h", "--all"], ["--all", "-h"], ["--help", "--all"]):
+        with pytest.raises(SystemExit) as e:
+            cli.parse(argv)
+        assert e.value.code == 0
+        out = capsys.readouterr().out
+        for t, _ in cli.GROUPS:
+            assert NL + t + ":" + NL in out, t
+        agents = _section(out, "Between agents")
+        for n in ("peek", "board", "say", "reply"):
+            assert "  " + n + " " in agents, n
+    for n in ("peek", "board", "say", "reply"):
+        with pytest.raises(SystemExit) as e:
+            cli.parse([n, "-h"])
+        assert e.value.code == 0
+
+
+def test_run_help_puts_rubric_and_coordinator_flags_under_advanced():
+    import contextlib
+    import io
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf), pytest.raises(SystemExit):
+        cli.parse(["run", "-h"])
+    text = buf.getvalue()
+    head, adv = text.split(NL + "advanced (", 1)
+    for o in ("--coupling", "--clarity", "--risk", "--novelty", "--b ", "--minutes", "--seat", "--autonomy",
+              "--proposal", "--namecheck", "--quota", "--provider", "--from"):
+        assert NL + "  " + o.strip() + " " in adv and NL + "  " + o.strip() + " " not in head, o
+    for o in ("--to", "--mode", "--check", "--review", "--worktree", "--bg", "--model", "--effort", "--tradeoff",
+              "--context"):
+        assert NL + "  " + o in head, o
+    a = cli.parse(["run", "--coupling", "cross", "--risk", "low", "--seat", "r", "--to", "codex", "x"])   # parses as before
+    assert (a.coupling, a.risk, a.seat, a.to, a.brief) == ("cross", "low", "r", "codex", ["x"])
+
+
+@pytest.mark.parametrize("argv", [["q", "--cwd", "D", "done", "q1", "--ok", "1"], ["q", "done", "q1", "--ok", "1", "--cwd", "D"],
+                                  ["q", "ls", "--cwd", "D"], ["q", "--cwd", "D", "ls"], ["q", "tree", "--cwd", "D"],
+                                  ["q", "run", "--cwd", "D"], ["q", "resume", "--cwd", "D"], ["q", "accept", "q1", "--cwd", "D"],
+                                  ["q", "--cwd", "D", "accept", "q1"], ["q", "budget", "1", "--cwd", "D"]])
+def test_q_takes_cwd_before_or_after_the_subcommand(argv):
+    assert cli.parse(argv).cwd == "D"
+
+
+def test_handoff_takes_deepseek_for_dsh_and_run_keeps_the_provider():
+    a = cli.parse(["handoff", "--to", "deepseek", "--by", "DeepSeek"])
+    assert (a.to, a.by) == ("dsh", "dsh")
+    assert cli.parse(["handoff", "--to", "dsh"]).to == "dsh"
+    assert cli.parse(["run", "--to", "deepseek", "x"]).to == "deepseek"        # the provider, unchanged
+
+
+def test_help_text_for_verify_ok_and_reply_id(capsys):
+    for argv, want in ((["verify", "-h"], "1 = right, 0 = wrong"), (["reply", "-h"], "board message number"),
+                       (["reply", "-h"], "--from AGENT"), (["demo", "-h"], "made-up projects")):
+        with pytest.raises(SystemExit):
+            cli.parse(argv)
+        assert want in capsys.readouterr().out, (argv, want)
 
 
 # ---- a brief after the options (r5f/r5g: `resume R --check X "fix"` exited 2 with "unrecognized arguments")

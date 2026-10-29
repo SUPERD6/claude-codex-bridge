@@ -13,19 +13,22 @@ DESCRIPTION = ("A team of AI coding agents: Claude Code, Codex and DeepSeek hand
                "sub-agent, sharing memory and working context, and route each piece to the cheapest agent likely "
                "to finish it.")
 
-# `ccx -h` lists commands by what they are for; every command stays callable. Groups in NAMES_ONLY list names
-# only; Developer (measuring ccx itself) comes last. A name not registered (e.g. `demo` before it lands) is skipped.
+# `ccx -h` lists the person's commands by what they are for; `ccx -h --all` lists every group. Every command stays
+# callable either way. Groups in NAMES_ONLY list names only; Developer (measuring ccx itself) comes last. A name not
+# registered (e.g. `demo` before it lands) is skipped. "Between agents" are the commands open sessions call to
+# talk to each other (the person reads and answers the board in `ccx ui`).
 GROUPS = (
-    ("Everyday", ("setup", "doctor", "run", "ask", "resume", "stop", "undo", "verify", "show", "q", "ui", "demo",
-                  "peek", "board", "say", "reply")),
+    ("Everyday", ("setup", "doctor", "run", "ask", "resume", "stop", "undo", "verify", "show", "q", "ui", "demo")),
     ("Memory and context", ("mem", "ctx", "project", "handoff", "fresh", "inbox", "skills")),
     ("Accounting and reports", ("stats", "report", "quota", "lead")),
+    ("Between agents", ("peek", "board", "say", "reply")),
     ("Advanced", ("where", "projects", "intake", "init", "uninstall", "repair", "agents")),
     ("Maintenance", ("task", "send", "plan", "batch", "route", "propose", "way", "discuss", "turn", "sum", "archive",
                      "config", "autonomy", "selftest", "sync")),
     ("Developer", ("trial", "ab", "bench", "improve", "namecheck")),
 )
 NAMES_ONLY = ("Maintenance", "Developer")
+SHORT = ("Everyday", "Memory and context", "Accounting and reports")     # what `ccx -h` shows; --all: every group
 UNGROUPED_TO = "Maintenance"        # a new command nobody grouped yet still shows up, here
 
 
@@ -33,7 +36,7 @@ def _width() -> int:
     return max(60, min(shutil.get_terminal_size((100, 24)).columns, 120)) - 2
 
 
-def _grouped_help(sub: argparse._SubParsersAction) -> str:
+def _grouped_help(sub: argparse._SubParsersAction, full: bool = True) -> str:
     helps = {a.dest: a.help or "" for a in sub._choices_actions}
     width = _width()
     placed = {n for _, names in GROUPS for n in names}
@@ -41,7 +44,10 @@ def _grouped_help(sub: argparse._SubParsersAction) -> str:
     groups = [(title, tuple(n for n in names if n in sub.choices) + (rest if title == UNGROUPED_TO else ()))
               for title, names in GROUPS]
     lines = []
+    hidden = [(title, names) for title, names in groups if not full and title not in SHORT]
     for title, names in groups:
+        if not full and title not in SHORT:
+            continue
         lines.append(f"{title}:")
         if title in NAMES_ONLY:
             lines += textwrap.wrap(", ".join(names), width, initial_indent="  ", subsequent_indent="  ")
@@ -50,19 +56,27 @@ def _grouped_help(sub: argparse._SubParsersAction) -> str:
                 lines += textwrap.wrap(helps.get(n, ""), width, initial_indent=f"  {n:<10} ",
                                        subsequent_indent=" " * 13) or [f"  {n}"]
         lines.append("")
+    if hidden:
+        n = sum(len(names) for _, names in hidden)
+        lines += textwrap.wrap(f"`ccx -h --all` lists {n} more commands: " + "; ".join(
+            f"{title.lower()} ({', '.join(names[:4])}{', ...' if len(names) > 4 else ''})" for title, names in hidden)
+            + ".", width)
     lines.append("`ccx <command> -h` shows one command in full.")
     return "\n".join(lines)
 
 
-def build_parser() -> argparse.ArgumentParser:
+def build_parser(full: bool = False) -> argparse.ArgumentParser:
+    """The parser; its help lists the person's commands, or every group with full (`ccx -h --all`)."""
     ap = argparse.ArgumentParser(prog="ccx", usage="ccx [-h] [--version] <command> ...",
                                  description=textwrap.fill(DESCRIPTION, _width()),
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--version", action="version", version=f"ccx {__version__}")
+    ap.add_argument("--all", action="store_true", dest="help_all", help="with -h: list every command, also the "
+                    "ones agents call and the advanced and maintenance ones")
     sub = ap.add_subparsers(dest="cmd", required=True, metavar="<command>", help=argparse.SUPPRESS, prog="ccx")
     for m in commands.MODULES:
         m.register(sub)
-    ap.epilog = _grouped_help(sub)
+    ap.epilog = _grouped_help(sub, full)
     return ap
 
 
@@ -73,6 +87,9 @@ def parse(argv: list[str]) -> argparse.Namespace:
     a command without a brief. A bare brief word right after a free-text option's value exits 2 too: in
     `--check make test` or `--label a b` it is the value's second word, and taking it as brief would quietly shorten
     the check."""
+    if argv and "--all" in argv and set(argv) <= {"-h", "--help", "--all"} and len(set(argv)) > 1:
+        build_parser(full=True).print_help()          # `ccx -h --all` (either order): every group
+        raise SystemExit(0)
     ap = build_parser()
     a, rest = ap.parse_known_args(argv)
     if rest and not (isinstance(getattr(a, "brief", None), list) and not any(r.startswith("-") for r in rest)):

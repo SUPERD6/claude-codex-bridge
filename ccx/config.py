@@ -46,6 +46,14 @@ RESULT_SCHEMA = data_dir("config") / "result.schema.json"
 TIER_ORDER = ["T0", "T1", "T2", "T3", "T4"]
 AGENTS = ("codex", "claude")                 # wired for shared memory / skills / MCP / hooks
 DELEGATE_AGENTS = ("codex", "claude", "gemini", "dsh")   # can run headless sub-tasks (adapters in ccx/agents)
+LEAD_ALIASES = {"deepseek": "dsh"}           # a lead named by its vendor: DeepSeek's own agent is dsh
+
+
+def lead_name(value: str) -> str:
+    """A lead tool's name as ccx keeps it: `deepseek` -> `dsh` (ccx handoff --to/--by). Not for `ccx run --to`,
+    where `deepseek` is the deepseek provider (Claude Code on DeepSeek's API)."""
+    v = str(value).strip()
+    return LEAD_ALIASES.get(v.lower(), v)
 
 
 def _default_providers() -> tuple[str, ...]:

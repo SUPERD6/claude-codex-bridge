@@ -992,76 +992,79 @@ def cmd_propose(a) -> int:
 
 def register(sub) -> None:
     r = sub.add_parser("run", help="delegate one task to the other agent")
+    # `ccx run -h`: the options most runs use first; the routing rubric and the coordinator / lead-side flags
+    # under one "advanced" heading (help layout only: every option parses as before)
+    adv = r.add_argument_group("advanced (routing rubric, coordinator and lead-side options; most runs need none of them)")
     r.add_argument("brief", nargs="*", help="task text (or use --brief-file / stdin)")
     r.add_argument("--brief-file")
     r.add_argument("--to", choices=["auto", *DELEGATE_AGENTS, *PROVIDER_AGENTS], default="auto")
-    r.add_argument("--from", dest="caller", choices=[*DELEGATE_AGENTS, *PROVIDER_AGENTS, "user"])
-    r.add_argument("--provider", help="model API behind an agent CLI, e.g. deepseek (see [providers] in config)")
+    adv.add_argument("--from", dest="caller", choices=[*DELEGATE_AGENTS, *PROVIDER_AGENTS, "user"])
+    adv.add_argument("--provider", help="model API behind an agent CLI, e.g. deepseek (see [providers] in config)")
     r.add_argument("--bg", action="store_true", help="run detached; wait for it with `ccx show <run_id> --wait`")
     r.add_argument("--wait", type=float, metavar="SECONDS", help="with --bg: wait up to this long in the same call "
                    "and print the final result (the run id goes to stderr at once); not done by then: exactly what "
                    "--bg prints. Keep it under your tool-call limit (e.g. 540)")
-    r.add_argument("--tier", choices=["auto", *TIER_ORDER], default="auto")
+    adv.add_argument("--tier", choices=["auto", *TIER_ORDER], default="auto")
     r.add_argument("--mode", choices=["read", "write"],
                    help="read: analyse only; write: may edit files. Not given: inferred from the task text "
                         "(analysis verbs -> read, edit verbs -> write, unclear -> write)")
     r.add_argument("--cwd")
-    r.add_argument("--project", help="run in a project from the catalog: its name, an alias or a sentence "
+    adv.add_argument("--project", help="run in a project from the catalog: its name, an alias or a sentence "
                                      "(`ccx where`); several fit -> an error listing them")
-    r.add_argument("--rules-ok", action="store_true", help="with --project: you read the project's approval rules "
+    adv.add_argument("--rules-ok", action="store_true", help="with --project: you read the project's approval rules "
                                                           "ccx showed and they allow this task")
-    r.add_argument("--autonomy", choices=["L0", "L1", "L2"], help="this run's autonomy level (default: the "
+    adv.add_argument("--autonomy", choices=["L0", "L1", "L2"], help="this run's autonomy level (default: the "
                    "project's, `ccx autonomy`): L0 proposes only, L1 stops before edits, L2 may merge a small branch")
-    r.add_argument("--approved", action="store_true", help="the person said yes to this dispatch (passes an "
+    adv.add_argument("--approved", action="store_true", help="the person said yes to this dispatch (passes an "
                    "L0/L1 stop; never a spending cap, approval rules or a merge into a protected branch)")
-    _routing_args(r)
+    _routing_args(r, into=adv)
     r.add_argument("--model", help="explicit model (skips routing), e.g. gpt-6.1-sol or sonnet")
     r.add_argument("--effort", help="explicit reasoning effort: low|medium|high|xhigh|max")
-    r.add_argument("--minutes", type=float, help="how long a skilled engineer would need, in minutes: the standard "
+    adv.add_argument("--minutes", type=float, help="how long a skilled engineer would need, in minutes: the standard "
                    "difficulty unit (b = log2 minutes, blended 60/40 with the rubric); task-split learns from it too")
-    r.add_argument("--task", help="task-checkpoint task id: the session id is saved into it at once")
-    r.add_argument("--step", type=int, help="task-checkpoint step number")
-    r.add_argument("--force", action="store_true", help="delegate even when routing says do it yourself/split")
-    r.add_argument("--no-ab", action="store_true", help="never pick this task as an A/B self-run sample")
-    r.add_argument("--proposal", help="the `ccx propose` id the person said yes to (H12)")
-    r.add_argument("--mcp", action="store_true", help="Claude sub-agent: also load MCP tools (bigger start-up)")
-    r.add_argument("--new", action="store_true", help="always a fresh sub-session (default: continue the last "
+    adv.add_argument("--task", help="task-checkpoint task id: the session id is saved into it at once")
+    adv.add_argument("--step", type=int, help="task-checkpoint step number")
+    adv.add_argument("--force", action="store_true", help="delegate even when routing says do it yourself/split")
+    adv.add_argument("--no-ab", action="store_true", help="never pick this task as an A/B self-run sample")
+    adv.add_argument("--proposal", help="the `ccx propose` id the person said yes to (H12)")
+    adv.add_argument("--mcp", action="store_true", help="Claude sub-agent: also load MCP tools (bigger start-up)")
+    adv.add_argument("--new", action="store_true", help="always a fresh sub-session (default: continue the last "
                    "one from this conversation, same folder and agent, if under 1 h old)")
-    r.add_argument("--fork", action="store_true", help="Claude lead -> Claude sub only: start from a copy of "
+    adv.add_argument("--fork", action="store_true", help="Claude lead -> Claude sub only: start from a copy of "
                    "your whole conversation (full context, costs more per turn)")
     r.add_argument("--worktree", action="store_true", help="isolate write task in a git worktree")
-    r.add_argument("--quota", action="append", metavar="AGENT=USED",
+    adv.add_argument("--quota", action="append", metavar="AGENT=USED",
                    help="share of a subscription's quota already used (claude=0.8; default: read by ccx, "
                         "`ccx quota`); the fuller it is, the dearer that quota is priced, so pay-per-token "
                         "providers such as deepseek win more often")
-    r.add_argument("--seat", metavar="NAME", help="a named long-lived role (e.g. reviewer): its sub-session is "
+    adv.add_argument("--seat", metavar="NAME", help="a named long-lived role (e.g. reviewer): its sub-session is "
                    "kept for a week and reused by the next --seat NAME task here; --new starts it over")
     r.add_argument("--check", metavar="CMD", help="acceptance command (e.g. 'python -m pytest -q tests/test_x.py'): "
                    "the sub-agent runs it before finishing, then ccx runs it again; a failure counts as a failure")
-    r.add_argument("--allow-subagents", action="store_true", help="(the default) the sub-agent may use its own "
+    adv.add_argument("--allow-subagents", action="store_true", help="(the default) the sub-agent may use its own "
                    "sub-agents: one level, counted, stopped over the budget")
-    r.add_argument("--no-subagents", action="store_true", help="the sub-agent may not start its own sub-agents "
+    adv.add_argument("--no-subagents", action="store_true", help="the sub-agent may not start its own sub-agents "
                    "(same as --subagents off)")
-    r.add_argument("--subagents", default="auto", metavar="auto|off|N", help="how many of its own at once: auto = "
+    adv.add_argument("--subagents", default="auto", metavar="auto|off|N", help="how many of its own at once: auto = "
                    "the tool's default, fewer when quota is tight (default); off; or a number")
-    r.add_argument("--budget", type=float, metavar="USD", help="spending cap for its own sub-agents on this piece "
+    adv.add_argument("--budget", type=float, metavar="USD", help="spending cap for its own sub-agents on this piece "
                    "(default [subagents] max_usd, $2); over it the run stops and can go on with ccx resume --budget")
-    r.add_argument("--parallel", action="store_true", help="tell it explicitly to use sub-agents for independent "
+    adv.add_argument("--parallel", action="store_true", help="tell it explicitly to use sub-agents for independent "
                    "parts (only with this flag: a brief that lists several items does not add it)")
     r.add_argument("--review", choices=["auto", "on", "off"], default="auto", help="independent review of the diff "
                    "by another vendor's cheap model: auto = only when --risk is visible/critical, the sub-agent is "
                    "unsure, or its claimed files don't match the diff (default); on = every write run; off")
-    r.add_argument("--namecheck", choices=["warn", "fail", "off"], help="static check for names no scope "
+    adv.add_argument("--namecheck", choices=["warn", "fail", "off"], help="static check for names no scope "
                    "defines in the functions the run changed: warn = shown to you and the reviewer (default, "
                    "[defaults] namecheck); fail = a hit fails the work like a failed --check; off")
-    r.add_argument("--no-escalate", action="store_true")
-    r.add_argument("--no-fallback", action="store_true", help="on quota/rate limit, stop instead of "
+    adv.add_argument("--no-escalate", action="store_true")
+    adv.add_argument("--no-fallback", action="store_true", help="on quota/rate limit, stop instead of "
                    "retrying on the other agent")
     r.add_argument("--context", choices=["auto", "on", "off"], help="shared work context: attach what your "
                    "conversation has been about lately (the person's recent asks, what was settled, your plan, files "
                    "you changed), read by code from your session file. auto = write tasks only (default, "
                    "[shared_context] run)")
-    r.add_argument("--label")
+    adv.add_argument("--label")
     r.set_defaults(fn=cmd_run)
     ak = sub.add_parser("ask", help="quick read-only second opinion from the other agent (low effort)")
     ak.add_argument("brief", nargs="*"); ak.add_argument("--brief-file")
@@ -1090,7 +1093,7 @@ def register(sub) -> None:
     se.set_defaults(fn=cmd_send)
     v = sub.add_parser("verify", help="record your verdict on a run (calibrates routing and splitting)")
     v.add_argument("run_id", nargs="?")
-    v.add_argument("--ok", type=int, choices=[0, 1])
+    v.add_argument("--ok", type=int, choices=[0, 1], help="your verdict: 1 = right, 0 = wrong")
     v.add_argument("--note", default="", help="why (kept with the verdict)")
     v.add_argument("--reason", choices=["unfinished", "wrong", "overreach", "other"],
                    help="with --ok 0: what was wrong (not finished / done wrong / changed what it shouldn't / other)")

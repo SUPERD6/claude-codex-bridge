@@ -13,10 +13,14 @@ from .common import _out
 
 def _serve(p, project, days: float, a) -> int:
     if a.export:
-        _out({"snapshot": str(ui.export(p, Path(a.export), project, days))})
+        out = ui.export(p, Path(a.export), project, days)
+        _out({"snapshot": str(out)})
+        print(f"next: open {out} in a browser", file=sys.stderr, flush=True)
         return 0
     srv = ui.UI(p, project, days, port=a.port)
     print(f"ccx ui: {srv.url}", flush=True)
+    print(f"next: open {srv.url} in a browser" + ("" if a.no_open else " (opening it now)"), file=sys.stderr,
+          flush=True)
     print("buttons that change something show their ccx command and run it on a second click; stops on its own "
           "about a minute after the page is closed, up to 5 minutes if it was a background tab (or Ctrl+C)", file=sys.stderr, flush=True)
     if not a.no_open:
@@ -69,7 +73,12 @@ def register(sub) -> None:
     u.add_argument("--keep", action="store_true", help="with --demo: keep the demo folder after the page closes")
     u.set_defaults(fn=cmd_ui)
     d = sub.add_parser("demo", help="see ccx ui in 30 seconds, no account needed: made-up projects, runs, costs "
-                       "and conversations in a temporary folder, shown on the same page; works offline")
+                       "and conversations in a temporary folder, shown on the same page; works offline",
+                       description="Build made-up projects, runs, costs and agent conversations in a temporary "
+                       "folder and open them in ccx ui, the same page your own work shows on. Nothing needs an "
+                       "account or the network; your hub and your tools' settings are not read or written. Buttons "
+                       "that would start an agent only show their command; the rest (a verdict, undo, a handoff) "
+                       "act on the demo data. The folder is deleted when the page closes (--keep or --dir keep it).")
     d.add_argument("--no-open", action="store_true", help="print the address, don't open a browser")
     d.add_argument("--port", type=int, default=0, help="default: a random free port")
     d.add_argument("--export", metavar="FILE", help="write a static snapshot of the demo page instead of serving")
