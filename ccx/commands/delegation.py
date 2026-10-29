@@ -47,6 +47,11 @@ def cmd_ab(a) -> int:
 
 
 # ---------------------------------------------------------------- commands
+# a write run without --check: one line on stderr (PM review 2026-10-29); what ccx does is unchanged
+NO_CHECK_NUDGE = ("ccx: tip: this run may edit files and has no --check; add --check \"<test command>\" so ccx re-runs "
+                  "it and the result is checked, not only reported")
+
+
 def _background(argv: list[str], p, procs: list | None = None) -> dict:
     """Re-run this exact command detached; the run id is fixed up front so the caller can poll it. `procs`, when
     given, gets the detached process (for `--bg --wait N`, which waits on it in the same call)."""
@@ -282,6 +287,8 @@ def cmd_run(a) -> int:
             # refuse a used-up, smaller or lapsed pre-authorisation here, before detaching: the detached child's
             # refusal would leave `ccx show <id> --wait` waiting (it checks again, and records a refusal, below)
             _preauth_for_run(p, cfg, a.proposal, _spec_from_args(a, _brief(a)))
+        if not a.check and apply_mode(_spec_from_args(a, _brief(a)))["mode"] == "write":
+            print(NO_CHECK_NUDGE, file=sys.stderr, flush=True)     # here, where the person sees it
         return _bg_maybe_wait(sys.argv[1:], p, a.wait)
     text = _brief(a)
     caller = _caller(a.caller)
@@ -323,6 +330,8 @@ def cmd_run(a) -> int:
         return 0
     if route.get("cheaper_self"):
         print(f"ccx: {route['cheaper_self']}", file=sys.stderr, flush=True)
+    if mode["mode"] == "write" and not a.check:  # stderr only: stdout (the JSON a lead reads) stays as it was
+        print(NO_CHECK_NUDGE, file=sys.stderr, flush=True)
     if auto:
         plan = {"to": kw["to"], "model": kw.get("model"), "effort": kw.get("effort"), "mode": mode["mode"],
                 **{k: route[k] for k in ("rung", "p", "expected_usd") if route.get(k) is not None},

@@ -266,7 +266,12 @@ def cmd_stats(a) -> int:
     if a.summary:
         p = paths()
         s = report.summarize(p, report.collect(p, a.days))
-        _out({"totals": s["totals"], "streams": [{k: v for k, v in x.items() if k not in ("agent", "role")}
+        t = s["totals"]
+        # what was spent comes first; a saving is a measurement only from `ccx trial`, else a labelled model estimate
+        _out({"spend": {"sub_agents_usd": t["sub_ae"], "runs": t["runs"], "cost_per_success_usd": t["cps"]},
+              "saving": {"usd": t["saving"], "kind": t["saving_kind"], "ci95": t["saving_ci95"],
+                         "note": t.get("saving_note")},
+              "totals": t, "streams": [{k: v for k, v in x.items() if k not in ("agent", "role")}
                                                  for x in s["streams"] if x["events"]], "ab": s["ab"],
               "quota": s["quota"]})
         return 0
@@ -473,11 +478,13 @@ def register(sub) -> None:
                     "finished ('finished', compact results) and the ids still running ('running', plus the command "
                     "to wait on them); with --wait, block until at least one has finished")
     sh.set_defaults(fn=cmd_show)
-    st = sub.add_parser("stats", help="token/time per agent and tier; --summary for spend and savings")
+    st = sub.add_parser("stats", help="token/time per agent and tier; --summary for spend, then a labelled "
+                        "saving estimate")
     st.add_argument("--summary", action="store_true")
     st.add_argument("--days", type=int, default=30)
     st.set_defaults(fn=cmd_stats)
-    rp = sub.add_parser("report", help="static HTML dashboard of tokens, spend, quota and savings")
+    rp = sub.add_parser("report", help="static HTML dashboard of tokens, spend and quota; a saving only as a "
+                        "labelled estimate")
     rp.add_argument("--days", type=int, default=30)
     rp.add_argument("--out", help="output file (default <hub>/ccx/report/index.html)")
     rp.add_argument("--no-lead", action="store_true", help="skip reading the lead's own session logs")
