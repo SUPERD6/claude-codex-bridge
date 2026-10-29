@@ -452,8 +452,10 @@ def _restart_step(p, a, root: Path, step: dict, last: dict, brief: str) -> int:
     rung = (last.get("first_rung") or "").split(":")
     model, effort = (rung[1], rung[2]) if len(rung) == 3 and rung[0] == last["to"] else (None, None)
     req = Request(to=last["to"], brief=text, mode=last.get("mode") or "write", cwd=Path(last.get("cwd") or root),
-                  caller=_caller(a.caller), task=a.task, step=step["n"], label=f"{a.task}#{step['n']}",
-                  model=model, effort=effort, check=last.get("check_cmd"), provider=last.get("provider"))
+                  caller=_caller(a.caller), task=a.task, step=step["n"],
+                  label=last.get("label") or f"{a.task}#{step['n']}",    # the same step: keep its label
+                  model=model, effort=effort, check=last.get("check_cmd"), provider=last.get("provider"),
+                  review=last.get("review_mode") or "auto")
     rec = run(req, p)
     _out(compact(rec) | {"restarted": last["run_id"], "why": "the earlier run was cut off before its session "
                          "started, so there was nothing to resume"})
@@ -510,12 +512,14 @@ def cmd_task(a) -> int:
             if got:
                 text += "\n\n# Where the cut-off session stood\n" + got[1]
         req = Request(to=to, brief=text, tier="T2" if to != "gemini" else "T2", caller=_caller(a.caller),
-                      cwd=root, task=a.task, step=nxt["n"], label=f"{a.task}#{nxt['n']}")
+                      cwd=root, task=a.task, step=nxt["n"], label=last.get("label") or f"{a.task}#{nxt['n']}",
+                      review=last.get("review_mode") or "auto")
         rec = run(req, p)
         out = compact(rec) | {"handoff": f"{last['to']} -> {to} (quota)"}
     else:
         req = Request(to=last["to"], brief=f"Continue step {nxt['n']} ({nxt['title']}) from where you stopped. "
-                      "Do not redo finished work.", resume_run=last["run_id"], caller=_caller(a.caller))
+                      "Do not redo finished work.", resume_run=last["run_id"], caller=_caller(a.caller),
+                      review=None)    # None: the run's own review setting (ccx/delegate.py run)
         rec = run(req, p)
         out = compact(rec) | {"resumed": last["run_id"]}
     _out(out)
@@ -1068,8 +1072,8 @@ def register(sub) -> None:
     rs.add_argument("--effort")
     rs.add_argument("--budget", type=float, metavar="USD", help="a new spending cap for its own sub-agents (after "
                     "an over_budget stop)")
-    rs.add_argument("--review", choices=["auto", "on", "off"], default="auto", help="independent review of what this "
-                    "follow-up changed, as for ccx run (default auto)")
+    rs.add_argument("--review", choices=["auto", "on", "off"], default=None, help="independent review of what this "
+                    "follow-up changed, as for ccx run (default: the resumed run's own setting, auto for older runs)")
     rs.add_argument("--check", metavar="CMD", help="replace the run's acceptance command from here on (e.g. one "
                     "that named a missing file or ran no tests)")
     rs.add_argument("--namecheck", choices=["warn", "fail", "off"], help="static check for names no scope "
