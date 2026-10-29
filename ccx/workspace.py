@@ -390,6 +390,10 @@ def undo(p: Paths, run_id: str, apply: bool = False, wrong: bool = False) -> dic
                           "these files after the run")
         if wrong:
             out["wrong_scope"] = f"only {run_id} is recorded as wrong; `ccx verify` the earlier runs yourself"
+    if not restore and not new_files:
+        # nothing to put back: one line instead of a warning about files that are not there (walkthrough 2026-10-29)
+        del out["warning"]
+        out["nothing_to_undo"] = "this run left no changed or new files: there is nothing to undo"
     if apply:
         if restore:
             rc, msg = _git(repo, "checkout", base, "--", *restore)

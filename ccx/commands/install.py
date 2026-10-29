@@ -234,7 +234,8 @@ def cmd_doctor(a) -> int:
     if a.codex_rule:
         print(codex_lead_rule(), end="")
         return 0
-    ok = doctor(paths())
+    from .common import lead_identity
+    ok = doctor(paths(), codex_lead=bool(getattr(a, "codex_lead", False)) or lead_identity() == "codex")
     return 0 if ok else 1
 
 
@@ -278,6 +279,9 @@ def register(sub) -> None:
     dr.add_argument("--codex-rule", action="store_true",
                     help="print a Codex rule (for ~/.codex/rules/ccx.rules) that lets a sandboxed Codex lead run this "
                          "ccx's run/ask/resume/discuss outside the sandbox; not yet checked on a real run")
+    dr.add_argument("--codex-lead", action="store_true",
+                    help="show the 'Codex as lead (sandbox)' row in full: whether a Codex lead's sandbox lets it hand "
+                         "work out, and how to set it up (shown in full anyway when Codex runs this)")
     dr.set_defaults(fn=cmd_doctor)
     u = sub.add_parser("uninstall", help="remove ccx hooks/blocks/links from both tools (dry run unless --apply)")
     u.add_argument("--apply", action="store_true")

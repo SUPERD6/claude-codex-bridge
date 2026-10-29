@@ -1,6 +1,6 @@
 """Stand-in for `codex exec` used by tests. Mimics codex-cli 0.163 JSONL events.
 
-FAKE_STATUS: done | blocked | blocked_then_done | policy_then_done | policy | auth | quota | hang
+FAKE_STATUS: done | blocked | blocked_then_done | policy_then_done | policy | env | auth | quota | hang
 FAKE_LOG:    file to append argv (json) for assertions
 """
 import json
@@ -22,7 +22,9 @@ if log:
                             "openai_key": bool(os.environ.get("OPENAI_API_KEY"))}) + "\n")
 
 if argv[:2] == ["login", "status"]:
-    print("Logged in using ChatGPT"); sys.exit(0)
+    # FAKE_CODEX_LOGIN: what `codex login status` prints instead (exit 1 when it says "Not logged in")
+    out = os.environ.get("FAKE_CODEX_LOGIN") or "Logged in using ChatGPT"
+    print(out); sys.exit(1 if "not logged in" in out.lower() else 0)
 if argv[:1] == ["agents"]:
     print("thread-123  running  my desktop session"); sys.exit(0)
 if argv[:1] in (["archive"], ["unarchive"]):
@@ -115,6 +117,10 @@ if mode == "partial":
     status = "partial"
 if mode == "blocked" or (mode == "blocked_then_done" and not resuming):
     status = "blocked"
+if mode == "env":     # Codex's Windows sandbox helper could not start (2026-10-29 walkthrough, codex-cli 0.164)
+    status = "blocked"
+    print("ERROR codex_core::exec: orchestrator_helper_launch_canceled: ShellExecuteExW failed to launch setup "
+          "helper: 1223", file=sys.stderr)
 if mode == "policy" or (mode == "policy_then_done" and not resuming):   # as codex-cli 0.164 on Windows
     status = "blocked"
     print('ERROR codex_core::tools::router: error=exec_command failed: CreateProcess { message: "Rejected('

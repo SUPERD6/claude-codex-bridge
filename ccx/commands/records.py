@@ -455,7 +455,9 @@ def register(sub) -> None:
     ar.add_argument("--restore", metavar="RUN_ID", help="bring a run's archived sessions back")
     ar.set_defaults(fn=cmd_archive)
     ud = sub.add_parser("undo", help="put back the files a write run changed (dry run unless --apply)")
-    ud.add_argument("run_id"); ud.add_argument("--apply", action="store_true")
+    ud.add_argument("run_id")
+    ud.add_argument("--apply", action="store_true",
+                    help="really restore the files; without it, only shows what would change")
     ud.add_argument("--wrong", action="store_true", help="with --apply: also record the run as wrong (teaches "
                     "routing). Without it undoing records no verdict")
     ud.set_defaults(fn=cmd_undo)

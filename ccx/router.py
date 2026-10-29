@@ -16,6 +16,12 @@ SIGNALS: list[tuple[str, int, str]] = [
     # mechanical -> pull down
     (r"\b(typo|rename|reformat|format|lint|docstring|comment|boilerplate|bump version)\b|改名|重命名|格式化|错别字|加注释|补注释|样板", -2, "mechanical"),
     (r"\b(summari[sz]e|grep|find where|list all|locate)\b|总结|找出|列出|定位在哪", -1, "lookup/summary"),
+    # a one-line edit ("add a line ... at the end of README.md"): its "add" alone scored it standard dev (T2, a
+    # mid-price model) in the 2026-10-29 new-user walkthrough. Only the edit verb directly followed by a/one/the
+    # line|sentence|word; "line-by-line" does not count, and any other signal in the brief still adds up as before
+    (r"\b(?:add|append|insert|remove|delete|change|replace|edit)\s+(?:a|one|the|this|that)\s+(?:single\s+)?"
+     r"(?:line|sentence|word)\b(?![-\w])|\bone[- ]line (?:fix|change|edit)\b|加一行|删一行|改一行|加一句",
+     -2, "one-line edit"),
     # standard work
     (r"\b(add|implement|write|fix|test|script|endpoint|function)\b|实现|新增|修复|写一个|补测试|脚本|函数", 1, "standard dev"),
     # hard

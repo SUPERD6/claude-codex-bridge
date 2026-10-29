@@ -18,7 +18,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import socket
+import sys
 import threading
 import time
 from dataclasses import dataclass
@@ -84,6 +86,7 @@ class Request:
     share_context: str | None = None  # auto | on | off: the lead's recent work, from its session file (context_share)
     namecheck: str | None = None    # warn | fail | off: static undefined-name check (None = [defaults] namecheck)
     run_id: str | None = None       # the id to use (`ccx q run` names it up front so `q ls` can show it)
+    progress: bool = False          # a foreground `ccx run`/`resume`: one stderr line every ~30 s while it waits
 
 
 def _busy(p: Paths, prev: dict, scan: int = 300) -> str | None:
@@ -573,6 +576,8 @@ def run(req: Request, p: Paths) -> dict:
             if beat.wait(float(os.environ.get("CCX_BEAT_SEC", "60"))):
                 return
     threading.Thread(target=_beat, daemon=True).start()
+    if req.progress:
+        threading.Thread(target=_progress, args=(record, beat), daemon=True).start()
 
     while i < len(plan):
         if stop_file.exists():                    # stopped between attempts: start nothing more
@@ -722,6 +727,14 @@ def run(req: Request, p: Paths) -> dict:
             oc.kind = "needs_write"
             record["attempts"][-1]["kind"] = "needs_write"
             break
+        env_why = env_failure(status, oc.ok, oc.kind, se, (oc.result or {}).get("summary"), oc.error)
+        if env_why:
+            # the machine, not the model: a stronger model meets the same wall (2026-10-29 walkthrough: T1 -> T2,
+            # 29x the price, 265 s, nothing read). No climb, no retry, no fallback: back to the person with a fix
+            oc.kind = "env"
+            record["attempts"][-1]["kind"] = "env"
+            record["env_error"] = env_why
+            break
         rejected = _policy_rejections(se) if status == "blocked" else []
         if rejected:
             # the sandbox, not the model, stopped it: says nothing about ability, and a stronger model won't help
@@ -864,7 +877,7 @@ def run(req: Request, p: Paths) -> dict:
     # `ccx verify` (the lead's verdict) adds or corrects this later.
     verified = check_passed is not None or (oc.result or {}).get("verification", "not-run") not in ("", "not-run")
     if oc.kind not in ("quota", "auth", "timeout", "model", "needs_write", "split", "over_budget", "user_stopped",
-                       "review_issues", "review_failed") and record.get("kind") not in ("check_broken", "no_changes") and (status in ("blocked", "failed") or not oc.ok
+                       "review_issues", "review_failed", "env") and record.get("kind") not in ("check_broken", "no_changes") and (status in ("blocked", "failed") or not oc.ok
                                                         or (status == "done" and verified)):
         try:
             learn.record_outcomes(p, record, final_ok=oc.ok and status == "done" and check_passed is not False)
@@ -925,7 +938,7 @@ def run(req: Request, p: Paths) -> dict:
                           "Change only what the task needs; do not add checks or hardening it did not ask for.",
                           resume_run=run_id, caller=req.caller, cwd=req.cwd, review="on", risk=req.risk,
                           review_round=req.review_round + 1, check=req.check, fallback=False, task=req.task,
-                          step=req.step, label=req.label, namecheck=req.namecheck,
+                          step=req.step, label=req.label, namecheck=req.namecheck, progress=req.progress,
                           prior_issues=list(record["review"].get("issues") or [])), p)
         fix["review_of"], fix["first_review"] = run_id, record["review"]
         try:                               # the lead sees what the whole chain cost, not only its last run
@@ -936,6 +949,63 @@ def run(req: Request, p: Paths) -> dict:
         _write_record(p.runs / fix["run_id"], fix)
         return fix
     return record
+
+
+# Environment failures: the agent CLI could not start a process on this machine. Seen on Windows (2026-10-29
+# new-user walkthrough, codex-cli 0.164): "orchestrator_helper_launch_canceled: ShellExecuteExW failed to launch setup
+# helper: 1223" (1223 = the operation was cancelled, e.g. a UAC prompt), and CreateProcessWithLogonW error 267 (the
+# folder name is invalid). Matched only on an attempt that already failed (blocked / failed / an error).
+ENV_MARKERS = ("shellexecuteexw", "createprocesswithlogonw", "helper_launch", "windows error 1223",
+               "failed to launch setup helper")
+_CREATEPROCESS = re.compile(r"createprocess\w*[^\n]{0,60}?(?:fail|error)|(?:fail|error)[^\n]{0,60}?createprocess",
+                            re.I)
+
+
+def env_failure(status: str | None, ok: bool, kind: str | None, *texts: str | None) -> str | None:
+    """The line that shows a failed attempt was the machine's doing (see ENV_MARKERS), else None. A successful
+    attempt that merely mentions such words (a task about CreateProcess, say) is never one."""
+    if not ((not ok and kind == "error") or status in ("blocked", "failed")):
+        return None
+    for text in texts:
+        for line in (text or "").splitlines():
+            low = line.lower()
+            # "exec_command failed: CreateProcess { ... rejected: blocked by policy }" is the sandbox's policy saying
+            # no (a policy retry below), not a process that could not start
+            policy = "rejected" in low or "blocked by policy" in low
+            if any(m in low for m in ENV_MARKERS) or (_CREATEPROCESS.search(low) and not policy):
+                return line.strip()[:240]
+    return None
+
+
+def env_hint(record: dict) -> str:
+    agent, rid = record.get("to") or "the agent", record["run_id"]
+    why = record.get("env_error") or "a process could not be started"
+    fix = (f"run `{agent}` once yourself in this folder and let it finish setting up its Windows sandbox (error "
+           "1223 means its permission prompt was cancelled; 267, a working folder it cannot use), and keep "
+           "CODEX_HOME outside a temp folder" if agent == "codex" else
+           f"check that `{agent}` can run shell commands in this folder on its own")
+    return (f"{agent} could not start a process on this machine ({why}): an environment problem, not the task, so "
+            f"ccx did not move up to a pricier model or retry. Fix: {fix}; then `ccx resume {rid}`")
+
+
+PROGRESS_SEC = 30.0
+
+
+def _progress(record: dict, done: threading.Event) -> None:
+    """A foreground run says it is still working: one line on stderr every ~30 s (CCX_PROGRESS_SEC), so a person
+    at a terminal does not stare at nothing for minutes (2026-10-29 walkthrough: 265 s without a line). stdout,
+    which leads and scripts parse, is untouched."""
+    every = float(os.environ.get("CCX_PROGRESS_SEC") or PROGRESS_SEC)
+    t0 = time.time()
+    while not done.wait(every):
+        cur = record.get("current") or {}
+        what = (f"{cur.get('agent')} {cur.get('model')}/{cur.get('effort')}, attempt {int(cur.get('n') or 0) + 1}"
+                if cur else "between attempts")
+        try:
+            print(f"ccx: {record['run_id']} still working ({int(time.time() - t0)} s; {what}); "
+                  f"stop it with `ccx stop {record['run_id']}`", file=sys.stderr, flush=True)
+        except (OSError, ValueError):          # stderr closed: nothing to tell
+            return
 
 
 # review_failed: the same rule in the hint, `ccx ui`'s card (ui.py) and the agent-delegate skill (SKILL.md, README.zh.md)
@@ -967,6 +1037,14 @@ def _left_unchanged(p: Paths, record: dict) -> bool | None:
         return None
 
 
+def exit_ok(record: dict) -> bool:
+    """What decides `ccx run` / `resume`'s exit code (0 or 2), as before `ok` also said no for status blocked/failed:
+    exit codes of existing commands stay as they were."""
+    # review_issues as a final kind = the review found problems and no fix round ran: not a success either
+    return bool(record["ok"]) and record.get("kind") not in ("review_issues", "review_failed", "check_broken",
+                                                              "no_changes")
+
+
 def compact(record: dict) -> dict:
     """What the orchestrator actually reads. Keep it small."""
     r = record.get("result") or {}
@@ -975,9 +1053,9 @@ def compact(record: dict) -> dict:
     out = {
         "run_id": record["run_id"], "agent": record["to"], "tier": record["tier"],
         "model": f"{last.get('model')}/{last.get('effort')}",
-        # review_issues as a final kind = the review found problems and no fix round ran: not a success either
-        "ok": bool(record["ok"]) and record.get("kind") not in ("review_issues", "review_failed", "check_broken",
-                                                                 "no_changes"),
+        # a sub-agent that answered blocked/failed did not do the task: never ok, whatever its CLI exited with
+        # (2026-10-29 walkthrough: status=blocked with ok:true)
+        "ok": exit_ok(record) and r.get("status") not in ("blocked", "failed") and record.get("kind") != "env",
         "status": r.get("status") or ("running" if record.get("state") == "running" else "error"),
         "summary": r.get("summary") or record.get("error"),
         "files_changed": r.get("files_changed", []),
@@ -1025,6 +1103,8 @@ def compact(record: dict) -> dict:
         if record["kind"] == "needs_write":
             out["hint"] = ("read-only run: the sub-agent says it needs to edit files (see summary). If you agree, "
                            f"run it again with --mode write")
+        if record["kind"] == "env":
+            out["hint"] = env_hint(record)
         if record["kind"] in ("quota", "timeout", "user_stopped", "interrupted"):
             why = "ccx stop" if record["kind"] == "user_stopped" else record["kind"]
             out["hint"] = f"stopped by {why}; continue later with `ccx resume {record['run_id']}`"
@@ -1089,4 +1169,40 @@ def recap(record: dict, res: dict) -> str:
     return (f"ccx run {record['run_id']}: status={res.get('status')} ok={str(bool(ok)).lower()} "
             f"check={check} review={review}{lead} cost=~${usd:.4f}"
             + (f" ({len(cc['runs'])} runs + {cc.get('reviews', 0)} reviews)" if cc.get("ae_usd") is not None else "")
-            + f"; next: ccx show {record['run_id']}")
+            + f"; next: {_next(record)}")
+
+
+def _usd(record: dict, res: dict) -> float:
+    cc = record.get("cost_chain") or {}
+    if cc.get("ae_usd") is not None:
+        return cc["ae_usd"]
+    return sum(a.get("ae_usd") or 0 for a in record.get("attempts") or []) + ((res.get("review") or {}).get("usd") or 0)
+
+
+def _next(record: dict) -> str:
+    """The recap's next command: the login after an auth failure (the hint says so; `ccx show` did not help), the fix
+    and then a resume after an environment failure, else `ccx show`."""
+    if record.get("auth_problem"):
+        return f"run `{record.get('to')} login` (see hint)"
+    if record.get("kind") == "env":
+        return f"fix the environment (see hint), then ccx resume {record['run_id']}"
+    return f"ccx show {record['run_id']}"
+
+
+def human_summary(record: dict, res: dict) -> list[str]:
+    """Three plain lines after `ccx run`'s JSON when its stdout is a terminal (a person reading, not a lead or a
+    script): what came of it, what it cost, what to run next."""
+    rid, status = record["run_id"], res.get("status")
+    said = " ".join(str(res.get("summary") or "").split())
+    said = said if len(said) <= 160 else said[:157] + "..."
+    head = "done" if res.get("ok") else f"not done (status {status}" + (f", {res['kind']}" if res.get("kind") else "") + ")"
+    cost = f"Cost: ~${_usd(record, res):.4f} on {res.get('agent')} {res.get('model')}"
+    if res.get("escalated"):
+        cost += f" (escalated {res['escalated']})"
+    if res.get("ok"):
+        nxt = f"look at the result, then record your verdict: ccx verify {rid} --ok 1   (wrong: --ok 0)"
+    elif res.get("hint"):
+        nxt = res["hint"]
+    else:
+        nxt = f"ccx show {rid} --full"
+    return [f"Result: {head}" + (f": {said}" if said else ""), cost, f"Next: {nxt}"]

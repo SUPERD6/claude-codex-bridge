@@ -23,6 +23,39 @@ def _run(argv, timeout=20):
 
 HUB_FORMAT = 2   # bump when the hub's on-disk layout changes; `ccx init` migrates
 
+# how to log in, per CLI (setup.py says the same); a doctor FAIL row and the summary name it
+LOGIN_CMD = {"codex": "`codex login`", "claude": "`claude`, then /login", "gemini": "`gemini`, then sign in"}
+
+
+def login_line(out: str) -> str:
+    """The line of `<cli> login status` that says the state ("Not logged in" / "Logged in using ..."), not an
+    unrelated first line: codex-cli 0.164 can print a PATH-alias warning first (2026-10-29 walkthrough, CODEX_HOME
+    under a temp folder). Falls back to the first line."""
+    lines = [x.strip() for x in (out or "").splitlines() if x.strip()]
+    for x in lines:
+        if "logged in" in x.lower() or "logged out" in x.lower():
+            return x
+    return lines[0] if lines else ""
+
+
+def summary_lines(rows: list[tuple[str, str, str]]) -> list[str]:
+    """What to do, blocking items first: a CLI that is not logged in (its login command), a hub that is not set up
+    (`ccx init`), then the wiring `ccx sync` adds. A new user read only the last line, which named sync alone."""
+    todo = []
+    for name, state, _ in rows:
+        if state == "FAIL" and name.endswith(" login"):
+            agent = name.split()[0]
+            todo.append(f"log in to {agent}: run {LOGIN_CMD.get(agent, agent)}")
+    if any(state == "FAIL" and (name in ("hub", "memory snapshot")) for name, state, _ in rows):
+        todo.append("set up the hub: run `ccx init` (or `ccx setup`)")
+    if any(state == "missing" for _, state, _ in rows):
+        todo.append("missing items: run `ccx sync` (dry run) then `ccx sync --apply`")
+    if not todo:
+        return []
+    if len(todo) == 1 and todo[0].startswith("missing items"):
+        return ["", todo[0] + "."]                 # the one line it always was
+    return ["", "To do, in this order:"] + [f"  {i}. {t}" for i, t in enumerate(todo, 1)]
+
 # what to add to ~/.codex/config.toml so a Codex lead can run `ccx run` (codex-cli 0.164 `exec --help`, 2026-10-24)
 CODEX_LEAD_FIX = ('[sandbox_workspace_write]\nwritable_roots = ["{hub}"]\nnetwork_access = true\n'
                   '(or start Codex with --add-dir "{hub}")')
@@ -247,7 +280,8 @@ def config_row(p: Paths) -> tuple[str, str]:
     return "ok", f"hub {p.hub}{env}; " + (", ".join(str(f) for f in files) or "no config file (defaults)")
 
 
-def doctor(p: Paths) -> bool:
+def doctor(p: Paths, codex_lead: bool = False) -> bool:
+    """The table and what to do. codex_lead: the 'Codex as lead' row in full (else a WARN there is one info line)."""
     rows: list[tuple[str, str, str]] = []
 
     def add(name, state, detail=""):
@@ -292,18 +326,21 @@ def doctor(p: Paths) -> bool:
             if isinstance(js, dict) and "loggedIn" in js:
                 ok_ = bool(js["loggedIn"])
                 add(f"{agent} login", "ok" if ok_ else "FAIL",
-                    (js.get("authMethod") or "") if ok_ else f"not logged in: run `{agent}` once and log in")
+                    (js.get("authMethod") or "") if ok_ else
+                    f"not logged in -> run {LOGIN_CMD.get(agent, agent)}")
                 continue
         except ValueError:
             pass
-        low = out.lower()
+        line = login_line(out)
+        low = line.lower()
         if rc == 0 and "not" not in low:
             state = "ok"
         elif rc != 0 or "not logged" in low or "logged out" in low:
             state = "FAIL"
         else:
             state = "Unknown"
-        add(f"{agent} login", state, out.splitlines()[0][:90] if out else "")
+        add(f"{agent} login", state, line[:90] + (f" -> run {LOGIN_CMD.get(agent, agent)}"
+                                                    if state == "FAIL" else ""))
 
     add("hub", "ok" if p.hub.exists() else "FAIL", str(p.hub))
     vf = p.state / "version.json"
@@ -371,8 +408,12 @@ def doctor(p: Paths) -> bool:
     from . import hooktimeout
     add("hook timeouts", *hooktimeout.doctor_row(p))
     if find_bin("codex"):
-        add("Codex as lead (sandbox)", *codex_lead_sandbox(ct.read_text(encoding="utf-8") if ct.exists() else "", p.hub,
-                                                           rule=codex_rule_allows(codex_home() / "rules")))
+        lead = codex_lead_row(p, ct)
+        if lead[0] == "WARN" and not codex_lead:
+            # only matters when Codex leads: one line here, the details (and the full-access advice) on request
+            lead = ("info", "only matters if Codex leads (hands work to Claude): `ccx doctor --codex-lead` shows "
+                    "whether its sandbox lets it and how to set it up")
+        add("Codex as lead (sandbox)", *lead)
 
     skill = "agent-delegate"
     for tool, d in (("claude", claude_home() / "skills"), ("codex", codex_home() / "skills")):
@@ -385,6 +426,13 @@ def doctor(p: Paths) -> bool:
     for name, state, detail in rows:
         print(f"{name.ljust(w)}  {state:<8} {detail}")
     bad = [r for r in rows if r[1] in ("FAIL",)]
-    if any(r[1] == "missing" for r in rows):
-        print("\nmissing items: run `ccx sync` (dry run) then `ccx sync --apply`.")
+    for x in summary_lines(rows):
+        print(x)
     return not bad
+
+
+def codex_lead_row(p: Paths, ct=None) -> tuple[str, str]:
+    """The full 'Codex as lead (sandbox)' verdict (`ccx doctor --codex-lead`)."""
+    ct = ct or codex_home() / "config.toml"
+    return codex_lead_sandbox(ct.read_text(encoding="utf-8") if ct.exists() else "", p.hub,
+                              rule=codex_rule_allows(codex_home() / "rules"))
