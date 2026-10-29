@@ -48,6 +48,7 @@ import argparse
 import json
 import os
 import random
+import shutil
 import re
 import subprocess
 import sys
@@ -749,7 +750,10 @@ def run_unit(u: dict, a, mats: dict, work: Path) -> dict:
         if stream.exists():
             keep = OUT / "streams" / str(u.get("tag") or "untagged")
             keep.mkdir(parents=True, exist_ok=True)
-            os.replace(stream, keep / stream.name)
+            try:  # shutil.move: the work dir (temp) and the repo can be on different drives (os.replace cannot)
+                shutil.move(str(stream), str(keep / stream.name))
+            except OSError as e:
+                row["audit"].setdefault("problems", []).append(f"stream not kept: {type(e).__name__}: {e}"[:200])
         row["leftovers"] = PF.after_unit(iso, before, job, row["audit"].get("session_ids") or [], keep_repo=False)
         if spec_of(b) and getattr(a, "ext_venv", None):
             # the Python that scores every unit is shared: something installed into it changes later units

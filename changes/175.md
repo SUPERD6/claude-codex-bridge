@@ -1,0 +1,1 @@
+- eval (hold-out, batch): a finished unit's stream is moved with shutil.move, so a work dir on another drive than the repo (temp on C:, repo on D:) no longer fails every unit with WinError 17; a failed move is recorded in the audit instead of losing the unit.
