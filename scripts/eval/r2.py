@@ -395,7 +395,7 @@ def queue_unit(u: dict, a, work: Path) -> dict:
     killed_at, states = None, {}
     while proc.poll() is None and time.time() - t0 < a.timeout:
         time.sleep(3)
-        ls, _, _, _ = ccx(["q", "--cwd", str(repo), "ls"], repo, hub, 60)
+        ls, _, _, _ = ccx(["q", "--cwd", str(repo), "ls", "--long"], repo, hub, 60)
         items = ls.get("items") if isinstance(ls, dict) else ls
         states = {str(i.get("title")): i.get("status") for i in (items or []) if isinstance(i, dict)}
         if any(s == "done" for s in states.values()) and any(s != "done" for s in states.values()):
@@ -408,7 +408,7 @@ def queue_unit(u: dict, a, work: Path) -> dict:
     proc.wait(timeout=60)
     before = dict(states)
     res, rc, wall, err = ccx(["q", "--cwd", str(repo), "resume", "--from", "user"], repo, hub, a.timeout)
-    ls, _, _, _ = ccx(["q", "--cwd", str(repo), "ls"], repo, hub, 60)
+    ls, _, _, _ = ccx(["q", "--cwd", str(repo), "ls", "--long"], repo, hub, 60)
     items = ls.get("items") if isinstance(ls, dict) else ls
     sc = score(repo, QUEUE)
     cost = hub_cost(hub)

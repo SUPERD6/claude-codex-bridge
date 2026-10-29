@@ -262,9 +262,19 @@ def load(root: Path) -> dict:
     return {"items": items, "order": order, "budget_usd": meta.get("budget_usd"), "meta": meta}
 
 
+def norm_id(x, items: dict | None = None) -> str:
+    """An item id as people type it: `1` (or ` q1 `) means q1. With items given, a bare number that is not an id
+    of its own is read as q<n>; without them, always."""
+    s = str(x).strip()
+    if s.isdigit() and (items is None or s not in items):
+        return "q" + s
+    return s
+
+
 def add(root: Path, title: str, brief: str, deps=(), parent: str | None = None, **extra) -> dict:
     with _lock(root):
         q = load(root)
+        deps = [norm_id(d, q["items"]) for d in deps]           # `--dep 1` means q1
         n = 1 + max((int(i[1:]) for i in q["items"] if i[1:].isdigit()), default=0)
         depth = (q["items"][parent]["depth"] + 1) if parent in q["items"] else 0
         unknown = [d for d in deps if d not in q["items"]]

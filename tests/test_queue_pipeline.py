@@ -24,7 +24,7 @@ class QEnv(AdapterEnv):
         return self.q("add", "--plan", str(f))
 
     def items(self):
-        return {i["id"]: i for i in self.q("ls")["items"]}
+        return {i["id"]: i for i in self.q("ls", "--long")["items"]}
 
     def git_init(self):
         for args in (["init", "-q"], ["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty",
@@ -47,7 +47,7 @@ class TestPlan(QEnv):
         self.assertEqual(items[ids["wire"]]["files"], ["loader.py"])
         self.assertTrue(items[ids["api"]]["brief"].startswith("define the api."))  # built from the title
         self.assertIn("cache/api.py", items[ids["api"]]["brief"])
-        self.assertEqual(self.q("ls")["ready"], [ids["api"]])
+        self.assertEqual(self.q("ls", "--long")["ready"], [ids["api"]])
         res = self.q("run")["results"]
         self.assertEqual([r["id"] for r in res], [ids["api"], ids["disk"], ids["wire"]])
 
@@ -60,13 +60,13 @@ class TestPlan(QEnv):
     def test_unknown_dependency_is_an_error_and_adds_nothing(self):
         msg = self.plan({"tasks": [{"id": "a", "brief": "x", "deps": ["nope"]}]}, code=3)
         self.assertIn("a -> nope", msg)
-        self.assertEqual(self.q("ls")["items"], [])
+        self.assertEqual(self.q("ls", "--long")["items"], [])
 
     def test_cycle_is_an_error(self):
         msg = self.plan({"pieces": [{"id": "a", "title": "a", "depends_on": ["b"]},
                                     {"id": "b", "title": "b", "depends_on": ["a"]}]}, code=3)
         self.assertIn("cycle", msg)
-        self.assertEqual(self.q("ls")["items"], [])
+        self.assertEqual(self.q("ls", "--long")["items"], [])
 
     def test_a_plan_may_wait_on_an_item_already_queued(self):
         first = self.q("add", "x", "--brief", "look at x", "--minutes", "5")

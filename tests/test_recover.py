@@ -199,7 +199,7 @@ class TestKilledQueue(RecoverEnv):
         self.assertEqual(len(self.rows(rec["run_id"])), 1)             # its spend reached the ledger
         killed = old["attempts"][-1]["ae_usd"]
         self.assertGreater(killed, 0)
-        item = json.loads(self.ccx("q", "ls").stdout)["items"][0]
+        item = json.loads(self.ccx("q", "ls", "--long").stdout)["items"][0]
         self.assertEqual(item["status"], "done")
         self.assertGreaterEqual(item["cost_usd"], killed)               # the queue counts it too
 
