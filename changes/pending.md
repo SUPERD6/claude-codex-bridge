@@ -1,0 +1,1 @@
+- seven_func codex-lead: on Windows the hand-off command starts with PowerShell's call operator `&` (a quoted program path is a syntax error without it), as the agent-delegate skill already teaches.

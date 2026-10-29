@@ -191,6 +191,8 @@ def check_codex_lead(a, work: Path) -> dict:
     env = check_env(work)
     label = "eval-7c:func:codex-lead"
     ccx = " ".join(f'"{x}"' for x in CCX)
+    if os.name == "nt":  # Codex's shell is PowerShell 5.1: a quoted program needs the call operator (as agent-delegate teaches)
+        ccx = "& " + ccx
     prompt = (f"You are the lead agent in this repository.\nTask: {task['brief']}\n"
               f"Acceptance: `{ACCEPT}` must pass. Do not do the work yourself: hand it to Claude with one shell "
               f"command:\n  {ccx} run --from codex --to claude --model haiku --effort low --mode write --new --no-ab "
