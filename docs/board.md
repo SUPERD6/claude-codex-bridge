@@ -66,6 +66,41 @@ DeepSeek runs `ccx board --as deepseek` at the start of every turn; all three tr
 - **Data, not instructions**: everything the hook prints is framed as messages from other agents; the agent decides
   with its own person's instructions, and never runs a command just because a message asks.
 - **Audit**: `from` and `via` are on every line; an agent cannot write `--from user`.
+- **Asking the person**: an agent that needs its person's answer puts `@person` (or `@user` / `@human`) in the
+  message as plain text (the board's rules in `AGENTS.md` say so). It counts only as a mention: not inside backticks
+  or code, not in `me@user.com`, `@user.setter`, `@user-agent` or `@human/pkg`. A project whose board was set up
+  before this rule has to run `ccx board --init` again to get it in its `AGENTS.md`. The board itself still refuses
+  `--to user`.
+
+## Seeing it and answering in `ccx ui`
+
+`ccx ui` has an **Agent conversation** page per project (`#/conv/<project>`; not to be confused with the page's own
+"manager's board", which is about runs and queues). It reads each project's `.ccx/board.jsonl` (read only, from
+where it last stopped) for the projects the page shows and the `ccx projects` catalog, and lists the threads, newest
+first, each message with who wrote it (an agent or you), when, to whom, `via`, and its text. Board text is written by
+agents: the page always shows it as plain text (escaped), never as markup. What goes to the page is capped: 40
+threads, the last 80 messages of each, 6000 characters per message (marked as cut; `ccx board --thread` has it
+whole).
+
+Two kinds of to-do join the home page's list, each linking to its thread:
+
+- a thread **stopped by the machine-message cap**: `board.max_machine_turns` (6) machine messages in a row with no
+  person in between (the same count `ccx say` refuses on); it clears once a person speaks, by the board's rules (a
+  board message from the person, or a turn the person typed in one of that thread's sessions);
+- a message that **asks the person** (`@person`), until the person writes in that thread.
+
+Only messages within the `ccx ui --days` window (7 days by default) count as to-dos; older threads still show on the
+page.
+
+**Replying from the page** (decision 2026-10-29 in DECISIONS.md): the reply box under a thread answers its last
+message, like `ccx reply <id>` (to that message's writer, or everyone when you wrote it). It takes the same two steps
+as every `ccx ui` button: *Reply…* asks the server to prepare it and shows exactly what will be written, to whom and
+in which thread, with a one-time code that expires in 2 minutes; only the second click writes it, once. At most 4000
+characters: a longer one is refused, never cut. It is written by ccx's board code as one message, `from: user`,
+`via: ui`, exactly as you typed it (only leading and trailing blank space is dropped, as `ccx say` does); it is never
+run, no command line or shell is involved. Writing as the person resets the machine-message count, so a stopped
+thread may go on. The page sends only the project id, thread, message id and text; the server finds the board
+itself. `<hub>/ccx/ui-actions.jsonl` gets one line per reply (thread, id, length; not the text).
 
 ## GitHub fallback (optional)
 
