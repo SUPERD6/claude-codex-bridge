@@ -115,7 +115,7 @@ def test_every_endpoint_returns_the_demo(server):
     whats = {pc["run_id"]: (pc["status"], (pc.get("act") or {}).get("what")) for t in shop["tasks"]
              for pc in walk(t["pieces"])}
     assert whats == {"demo-r-ok": ("done", None), "demo-r-review": ("decide", "a_review_failed"),
-                     "demo-r-running": ("run", None), "demo-r-env": ("decide", "a_failed")}
+                     "demo-r-running": ("run", None), "demo-r-env": ("decide", "a_env")}
     docs = project(d, demo.DOCS)
     q = next(t for t in docs["tasks"] if t["kind"] == "queue")
     assert [pc["status"] for pc in q["pieces"]] == ["done", "review", "queued"]   # one piece not merged yet
@@ -244,11 +244,11 @@ def test_demo_shows_but_never_runs_a_command_that_starts_an_agent(server):
     srv, base, p = server
     d = json.loads(get(srv, "/api/data")[2])
     shop = project(d, demo.SHOP)
-    t = next(t for t in shop["tasks"] if any(pc["run_id"] == "demo-r-env" for pc in walk(t["pieces"])))
-    pc = next(pc for pc in walk(t["pieces"]) if pc["run_id"] == "demo-r-env")
-    i = next(i for i, b in enumerate(pc["act"]["buttons"]) if b["label"] == "b_retry")
+    t = next(t for t in shop["tasks"] if any(pc["run_id"] == "demo-r-review" for pc in walk(t["pieces"])))
+    pc = next(pc for pc in walk(t["pieces"]) if pc["run_id"] == "demo-r-review")
+    i = next(i for i, b in enumerate(pc["act"]["buttons"]) if b["label"] == "b_one_more")   # one more round starts an agent
     code, prep = post(srv, "/api/act/prepare", {"project": shop["id"], "task": t["id"], "piece": pc["id"], "btn": f"a{i}"})
-    assert code == 200 and prep["demo"] and prep["nonce"] is None and "ccx resume demo-r-env" in prep["cmd"]
+    assert code == 200 and prep["demo"] and prep["nonce"] is None and "ccx resume demo-r-review" in prep["cmd"]
     assert len(list(p.runs.iterdir())) == 6                                       # nothing was started
 
 
