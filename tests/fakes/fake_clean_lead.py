@@ -136,9 +136,15 @@ if "--disable-slash-commands" not in argv and "Skill" in (opt("--tools") or "").
     init["skills"] = found
     init["slash_commands"] = ["/" + x for x in found]
 answer = ("OTHER: " + ", ".join(seen)) if seen else f"PROJECT-ONLY {word}".strip()
-for ev in [*events, init,
-           {"type": "assistant", "message": {"id": "m1", "content": [{"type": "text", "text": answer}],
+# FAKE_SPLIT_ANSWER: the answer in a first message, then a Read and a last message that alone is the result (as
+# haiku did on 2026-10-28)
+last = "The Read was denied, so there is nothing to append." if os.environ.get("FAKE_SPLIT_ANSWER") else answer
+split = [{"type": "assistant", "message": {"id": "m0", "content": [{"type": "text", "text": answer},
+                                                                   {"type": "tool_use", "name": "Read", "input": {}}],
+                                           "usage": {"input_tokens": 1, "output_tokens": 1}}}] if last != answer else []
+for ev in [*events, init, *split,
+           {"type": "assistant", "message": {"id": "m1", "content": [{"type": "text", "text": last}],
                                              "usage": {"input_tokens": 1, "output_tokens": 1}}},
-           {"type": "result", "subtype": "success", "is_error": False, "result": answer, "session_id": sid,
+           {"type": "result", "subtype": "success", "is_error": False, "result": last, "session_id": sid,
             "total_cost_usd": 0.0, "usage": {"input_tokens": 1, "output_tokens": 1}}]:
     print(json.dumps(ev), flush=True)
