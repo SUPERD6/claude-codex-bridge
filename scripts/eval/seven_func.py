@@ -224,8 +224,9 @@ def check_codex_lead(a, work: Path) -> dict:
                          "output": str(it.get("aggregated_output"))[-300:]})
         elif ev.get("type") == "item.completed" and it.get("type") == "agent_message":
             said.append(str(it.get("text"))[:300])
-    return {"check": "codex-lead", "sandbox": a.lead_sandbox, "ok": sc["ok"] and any(r.get("to") == "claude" and r.get("caller") == "codex"
-                                                            for r in rows),
+    sub = any(r.get("to") == "claude" and r.get("caller") == "codex" for r in rows)
+    # a run that wrote into the person's hub fails the check even when another one used the check's own hub
+    return {"check": "codex-lead", "sandbox": a.lead_sandbox, "ok": sc["ok"] and sub and leaked == 0,
             "hidden_ok": sc["ok"], "pytest": sc["pytest"], "rc": rc, "wall_s": round(time.time() - t0, 1),
             "hub": str(hub_of(env)), "rows_in_default_hub": leaked,
             "sub_runs": [{k: r.get(k) for k in ("run_id", "caller", "to", "rungs", "ok", "ae_usd", "seconds")}
@@ -264,7 +265,10 @@ def check_resume(a, work: Path) -> dict:
     prev = next((r for r in killed_recs if r.get("run_id") == from_id), {})
     new = run_record(hub, res.get("run_id"))
     # the killed run's session continued (None: it was killed before its session began, so ccx restarts the step)
-    same_session = new.get("session_id") == prev["session_id"] if prev.get("session_id") else None
+    # the id the resumed CLI itself reported (the record's top-level id is copied forward from the killed run, so
+    # it would match even when the CLI never started a session)
+    reported = next((t.get("session_id") for t in reversed(new.get("attempts") or []) if t.get("session_id")), None)
+    same_session = (reported is not None and reported == prev["session_id"]) if prev.get("session_id") else None
     inherited = {"label": new.get("label") == label, "check": new.get("check_cmd") == ACCEPT,
                  "review": new.get("review_mode") == "off"}
     mechanism = {

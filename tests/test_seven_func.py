@@ -48,9 +48,13 @@ FAKE_RESUME_CCX = textwrap.dedent('''
     def save(rec):
         (runs / rec["run_id"]).mkdir(parents=True, exist_ok=True)
         (runs / rec["run_id"] / "run.json").write_text(json.dumps(rec), encoding="utf-8")
+    # FAKE_RESUME_MODE: same (the session goes on), restart (killed before its session began), silent (the
+    # resumed CLI reports no session: ccx's record still carries the old id forward)
+    mode = os.environ.get("FAKE_RESUME_MODE", "same")
     if args[0] == "run":
         save({"run_id": "r-killed", "task": opt("--task"), "step": 1, "label": opt("--label"),
-              "check_cmd": opt("--check"), "review_mode": opt("--review"), "session_id": "th-1", "ok": False,
+              "check_cmd": opt("--check"), "review_mode": opt("--review"),
+              "session_id": None if mode == "restart" else "th-1", "attempts": [], "ok": False,
               "state": "running", "ts": time.time()})
         time.sleep(120)
     elif args[:2] == ["task", "status"]:
@@ -58,11 +62,14 @@ FAKE_RESUME_CCX = textwrap.dedent('''
         print("step 1 doing")
     elif args[:2] == ["task", "resume"]:
         prev = json.loads((runs / "r-killed" / "run.json").read_text(encoding="utf-8"))
-        save({**prev, "run_id": "r-resumed", "resumed_from": "r-killed", "ok": True, "state": "done",
-              "ts": time.time()})
+        reported = {"same": "th-1", "restart": "th-2", "silent": None}[mode]
+        save({**prev, "run_id": "r-resumed", "resumed_from": None if mode == "restart" else "r-killed",
+              "session_id": reported or prev["session_id"], "attempts": [{"session_id": reported}],
+              "ok": True, "state": "done", "ts": time.time()})
         for name, text in json.loads(Path(files).read_text(encoding="utf-8")).items():
             Path(name).write_text(text, encoding="utf-8")
-        print(json.dumps({"resumed": "r-killed", "run_id": "r-resumed", "ok": True, "status": "done"}))
+        how = "restarted" if mode == "restart" else "resumed"
+        print(json.dumps({how: "r-killed", "run_id": "r-resumed", "ok": True, "status": "done"}))
 ''')
 
 class TestHelpers(unittest.TestCase):
@@ -143,12 +150,12 @@ class TestIsolation(unittest.TestCase):
 
 @unittest.skipUnless(HAS_PYTEST, "pytest is needed to score the task")
 class TestResumeCheck(unittest.TestCase):
-    def check(self, files: dict) -> tuple[dict, Path]:
+    def check(self, files: dict, mode: str = "same") -> tuple[dict, Path]:
         tmp = Path(tempfile.mkdtemp())
         fake, sol = tmp / "fake_ccx.py", tmp / "files.json"
         fake.write_text(FAKE_RESUME_CCX, encoding="utf-8")
         sol.write_text(json.dumps(files), encoding="utf-8")
-        with mock.patch.object(seven_func, "CCX", [sys.executable, str(fake), str(sol)]):
+        with mock.patch.object(seven_func, "CCX", [sys.executable, str(fake), str(sol)]),                 mock.patch.dict(os.environ, {"FAKE_RESUME_MODE": mode}):
             return seven_func.check_resume(SimpleNamespace(kill_after=2.0), tmp / "work"), tmp / "work"
 
     def test_resume_mechanism_and_task(self):
@@ -168,16 +175,37 @@ class TestResumeCheck(unittest.TestCase):
         r, _ = self.check(sol)
         self.assertEqual((r["ok"], r["mechanism_ok"], r["task_ok"]), (True, True, False), r)
 
-    def test_visible_test_covers_low_stock(self):
-        sol = dict(seven_func.by_id("inventory")["solution"])
-        sol["inventory/report.py"] = sol["inventory/report.py"].replace("[i.sku for i in sorted(", "list(sorted(")
-        repo = seven_func.make_repo({**seven_func.by_id("inventory"), "visible": seven_func.RESUME_VISIBLE},
+    def test_restart_of_a_run_killed_before_its_session(self):
+        # killed before its session began: ccx restarts the step in a new session, keeping label, check and review
+        r, _ = self.check(seven_func.by_id("inventory")["solution"], mode="restart")
+        self.assertEqual((r["ok"], r["mechanism_ok"], r["same_session"]), (True, True, None), r)
+        self.assertEqual(r["inherited"], {"label": True, "check": True, "review": True})
+
+    def test_session_must_be_reported_by_the_cli(self):
+        # the record's top-level id is copied forward; a resumed CLI that reported no session did not continue it
+        r, _ = self.check(seven_func.by_id("inventory")["solution"], mode="silent")
+        self.assertEqual((r["mechanism_ok"], r["same_session"], r["mechanism"]["same_session"]), (False, False, False))
+
+    def visible(self, visible: str, report: str) -> subprocess.CompletedProcess:
+        sol = {**seven_func.by_id("inventory")["solution"], "inventory/report.py": report}
+        repo = seven_func.make_repo({**seven_func.by_id("inventory"), "visible": visible},
                                     Path(tempfile.mkdtemp()) / "repo")
         for name, text in sol.items():
             (repo / name).write_text(text, encoding="utf-8")
-        r = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "test_task.py"],
-                           cwd=repo, capture_output=True, text=True)
-        self.assertNotEqual(r.returncode, 0, r.stdout)          # low_stock returning items fails ccx's own check
+        return subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "test_task.py"],
+                              cwd=repo, capture_output=True, text=True)
+
+    def test_visible_test_covers_low_stock(self):
+        good = seven_func.by_id("inventory")["solution"]["inventory/report.py"]
+        # valid code that returns the Items instead of their SKUs
+        items = good.replace("return [i.sku for i in sorted(low, key=lambda i: (i.qty - i.reorder_at, i.sku))]",
+                             "return sorted(low, key=lambda i: (i.qty - i.reorder_at, i.sku))")
+        self.assertNotEqual(items, good)
+        new = self.visible(seven_func.RESUME_VISIBLE, items)
+        self.assertEqual(new.returncode, 1, new.stdout)                 # a failing test, not a collection error
+        self.assertIn("test_low_stock_returns_skus", new.stdout)
+        old = self.visible(seven_func.by_id("inventory")["visible"], items)
+        self.assertEqual(old.returncode, 0, old.stdout)                 # the shared task's visible test misses it
 
 if __name__ == "__main__":
     unittest.main()
