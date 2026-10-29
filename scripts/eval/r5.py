@@ -18,8 +18,8 @@ so doing it takes many requests. Arms (the lead is a fresh headless Claude Code,
            unit's own hub has `[defaults] namecheck = "fail"` in its tiers.toml (asserted from the hub before the
            lead starts), so a sub-agent's change that uses an undefined name fails its run like a failed --check;
            ccx's own default stays "warn". Every row records the hub's mode (`namecheck_mode`) and each builder
-           run's own (`ccx_namecheck`: mode, hits), counted per arm in the summary (`namecheck`), so ccx2 vs
-           ccx2nc measures the change before / after
+           run's own (`ccx_namecheck`: mode, hits, climbs past a hit), counted per arm in the summary
+           (`namecheck`), so ccx2 vs ccx2nc measures the change before / after
   builtin2 opt-in (--arms builtin2): builtin's Agent-tool hand-off with ccx2's brief and acceptance wording, word
            for word (the worker reports check / files_changed / diffstat / status); not in the default schedule
   builtin2r opt-in (--arms builtin2r): builtin2 whose worker's own prompt also carries ccx's KEEP_TESTS and WIRING
@@ -698,18 +698,22 @@ def namecheck_stats(rows: list[dict]) -> dict | None:
     many builder runs the check saw, how many had hits and how many of those it failed (mode fail). None: no row
     says."""
     modes: dict[str, int] = {}
-    runs = hit = failed = 0
+    runs = hit = failed = climbs = 0
     for r in rows:
         if r.get("namecheck_mode"):
             modes[r["namecheck_mode"]] = modes.get(r["namecheck_mode"], 0) + 1
         for x in r.get("ccx_namecheck") or []:
             runs += 1
+            climbs += int(x.get("climbs") or 0)
             if x.get("hits"):
                 hit += 1
                 failed += x.get("mode") == "fail"
     if not modes and not runs:
         return None
-    return {"modes": modes, "runs": runs, "runs_with_hits": hit, "runs_failed_by_it": failed}
+    # runs_with_hits / runs_failed_by_it: the run's last attempt; climbs_by_it: earlier attempts it failed and ccx
+    # climbed past (the extra escalation fail mode costs; compare with ccx_routes / rungs per arm)
+    return {"modes": modes, "runs": runs, "runs_with_hits": hit, "runs_failed_by_it": failed,
+            "climbs_by_it": climbs}
 
 
 PHASES = ("sub_s", "check_s", "review_s", "fix_s", "overlap_s", "lead_wait_s", "lead_active_s")
@@ -856,7 +860,10 @@ def hub_namecheck(hub: Path) -> str:
 
 def ccx_namecheck(hub: Path, run_ids: list) -> list[dict]:
     """The namecheck each builder run of a unit actually ran with (reviews left out; its record's `namecheck`:
-    mode and number of hits; a run without one, a read-only or `off` run, is left out)."""
+    mode and number of hits on the last attempt; a run without one, a read-only or `off` run, is left out).
+    `climbs`: attempts whose namecheck hit failed them in fail mode with a rung left, so ccx climbed (the
+    record's last `namecheck` does not show these: a clean next rung overwrites it). `final_fail`: the run ended
+    on a namecheck failure. `attempts_hit`: attempts whose namecheck had hits (records before r6a: None)."""
     out = []
     for rid in run_ids or []:
         rec = r2.record(hub, rid)
@@ -864,7 +871,14 @@ def ccx_namecheck(hub: Path, run_ids: list) -> list[dict]:
             continue
         nc = rec.get("namecheck")
         if isinstance(nc, dict):
-            out.append({"run": rid, "mode": nc.get("mode"), "hits": len(nc.get("hits") or [])})
+            att = [a for a in rec.get("attempts") or [] if isinstance(a, dict)]
+            per = [a["namecheck"] for a in att if isinstance(a.get("namecheck"), dict)]
+            chk = rec.get("check") if isinstance(rec.get("check"), dict) else {}
+            out.append({"run": rid, "mode": nc.get("mode"), "hits": len(nc.get("hits") or []),
+                        "climbs": sum(a.get("kind") == "check_failed" and a.get("check_reason") == "namecheck"
+                                      for a in att),
+                        "final_fail": chk.get("reason") == "namecheck",
+                        "attempts_hit": sum(bool(x.get("hits")) for x in per) if per else None})
     return out
 
 
@@ -969,6 +983,20 @@ def hub_rows(hub: Path) -> list[dict]:
     return r2.ledger.rows(r2.Paths(hub))
 
 
+def ccx_check_reason(hub: Path, run_ids: list) -> str | None:
+    """"namecheck" when the unit's last sub-agent run's check is namecheck's stand-in (mode fail: the acceptance
+    command did not run), else None. Such a False is not "the --check caught it": check_passed_on_fail leaves
+    it out."""
+    last = None
+    for rid in run_ids or []:
+        rec = r2.record(hub, rid)
+        if str(rec.get("label") or "").startswith("review:"):
+            continue
+        if isinstance(rec.get("check"), dict) and "passed" in rec["check"]:
+            last = rec["check"].get("reason") or None
+    return last
+
+
 def ccx_check_passed(hub: Path, run_ids: list) -> bool | None:
     """Whether ccx's --check passed on the unit's last sub-agent run (reviews left out); None: no run had a check.
     Read on a failed unit, it says whether the check let a wrong result through."""
@@ -1056,6 +1084,8 @@ def bookkeeping(row: dict, arm: str, hub: Path, task: dict) -> None:
             row.update(tier_fields(arm, hub, task))
         if row.get("ccx_run_ids"):
             row["ccx_check_passed"] = ccx_check_passed(hub, row["ccx_run_ids"])
+            if ccx_check_reason(hub, row["ccx_run_ids"]):
+                row["ccx_check_reason"] = ccx_check_reason(hub, row["ccx_run_ids"])
             row["ccx_routes"] = ccx_routes(hub, row["ccx_run_ids"])
             row["ccx_namecheck"] = ccx_namecheck(hub, row["ccx_run_ids"])
     except Exception as e:  # noqa: BLE001 — metadata only; the score below still runs
@@ -1961,7 +1991,9 @@ def tier_summary(rows: list[dict]) -> dict | None:
     out = {}
     for arm in arm_order(arm_of(r) for r in rows):
         rs = [r for r in rows if arm_of(r) == arm]
-        fails = [r for r in rs if not r.get("ok") and r.get("ccx_check_passed") is not None]
+        fails = [r for r in rs if not r.get("ok") and r.get("ccx_check_passed") is not None
+                 and r.get("ccx_check_reason") != "namecheck"]   # namecheck's stand-in: the command never ran
+        nc_fails = sum(not r.get("ok") and r.get("ccx_check_reason") == "namecheck" for r in rs)
         fol = [r["followed_plan"] for r in rs if r.get("followed_plan") is not None]
         routes = [x.get("source") for r in rs for x in r.get("ccx_routes") or []]
         out[arm] = {**wall_stats(rs), "right": f"{sum(bool(r.get('ok')) for r in rs)}/{len(rs)}",
@@ -1979,6 +2011,8 @@ def tier_summary(rows: list[dict]) -> dict | None:
                     "followed_plan": f"{sum(fol)}/{len(fol)}" if fol else None,
                     "check_passed_on_fail": f"{sum(bool(r['ccx_check_passed']) for r in fails)}/{len(fails)}"
                     if fails else None}
+        if nc_fails:
+            out[arm]["failed_on_namecheck"] = nc_fails      # wrong units whose last check was namecheck's
         if any(r.get("may_be_wrong") for r in rs):
             out[arm]["may_be_wrong"] = True
     return out
@@ -2121,7 +2155,7 @@ def cmd_export(a) -> int:
             "env_clean", "fingerprint", "lead_model", "lead_effort", "lead_pick", "lead_b", "lead_band", "phases", "tier", "tier_plan", "ref_size",
             "actual_mode", "misband", "misband_overall", "followed_plan", "ccx_check_passed", "may_be_wrong",
             "ccx_routes", "bookkeeping_error", "lead_usage", "timeline", "skill_used", "skills_used",
-            "namecheck_mode", "ccx_namecheck")
+            "namecheck_mode", "ccx_namecheck", "ccx_check_reason")
     rows = tagged(read_jsonl(results_file(a.taskset)), a.tag)
     data = {"summary": summarize(rows, a.include_unclean),
             "rows": [r3.scrub({**{k: r[k] for k in keep if k in r},

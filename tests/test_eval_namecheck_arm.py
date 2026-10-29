@@ -181,6 +181,71 @@ def test_the_summary_counts_namecheck_per_arm():
             {"tag": "r5h", "round": 1, "task": "a", "arm": "ccx", "ok": True, "usd": 0.1, "wall_s": 10,
              "env_clean": True}]
     s = r5.summarize(rows)["arms"]
-    assert s["ccx2nc"]["namecheck"] == {"modes": {"fail": 1}, "runs": 2, "runs_with_hits": 1, "runs_failed_by_it": 1}
-    assert s["ccx2"]["namecheck"] == {"modes": {"warn": 1}, "runs": 1, "runs_with_hits": 1, "runs_failed_by_it": 0}
+    assert s["ccx2nc"]["namecheck"] == {"modes": {"fail": 1}, "runs": 2, "runs_with_hits": 1, "runs_failed_by_it": 1,
+                                        "climbs_by_it": 0}
+    assert s["ccx2"]["namecheck"] == {"modes": {"warn": 1}, "runs": 1, "runs_with_hits": 1, "runs_failed_by_it": 0,
+                                      "climbs_by_it": 0}
     assert "namecheck" not in s["ccx"]                                           # an old row: nothing to say
+
+
+def _rec(hub, rid, **kw):
+    d = hub / "ccx" / "runs" / rid
+    d.mkdir(parents=True)
+    (d / "run.json").write_text(json.dumps({"run_id": rid, **kw}), encoding="utf-8")
+
+
+def test_a_climb_past_a_namecheck_hit_is_counted_though_the_last_rung_is_clean(tmp_path):
+    hub = tmp_path / "h"
+    # fail mode: rung 1 hit, failed and climbed; rung 2 clean and its real check passed
+    _rec(hub, "a", label="L", namecheck={"mode": "fail", "hits": []}, check={"passed": True, "cmd": "pytest"},
+         attempts=[{"kind": "check_failed", "check_reason": "namecheck", "namecheck": {"mode": "fail", "hits": 1}},
+                   {"kind": "ok", "namecheck": {"mode": "fail", "hits": 0}}])
+    # a real check failure climbs too: not namecheck's
+    _rec(hub, "b", label="L", namecheck={"mode": "warn", "hits": []},
+         attempts=[{"kind": "check_failed"}, {"kind": "ok"}])
+    _rec(hub, "c", label="L", namecheck={"mode": "fail", "hits": ["x"]},
+         check={"passed": False, "reason": "namecheck"}, attempts=[{"kind": "check_failed"}])
+    got = {x["run"]: x for x in r5.ccx_namecheck(hub, ["a", "b", "c"])}
+    assert (got["a"]["hits"], got["a"]["climbs"], got["a"]["final_fail"], got["a"]["attempts_hit"]) == (0, 1, False, 1)
+    assert (got["b"]["climbs"], got["b"]["attempts_hit"]) == (0, None)        # a record before r6a: no per-attempt
+    assert (got["c"]["climbs"], got["c"]["final_fail"]) == (0, True)
+    row = {"tag": "r6a", "round": 1, "task": "a", "arm": "ccx2nc", "ok": True, "usd": 0.1, "wall_s": 10,
+           "env_clean": True, "namecheck_mode": "fail", "ccx_namecheck": list(got.values())}
+    nc = r5.summarize([row])["arms"]["ccx2nc"]["namecheck"]
+    assert (nc["climbs_by_it"], nc["runs_with_hits"], nc["runs_failed_by_it"]) == (1, 1, 1)
+
+
+def test_a_namecheck_stand_in_is_not_counted_as_the_check_letting_it_through(tmp_path):
+    hub = tmp_path / "h"
+    _rec(hub, "n", label="L", check={"passed": False, "reason": "namecheck"})
+    _rec(hub, "r", label="L", check={"passed": False})
+    assert r5.ccx_check_reason(hub, ["n"]) == "namecheck" and r5.ccx_check_reason(hub, ["n", "r"]) is None
+    # check_passed_on_fail (tier arms) leaves a namecheck stand-in out and counts it apart
+    base = {"tag": "r6a", "round": 1, "task": "a", "usd": 0.1, "wall_s": 10, "env_clean": True, "ok": False}
+    rows = [{**base, "arm": "balanced", "ccx_check_passed": False, "ccx_check_reason": "namecheck"},
+            {**base, "task": "b", "arm": "balanced", "ccx_check_passed": True}]
+    t = r5.tier_summary(rows)["balanced"]
+    assert (t["check_passed_on_fail"], t["failed_on_namecheck"]) == ("1/1", 1)
+    t = r5.tier_summary(rows[1:])["balanced"]
+    assert t["check_passed_on_fail"] == "1/1" and "failed_on_namecheck" not in t     # rows before r6a: as before
+
+
+def test_a_real_ccx_climb_past_a_namecheck_hit_marks_the_attempt(tmp_path):
+    """ccx itself: the in-loop namecheck failure keeps its reason on the attempt (the record's last namecheck is the
+    clean rung's)."""
+    hub, work = tmp_path / "hub", tmp_path / "w"
+    work.mkdir()
+    _git_repo(work)
+    env = {**_fake_env(tmp_path, hub), "FAKE_WRITE": f"{work / 'a.py'}={BAD}",
+           "FAKE_WRITE_RESUMED": f"{work / 'a.py'}=def f():\n    return 2\n"}
+    check = f'"{sys.executable}" -c "pass"'
+    r = subprocess.run([sys.executable, str(r5.ROOT / "ccx.py"), "run", "--to", "codex", "--tier", "T1", "--mode",
+                        "write", "--review", "off", "--namecheck", "fail", "--check", check, "add f to a.py"],
+                       cwd=work, env=env, capture_output=True, text=True, encoding="utf-8", timeout=300)
+    out = json.loads(r.stdout)
+    rec = json.loads((hub / "ccx" / "runs" / out["run_id"] / "run.json").read_text(encoding="utf-8"))
+    assert out["ok"] and rec["check"]["passed"] and rec["namecheck"]["hits"] == []
+    assert rec["attempts"][0]["check_reason"] == "namecheck" and rec["attempts"][0]["namecheck"]["hits"] == 1
+    assert rec["attempts"][-1]["namecheck"]["hits"] == 0 and "check_reason" not in rec["attempts"][-1]
+    x = r5.ccx_namecheck(hub, [out["run_id"]])[0]
+    assert (x["climbs"], x["final_fail"], x["hits"]) == (1, False, 0)

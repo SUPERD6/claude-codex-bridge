@@ -309,6 +309,15 @@ def test_leftovers_are_new_processes_that_name_the_unit():
     assert [p["pid"] for p in got] == [11, 12]
 
 
+
+def test_a_unit_does_not_claim_its_auto_sibling():
+    """r6a runs ccx2 and ccx2@auto-medium units of one task in one work dir: neither names the other's processes."""
+    assert not PF._has(PF._norm("/w/1-t-ccx2"), PF._norm("node /w/1-t-ccx2@auto-medium/x"))
+    assert not PF._has(PF._norm("eval-r5:r6a:1:t:ccx2"), PF._norm("--label eval-r5:r6a:1:t:ccx2@auto-medium"))
+    assert PF._has(PF._norm("/w/1-t-ccx2@auto-medium"), PF._norm("node /w/1-t-ccx2@auto-medium/x"))
+    assert PF._has(PF._norm("/w/1-t-ccx2"), PF._norm("node /w/1-t-ccx2/x"))
+
+
 def test_busy_ignores_this_run_and_its_detached_children():
     procs = [{"pid": 1, "ppid": 0, "name": "shell", "cmd": "bash"},
              {"pid": 2, "ppid": 1, "name": "python", "cmd": "python scripts/eval/r5.py run --tag me"},

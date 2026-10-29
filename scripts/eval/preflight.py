@@ -176,10 +176,11 @@ def _norm(s) -> str:
 
 
 def _has(marker: str, text: str) -> bool:
-    """`marker` in `text` as a whole path or label: /w/1-t-ccx matches /w/1-t-ccx/x but not /w/1-t-ccx2."""
+    """`marker` in `text` as a whole path or label: /w/1-t-ccx matches /w/1-t-ccx/x but not /w/1-t-ccx2, and
+    /w/1-t-ccx2 not /w/1-t-ccx2@auto-medium (an `<arm>@auto` unit of the same task, r6a)."""
     if not marker:
         return False
-    tail = "" if marker[-1] in "/:" else r"(?![A-Za-z0-9_.-])"     # "eval-r5:<tag>:" is a prefix on purpose
+    tail = "" if marker[-1] in "/:" else r"(?![A-Za-z0-9_.@-])"     # "eval-r5:<tag>:" is a prefix on purpose
     return re.search(re.escape(marker) + tail, text) is not None
 
 

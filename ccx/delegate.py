@@ -195,6 +195,8 @@ def _namecheck(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path) -> di
     nc = namecheck.for_run(req, cfg, p, record, cwd)
     if nc is not None:
         record["namecheck"] = nc
+        if record.get("attempts"):      # per attempt too: a later rung's run overwrites record["namecheck"]
+            record["attempts"][-1]["namecheck"] = {"mode": nc.get("mode"), "hits": len(nc.get("hits") or [])}
     return namecheck.as_check(nc, req.check) if nc and nc["mode"] == "fail" and nc["hits"] else None
 
 
@@ -758,6 +760,8 @@ def run(req: Request, p: Paths) -> dict:
                     bg_review = None
                 record["attempts"][-1]["kind"] = "check_failed"
                 record["attempts"][-1]["check_seconds"] = chk.get("seconds")   # record["check"] keeps only the last
+                if chk.get("reason"):           # "namecheck": mode fail stood in for the command, which did not run
+                    record["attempts"][-1]["check_reason"] = chk["reason"]
                 _write_record(run_dir, record)
                 summary = f"you said done, but `{chk['cmd']}` failed (exit {chk['exit']}):\n{chk['tail'][-400:]}"
                 if plan[i + 1]["agent"] == to and session:
