@@ -270,7 +270,7 @@ def cmd_stats(a) -> int:
         # what was spent comes first; a saving is a measurement only from `ccx trial`, else a labelled model estimate
         _out({"spend": {"sub_agents_usd": t["sub_ae"], "runs": t["runs"], "cost_per_success_usd": t["cps"]},
               "saving": {"usd": t["saving"], "kind": t["saving_kind"], "ci95": t["saving_ci95"],
-                         "upper_bound_usd": t.get("saving_upper"), "note": t.get("saving_note")},
+                         "note": t.get("saving_note")},
               "totals": t, "streams": [{k: v for k, v in x.items() if k not in ("agent", "role")}
                                                  for x in s["streams"] if x["events"]], "ab": s["ab"],
               "quota": s["quota"]})

@@ -77,11 +77,14 @@ measured or extrapolated.
   Subscriptions don't bill per token, so AE$ is the common yardstick. Against one real run it was 1.5% from
   Claude's own reported cost.
 - **Estimated saving per delegated run (a model, not measured):** the task-sized part of the sub-agent's tokens
-  (fresh input and output; not its cache reads and cache writes, which are its own start-up and re-reading, ~93k
-  tokens a run in round 2) at the lead model's price, minus what the sub-agent cost, minus the brief/review
+  (fresh input and output, minus its own start-up: its cache reads and cache writes, ~93k tokens a run in round 2,
+  and for Codex, which reports no cache writes, the ~20k tokens a run reads fresh before it touches the task, per
+  docs/research/2026-10-25-warm-lanes.md; Gemini is assumed to be the same) at the lead model's price, minus what the sub-agent cost, minus the brief/review
   overhead. Reported with a bootstrap 95% CI. Until 2026-10-29 all the sub-agent's tokens were priced at the lead's
   price; that put the demo at about $2.97 "saved" on $0.49 spent while the measured totals were about even, so it
-  is kept only as an upper bound (`saving_upper`). `ccx ui`, `ccx report` and `ccx stats --summary` show the spend
+  is kept only for comparison (`saving_old_model`, left out when a trial measured the saving). It is not an upper
+  bound: a lead with a long conversation re-reads its whole context on every request, so doing a task itself can
+  cost more than either figure. `ccx ui`, `ccx report` and `ccx stats --summary` show the spend
   first and this estimate after it, labelled. A `ccx trial` with enough tasks replaces it with a measured value.
 - **Measured A/B:** about 10% of tasks that would have been delegated are randomly handed back to the lead
   (`defaults.ab_self_rate`; 0 turns it off). Costs are compared at the same difficulty, which tests the estimate

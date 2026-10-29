@@ -3,6 +3,7 @@ lead's price and is never the headline; a write run without --check gets a one-l
 import json
 import os
 import re
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -26,9 +27,18 @@ class TestTaskSizedEstimate(ReportEnv):
         from ccx.report import task_sized
         u = {"input_tokens": 1200, "cache_write_tokens": 20000, "cached_input_tokens": 90000, "output_tokens": 300}
         self.assertEqual(task_sized(u), {"input_tokens": 1200, "output_tokens": 300})
+        self.assertEqual(task_sized(u, "claude"), {"input_tokens": 1200, "output_tokens": 300})  # start-up is cached
         self.assertEqual(task_sized({}), {"input_tokens": 0, "output_tokens": 0})
 
-    def test_saving_prices_only_the_task_sized_tokens_and_keeps_the_old_one_as_upper_bound(self):
+    def test_codex_start_up_read_fresh_is_not_task_sized(self):
+        # warm-lanes round 1: a Codex run that starts a session reads 20.5-21.6k tokens fresh for a tiny piece
+        from ccx.report import STARTUP_FRESH, task_sized
+        cold = {"input_tokens": 21000, "cached_input_tokens": 78000, "output_tokens": 800}
+        self.assertEqual(task_sized(cold, "codex"), {"input_tokens": 1000, "output_tokens": 800})
+        self.assertEqual(task_sized({"input_tokens": 3000, "output_tokens": 1}, "codex")["input_tokens"], 0)
+        self.assertEqual(task_sized(cold, "deepseek")["input_tokens"], 21000 - STARTUP_FRESH["codex"])  # unknown: like Codex
+
+    def test_saving_prices_only_the_task_sized_tokens_and_keeps_the_old_one_for_comparison(self):
         from ccx import learn
         from ccx.report import task_sized
         out = self.j("run", "--from", "claude", "--to", "codex", "--b", "4", "implement")
@@ -40,12 +50,13 @@ class TestTaskSizedEstimate(ReportEnv):
             from ccx.config import load_config
             lead = load_config(p).get("lead", {}).get("claude", "")
             over = learn.price_usd(p, "claude", lead, {"input_tokens": 1500 + 4000, "output_tokens": 400}) or 0.0
-            want = learn.price_usd(p, "claude", lead, task_sized(e["usage"])) - e["ae"] - over
+            want = learn.price_usd(p, "claude", lead, task_sized(e["usage"], "codex")) - e["ae"] - over
             upper = learn.price_usd(p, "claude", lead, e["usage"]) - e["ae"] - over
         self.assertEqual(t["saving_kind"], "model")
         self.assertAlmostEqual(t["saving"], round(want, 4), places=4)
-        self.assertAlmostEqual(t["saving_upper"], round(upper, 4), places=4)
-        self.assertLessEqual(t["saving"], t["saving_upper"])          # start-up no longer counted as lead spend
+        self.assertAlmostEqual(t["saving_old_model"], round(upper, 4), places=4)
+        self.assertNotIn("saving_upper", t)                            # not called a bound: nothing measured bounds it
+        self.assertLessEqual(t["saving"], t["saving_old_model"])       # start-up no longer counted as lead spend
         self.assertIn("measured.md", t["saving_note"])
         self.assertIn("about even", t["saving_note"])
 
@@ -68,6 +79,33 @@ class TestTaskSizedEstimate(ReportEnv):
         self.assertIn("model estimate", st["saving"]["note"])
         self.assertIn("docs/measured.md", st["saving"]["note"])
         self.assertIn("saving", st["totals"])                         # the old keys stay for scripts that read them
+        self.assertNotIn("upper_bound_usd", st["saving"])              # the old model is not offered as a bound
+
+    def test_realistic_codex_runs_are_not_estimated_far_above_their_spend(self):
+        # A measured cold Codex run (warm-lanes round 1: ~21k fresh, ~78k cached, ~0.8k out) on a small task. Measured
+        # totals so far were about even (docs/measured.md: self/ccx ratio 0.7-1.4 per success), so the model must not
+        # claim a saving of several times what was spent; the old model did (start-up at the lead's price).
+        from ccx import ledger
+        from ccx.config import paths
+        with mock.patch.dict(os.environ, self.env):
+            p = paths()
+            for i in range(5):
+                rec = {"run_id": f"r-cold-{i}", "label": None, "to": "codex", "caller": "claude", "mode": "write",
+                       "cwd": str(self.work), "tier": "T1", "session_id": None, "ts": time.time() - 60 * i,
+                       "first_rung": "codex:gpt-6-luna:low",
+                       "attempts": [{"agent": "codex", "rung": "codex:gpt-6-luna:low", "model": "gpt-6-luna",
+                                     "effort": "low", "seconds": 60,
+                                     "usage": {"input_tokens": 21000, "cached_input_tokens": 78000,
+                                               "output_tokens": 800}, "ae_usd": None}],
+                       "result": {"status": "done", "summary": "", "files_changed": [], "verification": ""},
+                       "ok": True, "state": "finished", "kind": None}
+                ledger.append(p, rec)
+        _, s, _ = self._summary()
+        t = s["totals"]
+        self.assertEqual(t["saving_kind"], "model")
+        self.assertGreater(t["sub_ae"], 0)
+        self.assertLessEqual(t["saving"], 1.0 * t["sub_ae"], t)         # at most what was spent, not several times it
+        self.assertGreater(t["saving_old_model"], t["saving"])
 
 
 def report_events(p):
@@ -157,6 +195,22 @@ class TestNoCheckNudge(ReportEnv):
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(sum("no --check" in ln for ln in r.stderr.splitlines()), 1, r.stderr)
         self.assertEqual(json.loads(r.stdout)["status"], "done")      # stdout is still the one JSON result
+        self.assertNotIn("no --check", r.stdout)
+
+    def test_bg_write_run_without_check_gets_one_line_and_the_same_json(self):
+        r = self.ccx("run", "--bg", "--from", "claude", "--to", "codex", "--tier", "T1", "--mode", "write", "add a helper")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(sum("no --check" in ln for ln in r.stderr.splitlines()), 1, r.stderr)
+        out = json.loads(r.stdout)                                     # plain --bg's record, unchanged
+        self.assertEqual(set(out), {"run_id", "state", "peek", "log", "next"})
+        self.assertNotIn("no --check", r.stdout)
+        self.ccx("show", out["run_id"], "--wait", "90")                 # let the child finish before the temp dir goes
+        r = self.ccx("run", "--bg", "--wait", "90", "--from", "claude", "--to", "codex", "--tier", "T1",
+                     "--mode", "write", "add another helper")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertEqual(sum("no --check" in ln for ln in r.stderr.splitlines()), 1, r.stderr)
+        out = json.loads(r.stdout)                                     # one JSON document: the final result
+        self.assertEqual(out["status"], "done", out)
         self.assertNotIn("no --check", r.stdout)
 
     def test_no_nudge_with_a_check_or_for_a_read_run(self):

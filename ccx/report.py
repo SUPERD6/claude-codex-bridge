@@ -12,13 +12,13 @@ Numbers, and how each one is computed (kept simple so anyone can re-derive them)
                             "measured"): the trial's saving per task (lead's own $ when it did the task minus
                             lead + sub-agent $ when it delegated) x delegated runs in the window.
                             Otherwise a MODEL (`saving_kind` "model"), shown as such and after the spend: per
-                            delegated run, the task-sized part of the sub-agent's tokens (fresh input + output:
-                            what the task itself read and wrote; not cache reads or writes, which are the
-                            sub-agent's start-up and its re-reading, ~93k tokens a run in round 2) at the lead's
+                            delegated run, the task-sized part of the sub-agent's tokens (fresh input + output,
+                            minus the sub-agent's start-up: cache reads and writes, ~93k tokens a run in round 2,
+                            and for Codex ~20k start-up tokens it reads fresh, STARTUP_FRESH) at the lead's
                             model price, minus what the sub-agent cost, minus the lead's brief+review overhead
                             (400 output + 1500+1000*b input tokens at the lead's price); 95% CI by bootstrap over
-                            runs. `saving_upper` keeps the old figure (all the sub-agent's tokens at the lead's
-                            price, start-up included) as an upper bound. Measured totals so far (rounds 1-5,
+                            runs. `saving_old_model` keeps the old figure (all the sub-agent's tokens at the lead's
+                            price, start-up included) for comparison; it bounds nothing that was measured. Measured totals so far (rounds 1-5,
                             docs/measured.md) were about even, so the model is never the headline. H11 (2026-10-24,
                             docs/research) measured something else: what the lead saves is the requests it
                             does not make x its own context per request — about one request per small task,
@@ -73,11 +73,21 @@ MEASURED_URL = "https://github.com/SUPERD6/relayline/blob/main/docs/measured.md"
 MEASURED_NOTE = f"model estimate; measured totals so far about even (rounds 1-5): {MEASURED_URL}"
 
 
-def task_sized(u: dict) -> dict:
-    """The part of a sub-agent's usage the lead would also spend doing the task itself: fresh input and output.
-    Cache reads and cache writes are the sub-agent's own start-up and its re-reading of it (~93k tokens a run in
-    round 2), which the lead, already running, would not pay again."""
-    return {"input_tokens": u.get("input_tokens", 0) or 0, "output_tokens": u.get("output_tokens", 0) or 0}
+# Fresh (uncached) input a sub-agent reads at start-up before it touches the task. Claude reports its start-up as
+# cache writes and reads, so none of it is in fresh input. Codex reports no cache-write bucket: a run that starts a
+# session read 20.5-21.6k fresh tokens for a tiny piece (docs/research/2026-10-25-warm-lanes.md), so ~20k of its fresh
+# input is start-up. Gemini is not measured; it is assumed to be like Codex (a lower estimate, not a higher one).
+STARTUP_FRESH = {"claude": 0, "codex": 20000, "gemini": 20000}
+
+
+def task_sized(u: dict, agent: str | None = None) -> dict:
+    """The part of a sub-agent's usage the lead would also spend doing the task itself: fresh input and output,
+    minus the agent's own start-up. Cache reads and cache writes are the sub-agent's start-up and its re-reading of it
+    (~93k tokens a run in round 2); Codex also reads ~20k start-up tokens fresh (STARTUP_FRESH). The lead, already
+    running, would not pay for any of it again. Unknown agents are treated like Codex."""
+    fresh = u.get("input_tokens", 0) or 0
+    startup = STARTUP_FRESH.get(agent or "", STARTUP_FRESH["codex"]) if agent is not None else 0
+    return {"input_tokens": max(0, fresh - startup), "output_tokens": u.get("output_tokens", 0) or 0}
 
 
 def collect(p: Paths, days: int = 30, include_lead: bool = True) -> dict:
@@ -179,7 +189,7 @@ def summarize(p: Paths, data: dict) -> dict:
             # the lead doing it itself pays for the task (what was read fresh and written), not for a second agent's
             # start-up and re-reading: pricing all of the sub-agent's tokens at the lead's price put the estimate at
             # several times the spend while measured totals were about even (PM review 2026-10-29)
-            self_cost = learn.price_usd(p, caller, lead_model, task_sized(e["usage"]))
+            self_cost = learn.price_usd(p, caller, lead_model, task_sized(e["usage"], r["to"]))
             upper = learn.price_usd(p, caller, lead_model, e["usage"])
             bb = r.get("b") if r.get("b") is not None else 4
             overhead = learn.price_usd(p, caller, lead_model,
@@ -272,8 +282,9 @@ def summarize(p: Paths, data: dict) -> dict:
                                    and tr.get("saving_ci95") else
                                    [round(x, 4) for x in (_bootstrap(savings) or ())] or None),
                    "saving_n": n_delegated if measured else len(savings),
-                   # the old model (all sub-agent tokens at the lead's price): an upper bound, never the headline
-                   "saving_upper": round(sum(uppers), 4) if uppers else None,
+                   # the old model (all sub-agent tokens at the lead's price), for comparison only: not a bound on a
+                   # real saving, and left out when a trial measured one
+                   "saving_old_model": round(sum(uppers), 4) if uppers and not measured else None,
                    "saving_note": None if measured else MEASURED_NOTE, "quota_stops": limit_hits,
                    "lead_turns": len(lead_turns), "lead_turn_tokens_median": mid[0] if mid else None,
                    "lead_turn_ae_median": round(mid[1], 4) if mid else None,
@@ -429,9 +440,9 @@ def render_html(s: dict) -> str:
     measured = t.get("saving_kind") == "measured"
     saving_note += (" · measured by ccx trial (per task × delegated runs)" if measured else
                     " · a model, not measured; measured totals so far about even (docs/measured.md). The model: the "
-                    "task-sized part of the sub-agent's tokens (fresh input + output) at the lead's price"
-                    + (f"; all its tokens at the lead's price, start-up included, give at most "
-                       f"{_usd(t['saving_upper'])}" if t.get("saving_upper") is not None else "")
+                    "task-sized part of the sub-agent's tokens (fresh input + output, minus its start-up) at the lead's price"
+                    + (f"; the old model (all its tokens at the lead's price, start-up included) gave "
+                       f"{_usd(t['saving_old_model'])}" if t.get("saving_old_model") is not None else "")
                     + ". Measured (H11): what the lead saves is the requests it doesn't make — about one per small "
                     "task, only when it trusts ccx's check. Measure yours with `ccx trial start`")
     tiles = [
@@ -543,8 +554,8 @@ first use, so delegations close together are cheaper.</p></div>
 <div class="card"><h2>Delegated runs</h2><div class="scroll"><table class="tbl"><tr><th>day</th><th>task</th><th>who</th>
 <th>model → escalation</th><th>result</th><th class="r">tokens</th><th class="r">AE$</th><th class="r">est. saving (model)</th></tr>
 {run_rows or '<tr><td colspan="8">No runs yet.</td></tr>'}</table></div>
-<p class="note">Estimated saving (a model, not measured) = the task-sized tokens (fresh input + output) at the lead's
-model price − sub-agent cost − brief/review overhead. Negative means delegating cost more than doing it yourself would
+<p class="note">Estimated saving (a model, not measured) = the task-sized tokens (fresh input + output, minus the
+sub-agent's start-up: ~20k fresh tokens for Codex) at the lead's model price − sub-agent cost − brief/review overhead. Negative means delegating cost more than doing it yourself would
 have. Measured totals so far were about even (docs/measured.md).</p></div>
 </div></div><div id="tip" role="tooltip"></div><script>{JS}</script></body></html>"""
 

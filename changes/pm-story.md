@@ -1,6 +1,7 @@
 - report / ui / stats: the saving estimate prices only the task-sized part of the sub-agent's tokens (fresh input
-  and output, not its start-up and re-reading) at the lead's price; the old figure is kept as `saving_upper`, an
-  upper bound. `ccx ui` ("Is it worth it"), `ccx report` and `ccx stats --summary` show the spend first and the
+  and output, minus its start-up: cache reads and writes, and the ~20k fresh tokens a Codex run reads to start) at
+  the lead's price; the old figure is kept for comparison as `saving_old_model` (not an upper bound; left out when
+  a trial measured the saving). `ccx ui` ("Is it worth it"), `ccx report` and `ccx stats --summary` show the spend first and the
   estimate after it, labelled "model estimate; measured totals so far about even" with a link to docs/measured.md;
   `ccx stats --summary` gains `spend` and `saving` (the old `totals` keys stay). `ccx -h` no longer promises savings.
 - run: a write run with no `--check` prints one reminder line on stderr; stdout and what ccx does are unchanged.
