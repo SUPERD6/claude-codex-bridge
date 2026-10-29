@@ -356,6 +356,73 @@ class TestUndoAskTask(AdapterEnv):
         self.assertEqual(out["resumed"], first["run_id"])
         self.assertEqual(self.calls()[-1]["argv"][:2], ["exec", "resume"])
 
+    def record(self, run_id):
+        return json.loads((self.hub / "ccx" / "runs" / run_id / "run.json").read_text(encoding="utf-8"))
+
+    def reviews(self):
+        return [c for c in self.calls() if "[ccx review" in c.get("prompt", "")]
+
+    def test_resume_keeps_the_review_setting(self):
+        # 2026-10-29: a run started with --review off was resumed with the default (auto) review
+        w = {"FAKE_WRITE": "a.py=changed by agent"}
+        out = self.j("run", "--from", "claude", "--to", "codex", "--tier", "T2", "--review", "off", "edit", env=w)
+        res = self.j("resume", out["run_id"], "also this", env=w)
+        self.assertEqual((self.record(out["run_id"])["review_mode"], self.record(res["run_id"])["review_mode"]),
+                         ("off", "off"))
+        self.assertEqual(self.reviews(), [])
+        again = self.j("resume", "--review", "auto", res["run_id"], "and that", env=w)   # explicit wins
+        self.assertEqual(self.record(again["run_id"])["review_mode"], "auto")
+
+    def test_task_resume_keeps_the_review_setting(self):
+        tid = self.checkpoint("init", "--title", "job", "--step", "x")
+        first = self.j("run", "--from", "claude", "--to", "codex", "--tier", "T2", "--no-escalate", "--review", "off",
+                       "--task", tid, "--step", "1", "x", env={"FAKE_STATUS": "blocked"})
+        out = self.j("task", "resume", tid, env={"FAKE_WRITE": "a.py=changed by agent"})
+        self.assertEqual(out["resumed"], first["run_id"])
+        self.assertEqual(self.record(out["run_id"])["review_mode"], "off")
+        self.assertEqual(self.reviews(), [])
+
+    def test_task_resume_restart_keeps_the_review_setting(self):
+        tid = self.checkpoint("init", "--title", "long job", "--step", "part a")
+        d = self.hub / "ccx" / "runs" / "20261024-000000-early"
+        d.mkdir(parents=True)
+        (d / "brief.md").write_text("change x to 2 in a.py", encoding="utf-8")
+        (d / "run.json").write_text(json.dumps({
+            "run_id": "20261024-000000-early", "to": "codex", "caller": "claude", "tier": "rung", "mode": "write",
+            "cwd": str(self.work), "session_id": None, "attempts": [], "state": "running", "ok": False,
+            "task": tid, "step": 1, "first_rung": "codex:gpt-6-luna:low", "review_mode": "off",
+            "label": "eval:resume", "ts": time.time()}), encoding="utf-8")
+        out = self.j("task", "resume", tid, env={"FAKE_WRITE": "a.py=changed by agent"})
+        self.assertEqual(out["restarted"], "20261024-000000-early")
+        self.assertEqual(self.record(out["run_id"])["review_mode"], "off")
+        self.assertEqual(self.record(out["run_id"])["label"], "eval:resume")      # the same step keeps its label
+        self.assertEqual(self.reviews(), [])
+
+    def test_quota_hand_off_keeps_the_label(self):
+        tid = self.checkpoint("init", "--title", "long job", "--step", "part a")
+        self.j("run", "--from", "claude", "--to", "codex", "--tier", "T2", "--no-fallback", "--task", tid,
+               "--step", "1", "--label", "eval:quota", "part a", env={"FAKE_STATUS": "quota"}, code=2)
+        out = self.j("task", "resume", tid)
+        self.assertEqual(out["handoff"], "codex -> claude (quota)")
+        self.assertEqual(self.record(out["run_id"])["label"], "eval:quota")
+
+    def test_fix_round_of_an_old_record_stores_auto(self):
+        # a record from before review_mode was stored: its fix round (forced "on") must not pass "on" to a resume
+        import os
+        from unittest import mock
+        from ccx.config import paths
+        from ccx.delegate import Request, run
+        d = self.hub / "ccx" / "runs" / "20261020-000000-old"
+        d.mkdir(parents=True)
+        (d / "run.json").write_text(json.dumps({
+            "run_id": "20261020-000000-old", "to": "codex", "caller": "claude", "tier": "T2", "mode": "read",
+            "cwd": str(self.work), "session_id": "th-old", "attempts": [], "state": "done", "ok": True,
+            "ts": time.time()}), encoding="utf-8")
+        with mock.patch.dict(os.environ, self.env):
+            rec = run(Request(to="codex", brief="fix this", resume_run="20261020-000000-old", caller="claude",
+                              review="on", review_round=1), paths())
+        self.assertEqual(rec["review_mode"], "auto")
+
     def test_skills_install_links_repo_skills(self):
         (self.hub / "skills" / "task-split").mkdir(parents=True)          # an older real copy
         dry = self.j("skills", "install", "--replace")
