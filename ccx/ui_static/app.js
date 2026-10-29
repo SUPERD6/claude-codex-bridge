@@ -92,7 +92,8 @@
       if (tasks.length) projects.push(Object.assign({}, pr, {tasks}));
     }
     return Object.assign({}, d, {projects, leads: (d.leads || []).filter(l => !l.test),
-                                 discussions: (d.discussions || []).filter(x => !x.test)});
+                                 discussions: (d.discussions || []).filter(x => !x.test),
+                                 conversations: (d.conversations || []).filter(x => !x.test)});
   }
   function findProject(id) { return ((D && D.projects) || []).find(x => x.id === id); }
   function findTask(pr, id) { return pr && pr.tasks.find(x => x.id === id); }
@@ -120,6 +121,7 @@
   function renderSide(route) {
     const all = [];
     for (const pr of (D && D.projects) || []) for (const tk of pr.tasks) all.push(...acts(tk.pieces));
+    all.push(...convTodos());
     let state = SNAP ? `<span class="dot snap"></span>${t("snapshot")}` : OFFLINE ? `<span class="dot off"></span>${t("offline")}` :
       `<span class="dot"></span>${D ? t("updated", {a: raw(ago(D.generated))}) : "…"}`;
     let h = `<div class="brand"><b>ccx</b><span style="color:var(--muted)">${t("now")}</span><span class="live">${state}</span></div>
@@ -127,6 +129,7 @@
       <nav class="nav" id="nav"><a href="#/" class="${route.length ? "" : "cur"}">${t("overview")}${all.length ? `<span class="badge">${all.length}</span>` : ""}</a>`;
     const talks = (D && D.discussions) || [];
     if (talks.length) h += `<a href="#/discuss" class="${route[0] === "discuss" ? "cur" : ""}">${t("disc_nav")}<span class="mini-n">${talks.length}</span></a>`;
+    for (const c of convs()) h += `<a href="${convHref(c.id)}" class="${route[0] === "conv" && route[1] === c.id ? "cur" : ""}">${t("conv_nav")} · ${esc(c.name)}${(c.todos || []).length ? `<span class="badge">${c.todos.length}</span>` : `<span class="mini-n">${c.threads}</span>`}</a>`;
     const q = query.toLowerCase();
     for (const pr of (D && D.projects) || []) {
       const need = pr.tasks.reduce((a, x) => a + acts(x.pieces).length, 0);
@@ -175,19 +178,22 @@
       tasks++;
       walk(tk.pieces, (p, ch) => { if (p.status === "run") running++; if (p.act) todos.push({pr, tk, p, ch}); });
     }
+    const ct = convTodos();
     let h = banner() + `<h1>${t("ov_title")}</h1>`;
     if (!tasks) {
-      h += `<p class="lead">${t("empty")}</p>` + sugHTML() + leadsHTML() + discRecentHTML() + othersHTML() + weekHTML();
+      h += `<p class="lead">${t("empty")}</p>` + (ct.length ? `<h2>${t("todo_all")}</h2><div class="todo">${convTodoHTML(ct)}</div>` : "")
+        + sugHTML() + leadsHTML() + discRecentHTML() + othersHTML() + weekHTML();
       return h;
     }
     const parts = [t("ov_running", {n: running})], nsug = (D && D.suggestions_total) || ((D && D.suggestions) || []).length;
-    parts.push(todos.length ? `<span class="warn">${t("ov_waiting", {n: todos.length})}</span>` : `<span class="good">${t("ov_nothing")}</span>`);
+    const nwait = todos.length + ct.length;
+    parts.push(nwait ? `<span class="warn">${t("ov_waiting", {n: nwait})}</span>` : `<span class="good">${t("ov_nothing")}</span>`);
     if (nsug) parts.push(`<span class="warn">${t("ov_sug", {n: nsug})}</span>`);
     const qw = quotaWarn(); if (qw) parts.push(qw);
     if (D.inbox) parts.push(`<span class="warn">${t("ov_inbox", {n: D.inbox})}</span>`);
     h += `<p class="lead">${parts.join(" · ")}</p>`;
-    if (todos.length) {
-      h += `<h2>${t("todo_all")}</h2><div class="todo">`;
+    if (nwait) {
+      h += `<h2>${t("todo_all")}</h2><div class="todo">` + convTodoHTML(ct);
       todos.sort((a, b) => (a.p.act.kind === "review") - (b.p.act.kind === "review"));
       for (const x of todos) h += `<a class="${x.p.act.kind === "review" ? "rv" : ""}" href="${href([x.pr.id, x.tk.id].concat(x.ch.map(c => c.id)), x.p.id)}"><b>${esc(x.p.title)}</b><span>${t(x.p.act.what)}</span><span class="where">${esc(x.pr.name)} › ${esc(taskTitle(x.tk))}</span></a>`;
       h += `</div>`;
@@ -404,9 +410,131 @@
     return h;
   }
 
+  /* ---------- U2: the agents' conversation (each project's board: ccx say / ccx reply), I1: the person's reply ----------
+     Every message is text written by agents (or remote copies of the board): esc() always, shown as plain text. The
+     reply goes through the same two steps as a button: prepare (the server answers what it will write and a nonce),
+     then a second click writes it once, as the person, via ui. It is a message on the board, never a command. */
+  let CONV = null, CONVKEY = "", CONVSIG = "", CONVBUSY = false, CONVERR = "", SAY = null;
+  const DRAFT = {};
+  function convs() { return (D && D.conversations) || []; }
+  function convTodos() { const out = []; for (const c of convs()) for (const x of c.todos || []) out.push({c, x}); return out; }
+  function convHref(pid, th) { return "#/conv/" + encodeURIComponent(pid) + (th ? "/" + encodeURIComponent(th) : ""); }
+  function vendorOf(w) { const v = String(w || "").split(":")[0].trim().toLowerCase(); return v === "dsh" || v === "deepseek-codex" ? "deepseek" : v === "human" || v === "person" ? "user" : v; }
+  function toName(w) { const v = vendorOf(w); return v === "all" ? t("conv_all") : v === "user" ? t("conv_you") : agentName(v); }
+  function msgWho(m) { return m.who === "user" ? `<span class="who you">${t("conv_you")}</span>` : who(m.who); }
+  function convTodoHTML(list) {
+    return list.map(({c, x}) => `<a class="conv" href="${convHref(c.id, x.key)}"><b>${esc(x.text)}</b><span>${x.kind === "stuck" ? t("conv_todo_stuck", {n: x.run}) : t("conv_todo_asks", {w: agentName(vendorOf(x.from))})}</span><span class="where">${esc(c.name)} › ${t("conv_nav")} › ${esc(x.thread)}</span></a>`).join("");
+  }
+  function convLinkHTML(pid) {
+    const c = convs().find(x => x.id === pid);
+    return c ? `<p class="stat"><a href="${convHref(pid)}">${t("conv_page_link", {n: c.threads})}</a>${(c.todos || []).length ? ` <span class="badge">${c.todos.length}</span>` : ""}</p>` : "";
+  }
+  /* one read of /api/conv/<project>; true when a thread changed */
+  async function loadConv(pid) {
+    const j = await api("/api/conv/" + encodeURIComponent(pid));
+    const sig = JSON.stringify([j.threads, j.threads_total]), changed = CONVKEY !== pid || sig !== CONVSIG;
+    CONV = j; CONVKEY = pid; CONVSIG = sig; CONVERR = "";
+    return changed;
+  }
+  function wantConv(pid) {
+    if (SNAP || CONVBUSY || (CONVKEY === pid && (CONV || CONVERR))) return;
+    CONVBUSY = true;
+    loadConv(pid).catch(e => { CONV = null; CONVKEY = pid; CONVERR = (e && e.message) || "?"; })
+      .then(() => { CONVBUSY = false; if (route().r[0] === "conv") render(); });
+  }
+  function msgHTML(m) {
+    const via = m.via && m.via !== m.from ? " · " + t("conv_via", {v: m.via}) : "";
+    return `<div class="msg bmsg${m.who === "user" ? " you" : ""}${m.asks ? " asks" : ""}"><div class="hd">${msgWho(m)}<span>→ ${esc(toName(m.to))}</span><span class="mono">#${esc(m.id)}${m.reply_to ? " re #" + esc(m.reply_to) : ""}</span><span class="cost">${clock(m.ts)}${via}</span></div>`
+      + `<p class="btext">${esc(m.text)}</p>${m.cut ? `<p class="cost">${t("conv_cut", {n: m.chars})}</p>` : ""}${m.asks ? `<p class="warn">${t("conv_asks_you")}</p>` : ""}</div>`;
+  }
+  function threadHead(pid, x, open) {
+    const flags = (x.stuck ? ` <span class="warn">${t("conv_stuck", {n: x.run})}</span>` : "") + ((x.asks || []).length ? ` <span class="warn">${t("conv_asks_badge")}</span>` : "");
+    return `<h2>${open ? esc(x.thread) : `<a href="${convHref(pid, x.key)}">${esc(x.thread)}</a>`} <span class="cost">${t("conv_msgs", {n: x.n})} · ${clock(x.last)}</span>${flags}</h2>`;
+  }
+  function sayBox(key) {
+    if (!SAY || SAY.key !== key) return "";
+    const cancel = `<button class="btn" data-do="say-cancel">${t("act_cancel")}</button>`;
+    if (SAY.stage === "busy") return `<div class="k">${t("act_busy")}</div>`;
+    if (SAY.stage === "err") return `<div class="k"><span class="warn">${t("act_failed", {e: SAY.msg || ""})}</span></div><div class="acts">${cancel}</div>`;
+    return `<div class="k">${t("conv_will", {to: toName(SAY.to), thread: SAY.thread, id: SAY.id})}</div><pre class="says btext mono">${esc(SAY.text)}</pre>`
+      + `<p class="cost">${t("conv_not_run")} <code class="mono">${esc(SAY.cmd || "")}</code></p>`
+      + `<div class="acts"><button class="btn primary" data-do="say-run">${t("conv_send")}</button>${cancel}</div>`;
+  }
+  function replyHTML(pid, x) {
+    const key = pid + "|" + x.key, d = DRAFT[key] || "", max = (CONV && CONV.say_max) || 4000, box = sayBox(key);
+    return `<div class="card reply"><label class="k" for="saytext">${t("conv_reply_to", {to: toName(x.reply.to), id: x.reply.id})}</label>`
+      + `<textarea id="saytext" data-saykey="${esc(key)}" maxlength="${max}" rows="4">${esc(d)}</textarea>`
+      + `<div class="acts"><span class="cost" id="saycount">${t("conv_chars", {n: d.length, m: max})}</span><button class="btn primary" data-do="say-prep">${t("conv_reply")}</button></div>`
+      + `<p class="cost">${t("conv_reply_rule", {m: max})}</p><div class="cmd" id="saybox"${box ? "" : " hidden"}>${box}</div></div>`;
+  }
+  function renderConv(pid, th) {
+    const c = convs().find(x => x.id === pid), name = c ? c.name : CONV && CONVKEY === pid ? CONV.project.name : "";
+    let h = banner() + `<div class="crumbs"><a href="#/">${t("overview")}</a> › ${name ? esc(name) + " › " : ""}${th ? `<a href="${convHref(pid)}">${t("conv_title")}</a> › ${esc(th)}` : t("conv_title")}</div>`;
+    h += `<h1>${t("conv_title")}${name ? " · " + esc(name) : ""}</h1><p class="lead">${t("conv_lead", {n: (CONV && CONV.max_machine) || 6})}</p>`;
+    if (SNAP) {
+      if (c && (c.todos || []).length) h += `<div class="todo">${convTodoHTML(convTodos().filter(z => z.c.id === pid))}</div>`;
+      return h + `<p class="lead">${t("conv_snap")}</p>`;
+    }
+    if (CONVKEY !== pid || (!CONV && !CONVERR)) { wantConv(pid); return h + `<p class="lead">${t("conv_loading")}</p>`; }
+    if (CONVERR || !CONV) return h + `<p class="lead">${t("conv_gone")}</p>`;
+    if (!CONV.threads.length) return h + `<p class="lead">${t("conv_none")}</p>`;
+    if (th) {
+      const x = CONV.threads.find(z => z.key === th);
+      if (!x) return h + `<p class="lead">${t("conv_gone")}</p>`;
+      h += threadHead(pid, x, true);
+      if (x.more) h += `<p class="cost">${t("conv_more", {n: x.more, t: x.thread})}</p>`;
+      h += `<div class="chat">${x.messages.map(msgHTML).join("")}</div>`;
+      if (x.clipped) h += `<p class="cost">${t("conv_clipped", {t: x.thread})}</p>`;
+      return h + replyHTML(pid, x);
+    }
+    for (const x of CONV.threads) {
+      h += threadHead(pid, x, false) + `<div class="chat">${x.messages.slice(-3).map(msgHTML).join("")}</div>`;
+      h += `<p class="stat"><a href="${convHref(pid, x.key)}">${t("conv_open")}</a></p>`;
+    }
+    if (CONV.threads_total > CONV.threads.length) h += `<p class="cost">${t("conv_more_threads", {n: CONV.threads_total - CONV.threads.length})}</p>`;
+    return h;
+  }
+  /* a redraw keeps what the person is typing: the draft, the focus and the caret */
+  function drawConv(pid, th) {
+    const ta = $("saytext"), focused = ta && document.activeElement === ta, a = focused ? ta.selectionStart : 0, b = focused ? ta.selectionEnd : 0;
+    const keep = window.scrollY;
+    $("main").innerHTML = renderConv(pid, th);
+    const nt = $("saytext");
+    if (focused && nt) { nt.focus(); try { nt.setSelectionRange(a, b); } catch (e) { /* ok */ } }
+    window.scrollTo(0, keep);
+  }
+  function paintSay() {
+    const box = $("saybox"), ta = $("saytext"); if (!box || !ta) return;
+    const h = sayBox(ta.dataset.saykey); box.innerHTML = h; box.hidden = !h;
+  }
+  async function prepSay() {
+    const ta = $("saytext"); if (!ta || !CONV || SNAP) return;
+    const key = ta.dataset.saykey, cut = key.indexOf("|"), pid = key.slice(0, cut), thread = key.slice(cut + 1);
+    const x = CONV.threads.find(z => z.key === thread), text = ta.value;
+    SAY = {key, stage: "busy", text}; paintSay();
+    try {
+      const r = await post("/api/say/prepare", {project: pid, thread, reply_to: x ? x.reply.id : null, text});
+      if (SAY && SAY.key === key && SAY.text === text) Object.assign(SAY, {stage: "confirm", nonce: r.nonce, to: r.to, id: r.reply_to, thread: r.thread, cmd: r.cmd});
+    } catch (e) { if (SAY && SAY.key === key) Object.assign(SAY, {stage: "err", msg: e.message}); }
+    paintSay();
+  }
+  async function runSay() {
+    if (!SAY || SAY.stage !== "confirm") return;
+    const s = SAY; s.stage = "busy"; paintSay();
+    try {
+      const r = await post("/api/say/run", {nonce: s.nonce});
+      FLASH = {at: Date.now(), ok: true, html: t("conv_sent", {id: r.posted.id, thread: r.posted.thread})};
+      delete DRAFT[s.key]; SAY = null;
+      const ta = $("saytext"); if (ta) ta.value = "";
+      try { await refresh(); } catch (e) { /* the next poll */ }
+      const rt = route().r; if (rt[0] === "conv") { try { await loadConv(rt[1]); } catch (e) { /* the next poll */ } }
+      render();
+    } catch (e) { Object.assign(s, {stage: "err", msg: e.message}); paintSay(); }
+  }
+
   /* ---------- a project page ---------- */
   function renderProject(pr) {
-    let h = banner() + `<div class="crumbs"><a href="#/">${t("overview")}</a> › ${esc(pr.name)}</div><h1>${esc(pr.name)}${levelHTML(pr)}</h1><p class="lead mono" style="font-size:13px">${esc(pr.path)}</p>${rulesHTML(pr)}<h2>${t("tasks")}</h2><div class="grid">`;
+    let h = banner() + `<div class="crumbs"><a href="#/">${t("overview")}</a> › ${esc(pr.name)}</div><h1>${esc(pr.name)}${levelHTML(pr)}</h1><p class="lead mono" style="font-size:13px">${esc(pr.path)}</p>${convLinkHTML(pr.id)}${rulesHTML(pr)}<h2>${t("tasks")}</h2><div class="grid">`;
     for (const tk of pr.tasks) {
       const s = stats(tk.pieces), k = acts(tk.pieces).length, ws = new Set();
       walk(tk.pieces, p => { if (p.worker) ws.add(p.worker); });
@@ -689,6 +817,7 @@
     renderSide(r);
     const main = $("main");
     if (r[0] === "discuss") { main.innerHTML = discHTML(r[1]); return; }
+    if (r[0] === "conv") { drawConv(r[1], r[2]); return; }
     const pr = r.length ? findProject(r[0]) : null;
     const tk = pr && r[1] ? findTask(pr, r[1]) : null;
     if (!pr) { main.innerHTML = renderOverview(); paintAct(); return; }
@@ -707,6 +836,9 @@
   document.addEventListener("click", (e) => {
     const el = e.target.closest("[data-sel],[data-filt],[data-more],[data-btn],[data-tbtn],[data-rbtn],[data-reason],[data-do],[data-sug]");
     if (!el) return;
+    if (el.dataset.do === "say-prep") { prepSay(); return; }
+    if (el.dataset.do === "say-run") { runSay(); return; }
+    if (el.dataset.do === "say-cancel") { SAY = null; paintSay(); return; }
     if (el.dataset.sug !== undefined) { if (!SNAP && !el.disabled) decideSug(el.dataset.sug, el.dataset.ok === "1"); return; }
     if (el.dataset.do === "act-cancel") { ACT = null; paintAct(); return; }
     if (el.dataset.do === "act-run") { runAct(); return; }
@@ -760,6 +892,12 @@
   document.addEventListener("input", (e) => {
     if (e.target.id === "search") { query = e.target.value; const {r} = route(); renderSide(r); }
     if (e.target.id === "usdin" && ACT) ACT.usd = e.target.value;
+    if (e.target.id === "saytext") {
+      const key = e.target.dataset.saykey, max = (CONV && CONV.say_max) || 4000;
+      DRAFT[key] = e.target.value;
+      const n = $("saycount"); if (n) n.textContent = t("conv_chars", {n: e.target.value.length, m: max});
+      if (SAY && SAY.key === key && SAY.stage !== "busy" && SAY.text !== e.target.value) { SAY = null; paintSay(); }
+    }
   });
   document.addEventListener("toggle", (e) => { if (e.target.dataset && e.target.dataset.hist) histOpen[e.target.dataset.hist] = e.target.open; }, true);
   addEventListener("hashchange", render);
@@ -805,13 +943,21 @@
       now.add(k);
       if (SEEN && !SEEN.has(k)) fresh.push(p.title + " — " + t(p.act.what));
     });
+    for (const {c, x} of convTodos()) {
+      const k = c.id + "|" + x.key + "|" + x.kind + "|" + x.id;
+      now.add(k);
+      if (SEEN && !SEEN.has(k)) fresh.push(x.text + " — " + t(x.kind === "stuck" ? "conv_todo_stuck" : "conv_todo_asks", {n: x.run, w: agentName(vendorOf(x.from))}));
+    }
     SEEN = now;
     const el = $("announce");
     if (el && fresh.length) el.textContent = t("todo_new", {n: fresh.length}) + " " + fresh.slice(0, 3).join("; ");
   }
   async function poll() {
     try {
-      if (await refresh()) { render(); announce(); } else patchLive();
+      let changed = await refresh();
+      const rt = route().r;
+      if (rt[0] === "conv" && rt[1] && !SNAP) { try { changed = (await loadConv(rt[1])) || changed; } catch (e) { /* shown on the page */ } }
+      if (changed) { render(); announce(); } else patchLive();
     } catch (e) {
       if (!OFFLINE && Date.now() - lastOk > 8000) { OFFLINE = true; render(); }
     }
