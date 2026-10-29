@@ -14,6 +14,12 @@ so doing it takes many requests. Arms (the lead is a fresh headless Claude Code,
   ccx2-skill opt-in (--arms ccx2-skill, R7): the lead is only told to delegate through ccx as its agent-delegate
            skill says and must load that skill (no inline HOW); needs --claude-isolation ccx-home, a fresh Claude
            home holding ccx's marked block, hooks and skills only (scripts/eval/preflight.py)
+  ccx2nc   opt-in (--arms ccx2nc, r6a): exactly ccx2 (the same lead, wording and command line), except that the
+           unit's own hub has `[defaults] namecheck = "fail"` in its tiers.toml (asserted from the hub before the
+           lead starts), so a sub-agent's change that uses an undefined name fails its run like a failed --check;
+           ccx's own default stays "warn". Every row records the hub's mode (`namecheck_mode`) and each builder
+           run's own (`ccx_namecheck`: mode, hits), counted per arm in the summary (`namecheck`), so ccx2 vs
+           ccx2nc measures the change before / after
   builtin2 opt-in (--arms builtin2): builtin's Agent-tool hand-off with ccx2's brief and acceptance wording, word
            for word (the worker reports check / files_changed / diffstat / status); not in the default schedule
   builtin2r opt-in (--arms builtin2r): builtin2 whose worker's own prompt also carries ccx's KEEP_TESTS and WIRING
@@ -94,6 +100,9 @@ The work dir defaults to <temp>/<tag>, so two tags never share unit folders.
   python scripts/eval/r5.py run --taskset holdout --rounds 3 --arms ccx2 --tag ho4 --lead-model auto --dry-run
       # lead model per task (ccx's lead.model_by_task rule, its own arm ccx2@auto-medium); compare with the
       # same tag under --lead-model opus and the default sonnet
+  python scripts/eval/r5.py run --rounds 1 --arms ccx2,ccx2nc,ccx2@auto --tag r6a --budget 10 --dry-run
+      # r6a: ccx2, ccx2 with namecheck fail and ccx2 with the lead model per task, interleaved in one invocation
+      # (an `<arm>@auto` token is that arm with --lead-model auto for its units only: arm ccx2@auto-medium)
   python scripts/eval/r5.py run --taskset holdout --rounds 3 --arms ccx2,ccx2-skill --tag ho3 --budget 20 \
       --claude-isolation ccx-home      # skill vs inline wording (export CLAUDE_CODE_OAUTH_TOKEN yourself first)
   python scripts/eval/r5.py summary [--taskset holdout] [--include-unclean]
@@ -298,10 +307,13 @@ def ccx_lead_model(model: str) -> str:
 TIER_ARMS = ("fast", "balanced", "save", "cheapest")
 TIER_LEAD_ARMS = ("balanced", "save")            # the lead sizes with ccx propose and follows its answer
 SKILL_ARMS = PF.SKILL_ARMS                       # the lead loads the agent-delegate skill (needs ccx-home)
-CCX_ARMS = ("ccx", "ccx2", *SKILL_ARMS, *TIER_LEAD_ARMS)   # leads that may hand work to ccx (session file, metrics)
+# namecheck arms (opt-in): ccx2 in a unit hub whose tiers.toml sets [defaults] namecheck to this mode
+NAMECHECK_ARMS = {"ccx2nc": "fail"}
+# leads that may hand work to ccx (session file, metrics)
+CCX_ARMS = ("ccx", "ccx2", *NAMECHECK_ARMS, *SKILL_ARMS, *TIER_LEAD_ARMS)
 BUILTIN_ARMS = PF.BUILTIN_ARMS
 # not in ARMS: the default schedule (and old tags' done-keys) stay
-OPT_IN_ARMS = ("ccx2", "builtin2", "builtin2r", *TIER_ARMS, *SKILL_ARMS)
+OPT_IN_ARMS = ("ccx2", "builtin2", "builtin2r", *TIER_ARMS, *SKILL_ARMS, *NAMECHECK_ARMS)
 DEFAULT_LEAD = (r3.LEAD_MODEL, r3.LEAD_EFFORT)
 # --lead-model auto: each task's lead model from its difficulty by ccx's lead.model_by_task rule (ccx/leadmodel.py,
 # this checkout's config/tiers.toml [lead] / [lead_by_task], never the hub's settings), so the next round can compare
@@ -521,7 +533,7 @@ def lead_how(arm: str, label: str, lead: tuple[str, str] = DEFAULT_LEAD) -> str:
     lead passes to ccx propose as --lead)."""
     if arm == "ccx":
         return HOW_CCX.format(ccx=r3.CCX_CMD, label=label)
-    if arm == "ccx2":
+    if arm == "ccx2" or arm in NAMECHECK_ARMS:    # ccx2nc: ccx2's lead; only its hub's namecheck differs
         return HOW_CCX2.format(ccx=r3.CCX_CMD, label=label)
     if arm in SKILL_ARMS:
         return HOW_CCX2_SKILL
@@ -681,6 +693,25 @@ def lead_unit(u: dict, a, work: Path, repo: Path, hub: Path, iso: PF.Unit | None
     return row
 
 
+def namecheck_stats(rows: list[dict]) -> dict | None:
+    """Per arm: the namecheck modes its unit hubs ran (`namecheck_mode`, rows before r6a have none: left out), how
+    many builder runs the check saw, how many had hits and how many of those it failed (mode fail). None: no row
+    says."""
+    modes: dict[str, int] = {}
+    runs = hit = failed = 0
+    for r in rows:
+        if r.get("namecheck_mode"):
+            modes[r["namecheck_mode"]] = modes.get(r["namecheck_mode"], 0) + 1
+        for x in r.get("ccx_namecheck") or []:
+            runs += 1
+            if x.get("hits"):
+                hit += 1
+                failed += x.get("mode") == "fail"
+    if not modes and not runs:
+        return None
+    return {"modes": modes, "runs": runs, "runs_with_hits": hit, "runs_failed_by_it": failed}
+
+
 PHASES = ("sub_s", "check_s", "review_s", "fix_s", "overlap_s", "lead_wait_s", "lead_active_s")
 
 
@@ -793,6 +824,48 @@ def set_picked(hub: Path, tier: str, env: dict | None = None) -> str:
     if got != tier:
         raise RuntimeError(f"the unit hub picks {got!r} after setting policy.picked {tier}")
     return got
+
+
+def set_namecheck(hub: Path, mode: str) -> str:
+    """A namecheck arm's unit hub: `[defaults] namecheck = "<mode>"` written into the hub's own tiers.toml (the
+    hand-edited overrides file r2.make_hub writes, ccx's `[defaults] namecheck` setting), then read back the way ccx
+    reads it (load_config + namecheck.mode). Raises unless the hub now runs with `mode`; returns it."""
+    f = r2.Paths(hub).user_tiers
+    text = f.read_text(encoding="utf-8") if f.exists() else ""
+    line = f'namecheck = "{mode}"\n'
+    text = re.sub(r"(?m)^namecheck[ \t]*=.*(?:\n|\Z)", "", text)     # an earlier setting (a TOML key only once)
+    if re.search(r"(?m)^\[defaults\][ \t]*$", text):
+        text = re.sub(r"(?m)^\[defaults\][ \t]*(?:\n|\Z)", lambda m: m.group(0).rstrip("\n") + "\n" + line, text,
+                      count=1)
+    else:
+        text = text + ("" if not text or text.endswith("\n") else "\n") + "[defaults]\n" + line
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text(text, encoding="utf-8")
+    got = hub_namecheck(hub)
+    if got != mode:
+        raise RuntimeError(f"the unit hub runs namecheck {got!r} after setting [defaults] namecheck = {mode!r}")
+    return got
+
+
+def hub_namecheck(hub: Path) -> str:
+    """The namecheck mode a ccx run in this hub gets without a --namecheck flag (ccx's own resolution)."""
+    from ccx import namecheck
+    from ccx.config import load_config
+    return namecheck.mode(None, load_config(r2.Paths(hub)))
+
+
+def ccx_namecheck(hub: Path, run_ids: list) -> list[dict]:
+    """The namecheck each builder run of a unit actually ran with (reviews left out; its record's `namecheck`:
+    mode and number of hits; a run without one, a read-only or `off` run, is left out)."""
+    out = []
+    for rid in run_ids or []:
+        rec = r2.record(hub, rid)
+        if not rec or str(rec.get("label") or "").startswith("review:"):
+            continue
+        nc = rec.get("namecheck")
+        if isinstance(nc, dict):
+            out.append({"run": rid, "mode": nc.get("mode"), "hits": len(nc.get("hits") or [])})
+    return out
 
 
 _TR = []
@@ -984,6 +1057,7 @@ def bookkeeping(row: dict, arm: str, hub: Path, task: dict) -> None:
         if row.get("ccx_run_ids"):
             row["ccx_check_passed"] = ccx_check_passed(hub, row["ccx_run_ids"])
             row["ccx_routes"] = ccx_routes(hub, row["ccx_run_ids"])
+            row["ccx_namecheck"] = ccx_namecheck(hub, row["ccx_run_ids"])
     except Exception as e:  # noqa: BLE001 — metadata only; the score below still runs
         row["bookkeeping_error"] = f"{type(e).__name__}: {e}"[:400]
 
@@ -1017,6 +1091,8 @@ def unit_models(u: dict, row: dict) -> dict:
         out = {"direct": " ".join(no_lead_flags(u["arm"]))}
     if u["arm"] in TIER_ARMS:                     # the hub's policy.picked (the person's choice the arm simulates)
         out["tier_picked"] = u["arm"]
+    if u["arm"] in NAMECHECK_ARMS:                # the hub's [defaults] namecheck
+        out["namecheck"] = NAMECHECK_ARMS[u["arm"]]
     seen = ((row.get("audit") or {}).get("init") or {}).get("model")
     if seen:
         out["lead_seen"] = seen
@@ -1054,6 +1130,11 @@ def run_unit(u: dict, a, work: Path) -> dict:
         env = PF.prepare(iso)
         if u["arm"] in TIER_ARMS:                 # the person's choice the arm simulates, in the unit's own hub
             hinfo["picked"] = set_picked(hub, u["arm"], env)
+        # the namecheck mode the unit's ccx runs get (ccx2nc: fail, set and asserted here; any other arm: what the
+        # hub says, warn as shipped), in every row so before / after compare on the field, not on the arm name
+        hinfo["namecheck"] = (set_namecheck(hub, NAMECHECK_ARMS[u["arm"]]) if u["arm"] in NAMECHECK_ARMS
+                              else hub_namecheck(hub))
+        row["namecheck_mode"] = hinfo["namecheck"]
         row.update(direct_unit(u, a, repo, hub, env, job) if not has_lead(u["arm"]) else
                    lead_unit(u, a, work, repo, hub, iso, env, job))
         row.update(changed(repo))
@@ -1371,6 +1452,31 @@ def pin_check(rows: list[dict], tag: str, head: str, pin: str = "") -> tuple[str
     return (seen[0] if seen else pin12 or head12), probs
 
 
+def arm_tokens(tokens: list[str], lead_model: str = "") -> list[str]:
+    """--arms checked: each an arm (ARMS, OPT_IN_ARMS) or `<arm>@auto`, that arm with its lead model picked per task
+    (--lead-model auto for its units only), so `ccx2,ccx2@auto` schedules and interleaves both in one invocation.
+    Returns the arms themselves, each once (what preflight and the codex / skill checks see)."""
+    known = (*ARMS, *OPT_IN_ARMS)
+    bad, out = [], []
+    for x in tokens:
+        arm, at, pick = x.partition("@")
+        if arm not in known or (at and pick != LEAD_AUTO):
+            bad.append(x)
+            continue
+        if at and not has_lead(arm):
+            raise SystemExit(f"{x}: arm {arm} has no lead to pick a model for")
+        if at and lead_model == LEAD_AUTO:
+            raise SystemExit(f"{x}: with --lead-model auto every lead arm is already auto; name the arm as {arm}")
+        if arm not in out:
+            out.append(arm)
+    if bad:
+        raise SystemExit(f"unknown arm(s): {', '.join(bad)} (known: {', '.join(known)}, or <arm>@{LEAD_AUTO})")
+    dup = sorted({x for x in tokens if tokens.count(x) > 1})
+    if dup:
+        raise SystemExit(f"arm(s) named twice: {', '.join(dup)}")
+    return out
+
+
 def cmd_run(a) -> int:
     out = Path(a.out) if a.out else results_file(a.taskset)
     ids = TASKSETS[a.taskset].IDS
@@ -1379,10 +1485,8 @@ def cmd_run(a) -> int:
     if bad_t:
         raise SystemExit(f"unknown task(s) in task set {a.taskset}: {', '.join(bad_t)} (known: {', '.join(ids)})")
     work = Path(a.workdir or (Path(tempfile.gettempdir()) / a.tag))
-    arms = a.arms.split(",") if a.arms else list(ARMS)
-    bad = [x for x in arms if x not in (*ARMS, *OPT_IN_ARMS)]
-    if bad:
-        raise SystemExit(f"unknown arm(s): {', '.join(bad)} (known: {', '.join((*ARMS, *OPT_IN_ARMS))})")
+    tokens = a.arms.split(",") if a.arms else list(ARMS)
+    arms = arm_tokens(tokens, a.lead_model or "")      # the arms themselves (an `<arm>@auto` token: its arm)
     skill = [x for x in arms if x in SKILL_ARMS]
     if skill and a.claude_isolation != "ccx-home" and not a.dry_run:
         raise SystemExit(f"arm {', '.join(skill)} needs --claude-isolation ccx-home: its lead must load the "
@@ -1392,10 +1496,12 @@ def cmd_run(a) -> int:
     lead = {"lead_model": a.lead_model or DEFAULT_LEAD[0], "lead_effort": a.lead_effort or DEFAULT_LEAD[1]}
     auto = lead["lead_model"] == LEAD_AUTO
     todo = []
-    for u in schedule(a.rounds, a.seed, tasks, arms):
-        u = {**u, "tag": a.tag, "seed": a.seed, "taskset": a.taskset, **(lead if has_lead(u["arm"]) else {})}
-        if auto and has_lead(u["arm"]):
-            u.update(auto_lead(by_id(u["task"])))
+    for u in schedule(a.rounds, a.seed, tasks, tokens):   # tokens: `x` and `x@auto` interleave as two arms
+        arm, _, pick = u["arm"].partition("@")
+        u = {**u, "arm": arm, "tag": a.tag, "seed": a.seed, "taskset": a.taskset,
+             **(lead if has_lead(arm) else {})}
+        if (auto or pick == LEAD_AUTO) and has_lead(arm):
+            u.update({"lead_model": LEAD_AUTO, **auto_lead(by_id(u["task"]))})
         if a.claude_isolation == "ccx-home" and u["arm"] in CCX_ARMS:
             u["ccx_home"] = True                  # its own arm (`@ccx-home`), key, folder and label
         u["label"] = f"eval-r5:{a.tag}:{u['round']}:{u['task']}:{u['arm']}{_arm_suffix(u)}"
@@ -1412,7 +1518,7 @@ def cmd_run(a) -> int:
                       if is_auto(u) else "")
             print(f"[dry] {u['label']}  ~${sp['usd']:.3f} ({sp['mode']}; lead ~${sp['lead']:.3f}, "
                   f"ccx ~${sp['ccx']:.3f}{picked})")
-        if auto:
+        if any(is_auto(u) for u in todo):
             n: dict[str, int] = {}
             for u in todo:
                 if is_auto(u):
@@ -1449,6 +1555,9 @@ def cmd_run(a) -> int:
               flush=True)
         return 3
     rep["lead"] = {"model": lead["lead_model"], "effort": lead["lead_effort"]}     # in every row's fingerprint
+    per_arm = [x for x in tokens if "@" in x]
+    if per_arm:                                    # `<arm>@auto` tokens: those units' lead was picked per task
+        rep["lead"]["auto_arms"] = per_arm
     rep["pinned_commit"] = pinned
     if pin_probs:                                  # forced past a commit change: recorded, and no row is clean
         rep["pin_problems"] = pin_probs
@@ -1933,6 +2042,9 @@ def summarize(rows: list[dict], include_unclean: bool = False) -> dict:
             out[arm]["phases"] = ph
         if ex_arm.get(arm):
             out[arm]["excluded"] = ex_arm[arm]
+        nc = namecheck_stats(rs)
+        if nc:
+            out[arm]["namecheck"] = nc
         if arm.split("@", 1)[0] in SKILL_ARMS:        # did the lead load the skill the arm is about
             used = [r.get("skill_used") for r in rs]
             out[arm]["skill_used"] = f"{sum(x is True for x in used)}/{len(rs)}"
@@ -2008,7 +2120,8 @@ def cmd_export(a) -> int:
             "delegated", "context_attached", "files_changed", "diffstat", "model", "status", "verdicts", "error",
             "env_clean", "fingerprint", "lead_model", "lead_effort", "lead_pick", "lead_b", "lead_band", "phases", "tier", "tier_plan", "ref_size",
             "actual_mode", "misband", "misband_overall", "followed_plan", "ccx_check_passed", "may_be_wrong",
-            "ccx_routes", "bookkeeping_error", "lead_usage", "timeline", "skill_used", "skills_used")
+            "ccx_routes", "bookkeeping_error", "lead_usage", "timeline", "skill_used", "skills_used",
+            "namecheck_mode", "ccx_namecheck")
     rows = tagged(read_jsonl(results_file(a.taskset)), a.tag)
     data = {"summary": summarize(rows, a.include_unclean),
             "rows": [r3.scrub({**{k: r[k] for k in keep if k in r},
