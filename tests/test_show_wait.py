@@ -1,6 +1,7 @@
 """`ccx show <id> --wait` (a lead waiting out a long run within one tool call) and the diffstat in the compact
 result (the lead needs no `git diff` of its own). Fake CLIs only."""
 import json
+import os
 import subprocess
 import sys
 import time
@@ -52,6 +53,94 @@ class TestShowWait(Env):
         self.assertEqual(out["fixed_after_review_of"], first)
         self.assertEqual(out["review"]["verdict"], "pass")
         self.assertTrue(out["recap"].startswith(f"ccx run {fix}:"))
+
+    def test_plain_show_follows_a_finished_fix_round(self):
+        # plan #3: `ccx show <first id>` without --wait printed the first run's stale result (ok true, kind
+        # review_issues) after its fix round had ended review_failed; it reports the chain's final state, like --wait
+        first, fix = "20991231-100000-aaaa", "20991231-100500-bbbb"
+        self.put(_rec(first, kind="review_issues", review={"verdict": "issues", "issues": ["a.py:1 bug"]}))
+        self.put(_rec(fix, resumed_from=first, review_of=first, kind="review_failed",
+                      review={"verdict": "issues", "issues": ["a.py:1 bug"]},
+                      first_review={"verdict": "issues", "issues": ["a.py:1 bug"]}))
+        out = json.loads(self.ccx("show", first).stdout)
+        self.assertEqual((out["run_id"], out["kind"], out["ok"]), (fix, "review_failed", False), out)
+        self.assertEqual(out["chain"], f"{first} -> {fix}")
+        self.assertIn("[must]", out["hint"])
+        full = self.ccx("show", first, "--full").stdout
+        self.assertIn(f"chain: {first} -> {fix}", full)
+        self.assertIn(f'"run_id": "{fix}"', full)
+        self.assertEqual(json.loads(self.ccx("show", fix).stdout)["run_id"], fix)       # the last link: itself
+
+    def test_show_follows_a_fix_round_started_in_the_same_second(self):
+        # CI (Linux/macOS): the fix round began in its parent's second and its random hex sorted below the parent's
+        first, fix = "20991231-100000-ffff", "20991231-100000-0000"
+        self.put(_rec(first, kind="review_issues", review={"verdict": "issues", "issues": ["a.py:1 bug"]}))
+        self.put(_rec(fix, resumed_from=first, review_of=first, kind="review_failed",
+                      review={"verdict": "issues", "issues": ["a.py:1 bug"]},
+                      first_review={"verdict": "issues", "issues": ["a.py:1 bug"]}))
+        self.assertEqual(json.loads(self.ccx("show", first).stdout)["run_id"], fix)
+        self.assertEqual(json.loads(self.ccx("show", first, "--wait", "5").stdout)["run_id"], fix)
+
+    def test_plain_show_of_a_fix_round_still_running(self):
+        first, fix = "20991231-100000-aaaa", "20991231-100500-bbbb"
+        self.put(_rec(first, kind="review_issues", review={"verdict": "issues", "issues": ["a.py:1 bug"]}))
+        self.put(_rec(fix, resumed_from=first, review_of=first, state="running", result=None, kind=None, ok=False,
+                      pid=None))
+        (self.hub / "ccx" / "runs" / fix / "beat").write_text(str(time.time()), encoding="utf-8")
+        out = json.loads(self.ccx("show", first).stdout)
+        self.assertEqual((out["run_id"], out["status"], out["ok"]), (fix, "running", False), out)
+
+    def test_plain_show_before_the_fix_round_starts(self):
+        first = "20991231-100000-aaaa"
+        self.put(_rec(first, kind="review_issues", review={"verdict": "issues", "issues": ["a.py:1 bug"]}))
+        out = json.loads(self.ccx("show", first).stdout)
+        self.assertEqual((out["run_id"], out["ok"], out["fix_round"]), (first, False, "starting"), out)
+        self.assertEqual(out["next"], f"ccx show {first} --wait")
+        f = self.hub / "ccx" / "runs" / first / "run.json"
+        old = time.time() - 3600                       # long ended and no fix round came: review_issues is final
+        os.utime(f, (old, old))
+        out = json.loads(self.ccx("show", first).stdout)
+        self.assertEqual((out["kind"], out["ok"]), ("review_issues", False), out)
+        self.assertNotIn("fix_round", out)
+
+    def test_plain_show_of_a_verified_review_issues_run_is_final(self):
+        # `ccx verify` / dismiss rewrite run.json after the run ended: no fix round is "starting" because of that
+        first = "20991231-100000-aaaa"
+        self.put(_rec(first, kind="review_issues", review={"verdict": "issues", "issues": ["a.py:1 bug"]},
+                      verdict={"ok": False, "note": "", "reason": None, "ts": time.time()}))
+        out = json.loads(self.ccx("show", first).stdout)
+        self.assertEqual((out["run_id"], out["kind"], out["ok"]), (first, "review_issues", False), out)
+        self.assertNotIn("fix_round", out)
+
+    def test_a_later_resume_is_not_taken_for_the_fix_round(self):
+        # the lead's own `ccx resume ID` after a final review_issues (review_round 0) is another run, not the chain
+        first, later = "20991231-100000-aaaa", "20991231-110000-bbbb"
+        self.put(_rec(first, kind="review_issues", review={"verdict": "issues", "issues": ["a.py:1 bug"]}))
+        old = time.time() - 3600
+        os.utime(self.hub / "ccx" / "runs" / first / "run.json", (old, old))
+        self.put(_rec(later, resumed_from=first, review_round=0))
+        out = json.loads(self.ccx("show", first).stdout)
+        self.assertEqual((out["run_id"], out["kind"]), (first, "review_issues"), out)
+        self.assertNotIn("chain", out)
+        full = self.ccx("show", first, "--full").stdout
+        self.assertIn(f'"run_id": "{first}"', full)
+        self.assertNotIn("chain:", full)
+        w = json.loads(self.ccx("show", first, "--wait", "5").stdout)
+        self.assertEqual(w["run_id"], first, w)
+
+    def test_plain_show_of_a_fix_round_its_parent_has_not_tagged_yet(self):
+        # the fix round's run.json is final a moment before its parent adds review_of / cost_chain
+        first, fix = "20991231-100000-aaaa", "20991231-100500-bbbb"
+        self.put(_rec(first, kind="review_issues", review={"verdict": "issues", "issues": ["a.py:1 bug"]}))
+        self.put(_rec(fix, resumed_from=first, review_round=1, kind="ok", review={"verdict": "pass"}))
+        out = json.loads(self.ccx("show", first).stdout)
+        self.assertEqual((out["run_id"], out["ok"], out["fix_round"]), (fix, False, "finishing"), out)
+        self.assertEqual(out["next"], f"ccx show {first} --wait")
+        old = time.time() - 3600                       # never tagged (the parent died): the fix round's own result
+        os.utime(self.hub / "ccx" / "runs" / fix / "run.json", (old, old))
+        out = json.loads(self.ccx("show", first).stdout)
+        self.assertEqual((out["run_id"], out["ok"]), (fix, True), out)
+        self.assertNotIn("fix_round", out)
 
     def test_wait_times_out_with_status_running(self):
         rid = "20991231-120000-dddd"

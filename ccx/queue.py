@@ -14,7 +14,10 @@ from __future__ import annotations
 
 import json
 import os
+import random
+import threading
 import time
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -37,7 +40,10 @@ _WINDOWS = os.name == "nt"
 def _can_create(d: Path) -> bool:
     """Can this process create a file in d at all? Tells a lock file that is busy (Windows "delete pending") from a
     folder it may not write (read-only, an ACL), where waiting would never help."""
-    probe = d / f"queue.probe.{os.getpid()}.{time.monotonic_ns()}"
+    # unique per call: threads of one process probing within one clock tick (monotonic_ns is ~15 ms coarse on Windows
+    # before 3.13) drew the same name, and one thread's create then hit the other's just-deleted probe ("delete
+    # pending": PermissionError) and took a busy lock for a folder it may not write (CI, windows-latest 3.12)
+    probe = d / f"queue.probe.{os.getpid()}.{threading.get_ident()}.{uuid.uuid4().hex}"
     try:
         os.close(os.open(probe, os.O_CREAT | os.O_EXCL | os.O_WRONLY))
     except PermissionError:
@@ -72,20 +78,102 @@ def _stale(lock: Path, timeout: float, seen: dict | None = None) -> bool:
     return now - seen["since"] > timeout
 
 
+class _Turns:
+    """This process's threads take turns on one queue folder's lock file through this; n counts the turns taken, so
+    a waiter sees whether the lock is changing hands or one holder has hung."""
+
+    def __init__(self):
+        self.lock, self.n = threading.Lock(), 0
+
+
+_LOCAL: dict[str, _Turns] = {}     # one per queue folder
+_LOCAL_GUARD = threading.Lock()
+
+
+def _local_lock(lock: Path) -> _Turns:
+    key = os.path.normcase(os.path.abspath(lock))
+    with _LOCAL_GUARD:
+        return _LOCAL.setdefault(key, _Turns())
+
+
+def _wait_turn(turns: _Turns, lock: Path, timeout: float, t0: float) -> None:
+    """Take this process's turn: the same deadline rules as the file (2 * timeout since the last time a turn was
+    taken, MAX_WAIT_FACTOR * timeout in all), so a thread that hangs holding the lock stalls the others no longer than
+    a hung holder in another process would."""
+    seen, progress = turns.n, t0
+    while not turns.lock.acquire(timeout=min(0.1, timeout)):
+        now = time.time()
+        if turns.n != seen:
+            seen, progress = turns.n, now
+        if now - progress > 2 * timeout or now - t0 > MAX_WAIT_FACTOR * timeout:
+            raise RuntimeError(f"queue lock {lock} still busy in this process after {now - t0:.1f}s")
+    turns.n += 1
+
+
+def _holder(lock: Path):
+    """Which lock file this is (not how old): a new holder creates a new file and writes its own token into it, so
+    this changes when the lock changed hands; touching the same file does not. The token matters where a freed inode
+    number is reused at once and there is no birth time (Linux ext4/tmpfs). None when there is none to look at."""
+    try:
+        st = lock.stat()
+        body = lock.read_bytes()[:200]
+    except OSError:
+        return None
+    return st.st_ino, getattr(st, "st_birthtime_ns", None), body
+
+
 @contextmanager
 def _lock(root: Path, timeout: float = 10.0):
     """Hold the queue lock. Waits for a held one; takes over one older than timeout (a crashed writer's); gives up
-    after 2 * timeout in all (a lock that cannot be taken over, e.g. held open by a hung writer on Windows) with
-    PermissionError when the last attempt was denied, else RuntimeError. Never waits forever."""
+    when the lock has not changed hands for 2 * timeout (a lock that cannot be taken over, e.g. held open by a hung
+    writer on Windows) with PermissionError when the last attempt was denied, else RuntimeError; and after
+    MAX_WAIT_FACTOR * timeout in all (the in-process wait below included). Never waits forever, and below that cap
+    never fails only because other writers kept it busy.
+
+    Threads of this process first take turns on an in-process lock, so they never poll against each other for the
+    file (polling is unfair: a writer that just released takes it again before a sleeping waiter wakes; CI windows
+    3.12 saw a thread wait out the old 2 * timeout in all while others wrote). That wait has the same rules: it fails
+    after 2 * timeout without a turn changing hands (a thread hung holding the lock). Other processes still meet at
+    the file; there the 2 * timeout counts from when this thread got its turn, and restarts whenever it sees the lock
+    file change hands."""
     d = qdir(root)
     d.mkdir(parents=True, exist_ok=True)
     lock = d / "queue.lock"
-    token = f"{os.getpid()}.{time.monotonic_ns()}.{id(lock)}".encode()
-    t0, probed, seen = time.time(), False, {}
+    token = f"{os.getpid()}.{threading.get_ident()}.{uuid.uuid4().hex}".encode()
+    t0 = time.time()
+    turns = _local_lock(lock)
+    _wait_turn(turns, lock, timeout, t0)
+    local = turns.lock
+    try:
+        fd = _take(lock, d, timeout, t0, start=time.time())    # the file's deadline counts from here, not t0
+    except BaseException:
+        local.release()
+        raise
+    try:
+        try:
+            token = token[:os.write(fd, token)]    # whose lock it is: a release removes only its own
+        except OSError:
+            token = b""                        # unmarked: ours only while it stays empty (a takeover marks it)
+        yield
+    finally:
+        try:
+            os.close(fd)
+            _unlink(lock, token)
+        finally:
+            local.release()
+
+
+MAX_WAIT_FACTOR = 30            # a waiter that keeps seeing progress still gives up after this many timeouts
+
+
+def _take(lock: Path, d: Path, timeout: float, t0: float, start: float | None = None) -> int:
+    """Create the lock file (O_EXCL) -> its fd; the waiting and takeover rules of _lock. The 2 * timeout deadline
+    counts from start (when this thread got its in-process turn) or the last change of hands; t0 is only for the
+    MAX_WAIT_FACTOR * timeout cap on the whole wait."""
+    probed, seen, holder, progress, pause = False, {}, None, (t0 if start is None else start), 0.002
     while True:
         try:
-            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-            break
+            return os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         except (FileExistsError, PermissionError) as e:
             last = e
             if isinstance(e, PermissionError):
@@ -98,6 +186,11 @@ def _lock(root: Path, timeout: float = 10.0):
                     probed = True
                     if not _can_create(d):
                         raise
+            now_holder = _holder(lock)
+            if now_holder is not None:
+                if holder is not None and now_holder != holder:
+                    progress, pause = time.time(), 0.002     # changed hands: others are writing, not stuck
+                holder = now_holder
             if _stale(lock, timeout, seen):    # a crashed writer left it: take it over
                 try:
                     lock.unlink()
@@ -106,29 +199,22 @@ def _lock(root: Path, timeout: float = 10.0):
                     continue
                 except PermissionError as e2:  # held open (a hung writer, Windows): wait, up to the deadline
                     last = e2
-            waited = time.time() - t0
-            if waited > 2 * timeout:
-                msg = f"queue lock {lock} still busy after {waited:.1f}s ({type(last).__name__}: {last})"
+            now = time.time()
+            if now - progress > 2 * timeout or now - t0 > MAX_WAIT_FACTOR * timeout:
+                msg = f"queue lock {lock} still busy after {now - t0:.1f}s ({type(last).__name__}: {last})"
                 raise (PermissionError(msg) if isinstance(last, PermissionError) else RuntimeError(msg)) from last
-            time.sleep(0.05)
-    try:
-        try:
-            token = token[:os.write(fd, token)]    # whose lock it is: a release removes only its own
-        except OSError:
-            token = b""                        # unmarked: ours only while it stays empty (a takeover marks it)
-        yield
-    finally:
-        os.close(fd)
-        _unlink(lock, token)
+            time.sleep(pause * (0.5 + random.random()))       # short at first, jittered: waiters do not move in step
+            pause = min(0.05, pause * 1.5)
 
 
-def _unlink(lock: Path, token: bytes | None = None, tries: int = 20) -> None:
+def _unlink(lock: Path, token: bytes | None = None, tries: int = 100) -> None:
     """Release the lock file, if it is still ours (token): one taken over from us belongs to the next writer now.
     On Windows the unlink can be denied for a moment (another writer's create racing with it, a virus scanner
-    holding it open): retry briefly. Left behind, it is taken over once stale, so a release never fails the write
-    it guarded. The check and the unlink are two steps: a takeover landing between them (only after we held the
-    lock past timeout, and only where an open file can be deleted, i.e. not Windows) can still lose the new
-    holder's lock; closing that needs OS file locking, which a plain lock file does not have."""
+    holding it open): retry for up to about 2 s, since a lock left behind stalls every other writer until it is
+    stale (timeout). Left behind anyway, it is taken over then, so a release never fails the write it guarded.
+    The check and the unlink are two steps: a takeover landing between them (only after we held the lock past
+    timeout, and only where an open file can be deleted, i.e. not Windows) can still lose the new holder's lock;
+    closing that needs OS file locking, which a plain lock file does not have."""
     for _ in range(tries):
         try:
             if token is not None and lock.read_bytes() != token:
@@ -138,7 +224,7 @@ def _unlink(lock: Path, token: bytes | None = None, tries: int = 20) -> None:
         except FileNotFoundError:
             return
         except PermissionError:
-            time.sleep(0.01)
+            time.sleep(0.02)
         except OSError:
             return
 

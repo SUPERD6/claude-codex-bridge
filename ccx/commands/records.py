@@ -62,13 +62,32 @@ POLL_SEC = 2.0                          # `ccx show --wait` reads run.json this 
 FIX_ROUND_GRACE = 30.0                  # a review fix round's run.json appears within this after its parent ends
 
 
+def _is_fix_round_of(r: dict, rid: str) -> bool:
+    """Is r the review fix round of run rid? review_of is written when the fix round ends; while it runs, its own
+    review_round (>= 1) says so. A `ccx resume rid` the lead started later has review_round 0: not followed. Records
+    from before review_round was kept (no key) are matched by resumed_from alone, as then."""
+    if r.get("review_of") == rid:
+        return True
+    return r.get("resumed_from") == rid and ("review_round" not in r or int(r.get("review_round") or 0) >= 1)
+
+
+def _fix_may_start(rec: dict) -> bool:
+    """A finished review_issues run with a session to fix in: its fix round may still be about to start. Not once
+    the lead has given a verdict or dismissed it (that rewrites run.json, which says nothing about a fix round)."""
+    return (rec.get("state") != "running" and rec.get("kind") == "review_issues" and bool(rec.get("session_id"))
+            and not rec.get("verdict") and not rec.get("dismissed"))
+
+
 def _fix_round(p, rec: dict) -> dict | None:
     """The review fix round a finished run started (delegate.run resumes the same sub-session once when the
-    independent review finds problems), or None. The fix run's record points back with resumed_from/review_of."""
+    independent review finds problems), or None. The fix run's record points back with review_of / review_round."""
     if rec.get("kind") != "review_issues" or not rec.get("session_id") or not p.runs.exists():
         return None
     rid = rec["run_id"]
-    for d in sorted(x for x in p.runs.iterdir() if x.name > rid):       # run ids sort by start time
+    # run ids sort by start second (YYYYMMDD-HHMMSS), then 4 random hex digits: a fix round started in the same
+    # second may sort below its parent (CI on Linux/macOS: fast fakes), so compare the second, not the whole id
+    stamp = rid[:15]
+    for d in sorted(x for x in p.runs.iterdir() if x.name[:15] >= stamp and x.name != rid):
         f = d / "run.json"
         if not f.exists():
             continue
@@ -76,7 +95,7 @@ def _fix_round(p, rec: dict) -> dict | None:
             r = ledger.read_record(f)
         except (OSError, ValueError):
             continue
-        if r.get("review_of") == rid or r.get("resumed_from") == rid:
+        if _is_fix_round_of(r, rid):
             return r
     return None
 
@@ -106,7 +125,7 @@ class RunWaiter:
             if nxt:
                 self.rid, self.ended_at = nxt["run_id"], None
                 continue
-            fix_due = rec.get("kind") == "review_issues" and bool(rec.get("session_id"))   # one is about to start
+            fix_due = _fix_may_start(rec)                                    # one is about to start
             tag_due = self.rid != self.run_id and not rec.get("review_of")   # its parent writes review_of right after
             if not (fix_due or tag_due):
                 return rec
@@ -187,14 +206,59 @@ def cmd_show(a) -> int:
         _out(_result(rec, run_id, rid, a.full))
         return 0
     recover.sweep(p)                    # a run whose ccx process is gone shows as interrupted, not running
-    rec = ledger.load_run(p, run_id)
+    rec, rid = follow_chain(p, ledger.load_run(p, run_id))
     if a.full:
         _out(rec)
-        d = p.runs / run_id
-        print(f"\nlogs: {d}")
-    else:
-        _out(compact(rec))
+        if rid != run_id:
+            print(f"\nchain: {run_id} -> {rid}")
+            print(f"\nlogs of {run_id}: {p.runs / run_id}")
+        print(f"\nlogs: {p.runs / rid}")
+        return 0
+    res = _result(rec, run_id, rid, False) if rid != run_id else compact(rec)   # as --wait reports the chain
+    if fix_round_due(p, rec):
+        # the review found problems and its fix round is about to start: this record is not the result yet
+        res.update(ok=False, fix_round="starting", next=f"ccx show {run_id} --wait")
+    elif rid != run_id and fix_round_finishing(p, rec):
+        # the fix round has ended; its parent adds review_of, first_review and cost_chain a moment later (the gap
+        # RunWaiter's tag_due waits out)
+        res.update(ok=False, fix_round="finishing", next=f"ccx show {run_id} --wait")
+    _out(res)
     return 0
+
+
+def follow_chain(p, rec: dict) -> tuple[dict, str]:
+    """The last record of the review fix round chain rec started (rec itself when there is none yet), and its id.
+    `ccx show ID` without --wait reports the same final state and kind as `--wait`, never the first run's stale
+    result; a fix round still running shows as running."""
+    seen = {rec["run_id"]}
+    while True:
+        nxt = _fix_round(p, rec)
+        if not nxt or nxt.get("run_id") in seen:
+            return rec, rec["run_id"]
+        seen.add(nxt["run_id"])
+        rec = nxt
+
+
+def fix_round_due(p, rec: dict) -> bool:
+    """A finished run whose review found problems, with a session to fix them in and no fix round yet, that ended
+    less than FIX_ROUND_GRACE ago (by its run.json): the fix round is about to start (the rule RunWaiter waits by).
+    Later than that, none started: review_issues is then its final kind."""
+    if not _fix_may_start(rec):
+        return False
+    return _written_within(p, rec, FIX_ROUND_GRACE)
+
+
+def fix_round_finishing(p, rec: dict) -> bool:
+    """A finished fix round its parent has not tagged yet (no review_of), written moments ago."""
+    return rec.get("state") != "running" and not rec.get("review_of") and _written_within(p, rec, 5 * POLL_SEC)
+
+
+def _written_within(p, rec: dict, seconds: float) -> bool:
+    try:
+        ended = (p.runs / rec["run_id"] / "run.json").stat().st_mtime
+    except OSError:
+        return False
+    return time.time() - ended < seconds
 
 
 def cmd_stats(a) -> int:
