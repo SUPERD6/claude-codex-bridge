@@ -236,7 +236,8 @@ def cmd_doctor(a) -> int:
         print(codex_lead_rule(), end="")
         return 0
     from .common import lead_identity
-    ok = doctor(paths(), codex_lead=bool(getattr(a, "codex_lead", False)) or lead_identity() == "codex")
+    ok = doctor(paths(), codex_lead=bool(getattr(a, "codex_lead", False)) or lead_identity() == "codex",
+                verbose=bool(getattr(a, "verbose", False)))
     return 0 if ok else 1
 
 
@@ -283,6 +284,9 @@ def register(sub) -> None:
     dr.add_argument("--codex-lead", action="store_true",
                     help="show the 'Codex as lead (sandbox)' row in full: whether a Codex lead's sandbox lets it hand "
                          "work out, and how to set it up (shown in full anyway when Codex runs this)")
+    dr.add_argument("--verbose", "-v", action="store_true",
+                    help="also the rows about ccx's own workings (routing prior, tier policy, hub layout, ...) "
+                         "when they are ok")
     dr.set_defaults(fn=cmd_doctor)
     u = sub.add_parser("uninstall", help="remove ccx hooks/blocks/links from both tools (dry run unless --apply)")
     u.add_argument("--apply", action="store_true")

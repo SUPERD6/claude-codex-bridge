@@ -44,7 +44,7 @@ ccx run --to codex --mode read "Summarise README.md in three lines for a new use
 点名时，再小的任务也会派出去，只在 stderr 提示一句自己做更省；主会话代为调用时，太小的任务仍会被建议自己做）。`ccx setup` 问到的 hub 是你自己的一个文件夹，放共享记忆、技能和每次运行的记录。
 
 需要 Python 3.11+，以及登录好的 `claude` 和 `codex` 命令行；DeepSeek（`dsh`，或 `DEEPSEEK_API_KEY` 里的密钥）可选。
-`ccx -h` 先列常用命令。
+`ccx -h` 先列常用命令（run、resume、show、q、undo、ui 等），开发者用的（trial、ab、bench 等）放在最后。
 
 <p align="center"><img alt="演示动画：ccx route 选出 codex:gpt-6.1-sol:medium，ccx run 一次完成并由 ccx 重跑验收命令，ccx verify 记下结论" src="docs/assets/demo.svg" width="100%"></p>
 

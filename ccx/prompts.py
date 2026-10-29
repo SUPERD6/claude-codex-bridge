@@ -58,9 +58,14 @@ REVIEW_PERMISSION = ("read-only review: read and search files with your file too
 # Claude's read-only allow-list ([permissions.claude] read, config/tiers.toml) has Read/Grep/Glob and Bash only for
 # git status/diff/log and ls: the "cat / rg are fine" above was refused there, and `cd <repo> && git diff` is
 # refused as a whole. Its own wording asks for nothing the allow-list turns down; Codex keeps REVIEW_PERMISSION.
+# r6a (2026-10-29): 4 of 10 ccx2 units had one reviewer Bash call refused, and none of the four was a test: each was a
+# compound read (`git diff ... | head`, `cd <dir> && grep ... && sed -n`, `git show ... | grep; sed -n`). So the fix is
+# this wording (one plain git command per call; Grep/Read for the rest) and ccx's check result in the brief, not a new
+# allow-list entry: the reviewer needs to run nothing.
 REVIEW_PERMISSION_CLAUDE = ("read-only review: read and search files with Read, Grep and Glob; use Bash only for "
-                            "git diff, git log and git status; you are already in the repository, so do not cd. "
-                            "Run no tests or builds and modify nothing")
+                            "git diff, git log and git status, one plain command per call (no |, ;, && or cd: "
+                            "anything else is refused; use Grep and Read instead of grep, sed, head or cat). "
+                            "You are already in the repository. Run no tests or builds and modify nothing")
 
 
 def review_permission(cli: str) -> str:
@@ -96,6 +101,23 @@ Final message = the JSON result (schema enforced). summary <= 120 words, facts o
 
 ESCALATE = """[ccx escalation {run_id}] The previous attempt ended with status={status}: {summary}
 You now run on a stronger model. Re-check the earlier reasoning, finish the original task, and return the JSON result."""
+
+
+# [defaults] focused_retry (default off): after ccx's own check failed on an attempt that said done, the next attempt
+# on the same agent resumes the same session (as ESCALATE does) but is told exactly what failed and to fix only that.
+# r6a (2026-10-29): such a retry got 400 characters and "re-check the earlier reasoning", and took longer than the
+# first attempt (median 389 s). Off until a measured round shows it does not lower the right-rate.
+CHECK_TAIL_CHARS = 2000
+CHECK_RETRY = """[ccx retry {run_id}] You said done, but ccx's acceptance check failed: `{cmd}` (exit {exit}).
+The end of its output:
+```
+{tail}
+```
+{model_line}Fix only what makes this check fail; keep the rest of your change and every part of the original task as it is.
+If the check's command lets you select part of it (one test, one target), re-run only the failing part, not the whole check: ccx runs it again afterwards. Return the JSON result."""
+
+CHECK_RETRY_SAME = "Same model as before, same session: you already know the task and the code.\n"
+CHECK_RETRY_STRONGER = "You now run on a stronger model, in the same session.\n"
 
 
 POLICY_RETRY = """[ccx retry {run_id}] The sandbox policy rejected a command before it ran; this is not a permission problem with the task:

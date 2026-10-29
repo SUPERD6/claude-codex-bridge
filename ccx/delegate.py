@@ -33,7 +33,7 @@ from .runners import BUILDERS, Outcome, execute, usage_dict
 from .agents.codex import _add_children, _codex_growth, _codex_seen, _codex_total  # noqa: F401
 from .ledger import write_record as _write_record  # noqa: F401
 from .plan import _fallback_plan, _plan, _provider_envs, _rung_spec, _usable, _within_budget, other  # noqa: F401
-from .prompts import (CONTINUE, ESCALATE, FOLLOWUP, LEAD_NOTE, NEEDS_WRITE, POLICY_MARKERS, POLICY_RETRY, PROMPT,  # noqa: F401
+from .prompts import (CHECK_RETRY, CHECK_RETRY_SAME, CHECK_RETRY_STRONGER, CHECK_TAIL_CHARS, CONTINUE, ESCALATE, FOLLOWUP, LEAD_NOTE, NEEDS_WRITE, POLICY_MARKERS, POLICY_RETRY, PROMPT,  # noqa: F401
                       REVIEW_CALLER, REVIEW_FINISH, REVIEW_PERMISSION, SELFCHECK, SELFCHECK_CMD, _policy_rejections,
                       review_permission)
 from .review import review_run as _review  # noqa: F401
@@ -776,8 +776,10 @@ def run(req: Request, p: Paths) -> dict:
                 bg_review = _start_review(req, p, cfg, record, cwd, run_dir, oc.result)
             # did this attempt change anything: told before the check runs, so files the check writes don't count
             left = _left_unchanged(p, record) if req.mode == "write" else None
+            focused = focused_retry(cfg)
             chk = (_namecheck(req, p, cfg, record, cwd)         # mode fail + a hit: the command is not run
-                   or run_check(req.check, cwd, int(cfg["defaults"].get("check_timeout_sec", 900))))
+                   or run_check(req.check, cwd, int(cfg["defaults"].get("check_timeout_sec", 900)),
+                                **({"tail_chars": CHECK_TAIL_CHARS} if focused else {})))
             early_check = (len(record["attempts"]), chk, left)
             if not chk["passed"] and not chk.get("broken"):   # a broken check is no reason to climb
                 if bg_review is not None:
@@ -789,7 +791,17 @@ def run(req: Request, p: Paths) -> dict:
                     record["attempts"][-1]["check_reason"] = chk["reason"]
                 _write_record(run_dir, record)
                 summary = f"you said done, but `{chk['cmd']}` failed (exit {chk['exit']}):\n{chk['tail'][-400:]}"
-                if plan[i + 1]["agent"] == to and session:
+                nxt = plan[i + 1]
+                if nxt["agent"] == to and session and focused and agents.get(cli).can_resume:
+                    # [defaults] focused_retry: the same session, told what failed (~2000 characters of the check's
+                    # output) and to fix only that; the ladder itself is unchanged (still the next rung)
+                    same = (nxt["model"], nxt["effort"]) == (spec["model"], spec["effort"])
+                    prompt = CHECK_RETRY.format(run_id=run_id, cmd=chk["cmd"], exit=chk["exit"],
+                                                tail=str(chk.get("tail") or "")[-CHECK_TAIL_CHARS:],
+                                                model_line=CHECK_RETRY_SAME if same else CHECK_RETRY_STRONGER)
+                    record["attempts"][-1]["retry"] = "focused"
+                    _write_record(run_dir, record)
+                elif nxt["agent"] == to and session:
                     prompt = ESCALATE.format(run_id=run_id, status="check_failed", summary=summary)
                 else:
                     prompt, session = first_prompt, None
@@ -988,6 +1000,13 @@ def env_hint(record: dict) -> str:
            f"check that `{agent}` can run shell commands in this folder on its own")
     return (f"{agent} could not start a process on this machine ({why}): an environment problem, not the task, so "
             f"ccx did not move up to a pricier model or retry. Fix: {fix}; then `ccx resume {rid}`")
+
+
+def focused_retry(cfg: dict) -> bool:
+    """[defaults] focused_retry (default false): after ccx's check failed, the next attempt on the same agent gets the
+    failing command and ~2000 characters of its output, and is told to fix only that (prompts.CHECK_RETRY)."""
+    v = (cfg.get("defaults") or {}).get("focused_retry", False)
+    return v is True or str(v).strip().lower() in ("true", "on", "yes", "1")
 
 
 PROGRESS_SEC = 30.0

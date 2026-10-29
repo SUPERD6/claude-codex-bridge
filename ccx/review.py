@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from .delegate import Request
 
 MARK = "[ccx review"
+CHECK_TAIL_IN_BRIEF = 600       # characters of ccx's own check output shown under Checks, when it already ran
 BRIEF = """{mark} of run {run_id}] Review a change another agent made. Do not edit anything.
 
 ## The task it was given
@@ -549,6 +550,12 @@ def brief(run_id: str, task: str, summary: str, diff: str, max_chars: int, check
     ran = (f"ccx ran the acceptance command `{check['cmd']}` after the change: "
            f"{'passed' if check.get('passed') else 'FAILED (exit %s)' % check.get('exit')}." if check
            else "No acceptance command was given; nobody ran the tests for you.")
+    if check:
+        # ccx's own result stands in for running it: the reviewer is given no permission to run tests (r6a)
+        ran += " You need not run it yourself."
+        tail = str(check.get("tail") or "").strip()
+        if tail:
+            ran += f"\nThe end of its output:\n```\n{tail[-CHECK_TAIL_IN_BRIEF:]}\n```"
     shown = diff[:max_chars]
     context = ""
     if cwd:

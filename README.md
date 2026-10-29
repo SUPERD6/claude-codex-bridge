@@ -48,7 +48,7 @@ when a lead session calls ccx, a task that small is still turned back to it.
 The hub `ccx setup` asks about is one folder of your own for shared memory, skills and the record of every run.
 
 You need Python 3.11+ and the `claude` and `codex` CLIs, logged in; DeepSeek (`dsh`, or a key in
-`DEEPSEEK_API_KEY`) is optional. `ccx -h` lists the everyday commands first.
+`DEEPSEEK_API_KEY`) is optional. `ccx -h` lists the everyday commands first (run, resume, show, q, undo, ui, ...) and the developer ones (trial, ab, bench) last.
 
 <p align="center"><img alt="Animated demo: ccx route picks codex:gpt-6.1-sol:medium, ccx run finishes in one attempt and ccx reruns the check, ccx verify records the verdict" src="docs/assets/demo.svg" width="100%"></p>
 

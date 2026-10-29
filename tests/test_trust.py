@@ -159,7 +159,7 @@ class TestWeekly(unittest.TestCase):
 
 class TestDoctorPrior(Env):
     def test_doctor_names_where_routing_starts(self):
-        line = lambda: next(x for x in self.ccx("doctor").stdout.splitlines() if x.startswith("routing prior"))  # noqa: E731
+        line = lambda: next(x for x in self.ccx("doctor", "--verbose").stdout.splitlines() if x.startswith("routing prior"))  # noqa: E731
         first = line()
         self.assertIn("seven-cores A/B round 1", first)
         self.assertIn("codex:gpt-6-luna:low +", first)

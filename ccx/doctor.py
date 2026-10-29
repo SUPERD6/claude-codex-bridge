@@ -280,8 +280,20 @@ def config_row(p: Paths) -> tuple[str, str]:
     return "ok", f"hub {p.hub}{env}; " + (", ".join(str(f) for f in files) or "no config file (defaults)")
 
 
-def doctor(p: Paths, codex_lead: bool = False) -> bool:
-    """The table and what to do. codex_lead: the 'Codex as lead' row in full (else a WARN there is one info line)."""
+# Rows about ccx's own workings, not something a person acts on while they are fine: shown with --verbose, or when
+# their state is not ok (then they say what to do). Walkthrough 2026-10-29: a new user asked what "routing prior"
+# and "tier policy" meant and whether to do something about them.
+INTERNAL_ROWS = ("python", "tiers.toml", "ccx config", "hub format", "hub layout", "routing prior", "tier policy",
+                 "hook timeouts")
+
+
+def shown_rows(rows: list[tuple[str, str, str]], verbose: bool) -> list[tuple[str, str, str]]:
+    return [r for r in rows if verbose or r[0] not in INTERNAL_ROWS or not str(r[1]).startswith("ok")]
+
+
+def doctor(p: Paths, codex_lead: bool = False, verbose: bool = False) -> bool:
+    """The table and what to do. codex_lead: the 'Codex as lead' row in full (else a WARN there is one info line).
+    verbose: also the INTERNAL_ROWS that are ok."""
     rows: list[tuple[str, str, str]] = []
 
     def add(name, state, detail=""):
@@ -422,9 +434,12 @@ def doctor(p: Paths, codex_lead: bool = False) -> bool:
         else:
             add(f"{tool} has {skill}", "ok" if (d / skill / "SKILL.md").exists() else "missing", str(d))
 
-    w = max(len(r[0]) for r in rows)
-    for name, state, detail in rows:
+    show = shown_rows(rows, verbose)
+    w = max(len(r[0]) for r in show)
+    for name, state, detail in show:
         print(f"{name.ljust(w)}  {state:<8} {detail}")
+    if len(show) < len(rows):
+        print(f"({len(rows) - len(show)} internal checks ok; `ccx doctor --verbose` shows them)")
     bad = [r for r in rows if r[1] in ("FAIL",)]
     for x in summary_lines(rows):
         print(x)
