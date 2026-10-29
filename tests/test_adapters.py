@@ -356,6 +356,47 @@ class TestUndoAskTask(AdapterEnv):
         self.assertEqual(out["resumed"], first["run_id"])
         self.assertEqual(self.calls()[-1]["argv"][:2], ["exec", "resume"])
 
+    def record(self, run_id):
+        return json.loads((self.hub / "ccx" / "runs" / run_id / "run.json").read_text(encoding="utf-8"))
+
+    def reviews(self):
+        return [c for c in self.calls() if "[ccx review" in c.get("prompt", "")]
+
+    def test_resume_keeps_the_review_setting(self):
+        # 2026-10-29: a run started with --review off was resumed with the default (auto) review
+        w = {"FAKE_WRITE": "a.py=changed by agent"}
+        out = self.j("run", "--from", "claude", "--to", "codex", "--tier", "T2", "--review", "off", "edit", env=w)
+        res = self.j("resume", out["run_id"], "also this", env=w)
+        self.assertEqual((self.record(out["run_id"])["review_mode"], self.record(res["run_id"])["review_mode"]),
+                         ("off", "off"))
+        self.assertEqual(self.reviews(), [])
+        again = self.j("resume", "--review", "auto", res["run_id"], "and that", env=w)   # explicit wins
+        self.assertEqual(self.record(again["run_id"])["review_mode"], "auto")
+
+    def test_task_resume_keeps_the_review_setting(self):
+        tid = self.checkpoint("init", "--title", "job", "--step", "x")
+        first = self.j("run", "--from", "claude", "--to", "codex", "--tier", "T2", "--no-escalate", "--review", "off",
+                       "--task", tid, "--step", "1", "x", env={"FAKE_STATUS": "blocked"})
+        out = self.j("task", "resume", tid, env={"FAKE_WRITE": "a.py=changed by agent"})
+        self.assertEqual(out["resumed"], first["run_id"])
+        self.assertEqual(self.record(out["run_id"])["review_mode"], "off")
+        self.assertEqual(self.reviews(), [])
+
+    def test_task_resume_restart_keeps_the_review_setting(self):
+        tid = self.checkpoint("init", "--title", "long job", "--step", "part a")
+        d = self.hub / "ccx" / "runs" / "20261024-000000-early"
+        d.mkdir(parents=True)
+        (d / "brief.md").write_text("change x to 2 in a.py", encoding="utf-8")
+        (d / "run.json").write_text(json.dumps({
+            "run_id": "20261024-000000-early", "to": "codex", "caller": "claude", "tier": "rung", "mode": "write",
+            "cwd": str(self.work), "session_id": None, "attempts": [], "state": "running", "ok": False,
+            "task": tid, "step": 1, "first_rung": "codex:gpt-6-luna:low", "review_mode": "off",
+            "ts": time.time()}), encoding="utf-8")
+        out = self.j("task", "resume", tid, env={"FAKE_WRITE": "a.py=changed by agent"})
+        self.assertEqual(out["restarted"], "20261024-000000-early")
+        self.assertEqual(self.record(out["run_id"])["review_mode"], "off")
+        self.assertEqual(self.reviews(), [])
+
     def test_skills_install_links_repo_skills(self):
         (self.hub / "skills" / "task-split").mkdir(parents=True)          # an older real copy
         dry = self.j("skills", "install", "--replace")

@@ -73,7 +73,8 @@ In Claude Code you say: "make `loader.py` accept a custom delimiter and add test
 5. **Recover from problems.**
    - Codex reports `blocked`: ccx continues **in the same Codex session** one rung up (high), with no re-briefing.
    - Codex is out of quota: Claude takes over.
-   - A timeout or crash: `ccx resume <run_id>` continues.
+   - A timeout or crash: `ccx resume <run_id>` continues (as does `ccx task resume` for a checkpointed task),
+     keeping the run's label, acceptance check and review setting unless you pass `--check` / `--review`.
    - You want it to stop: `ccx stop <run_id>` ends the sub-agent and everything it started; `ccx resume` goes on.
 6. **Learn and report.** Every run goes into a ledger and back into task-routing / task-split, so the next pick is
    better. `ccx report` builds a dashboard: who spent how many tokens of which kind, quota use, estimated savings.

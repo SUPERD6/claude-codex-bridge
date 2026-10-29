@@ -76,7 +76,8 @@ class Request:
     budget_usd: float | None = None # this piece's spending cap for its own sub-agents (F11; else [subagents] max_usd)
     parallel: bool | None = None    # say "use sub-agents for the independent parts" (F14; only when True, i.e. --parallel)
     lead_session: str | None = None # the lead conversation this run belongs to (for auto-continue)
-    review: str = "auto"            # independent review by another vendor's cheap model: auto | on | off (F1)
+    review: str | None = "auto"     # independent review by another vendor's cheap model: auto | on | off (F1);
+                                    # None (a resume not given one): the resumed run's own setting
     risk: str | None = None         # low | visible | critical (from the routing rubric): visible+ is reviewed
     review_round: int = 0           # 1 = this run fixes what a review found
     prior_issues: list[str] | None = None   # a fix round: the review issues it was handed ([review] fix_rereview)
@@ -410,6 +411,10 @@ def run(req: Request, p: Paths) -> dict:
         req.check = req.check or prev.get("check_cmd")
         req.risk = req.risk or prev.get("risk")
         req.namecheck = req.namecheck or prev.get("namecheck_mode")
+        # and its review setting: a run started with --review off was resumed with the default auto, so a resume
+        # reviewed what the person had asked not to (found 2026-10-29); an explicit --review on the resume wins
+        if req.review is None:
+            req.review = prev.get("review_mode") or "auto"
         last = (prev.get("attempts") or [{}])[-1]
         if not req.model and last.get("model"):
             req.model, req.effort = last["model"], last.get("effort")
@@ -417,6 +422,9 @@ def run(req: Request, p: Paths) -> dict:
             _, req.model, req.effort = prev["first_rung"].split(":", 2)
         if req.tier == "auto":
             req.tier = prev.get("tier", "T2")
+
+    if req.review is None:                 # nothing to inherit from (a fresh run, or a new task in an old session)
+        req.review = "auto"
 
     # ledger.new_run_id makes the folder: two runs started in the same second never share one
     run_id = req.run_id or os.environ.pop("CCX_RUN_ID", None) or ledger.new_run_id(p)
@@ -511,6 +519,9 @@ def run(req: Request, p: Paths) -> dict:
         "forked_from_lead": bool(req.fork_lead), "ephemeral": req.ephemeral,
         "mode_source": req.mode_source, "mode_why": req.mode_why, "check_cmd": req.check, "risk": req.risk,
         "namecheck_mode": req.namecheck,
+        # the review the person asked for, which a later resume inherits; a review fix round (forced "on")
+        # keeps the setting of the run it fixes
+        "review_mode": (prev or {}).get("review_mode", req.review) if req.review_round else req.review,
         "shared_context": shared_meta,
         **({"base_note": stale_base} if stale_base else {}),
     }
