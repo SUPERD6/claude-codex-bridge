@@ -334,3 +334,104 @@ def test_cli_demo_export_without_dir_leaves_no_folder(tmp_path):
     assert r.returncode == 0, r.stderr
     assert '"demo": true' in out.read_text(encoding="utf-8")
     assert not list(tmp.glob("ccx-demo-*"))                      # the export needs no folder afterwards
+
+
+# ---- PM review, part B: undo and "the review is wrong" on the card, the queue's order, small text bugs
+def _review_piece(d):
+    shop = project(d, demo.SHOP)
+    t = next(t for t in shop["tasks"] if any(pc["run_id"] == "demo-r-review" for pc in walk(t["pieces"])))
+    return shop, t, next(pc for pc in walk(t["pieces"]) if pc["run_id"] == "demo-r-review")
+
+
+@pytest.mark.skipif(not HAS_GIT, reason="the undo snapshot needs git")
+def test_undo_this_run_from_the_page_puts_the_files_back(server):
+    """A finished write run with ccx's snapshot offers "Undo this run": prepare shows `ccx undo <id> --apply`
+    (records, starts nothing, so a demo hub runs it), the second click puts the files back once; afterwards the
+    piece says it was undone and offers no undo."""
+    srv, base, p = server
+    shop, t, pc = _review_piece(json.loads(get(srv, "/api/data")[2]))
+    i = next(i for i, b in enumerate(pc["ctl"]) if b["label"] == "b_undo")
+    b = pc["ctl"][i]
+    assert b["run"] and not b["spends"] and b["argv"] == ["ccx", "undo", "demo-r-review", "--apply"]
+    assert b["note"] == "act_undo_note"
+    root = Path(shop["path"])
+    assert "apply" in (root / "orders.py").read_text(encoding="utf-8")
+    code, prep = post(srv, "/api/act/prepare", {"project": shop["id"], "task": t["id"], "piece": pc["id"], "btn": f"c{i}"})
+    assert code == 200 and prep["nonce"] and not prep.get("demo") and prep["cmd"] == "ccx undo demo-r-review --apply"
+    code, out = post(srv, "/api/act/run", {"nonce": prep["nonce"]})
+    assert code == 200 and out["ok"], out
+    assert (root / "orders.py").read_text(encoding="utf-8").startswith("def total(items):")
+    assert not (root / "discounts.py").exists() and (root / ".ccx" / "undo" / "demo-r-review" / "discounts.py").exists()
+    _, _, pc = _review_piece(json.loads(get(srv, "/api/data")[2]))
+    assert pc.get("undone") and not any(b["label"] == "b_undo" for b in pc["ctl"])
+    assert pc["act"] and pc["act"]["what"] == "a_review_failed"       # undo is not a verdict: it still waits for yours
+
+
+def test_review_is_wrong_accept_records_an_ok_verdict(server):
+    srv, base, p = server
+    shop, t, pc = _review_piece(json.loads(get(srv, "/api/data")[2]))
+    labels = [b["label"] for b in pc["act"]["buttons"]]
+    assert labels == ["b_see", "b_lead_fixes", "b_one_more", "b_accept_anyway", "b_myself"]
+    lead = pc["act"]["buttons"][1]
+    assert lead.get("prose") and not lead["run"]                   # a message for the lead, labelled so on the page
+    i = labels.index("b_accept_anyway")
+    b = pc["act"]["buttons"][i]
+    assert b["run"] and not b["spends"] and b["argv"][:5] == ["ccx", "verify", "demo-r-review", "--ok", "1"]
+    code, prep = post(srv, "/api/act/prepare", {"project": shop["id"], "task": t["id"], "piece": pc["id"], "btn": f"a{i}"})
+    assert code == 200 and prep["nonce"]
+    code, out = post(srv, "/api/act/run", {"nonce": prep["nonce"]})
+    assert code == 200 and out["ok"], out
+    _, _, pc = _review_piece(json.loads(get(srv, "/api/data")[2]))
+    assert pc["act"] is None and pc["verdict"]["ok"] is True
+
+
+def test_queue_piece_says_the_merge_comes_after_the_verdict(server):
+    srv, base, p = server
+    docs = project(json.loads(get(srv, "/api/data")[2]), demo.DOCS)
+    q2 = next(pc for t in docs["tasks"] for pc in walk(t["pieces"]) if pc.get("qid") == "q2")
+    assert q2["act"]["buttons"][0]["argv"][:4] == ["ccx", "q", "done", "q2"]
+    assert q2["act"]["then"] == "ccx q accept q2"
+    queue = next(t for t in docs["tasks"] if t["kind"] == "queue")
+    assert queue["budget"]                                          # the page's top box: "Work queue: 3 pieces (budget $0.05)"
+
+
+def test_env_failure_without_a_reason_has_no_empty_brackets(server):
+    srv, base, p = server
+    shop = project(json.loads(get(srv, "/api/data")[2]), demo.SHOP)
+    pc = next(pc for t in shop["tasks"] for pc in walk(t["pieces"]) if pc["run_id"] == "demo-r-env")
+    key, params = pc["act"]["why"]
+    strings = json.loads((REPO / "ccx" / "ui_static" / "strings.json").read_text(encoding="utf-8"))
+    if params["err"]:
+        assert key in ("w_env", "w_env_codex")
+    else:
+        assert key in ("w_env_noerr", "w_env_codex_noerr")
+        for lg in ("zh", "en"):
+            assert "{err}" not in strings[lg][key] and "（）" not in strings[lg][key] and "()" not in strings[lg][key]
+
+
+def test_merge_button_after_the_verdict_runs_q_accept_in_the_background(tmp_path):
+    from ccx import queue as wq
+    wt = tmp_path / "wt"
+    wt.mkdir()
+    q = {"items": {"q1": {"id": "q1", "title": "x", "status": "done", "verdict": True, "worktree": str(wt),
+                          "agent": "codex"}}, "order": ["q1"]}
+    rd = ui.Reader(Paths(tmp_path / "hub"))
+    pc = ui._queue_pieces(rd, tmp_path, q, {}, {}, time.time())[0]
+    b = pc["ctl"][0]
+    assert b["label"] == "b_q_merge" and b["argv"][:4] == ["ccx", "q", "accept", "q1"] and b["style"] == "primary"
+    assert b["run"] and not b["spends"] and b["bg"] and ui._op(b["argv"]) == "long"
+    q["items"]["q1"]["merged"] = "abc"                               # merged: nothing more to press
+    assert not ui._queue_pieces(rd, tmp_path, q, {}, {}, time.time())[0]["ctl"]
+    q["items"]["q1"].pop("merged")
+    wt.rmdir()                                                       # worktree gone: no button that can only fail
+    assert not ui._queue_pieces(rd, tmp_path, q, {}, {}, time.time())[0]["ctl"]
+    assert wq.children(q, "q1") == []
+
+
+def test_cli_demo_says_what_to_open_next(tmp_path):
+    out = tmp_path / "demo.html"
+    r = subprocess.run([sys.executable, str(REPO / "ccx.py"), "demo", "--dir", str(tmp_path / "d"), "--export", str(out)],
+                       capture_output=True, text=True, encoding="utf-8", timeout=180, stdin=subprocess.DEVNULL)
+    assert r.returncode == 0, r.stderr
+    assert f"next: open {out}" in r.stderr
+    assert json.loads(r.stdout)["snapshot"] == str(out)              # stdout stays the JSON

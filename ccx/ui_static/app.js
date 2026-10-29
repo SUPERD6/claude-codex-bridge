@@ -9,8 +9,12 @@
   let LANG = "en", D = null, ALL = null, TOKEN = "", SNAP = false, OFFLINE = false, lastOk = 0, TESTS = false, HIDDEN = 0;
   let filt = "all", sel = null, expanded = {}, query = "", histOpen = {}, drawerSig = "", drawerStable = "", pending = null, chosen = null;
   let ACT = null, FLASH = null;     /* the one button being prepared / confirmed, and the last outcome line */
-  const KNOWN = {claude: "Claude", codex: "Codex", deepseek: "DeepSeek", dsh: "DeepSeek", gemini: "Gemini"};
-  const FIXED = {claude: "claude", codex: "codex", deepseek: "deepseek"};
+  let NEXT = null;                  /* after a verdict: the panel moved on to the next waiting piece ({sel, n}) */
+  let LEADJUMP = "";                /* #/<project>/_lead: scroll to the project's lead panel once */
+  /* DeepSeek's own agent is shown with its command name (ccx handoff --to dsh, or deepseek); `deepseek` alone is
+     the deepseek provider (Claude Code on DeepSeek's API) in run records, the DeepSeek session on the board */
+  const KNOWN = {claude: "Claude", codex: "Codex", deepseek: "DeepSeek", dsh: "DeepSeek (dsh)", gemini: "Gemini"};
+  const FIXED = {claude: "claude", codex: "codex", deepseek: "deepseek", dsh: "deepseek"};
   const SPARE = 4;
   const $ = (id) => document.getElementById(id);
 
@@ -52,9 +56,14 @@
     if (d.toDateString() === y.toDateString()) return t("yesterday", {h: hm});
     return t("date_hm", {m: d.getMonth() + 1, d: d.getDate(), h: hm});
   }
+  /* seconds, minutes, hours up to two days, then days up to two weeks, then weeks ("9 days ago", not "216 h ago") */
   function ago(ts) {
     const s = Math.max(0, Date.now() / 1000 - ts);
-    return s < 60 ? t("ago_s", {n: Math.round(s)}) : s < 3600 ? t("ago_m", {n: Math.round(s / 60)}) : t("ago_h", {n: Math.round(s / 3600)});
+    if (s < 60) return t("ago_s", {n: Math.round(s)});
+    if (s < 3600) return t("ago_m", {n: Math.round(s / 60)});
+    if (s < 2 * 86400) return t("ago_h", {n: Math.round(s / 3600)});
+    if (s < 14 * 86400) return t("ago_d", {n: Math.round(s / 86400)});
+    return t("ago_w", {n: Math.round(s / 604800)});
   }
 
   /* ---------- agents: known colours fixed, any new one gets the next spare colour ---------- */
@@ -203,7 +212,8 @@
     if (nwait) {
       h += `<h2>${t("todo_all")}</h2><div class="todo">` + convTodoHTML(ct);
       todos.sort((a, b) => (a.p.act.kind === "review") - (b.p.act.kind === "review"));
-      for (const x of todos) h += `<a class="${x.p.act.kind === "review" ? "rv" : ""}" href="${href([x.pr.id, x.tk.id].concat(x.ch.map(c => c.id)), x.p.id)}"><b>${esc(x.p.title)}</b><span>${t(x.p.act.what)}</span><span class="where">${esc(x.pr.name)} › ${esc(taskTitle(x.tk))}</span></a>`;
+      for (const x of todos) h += todoRow(x.p.act.kind === "review" ? "review" : "decide", href([x.pr.id, x.tk.id].concat(x.ch.map(c => c.id)), x.p.id),
+        t(x.p.act.what), esc(x.p.title), esc(x.pr.name) + " › " + esc(cut(taskTitle(x.tk), 40)));
       h += `</div>`;
     }
     h += runningHTML() + sugHTML() + leadsHTML() + discRecentHTML();
@@ -211,12 +221,21 @@
     for (const pr of D.projects) {
       let n = 0, d = 0, need = 0; const ws = new Set();
       for (const tk of pr.tasks) { const s = stats(tk.pieces); n += s.n; d += s.d; need += acts(tk.pieces).length; walk(tk.pieces, p => { if (p.worker) ws.add(p.worker); }); }
-      h += `<a class="card pcard" href="${href([pr.id])}"><div class="top"><b>${esc(pr.name)}</b>${levelHTML(pr)}${need ? `<span class="badge">${t("needs_n", {n: need})}</span>` : ""}${(pr.rules || []).length ? `<span class="rulesb" title="${esc(t("rules_title"))}">${t("rules_n", {n: pr.rules.length})}</span>` : ""}</div>
+      h += `<div class="pwrap"><a class="card pcard" href="${href([pr.id])}"><div class="top"><b>${esc(pr.name)}</b>${levelHTML(pr)}${need ? `<span class="badge">${t("needs_n", {n: need})}</span>` : ""}${(pr.rules || []).length ? `<span class="rulesb" title="${esc(t("rules_title"))}">${t("rules_n", {n: pr.rules.length})}</span>` : ""}</div>
         <div class="pbar"><i style="width:${n ? Math.round(100 * d / n) : 0}%"></i></div><div class="m">${t("tasks_pieces", {t: pr.tasks.length, d, n})}</div>
-        <div class="whos">${[...ws].map(w => who(w)).join("")}</div></a>`;
+        <div class="whos">${[...ws].map(w => who(w)).join("")}</div></a>${leadLine(pr)}</div>`;
     }
     return h + `</div>` + othersHTML() + weekHTML();
   }
+  /* one row of "Waiting for you": a chip for the kind (your call / check the result / a question for you, each its
+     own colour), what the person has to do in bold, the agent's own words second (muted), then where. Every argument
+     is HTML already: page strings from t(), data through esc() by the caller */
+  const KCLS = {decide: "", review: "rv", answer: "ask"};
+  function todoRow(kind, link, action, said, place) {
+    return `<a class="${KCLS[kind]}" href="${link}"><span class="kchip k-${kind}">${t("k_" + kind)}</span><b>${action}</b>`
+      + `<span class="said">${said}</span><span class="where">${place}</span></a>`;
+  }
+  function cut(s, n) { s = String(s || ""); return s.length > n ? s.slice(0, n - 1) + "…" : s; }
   /* U4: every run going on now, with its agent, time so far, tokens when known, and the piece's own stop button
      (the same prepare -> exact command -> second click as everywhere; a snapshot shows the command) */
   function runningHTML() {
@@ -269,7 +288,22 @@
   function leadsHTML() {
     const ls = (D && D.leads) || [];
     if (!ls.length) return "";
-    return `<h2>${t("leads_now")}</h2><div class="leads">` + ls.map(l => `<div class="card">${who(l.agent, l.model)} <span style="color:var(--muted);font-size:13px">${esc(shortPath(l.cwd))} · ${ago(l.last)}${l.helpers && l.helpers.length ? " · " + t("helpers_n", {n: l.helpers.length}) : ""}</span></div>`).join("") + `</div>`;
+    return `<h2>${t("leads_now")}</h2><div class="leads">` + ls.map(l => {
+      const pr = projectAt(l.cwd), body = `${who(l.agent, l.model)} <span style="color:var(--muted);font-size:13px">${esc(shortPath(l.cwd))} · ${ago(l.last)}${l.helpers && l.helpers.length ? " · " + t("helpers_n", {n: l.helpers.length}) : ""}</span>`;
+      return pr && pr.lead_switch ? `<a class="card" href="${leadHref(pr)}" title="${esc(t("ov_lead_switch"))}">${body}</a>` : `<div class="card">${body}</div>`;
+    }).join("") + `</div>`;
+  }
+  /* U7 from the overview: who leads each project, a link to its switch-lead panel */
+  function leadHref(pr) { return href([pr.id, "_lead"]); }
+  function leadLine(pr) {
+    const sw = pr.lead_switch; if (!sw) return "";
+    const cur = sw.current ? t("ov_lead", {w: raw(who(sw.current))}) : t("ov_lead_none");
+    return `<div class="leadline">${cur}${(sw.ctl || []).length ? ` · <a href="${leadHref(pr)}">${t("ov_lead_switch")}</a>` : ""}</div>`;
+  }
+  function normPath(p) { return String(p || "").replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase(); }
+  function projectAt(cwd) {
+    const c = normPath(cwd); if (!c) return null;
+    return ((D && D.projects) || []).find(pr => { const r = normPath(pr.path); return r && (c === r || c.startsWith(r + "/")); }) || null;
   }
   function shortPath(p) { if (!p) return ""; const s = String(p).replace(/\\/g, "/").split("/").filter(Boolean); return s[s.length - 1] || p; }
   function weekHTML() {
@@ -331,7 +365,7 @@
     if (ACT.stage === "demo") return `<div class="k">${t(ACT.label)} — ${t("act_demo")}</div><code class="mono" id="cmdtext">${esc(ACT.cmd)}</code><div class="acts">${cancel}<button data-do="copy">${t("copy")}</button></div>`;
     if (ACT.stage === "err") return `<div class="k"><span class="warn">${t("act_failed", {e: ACT.msg || ""})}</span></div><div class="acts">${cancel}</div>`;
     if (ACT.stage === "confirm") return `<div class="k">${t(ACT.label)} — ${t("act_will")}</div><code class="mono" id="cmdtext">${esc(ACT.cmd)}</code>`
-      + `<p class="${ACT.spends ? "warn" : "cost"}" style="margin:6px 0">${t(ACT.spends ? "act_spends" : "act_records")}</p>`
+      + `<p class="${ACT.spends || (b && b.note) ? "warn" : "cost"}" style="margin:6px 0">${t(b && b.note ? b.note : ACT.spends ? "act_spends" : "act_records")}</p>`
       + (ACT.blank ? `<p class="warn" style="margin:6px 0">${t("sw_blank_pre")}</p>` : "")
       + `<div class="acts"><button class="btn ${ACT.spends ? "bad" : "primary"}" data-do="act-run">${t(ACT.spends ? "act_confirm_spend" : "act_confirm")}</button>${cancel}<button data-do="copy">${t("copy")}</button></div>`;
     return "";
@@ -363,8 +397,27 @@
         : t("act_exit", {c: raw(`<code class="mono">${esc(r.cmd)}</code>`), e: String(r.exit), m: (r.err || r.out || "").slice(-300)});
       if (r.handoff) HANDOFF[where(a.key).project] = r.handoff;      /* U7: kept on the panel, not only flashed */
       FLASH = {at: Date.now(), ok: !!r.ok, html: r.handoff ? t("sw_done", {f: r.handoff.file}) : html}; ACT = null;
-      await refresh(); render();
+      await refresh();
+      if (r.ok && !a.spends) moveOn(where(a.key).piece);
+      render();
     } catch (e) { Object.assign(a, {stage: "err", msg: e.message}); paintAct(); }
+  }
+  /* the pieces of the list on screen that wait for the person, in the order the page lists them */
+  function waitingIn(list) { return (list || []).filter(p => p.act).sort((a, b) => (a.act.kind === "review") - (b.act.kind === "review")); }
+  /* after a verdict on the piece in the panel: when it waits for nothing more (no new question, no Merge to press
+     next), the panel moves to the next piece that waits, and says so */
+  function moveOn(pid) {
+    const cur = currentList(); if (!cur || !pid || sel !== pid) return;
+    const f = findPiece(cur.list, pid);
+    if (f && (f.p.act || (f.p.ctl || []).some(b => b.style === "primary"))) return;
+    const w = waitingIn(cur.list);
+    if (w.length) { sel = w[0].id; NEXT = {sel: sel, n: w.length}; }
+  }
+  function stepWaiting(dir) {
+    const cur = currentList(); if (!cur) return;
+    const w = waitingIn(cur.list); if (!w.length) return;
+    const i = w.findIndex(p => p.id === sel);
+    sel = w[i < 0 ? 0 : (i + dir + w.length) % w.length].id; NEXT = null; render();
   }
   async function post(path, body) {
     const r = await fetch(path, {method: "POST", cache: "no-store", credentials: "omit",
@@ -377,7 +430,7 @@
   function pressBtn(key, holder, id) {
     const b = (id[0] === "a" ? (holder.act || {}).buttons : holder.ctl || [])[+id.slice(1)];
     if (!b) return;
-    if (SNAP || !b.run) { if (id[0] === "a") showCmd(holder, +id.slice(1), false); else fillCmd(b.label, b.cmd); return; }
+    if (SNAP || !b.run) { if (id[0] === "a") showCmd(holder, +id.slice(1), false); else fillCmd(b.label, b.cmd, b.prose); return; }
     if (b.cmd.includes("{reason}") || b.cmd.includes("{note}")) { showCmd(holder, +id.slice(1), false); return; }
     if (b.cmd.includes("{usd}")) {
       const tk = findTask(findProject(where(key).project), where(key).task) || {};
@@ -436,7 +489,9 @@
   function toName(w) { const v = vendorOf(w); return v === "all" ? t("conv_all") : v === "user" ? t("conv_you") : agentName(v); }
   function msgWho(m) { return m.who === "user" ? `<span class="who you">${t("conv_you")}</span>` : who(m.who); }
   function convTodoHTML(list) {
-    return list.map(({c, x}) => `<a class="conv" href="${convHref(c.id, x.key)}"><b>${esc(x.text)}</b><span>${x.kind === "stuck" ? t("conv_todo_stuck", {n: x.run}) : t("conv_todo_asks", {w: agentName(vendorOf(x.from))})}</span><span class="where">${esc(c.name)} › ${t("conv_nav")} › ${esc(x.thread)}</span></a>`).join("");
+    return list.map(({c, x}) => todoRow("answer", convHref(c.id, x.key),
+      x.kind === "stuck" ? t("conv_todo_stuck", {n: x.run}) : t("conv_todo_asks", {w: agentName(vendorOf(x.from))}),
+      esc(x.text), esc(c.name) + " › " + t("conv_nav") + " › " + esc(x.thread))).join("");
   }
   function convLinkHTML(pid) {
     const c = convs().find(x => x.id === pid);
@@ -551,7 +606,7 @@
   const HANDOFF = {};
   function leadPanelHTML(pr) {
     const sw = pr.lead_switch; if (!sw) return "";
-    let h = `<h2>${t("sw_title")}</h2><p class="stat">${sw.current ? t("sw_current", {w: raw(who(sw.current))}) : t("sw_unknown")}</p>`;
+    let h = `<h2 id="leadpanel">${t("sw_title")}</h2><p class="stat">${sw.current ? t("sw_current", {w: raw(who(sw.current))}) : t("sw_unknown")}</p>`;
     const ps = sw.periods || [];
     if (ps.length > 1) h += `<ul class="tl leadtl">${ps.map(p => `<li><time>${p.since ? clock(p.since) : t("sw_start")}</time>${who(p.agent)} <span class="cost">${p.until ? t("sw_until", {at: clock(p.until)}) : t("sw_now")}</span></li>`).join("")}</ul>`;
     const key = pr.id + "|_lead|_", ctl = sw.ctl || [];
@@ -643,7 +698,9 @@
     h += `<div class="filters">${[["all", "f_all"], ["mine", "f_mine"], ["run", "f_run"]].map(([k, l]) => `<button class="${filt === k ? "on" : ""}" data-filt="${k}">${t(l)}</button>`).join("")}</div>`;
     h += `<div class="layout"><div class="card"><div class="orgwrap"><div class="org">`;
     if (!node) {
-      h += `<div class="box you"><div class="t">${t("you_asked", {t: taskTitle(tk)})}</div><div class="m">${t("asked_at", {h: clock(tk.asked)})}</div></div><div class="vline"></div>`;
+      const top = tk.kind === "queue" ? (tk.budget ? t("queue_box_b", {n: list.length, b: usd(tk.budget)}) : t("queue_box", {n: list.length}))
+        : t("you_asked", {t: taskTitle(tk)});
+      h += `<div class="box you"><div class="t">${top}</div><div class="m">${t("asked_at", {h: clock(tk.asked)})}</div></div><div class="vline"></div>`;
       const sent = list.filter(p => p.worker).length;
       const lead = tk.lead && tk.lead.agent ? who(tk.lead.agent, null).replace(/>[^<]*<\/span>$/, ">" + t("boss", {m: agentName(tk.lead.agent) + (tk.lead.model ? " · " + tk.lead.model : "")}) + "</span>") : `<span class="who">${t("boss_unknown")}</span>`;
       h += `<div class="box boss"><div>${lead}</div><div class="t">${t("boss_sum", {n: list.length, s: sent})}</div>`;
@@ -672,7 +729,7 @@
       const hk = pr.id + "/" + tk.id;
       h += `<details class="hist" data-hist="${esc(hk)}"${histOpen[hk] ? " open" : ""}><summary>${t("hist")}</summary><ul class="tl">${hist.map(x => `<li class="${esc(x.tone || "")}"><time>${clock(x.ts)}</time>${histText(x)}</li>`).join("")}</ul></details>`;
     }
-    if (!node) h += leadPanelHTML(pr);
+    if (!node && pr.lead_switch) h += `<p class="stat"><a href="${leadHref(pr)}">${t("sw_title")} ›</a></p>`;
     h += `</div><aside class="drawer card" id="drawer"></aside></div>`;
     if (!sel || !findPiece(list, sel)) sel = needs.length ? needs[0].id : null;
     const old = $("drawer");
@@ -702,6 +759,9 @@
     if (!f) { d.innerHTML = `<p class="empty">${t("pick")}</p>`; return; }
     const p = f.p, a = p.act;
     let h = "";
+    const others = waitingIn(list).filter(x => x.id !== p.id);
+    if (NEXT && NEXT.sel === p.id) h += `<p class="nextnote" role="status">${t("next_note", {n: NEXT.n})}</p>`;
+    if (others.length) h += `<div class="acts nextrow"><button class="btn" data-do="next-wait" title="${esc(t("next_keys"))}">${t("next_wait", {n: others.length})}</button></div>`;
     if (a) h += `<span class="tag ${a.kind}">${t(a.kind === "review" ? "t_review" : "t_decide")}</span>`;
     h += `<div class="what">${esc(p.title)}${a ? (LANG === "zh" ? "：" : ": ") + t(a.what) : ""}</div>`;
     if (a && a.why) h += `<p class="why">${whyText(a.why)}</p>`;
@@ -715,21 +775,23 @@
     if (p.children) h += `<dt>${t("d_inside")}</dt><dd>${t("in_split", {n: p.children.length, d: p.children.filter(x => x.status === "done").length, r: p.children.filter(x => x.status === "run").length, k: below(p)})}<br><a href="${href(base.concat([p.id]))}">${t("open_level")}</a></dd>`;
     if (p.run_id) h += `<dt>${t("d_run")}</dt><dd class="mono" style="font-size:12px">${esc(p.run_id)}</dd>`;
     h += `</dl>`;
-    h += judgeHTML(p);
+    const ctl = p.ctl || [], key = base[0] + "|" + base[1] + "|" + p.id;
+    h += judgeHTML(p, key);
     if (p.review && p.review.issues && p.review.issues.length) h += `<h3>${t("issues")}</h3><ul class="files">${p.review.issues.map(x => `<li>${esc(x)}</li>`).join("")}</ul>`;
     if (p.native && p.native.length) h += `<h3>${t("d_native", {w: agentName(p.worker)})}</h3><ul class="nlist">${p.native.map(x => `<li><span class="mono">${esc(x.id)}</span><div class="m">${tok(x.tokens)} tokens</div></li>`).join("")}</ul>`;
-    const ctl = p.ctl || [], key = base[0] + "|" + base[1] + "|" + p.id;
     if (a || ctl.length) {
       const one = (b, id) => `<button class="btn ${esc(b.style || "")}" data-btn="${id}" data-key="${esc(key)}">${t(b.label)}${b.run && !SNAP ? (b.spends ? " ▸" : "") : ""}</button>`;
-      h += `<div class="acts">${(a ? a.buttons : []).map((b, i) => one(b, "a" + i)).join("")}${ctl.map((b, i) => one(b, "c" + i)).join("")}</div>`;
-      if (!a) h += `<p class="cost">${t("ctl_running")}</p>`;
+      /* undo sits beside the change (judgeHTML), the rest here */
+      h += `<div class="acts">${(a ? a.buttons : []).map((b, i) => one(b, "a" + i)).join("")}${ctl.map((b, i) => b.label === "b_undo" ? "" : one(b, "c" + i)).join("")}</div>`;
+      if (a && a.then) h += `<p class="cost">${t("q_then_merge", {c: raw(`<code class="mono">${esc(a.then)}</code>`)})}</p>`;
+      if (!a && p.status === "run") h += `<p class="cost">${t("ctl_running")}</p>`;
       h += `<div id="reasons"></div><div class="cmd" data-actbox="${esc(key)}" hidden></div><div class="cmd" id="cmd" hidden></div>`;
     }
     d.innerHTML = h;
     wantJudge(p);
     paintAct();
     if (ACT && ACT.key === key) return;
-    if (a && chosen && chosen.sel === p.id) fillCmd(chosen.label, chosen.cmd);
+    if (a && chosen && chosen.sel === p.id) fillCmd(chosen.label, chosen.cmd, chosen.prose);
     else if (a && (SNAP || !a.buttons[0].run)) showCmd(p, 0, true);
   }
   /* ---------- U1: is it right? what the agent says beside what ccx ran, and the change from ccx's own snapshots ----------
@@ -758,9 +820,11 @@
     const more = list.length - JFILES;
     return `<ul class="files mono">${list.slice(0, JFILES).map(x => `<li>${esc(x)}</li>`).join("")}</ul>` + (more > 0 ? `<p class="cost">${t("j_more", {n: more})}</p>` : "");
   }
-  function judgeHTML(p) {
+  function judgeHTML(p, key) {
     const j = JUDGE[judgeKey(p)] || null, c = p.check;
     let h = "";
+    const ui = (p.ctl || []).findIndex(b => b.label === "b_undo");
+    const undo = ui < 0 ? "" : `<div class="acts undo"><button class="btn bad" data-btn="c${ui}" data-key="${esc(key || "")}">${t("b_undo")}</button><span class="cost">${t("undo_hint")}</span></div>`;
     /* the two columns only for a piece that has run: a queued to-do or a live run has said nothing and ccx has run
        nothing yet, and "no check was given" would be wrong there */
     if (!p.live && (p.run_id || p.summary || p.verification || c)) {
@@ -792,7 +856,12 @@
       if ((j.untracked_before || []).length) h += `<p class="cost">${t("j_untracked_before", {n: j.untracked_before.length})}</p>`;
       if (j.diff != null) h += `<details class="diffbox"><summary>${t("j_diff")}</summary><pre class="diff mono">${diffLines(j.diff)}</pre>${j.truncated ? `<p class="warn">${t("j_truncated")}</p>` : ""}</details>`;
       if (j.truncated) h += `<p class="warn">${t("j_truncated")}</p>`;
-    } else if (p.files && p.files.length) h += `<h3>${t("ev_changed")}</h3>` + fileList(p.files);
+      h += undo;
+    } else {
+      if (p.files && p.files.length) h += `<h3>${t("ev_changed")}</h3>` + fileList(p.files);
+      h += undo;
+    }
+    if (p.undone) h += `<p class="good-note">${t("j_undone", {at: clock(p.undone)})}</p>`;
     if (j && j.note) h += `<p class="cost">${t(j.note)}</p>`;
     if (j && j.error) h += `<p class="cost">${t("j_failed", {e: j.error})}</p>`;
     if (!j && p.run_id && !p.live) h += `<p class="cost">${t(SNAP ? "j_snap" : "j_loading")}</p>`;
@@ -817,13 +886,14 @@
       c.hidden = true; return;
     }
     if (b.cmd.includes("{reason}") || b.cmd.includes("{note}")) { if (quiet) { c.hidden = true; return; } }
-    fillCmd(b.label, b.cmd);
+    fillCmd(b.label, b.cmd, b.prose);
   }
-  function fillCmd(label, cmd) {
+  /* prose: a message for the person to give the lead, not a command (labelled so) */
+  function fillCmd(label, cmd, prose) {
     const c = $("cmd"); if (!c) return;
-    chosen = {sel, label, cmd};
+    chosen = {sel, label, cmd, prose};
     c.hidden = !cmd;
-    c.innerHTML = cmd ? `<div class="k">${t(label)} — ${t("will_run")}</div><code class="mono" id="cmdtext">${esc(cmd)}</code><button data-do="copy">${t("copy")}</button>` : "";
+    c.innerHTML = cmd ? `<div class="k">${t(label)} — ${t(prose ? "paste_lead" : "will_run")}</div><code class="mono" id="cmdtext">${esc(cmd)}</code><button data-do="copy">${t("copy")}</button>` : "";
   }
   function copy(text, btn) {
     const done = () => { btn.textContent = t("copied"); };
@@ -859,7 +929,12 @@
     const pr = r.length ? findProject(r[0]) : null;
     const tk = pr && r[1] ? findTask(pr, r[1]) : null;
     if (!pr) { main.innerHTML = renderOverview(); paintAct(); return; }
-    if (!tk) { main.innerHTML = renderProject(pr); paintAct(); return; }
+    if (!tk) {
+      main.innerHTML = renderProject(pr); paintAct();
+      if (r[1] === "_lead" && LEADJUMP !== key) { LEADJUMP = key; const lp = $("leadpanel"); if (lp) lp.scrollIntoView({block: "start"}); }
+      if (r[1] !== "_lead") LEADJUMP = "";
+      return;
+    }
     const keep = window.scrollY;
     renderTask(pr, tk, r.slice(2));
     window.scrollTo(0, keep);
@@ -879,6 +954,7 @@
     if (el.dataset.do === "say-cancel") { SAY = null; paintSay(); return; }
     if (el.dataset.sug !== undefined) { if (!SNAP && !el.disabled) decideSug(el.dataset.sug, el.dataset.ok === "1"); return; }
     if (el.dataset.do === "act-cancel") { ACT = null; paintAct(); return; }
+    if (el.dataset.do === "next-wait") { stepWaiting(1); return; }
     if (el.dataset.do === "act-run") { runAct(); return; }
     if (el.dataset.do === "act-usd") {
       const v = ($("usdin") || {}).value;
@@ -912,7 +988,7 @@
     if (el.dataset.more) { expanded[el.dataset.more] = 1; render(); return; }
     const cur = currentList();
     if (el.dataset.sel !== undefined && !e.target.closest("a[href]")) {
-      sel = el.dataset.sel; render();
+      sel = el.dataset.sel; NEXT = null; render();
       if (innerWidth < 1100) { const d = $("drawer"); if (d) d.scrollIntoView({behavior: "smooth", block: "start"}); }
       return;
     }
@@ -932,6 +1008,10 @@
   });
   document.addEventListener("keydown", (e) => {
     if ((e.key === "Enter" || e.key === " ") && e.target.matches && e.target.matches(".piece[data-sel]")) { e.preventDefault(); e.target.click(); }
+    /* j / k: the next / previous piece that waits for you (not while typing) */
+    if ((e.key === "j" || e.key === "k") && !e.ctrlKey && !e.metaKey && !e.altKey && !(e.target.closest && e.target.closest("input,textarea,select,[contenteditable]"))) {
+      if (currentList()) { e.preventDefault(); stepWaiting(e.key === "j" ? 1 : -1); }
+    }
   });
   document.addEventListener("input", (e) => {
     if (e.target.id === "search") { query = e.target.value; const {r} = route(); renderSide(r); }
