@@ -30,7 +30,8 @@ codex plugin marketplace add SUPERD6/relayline && codex plugin add relayline@rel
 ```
 
 The Claude Code install ran for real (from a temporary config). The Codex install from a GitHub address is
-**experimental**: it follows Codex's plugin docs and is tested with a stand-in only.
+**experimental**: it follows Codex's plugin docs; the tests check only the plugin manifest, the install command
+itself has never run.
 
 - **Claude Code** gets the five skills (as `relayline:agent-delegate`, `relayline:task-routing`, `relayline:task-split`,
   `relayline:task-checkpoint`, `relayline:project-manager`) and ccx's two hooks: the start-of-session shared-memory
