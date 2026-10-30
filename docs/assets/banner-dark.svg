@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 340" width="1200" height="340" role="img" aria-labelledby="t d">
   <title id="t">relayline (ccx): coding agents take turns as each other's lead and sub-agent</title>
-  <desc id="d">Claude Code, Codex and DeepSeek each can lead or work (Gemini CLI: sub-agent adapter only, not run for real). ccx picks a cheap model likely to finish, reruns the check, has another vendor review the diff, and records the cost. Example from a real run: Codex gpt-6-luna low, one attempt, $0.0023.</desc>
+  <desc id="d">Claude Code, Codex and DeepSeek each can lead or work. ccx picks a cheap model likely to finish, reruns the check, has another vendor review the diff, and records the cost. Example from a real run: Codex gpt-6-luna low, one attempt, $0.0023.</desc>
   <rect width="1200" height="340" rx="16" fill="#0f1318"/>
   <g font-family="-apple-system,&quot;Segoe UI&quot;,Helvetica,Arial,sans-serif">
     <text x="64" y="118" font-size="76" font-weight="700" fill="#e7ebf0">relayline</text>
@@ -15,7 +15,7 @@
     <rect x="664" y="50" width="150" height="40" rx="8" fill="#e3a14e"/><text x="739.0" y="77" font-size="19" font-weight="600" fill="#0f1318" text-anchor="middle">Claude Code</text>
     <rect x="822" y="50" width="110" height="40" rx="8" fill="#4cc3c6"/><text x="877.0" y="77" font-size="19" font-weight="600" fill="#0f1318" text-anchor="middle">Codex</text>
     <rect x="940" y="50" width="150" height="40" rx="8" fill="#a990ec"/><text x="1015.0" y="77" font-size="19" font-weight="600" fill="#0f1318" text-anchor="middle">DeepSeek</text>
-    <text x="664" y="124" font-size="16" fill="#97a1ae">any of the three leads · any of them works</text>
+    <text x="664" y="124" font-size="16" fill="#97a1ae">any of the three can lead or take work</text>
     <rect x="664" y="140" width="464" height="40" rx="8" fill="#1d242d" stroke="#2b323c"/>
     <text x="682" y="167" font-size="18" fill="#e7ebf0">ccx route → codex · luna · low</text>
     <text x="664" y="212" font-size="17" fill="#58c27a">✓ check rerun</text>

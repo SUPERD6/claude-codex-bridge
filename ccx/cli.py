@@ -10,7 +10,7 @@ from . import __version__, commands, hooktimeout
 from .commands.common import _out
 
 DESCRIPTION = ("A team of AI coding agents: Claude Code, Codex and DeepSeek hand work to each other as lead or "
-               "sub-agent (Gemini CLI: sub-agent adapter only, not run for real), sharing memory and working "
+               "sub-agent (Gemini CLI: sub-agent adapter, not run for real), sharing memory and working "
                "context, and route each piece to the cheapest agent likely to finish it.")
 
 # `ccx -h` lists the person's commands by what they are for; `ccx -h --all` lists every group. Every command stays

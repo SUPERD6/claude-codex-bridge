@@ -30,7 +30,7 @@ def banner(c: dict) -> str:
         f'text-anchor="middle">{label}</text>')
     return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 340" width="1200" height="340" role="img" aria-labelledby="t d">
   <title id="t">relayline (ccx): coding agents take turns as each other's lead and sub-agent</title>
-  <desc id="d">Claude Code, Codex and DeepSeek each can lead or work (Gemini CLI: sub-agent adapter only, not run for real). ccx picks a cheap model likely to finish, reruns the check, has another vendor review the diff, and records the cost. Example from a real run: Codex gpt-6-luna low, one attempt, $0.0023.</desc>
+  <desc id="d">Claude Code, Codex and DeepSeek each can lead or work. ccx picks a cheap model likely to finish, reruns the check, has another vendor review the diff, and records the cost. Example from a real run: Codex gpt-6-luna low, one attempt, $0.0023.</desc>
   <rect width="1200" height="340" rx="16" fill="{c['bg']}"/>
   <g font-family="{SANS}">
     <text x="64" y="118" font-size="76" font-weight="700" fill="{c['ink']}">relayline</text>
@@ -45,7 +45,7 @@ def banner(c: dict) -> str:
     {chip(664, 50, 150, "Claude Code", c['amber'])}
     {chip(822, 50, 110, "Codex", c['teal'])}
     {chip(940, 50, 150, "DeepSeek", c['violet'])}
-    <text x="664" y="124" font-size="16" fill="{c['muted']}">any of the three leads · any of them works</text>
+    <text x="664" y="124" font-size="16" fill="{c['muted']}">any of the three can lead or take work</text>
     <rect x="664" y="140" width="464" height="40" rx="8" fill="{c['soft']}" stroke="{c['line']}"/>
     <text x="682" y="167" font-size="18" fill="{c['ink']}">ccx route → codex · luna · low</text>
     <text x="664" y="212" font-size="17" fill="{c['ok']}">✓ check rerun</text>
@@ -163,7 +163,7 @@ def social_preview(path: Path) -> bool:
         y = 130 + i * 92
         d.rounded_rectangle((x0, y, 1200, y + 60), 12, fill=col)
         d.text((x0 + 24, y + 13), name, font=mono_b(30), fill=c["on"])
-    d.text((x0, 418), "each leads · each works", font=mono(28), fill=c["muted"])
+    d.text((x0, 418), "all lead · all work", font=mono(28), fill=c["muted"])
     runs((x0, 470), [("✓", sym(32), c["ok"]), (" verified", mono_b(32), c["ok"])])
     path.parent.mkdir(parents=True, exist_ok=True)
     img.save(path, optimize=True)

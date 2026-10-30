@@ -35,8 +35,7 @@ you use in a terminal, not a web chat.
 **Which tools work?** **Leads: Claude Code, Codex and DeepSeek (tested on a real machine).** DeepSeek leads either as
 DeepSeek Harness (`dsh` 0.2.1-rc.3, headless, handed work to Codex) or as Claude Code running a DeepSeek model (handed
 work to Claude); ccx tells it from the environment and records the lead's vendor as deepseek. Codex running a DeepSeek
-model is recognised from its config or `CCX_LEAD=deepseek-codex`, not tested as a lead. Other tools can lead as far as
-their adapter allows, untested. **Sub-agents:** Claude Code and Codex in both directions; DeepSeek through Claude Code
+model is recognised from its config or `CCX_LEAD=deepseek-codex`, not tested as a lead. Gemini CLI and the configured providers cannot lead. **Sub-agents:** Claude Code and Codex in both directions; DeepSeek through Claude Code
 (calibrated on real tasks), through Codex (one small read-only task) and as `dsh` (read, write and resume run for real;
 ccx also finds the `dsh` that ships in the DeepSeek Harness desktop app on Windows). Gemini CLI is adapted
 (community) but **untested**; Kimi, GLM, Qwen and OpenRouter are configured, untested. One adapter per CLI (`ccx/agents/`);
@@ -45,7 +44,7 @@ ccx also finds the `dsh` that ships in the DeepSeek Harness desktop app on Windo
 
 **Official or community?** *Official* (Claude Code, Codex CLI): each release runs real read, write and resume tasks
 on the version in the adapter's `tested_version` (the release check). *Community* (Gemini CLI, `dsh`, new adapters):
-written from the CLI's `--help` and docs and tested with a stand-in only. `ccx doctor` warns when the installed
+written from the CLI's `--help` and docs and tested with a stand-in; `dsh` has also run for real (read, write, resume). `ccx doctor` warns when the installed
 version's major.minor differs from `tested_version`: for an official one, run the release check before relying on
 it; for a community one it means not verified on that version.
 
