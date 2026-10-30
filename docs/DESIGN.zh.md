@@ -17,7 +17,7 @@
 ## 组成
 
 1. **委派**（`ccx/delegate.py`、`ccx/runners.py`）：以无界面模式调用另一个工具：
-   - Codex：`codex exec --json`；
+   - Codex：`codex exec --json`。在 Windows 上，同一台机器的多个 CODEX_HOME 共用 Codex 的 elevated 沙箱账户（密码在各自 home 的 `.sandbox-secrets` 里）：最后跑过沙箱安装的那个 home 才能用（codex-cli 0.164.0 所见；评测里每个单元的 home 因此用 unelevated 沙箱）；
    - Claude Code：`claude -p --output-format stream-json --verbose`；
    - Gemini CLI：`gemini -p -o stream-json`。
 

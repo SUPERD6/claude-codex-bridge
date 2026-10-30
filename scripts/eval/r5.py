@@ -25,7 +25,9 @@ so doing it takes many requests. Arms (the lead is a fresh headless Claude Code,
            start with the person's daily setup: Codex in a per-unit home (scripts/eval/daily_home.py) holding copies
            of their ~/.codex memories/, AGENTS.md and skills/ and of ~/.agents/skills, the login copied from the eval
            Codex home (never their auth, credentials, config.toml, sessions or logs), no CCX_CODEX_ISOLATE; Claude
-           sub-agents with setting sources user,project,local and skills. Each variant writes one [subagent] switch
+           sub-agents with setting sources user,project,local and skills. On Windows every daily home has
+           [windows] sandbox = "unelevated" (a fresh home has no elevated-sandbox secrets and its setup needs UAC;
+           recorded as daily.windows_sandbox). Each variant writes one [subagent] switch
            into the unit hub's tiers.toml (read back before the lead starts): codex_memories = false, clean = true,
            codex_lean_tools = true. The eval Codex home gets nothing of the person's (only a login the unit
            refreshed is written back to it, daily_home.sync_login), so every other arm's checks stay as strict; the
@@ -938,6 +940,9 @@ def daily_plan_lines(arms: list[str], a) -> list[str]:
            f"{', '.join(DH.AGENTS_COPY)} from {agents_src} into a per-unit home (never auth, credentials, "
            "config.toml, sessions or logs); the Codex login is the eval Codex home's; Claude sub-agents load "
            f"setting sources {DH.DAILY_CLAUDE_SOURCES}"]
+    if DH.windows_sandbox():
+        out.append(f"[dry] daily homes on Windows: [windows] sandbox = \"{DH.windows_sandbox()}\" (all daily arms; "
+                   "a fresh home cannot use the elevated sandbox without UAC)")
     out += [f"[dry]   {x}: [subagent] {DAILY_ARMS[x] or '(none: the daily baseline)'}" for x in daily]
     if not getattr(a, "codex_home", ""):
         out.append("[dry] note: the daily arms need --codex-home (their login comes from it)")
@@ -958,6 +963,7 @@ def cmd_daily_check(a) -> int:
         names = sorted(p.relative_to(tmp).as_posix() for p in tmp.rglob("*") if p.is_file())
         print(json.dumps({"copied": info["copied"], "files": info["files"], "auth": info["auth"],
                           "memory_settings": info["memory_settings"], "features_off": info["features_off"],
+                          "windows_sandbox": info.get("windows_sandbox"),
                           "top": sorted({"/".join(n.split("/")[:2]) for n in names})}, indent=1))
         print("daily-check: ok (removed)")
         return 0
@@ -1243,6 +1249,9 @@ def unit_models(u: dict, row: dict) -> dict:
     if u["arm"] in DAILY_ARMS:                    # the daily home and the hub's [subagent] overlay
         out["daily"] = {"subagent": DAILY_ARMS[u["arm"]], "claude_setting_sources": DH.DAILY_CLAUDE_SOURCES,
                         "sha256": (row.get("daily") or {}).get("sha256")}    # the snapshot of the copied setup
+        sandbox = (row.get("daily") or {}).get("windows_sandbox") or DH.windows_sandbox()
+        if sandbox:                               # Windows: every daily home runs Codex's unelevated sandbox
+            out["daily"]["windows_sandbox"] = sandbox
     seen = ((row.get("audit") or {}).get("init") or {}).get("model")
     if seen:
         out["lead_seen"] = seen
