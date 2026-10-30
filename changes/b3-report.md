@@ -1,5 +1,5 @@
 - `ccx lead --cache` (Claude): a turn counts as a cache break only when it read at least 20k fewer tokens than the
-  last turn's whole prompt and under 90% of it, and a reply logged twice (same time, same cache write) counts once:
+  cache held after the last turn (its cache reads + writes) and under 90% of it, and a reply logged twice (same time, same cache write) counts once:
   a turn that merely adds a big tool result is no longer called a break. Codex breaks read the effort too: an
   effort change is named ("effort changed low → high") and a break caused only by it is marked `effort_only`.
   `causes` now groups model switches and effort changes without their from/to names.
@@ -11,5 +11,5 @@
   (`CCX_DEPTH` > 0).
 - Wording: the "~93k start-up" of a sub-agent run is its whole input (a fixed prefix, Codex ~18-25k and Claude
   ~13-15k, re-sent on each of ~5 requests), fixed in code comments, docs/measured, the project-manager skill and
-  config comments; 5000 Chinese characters of shared context are ~2.2-3k tokens, not ~1.2k. The task-routing priors
+  config comments (docs/STATUS lines still say "start-up ~93k" and are left to the release update); 5000 Chinese characters of shared context are ~2.2-3k tokens, not ~1.2k. The task-routing priors
   carry a TODO for Fable's price (no pricing source in the repo has it yet).

@@ -3,7 +3,7 @@
 Only the lanes run side by side.
 
 Round 2 (docs/research/2026-10-25-seven-cores-r2.md section 2.4) measured about 93k input tokens per Codex
-run (not a one-off start-up: the run's whole input, a fixed prefix of ~18-25k re-sent on each of ~5 requests): ten
+run (not a one-off start-up: the run's whole input, mostly cache reads, a fixed prefix of ~18-25k re-sent on each of ~5 requests): ten
 pieces as ten runs were the fastest and the most expensive. A lane is a list of pieces; its first piece
 starts a session, each later one continues it as a new task (Request.continued). Every piece is still its own ccx
 run: its own check, ledger row, undo snapshot and, inside a worktree, its own commit. A piece that fails, or a

@@ -13,8 +13,8 @@ Numbers, and how each one is computed (kept simple so anyone can re-derive them)
                             lead + sub-agent $ when it delegated) x delegated runs in the window.
                             Otherwise a MODEL (`saving_kind` "model"), shown as such and after the spend: per
                             delegated run, the task-sized part of the sub-agent's tokens (fresh input + output,
-                            minus the sub-agent's start-up: cache reads and writes, ~93k tokens a run in round 2
-                            (the run's whole cached input: its fixed prefix re-sent on each of ~5 requests),
+                            minus the sub-agent's cache reads and writes, ~93k tokens a run in round 2: the run's
+                            whole input, mostly cache reads, its fixed prefix re-sent on each of ~5 requests;
                             and for Codex ~20k start-up tokens it reads fresh, STARTUP_FRESH) at the lead's
                             model price, minus what the sub-agent cost, minus the lead's brief+review overhead
                             (400 output + 1500+1000*b input tokens at the lead's price); 95% CI by bootstrap over

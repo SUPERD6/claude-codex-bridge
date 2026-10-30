@@ -66,12 +66,55 @@ class TestClaude(Env):
         rows = [asst(0, "2026-10-24T10:00:00Z", 1_000, 100_000),
                 asst(1, "2026-10-24T10:01:00Z", 99_000, 101_005),     # a 99k tool result: reads the old prefix back
                 asst(2, "2026-10-24T10:02:00Z", 5_000, 150_000),
-                asst(3, "2026-10-24T10:03:00Z", 30_000, 140_000),     # read 15k less: under the 20k floor
+                asst(3, "2026-10-24T10:03:00Z", 30_000, 140_000),     # writes too little for the old rule
                 asst(4, "2026-10-24T12:00:00Z", 180_000, 0),          # idle: a real break
                 asst(5, "2026-10-24T12:00:00Z", 180_000, 0)]          # the same reply logged again, another id
         c = leadcost.cache_breaks(Paths(self.hub), "claude", write(self.work / "big.jsonl", rows))
         self.assertEqual([b["ts"] for b in c["breaks"]], ["2026-10-24T12:00:00Z"])
         self.assertIn("idle", c["breaks"][0]["why"][0])
+
+    def test_the_floor_and_the_90_percent_clause_each_reject_a_turn(self):
+        # Each turn below passes the old rule (writes >= 20k and > 30% of the turn); only the new tests reject it.
+        rows = [asst(0, "2026-10-24T10:00:00Z", 1_000, 99_000),           # holds 100k
+                asst(1, "2026-10-24T10:01:00Z", 45_000, 85_000),          # lost 15k: under the 20k floor
+                asst(2, "2026-10-24T10:02:00Z", 100_000, 120_000),        # lost 10k; holds 220k
+                asst(3, "2026-10-24T10:03:00Z", 90_000, 199_000),         # lost 21k but read >= 90% of 220k
+                asst(4, "2026-10-24T10:04:00Z", 150_000, 100_000)]        # lost 189k: a break
+        c = leadcost.cache_breaks(Paths(self.hub), "claude", write(self.work / "floor.jsonl", rows))
+        self.assertEqual([b["ts"] for b in c["breaks"]], ["2026-10-24T10:04:00Z"])
+
+    def test_uncached_input_is_not_lost_and_no_timestamp_is_no_duplicate(self):
+        prev = asst(0, "2026-10-24T10:00:00Z", 0, 40_000)
+        prev["message"]["usage"]["input_tokens"] = 60_000                  # never in the cache
+        rows = [prev, asst(1, "2026-10-24T10:01:00Z", 62_000, 40_000)]     # reads all the cache held
+        c = leadcost.cache_breaks(Paths(self.hub), "claude", write(self.work / "unc.jsonl", rows))
+        self.assertEqual(c["breaks"], [])
+        rows = [asst(0, None, 0, 10_000), asst(1, None, 0, 100_000), asst(2, None, 60_000, 0)]
+        c = leadcost.cache_breaks(Paths(self.hub), "claude", write(self.work / "nots.jsonl", rows))
+        self.assertEqual(len(c["breaks"]), 1)
+
+    def test_mcp_instructions_advice_only_names_unused_servers(self):
+        tools = [{"name": "mcp__browser__click", "description": "y" * 16000},
+                 {"name": "mcp__docs__read", "description": "y" * 16000}]
+        instr = {"type": "attachment", "attachment": {"type": "mcp_instructions_delta",
+                                                      "addedBlocks": ["z" * 16000]}}
+
+        def use(i, name):
+            return {"type": "assistant", "message": {"id": f"u{i}", "model": "claude-opus-5-5", "content": [
+                {"type": "tool_use", "id": f"tu{i}", "name": name, "input": {}}],
+                "usage": {"input_tokens": 5, "cache_read_input_tokens": 10_000, "output_tokens": 5}}}
+        head = [{"type": "api-request-shape", "shape": {"system": [{"text": "s"}], "tools": tools}}, instr]
+        both = head + [asst(0, "2026-10-24T10:00:00Z", 10_000, 0), use(1, "mcp__docs__read"),
+                       use(2, "mcp__browser__click")]
+        b = leadcost.breakdown(Paths(self.hub), "claude", write(self.work / "i1.jsonl", both))
+        self.assertIn("MCP server instructions", [x["part"] for x in b["parts"]])
+        self.assertFalse(any(a.startswith("MCP server") for a in b["advice"]))
+        one = head + [asst(0, "2026-10-24T10:00:00Z", 10_000, 0), use(1, "mcp__docs__read")]
+        b = leadcost.breakdown(Paths(self.hub), "claude", write(self.work / "i2.jsonl", one))
+        ia = [a for a in b["advice"] if a.startswith("MCP server instructions")]
+        self.assertEqual(len(ia), 1)
+        self.assertIn("browser", ia[0])
+        self.assertNotIn("docs", ia[0])
 
     def test_a_called_mcp_server_is_not_advised_off(self):
         tools = [{"name": "mcp__browser__click", "description": "y" * 16000},

@@ -100,8 +100,8 @@ measured or extrapolated.
   Subscriptions don't bill per token, so AE$ is the common yardstick. Against one real run it was 1.5% from
   Claude's own reported cost.
 - **Estimated saving per delegated run (a model, not measured):** the task-sized part of the sub-agent's tokens
-  (fresh input and output, minus its own start-up: its cache reads and cache writes, ~93k tokens a run in round 2
-  (the run's whole cached input, not a one-off start-up: a fixed prefix, Codex median ~18-25k and Claude ~13-15k,
+  (fresh input and output, minus its cache reads and writes (~93k tokens a run in round 2: the run's whole input,
+  mostly cache reads, not a one-off start-up; a fixed prefix, Codex median ~18-25k and Claude ~13-15k,
   re-sent on each of a run's ~5 requests), and for Codex, which reports no cache writes, the ~20k tokens a run reads fresh before it touches the task, per
   docs/research/2026-10-25-warm-lanes.md; Gemini is assumed to be the same) at the lead model's price, minus what the sub-agent cost, minus the brief/review
   overhead. Reported with a bootstrap 95% CI. Until 2026-10-29 all the sub-agent's tokens were priced at the lead's

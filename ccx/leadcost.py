@@ -12,7 +12,7 @@ J2. Cache reads are cheap; a turn that has to write the whole conversation into 
 turn is found by its cache writes (Claude) or uncached input (Codex) jumping, and the likely cause is named: idle
 longer than the cache lives, a model switch, an effort change (Codex), the conversation compacted, an instruction
 file edited, the tool list changed — else unknown. For Claude it counts only when the turn read at least 20k fewer
-tokens than the last turn's whole prompt and under 90% of it: a turn that merely adds a big tool result writes a
+tokens than the cache held after the last turn (its cache reads + writes) and under 90% of it: a turn that merely adds a big tool result writes a
 lot but reads the old prefix back, and is no break."""
 from __future__ import annotations
 
@@ -227,7 +227,13 @@ def _advice(parts: list[dict]) -> list[str]:
         if x["tokens"] < BIG_PART:
             continue
         cost = f"~{x['tokens']:,} tokens every turn (≈ ${x['usd_per_100_turns']:.2f} per 100 turns)"
-        if x["part"].startswith("MCP server"):
+        if x["part"] == "MCP server instructions":
+            # The servers' own usage notes, not one server: only worth acting on when some server is unused.
+            unused = [m.group(1) for y in parts if (m := MCP_PART.match(y["part"])) and y.get("calls") == 0]
+            if unused:
+                out.append(f"MCP server instructions: {cost}. Servers never called in this session: "
+                           f"{', '.join(unused)}; turning those off here also drops their instructions.")
+        elif MCP_PART.match(x["part"]):
             if x.get("calls"):          # called in this session: it is in use, turning it off is no advice
                 continue
             never = " and was never called in this session" if "calls" in x else ""
@@ -378,12 +384,14 @@ def _claude_breaks(evs: list[dict]) -> tuple[list[dict], str]:
             ts = _ts(e.get("timestamp"))
             w = int(u.get("cache_creation_input_tokens", 0) or 0)
             r = int(u.get("cache_read_input_tokens", 0) or 0)
-            ctx = int(u.get("input_tokens", 0) or 0) + w + r
-            if (e.get("timestamp"), w) in seen_tw:     # the same reply logged again under another id
+            ctx = w + r       # what the cache held after this turn; uncached input was never in it, so not "lost"
+            key = (e.get("timestamp"), w)
+            if key[0] and key in seen_tw:     # the same reply logged again under another id (needs a timestamp)
                 continue
-            seen_tw.add((e.get("timestamp"), w))
-            # A break is the cache losing what it held: this turn read clearly less than the last turn's whole
-            # prompt. A turn that only adds a big tool result writes a lot too, but reads the old prefix back.
+            seen_tw.add(key)
+            # A break is the cache losing what it held: this turn read clearly less than the cache held after the
+            # last turn (its cache reads + writes). A turn that only adds a big tool result writes a lot too, but
+            # reads the old prefix back.
             lost = prev[2] - r if prev else 0
             if prev and w >= BREAK_MIN and w > 0.3 * (w + r) and lost >= BREAK_MIN and r < 0.9 * prev[2]:
                 why = []
@@ -441,6 +449,16 @@ def _codex_breaks(evs: list[dict]) -> tuple[list[dict], str]:
     return breaks, model
 
 
+def cause_key(why: str) -> str:
+    """A break's cause without its numbers or from/to names, for counting causes."""
+    if why.startswith("idle"):
+        return "idle longer than the cache lives"
+    key = why.split(" → ")[0]
+    if key.startswith(("model switched", "effort changed")):
+        key = " ".join(key.split()[:2])
+    return key
+
+
 def cache_breaks(p, agent: str, path: Path) -> dict:
     from . import learn
     evs = _lines(path)
@@ -457,10 +475,7 @@ def cache_breaks(p, agent: str, path: Path) -> dict:
     causes: dict[str, int] = {}
     for b in breaks:
         for w in b["why"]:
-            key = w.split(" (")[0] if w.startswith("idle") else w.split(" → ")[0]
-            key = "idle longer than the cache lives" if key.startswith("idle") else key
-            if key.startswith(("model switched", "effort changed")):      # without the from/to names
-                key = " ".join(key.split()[:2])
+            key = cause_key(w)
             causes[key] = causes.get(key, 0) + 1
     return {"agent": agent, "session_file": str(path), "breaks": breaks, "extra_usd": round(extra, 4),
             "causes": causes,
