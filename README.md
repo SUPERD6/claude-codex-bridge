@@ -22,8 +22,11 @@ command is `ccx`; Python standard library only.
 
 ## Compared with doing it yourself and with Claude Code's own sub-agent
 
-**Dev set; hold-out confirmation pending.** Round 5: ten real changes from this repository × 2, a sonnet lead,
-hidden tests, the sub-agent Codex gpt-6-luna low. Built-in: every run, the lean builtin2 included; ccx: the four runs
+**Hold-out set (hc1, 2026-10-29):** on 10 tasks not used while building ccx (× 3 rounds, a sonnet lead, hidden
+tests), ccx was not seen to be less right (29/30, against 29/30 and 27/28) and cost less per success than doing it
+yourself and than the built-in sub-agent's default usage, but took about 3× the wall time of doing it yourself
+([report and limits](docs/research/2026-10-29-hc1-holdout.md)). **Dev set** (the other rows): round 5, ten real
+changes from this repository × 2, a sonnet lead, hidden tests, the sub-agent Codex gpt-6-luna low. Built-in: every run, the lean builtin2 included; ccx: the four runs
 after the round-5 fixes (the first run, before them, was 17/20 at $0.248).
 
 | | Lead does it itself | Claude Code built-in sub-agent | ccx → Codex |
@@ -31,20 +34,26 @@ after the round-5 fixes (the first run, before them, was 17/20 at $0.248).
 | Right | 19/20 (one run) | 17–19/20 (three runs) | 18–20/20 (four runs, r5e–r5h) |
 | Cost per success | $0.211 | $0.114–0.202 | $0.116–0.135 |
 | Wall time, median | 94 s | 276–316 s | 236–267 s |
-| Hold-out set (tasks not used while building ccx) | pending | pending | pending |
+| [Hold-out set](docs/research/2026-10-29-hc1-holdout.md) (10 tasks × 3): right, cost per success, wall | 29/30, $0.090, 21 s | 27/28, $0.103, 123 s (default usage) | 29/30, $0.063, 61 s |
 
-- **Cost: no clear winner between the two ways to delegate.** The lean built-in arm (builtin2, the built-in sub-agent
-  given ccx's lean recipe) cost **$0.114** per success and beat our latest ccx run (r5h, **$0.135**); ccx's range
-  is $0.116–0.135. Both are cheaper per success than the lead doing these larger tasks itself.
-- **Speed: ccx is slower than doing it yourself**, 2.5–2.8× the lead's own wall time here, about 3× on the small
+- **Cost.** On the hold-out set ccx cost about 30 % less per success than doing it yourself and about 39 % less
+  than the built-in sub-agent's **default usage**; on its 5 tasks from other repositories (the clean half: this
+  repository's own tasks may have their answers in ccx's code) about 15 % / 42 % less. The lean built-in recipe
+  (builtin2, the built-in sub-agent given ccx's lean recipe) was not in that run: on the dev set it cost **$0.114**
+  per success and beat our latest ccx run (r5h, **$0.135**; ccx's range $0.116–0.135), so between the two ways to
+  delegate there is no clear winner yet. On the dev set's larger tasks both were cheaper per success than the lead
+  doing them itself.
+- **Speed: ccx is slower than doing it yourself**, about 3× on the hold-out set (61 s vs 21 s; the built-in
+  sub-agent's default usage took 123 s), 2.5–2.8× the lead's own wall time on the dev set, about 3× on the small
   tasks of round 1 (34 s vs 11 s) and about 4.5× on round 3's harder, vaguer small-package tasks with fresh short
   leads (63 s vs 14 s): 2.5–4.5× in all. On smaller tasks the total
   spend was about even with doing it yourself in rounds 1 and 4 and higher in round 3 ($0.071 vs $0.045 per success).
 - **What ccx adds over the built-in sub-agent:** the work runs on another vendor's model and quota; ccx re-runs your
   `--check` itself instead of trusting the report; a different vendor reviews the diff; every run's cost goes into a
   ledger; `ccx undo` reverts a run.
-- **Limits:** the tasks were also used while fixing ccx, the lead doing it itself was not re-run after the first run,
-  and round 5 came before the clean-environment checks. Every number, the unfavourable ones and the best-case
+- **Limits:** the hold-out run had 10 tasks and only a sonnet lead, its prices are API-equivalent, and "not seen to
+  be less right" is not a statistical non-inferiority test. The dev-set tasks were also used while fixing ccx, the
+  lead doing it itself was not re-run after the first run, and round 5 came before the clean-environment checks. Every number, the unfavourable ones and the best-case
   feature A/Bs too: [docs/measured.md](docs/measured.md).
 
 **Try it without accounts:** `ccx demo` opens `ccx ui` on made-up projects, runs and costs in a temporary
@@ -112,7 +121,7 @@ what is verified and how is in [docs/STATUS.md](docs/STATUS.md).
 |---|---|
 | [What it does, and how](docs/features.md) | the seven things in detail, `ccx ui`, one example end to end, where shared things live, tiers, safety |
 | [Install and commands](docs/install.md) | install from a clone, plugging in your own setup, every command |
-| [Measured](docs/measured.md) | all measurements with their limits (the round-5 comparison, the best-case feature A/Bs), how a saving is estimated, external facts checked |
+| [Measured](docs/measured.md) | all measurements with their limits (the hold-out run, the round-5 comparison, the best-case feature A/Bs), how a saving is estimated, external facts checked |
 | [Shared work context](docs/shared-context.md) · [The board](docs/board.md) | what open sessions share with each other, and how |
 | [Questions and similar projects](docs/faq.md) | cost, subscriptions, safety, which tools work; how ccx differs from similar projects |
 | [Design](docs/DESIGN.md) · [Decisions](docs/DECISIONS.md) · [Changes](CHANGELOG.md) | the inside |

@@ -2,11 +2,34 @@
 
 English · [中文](measured.zh.md) · back to the [README](../README.md) · all [research reports](research/README.md)
 
-## The README's comparison: self, built-in sub-agent, ccx (round 5, dev set)
+## The README's comparison: self, built-in sub-agent, ccx
 
-The README's first table, from the [round-5 report](research/2026-10-26-r5.md) §1 and §7 and the r5h row below.
-**Dev set; hold-out confirmation pending**: when the hold-out run is read, its result (better or worse for ccx)
-fills the README's hold-out row, and the dev-set rows stay as they are.
+### Hold-out set (hc1, 2026-10-29)
+
+The README's hold-out row, from the [hold-out report](research/2026-10-29-hc1-holdout.md): 10 tasks not used while
+building ccx (5 from this repository, 5 from two external repositories) × 3 rounds, a Sonnet medium lead, hidden
+tests, pre-registered rules; 90 units counted, totals over the clean rows, true medians.
+
+| | Lead does it itself | Claude Code built-in sub-agent (default usage) | ccx → Codex (luna low) |
+|---|---|---|---|
+| Right | 29/30 | 27/28 (2 rows dropped as unclean; 28/30 with them) | 29/30 |
+| Cost per success | $0.090 | $0.103 | **$0.063** |
+| Wall time, median | 21.0 s | 123 s | 60.7 s |
+| Lead tokens, median | 62k | 56k | 36k |
+| External repositories only (5 tasks) | 15/15, $0.036 | 14/14, $0.052 | 15/15, $0.030 |
+
+By the pre-registered rules ccx is not less right (29 ≥ 29 − 2; a pointwise rule, not a statistical non-inferiority
+test: the per-task interval of a difference is about ±3/30) and cheaper: −$0.027 per success against self (95 % CI
+−0.054 to −0.004) and −$0.040 against the built-in default usage (−0.086 to −0.015), about 30 % and 39 % less. It
+took about 3× self's wall time. Limits that go with these numbers: the built-in arm is its default usage (told to run
+the full test suite; the lean builtin2 recipe, cheaper than ccx on the dev set, was not in this run); this
+repository's 5 tasks may have their answers in the ccx code ccx ran on, so the external-repository row (−15 % / −42 %)
+is the clean one; 10 tasks and one lead model only; API-equivalent prices. All eight limits are in the report.
+
+### Round 5, dev set
+
+The README's dev-set rows, from the [round-5 report](research/2026-10-26-r5.md) §1 and §7 and the r5h row below.
+**Dev set**: the tasks were also used while fixing ccx; the hold-out run above did not change these rows.
 
 | | Lead does it itself | Claude Code built-in sub-agent | ccx → Codex (luna low) |
 |---|---|---|---|
