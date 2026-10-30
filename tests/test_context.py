@@ -40,6 +40,18 @@ class TestHint(Env):
         self.assertNotEqual(context.hint(p, "claude", hook), "")              # 20 turns later, once more
         self.assertEqual(context.hint(p, "codex", hook), "")                  # no per-turn hook for Codex yet
 
+    def test_a_sub_agent_gets_no_hint(self):
+        from unittest import mock
+        f = transcript(self.work / "t.jsonl", 30, 400_000)
+        hook = {"session_id": "sub", "transcript_path": str(f)}
+        with mock.patch.dict("os.environ", {"CCX_DEPTH": "1"}):
+            self.assertEqual(context.hint(Paths(self.hub), "claude", hook), "")
+        r = self.ccx("lead", "--hint", "--as", "claude", stdin=json.dumps(hook), env={"CCX_DEPTH": "1"})
+        self.assertEqual((r.returncode, r.stdout), (0, ""))
+        r = self.ccx("turn", "--as", "claude", stdin=json.dumps(hook), env={"CCX_DEPTH": "1"})
+        self.assertEqual((r.returncode, r.stdout), (0, ""))
+        self.assertIn("re-reads about", context.hint(Paths(self.hub), "claude", hook))   # the lead still does
+
     def test_cli_hint_reads_the_hook_json_and_never_fails(self):
         f = transcript(self.work / "t.jsonl", 5, 300_000)
         r = self.ccx("lead", "--hint", "--as", "claude", stdin=json.dumps({"session_id": "x", "transcript_path": str(f)}))

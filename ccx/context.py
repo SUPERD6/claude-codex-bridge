@@ -5,6 +5,7 @@ one. This module measures it from the tools' own session files (no model calls) 
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 
@@ -101,11 +102,19 @@ def lead_now(agent: str, session: str | None, home: Path | None = None) -> int |
     return None
 
 
+def _in_subagent() -> bool:
+    try:
+        return int(os.environ.get("CCX_DEPTH", "0") or 0) > 0
+    except ValueError:
+        return False
+
+
 def hint(p, agent: str, hook_input: dict, threshold: int = THRESHOLD, every: int = EVERY) -> str:
     """One line for the lead's next turn when its conversation is long; '' otherwise, and at most once per
-    `every` turns per conversation (state in the hub)."""
+    `every` turns per conversation (state in the hub). Advice for the lead only: a ccx sub-agent (CCX_DEPTH > 0)
+    gets nothing, since handing over to a fresh conversation is not its call."""
     from . import learn
-    if agent != "claude" or not hook_input.get("transcript_path"):
+    if agent != "claude" or not hook_input.get("transcript_path") or _in_subagent():
         return ""
     got = _last_turn_claude(Path(hook_input["transcript_path"]))
     if not got:
