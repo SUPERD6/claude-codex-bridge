@@ -515,10 +515,17 @@ def run(req: Request, p: Paths) -> dict:
         selfcheck += CLEAN_LANG
     chome = clean_home(p, run_id) if switches["clean"] else None    # one empty HOME for the whole run's attempts
     brief = req.brief.strip()
+    fork_none = False
     if req.allow_subagents and req.parallel:
         # F14: the explicit request Codex's own instructions wait for, only on --parallel. No longer added just
         # because the brief lists 3+ items (r5: 40/100 first runs got it, +$0.007-0.024 a run, no wall gain).
         brief += "\n\n" + subagents.PARALLEL
+        # [subagents] fork_turns = "none" (B3 item 7, off by default): a Codex sub-agent's own children start without
+        # its history. Decided on the agent asked for (a fallback to another vendor keeps the brief as it was)
+        pv = provider_of(cfg, req.provider or req.to)
+        if subagents.fork_turns(cfg) == "none" and (pv.get("agent") if pv else req.to) == "codex":
+            brief += subagents.FORK_NONE
+            fork_none = True
     shared, shared_meta = "", None
     if (not prev or cont) and not req.fork_lead and context_share.wanted(req.share_context, cfg, req.mode):
         try:
@@ -579,6 +586,7 @@ def run(req: Request, p: Paths) -> dict:
         "review_mode": ((prev or {}).get("review_mode") or "auto") if req.review_round else req.review,
         "shared_context": shared_meta,
         "subagent_switches": switches,         # [subagent]: what this run's sub-agent loaded (ledger / eval group by it)
+        **({"parallel_fork_turns": "none"} if fork_none else {}),
         **({"base_note": stale_base} if stale_base else {}),
     }
     _write_record(run_dir, record)          # visible to `ccx show` at once (background runs, crashes)

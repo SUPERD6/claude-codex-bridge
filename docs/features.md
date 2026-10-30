@@ -221,7 +221,12 @@ the switches it ran with in run.json (`subagent_switches`); a ledger row names t
 | `clean = false` | `true`: Codex / dsh get an empty HOME of their own per run (`hub/ccx/agent-home/<run>`, emptied at the start, others removed after a day). That removes only `~/.agents/skills`: CODEX_HOME stays, so `~/.codex/AGENTS.md`, `~/.codex/skills` and memories still load; DSH_HOME, the git config and toolchain homes that exist (`~/.rustup`, `~/.cargo`, `~/.local`) stay pinned to the person's own, but other tools a test command runs see the empty HOME too. Claude gets `--disable-slash-commands` and `--setting-sources project,local` (no user settings or skills; MCP stays as `--mcp` / `[claude_subagent] mcp` asks). The prompt gains one line asking for the summary in the brief's language; a Claude sub-run gets the Agent tool only with `--parallel`. A `--fork` run keeps the lead's start on every attempt | medium: on Claude, personal skills (a verification skill, say) and user settings no longer reach the sub-agent; on Codex only the `~/.agents` skills go |
 | `codex_lean_tools = false` | `true`, write runs only: Codex without web search (`-c web_search="disabled"`), image generation and goals (`--disable`), and on OpenAI's own server without apps / plugins (checked on codex-cli 0.164.0); read runs keep web | low; a write task that needs current docs from the web loses them |
 
-Not to be confused with `[subagents]`, which caps what a sub-agent's own sub-agents may spend.
+Not to be confused with `[subagents]`, which caps what a sub-agent's own sub-agents may spend. That section has one
+experimental key too, `fork_turns = "all"` (default: nothing added). With `"none"`, a `--parallel` Codex piece is
+also told to start its own sub-agents with `fork_turns="none"` (a `spawn_agent` parameter of codex-cli 0.164.0) and
+to write into each one's message the files, goal, constraints and check it needs, so a child does not re-read the
+parent's history on every request. Claude's Agent tool never passes the parent's conversation, so Claude runs are
+unchanged. The run records `parallel_fork_turns`. Off until measured (M3).
 
 ## Safety
 
