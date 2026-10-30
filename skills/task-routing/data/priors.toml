@@ -99,6 +99,11 @@ cache_write_1h_mult = 2.0    # headless claude -p writes its ~48.7k-token start-
 input = 4.00
 cached = 0.20
 output = 20.00
+# TODO(fable): Claude Code accepts `--model fable` (config/tiers.toml), but no pricing source in this repo gives
+# Fable's per-token prices: docs/research/2026-10-23-token-cost-quantification.md has only its cache-read multiplier
+# (0.025 of input). Read input/output from platform.claude.com/docs/en/about-claude/pricing, then add [prices.fable]
+# (with the two cache_write multipliers above) and "fable" = "fable" under [model_prices]. Until then a fable lead
+# or run has no price: `ccx lead --breakdown/--cache` show $0 for it and the ledger shows its cost as unknown.
 
 # After an agent's own ladder, escalation continues on this agent's rungs above it (a failed DeepSeek piece goes to
 # Claude, not back to the lead).

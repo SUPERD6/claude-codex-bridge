@@ -191,13 +191,13 @@ github = ""
 # 共享工作上下文（docs/shared-context.zh.md）：ccx 用代码从主导会话记录里摘“最近在聊什么”，不调模型。
 # 派活时附上：auto = 只给可写任务；on = 所有任务；off = 不附（ccx run --context 每次可改）。
 run = "auto"
-max_chars = 5000          # 约 1.2k token
+max_chars = 5000          # 英文约 1.2k token；中文 5000 字约 2.2–3k token
 # 每轮 hook（ccx turn）里加一行“另一家刚做了什么”；false = 关
 turn = true
 
 [lanes]
-# 热车道（ccx/lanes.py）：同一项目、同一家、同一读写模式的小活，不再每块开一个新子会话（Codex 每次约 9.3 万 token
-# 启动，第 2 轮实测），而是最多 N 个会话按顺序做，后面的块像 ccx resume 一样续在同一会话里。每块仍是单独的 ccx 运行：
+# 热车道（ccx/lanes.py）：同一项目、同一家、同一读写模式的小活，不再每块开一个新子会话（Codex 每次运行输入约 9.3 万 token，
+# 第 2 轮实测；不是一次性启动开销，而是约 1.8–2.5 万的固定前缀每次请求重发、一次运行约 5 次请求），而是最多 N 个会话按顺序做，后面的块像 ccx resume 一样续在同一会话里。每块仍是单独的 ccx 运行：
 # 单独 --check、单独记账、单独可 undo（worktree 里每块一个提交）。某块失败、会话太长时下一块开新会话。
 # 默认关（0）：开不开由实测（确认实验）决定；H11 试用已于 2026-10-26 作废。单次打开：ccx batch --lanes 2 / ccx q run --lanes 2。
 default = 0

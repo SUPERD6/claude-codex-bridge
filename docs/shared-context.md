@@ -9,7 +9,7 @@ in three ways.
 
 | Where | What the other tool gets | Switch |
 |---|---|---|
-| A delegated task (`ccx run`) | the lead's recent work: the person's last asks, sentences that settled something, the lead's plan, the files it changed, its latest message; each line with its time and source; about 1–1.2k tokens | `--context auto\|on\|off`; auto (default) = write tasks only; `[shared_context] run` |
+| A delegated task (`ccx run`) | the lead's recent work: the person's last asks, sentences that settled something, the lead's plan, the files it changed, its latest message; each line with its time and source; about 1–1.2k tokens in English (5000 Chinese characters are ~2.2–3k) | `--context auto\|on\|off`; auto (default) = write tasks only; `[shared_context] run` |
 | `ccx peek claude\|codex\|deepseek` | a read-only look at that tool's newest open session in this project (or `--session ID`) | — |
 | The per-turn hook (`ccx turn`) | one line per other tool that did something since this reader last looked: what its person asked, what was settled, which files changed | `[shared_context] turn = false` |
 
