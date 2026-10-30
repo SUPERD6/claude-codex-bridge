@@ -208,6 +208,21 @@ model without a known price is refused, since its spend couldn't be counted agai
 a quota fallback or as a reviewer on their own; only DeepSeek through Claude Code is in automatic routing (it has
 calibration and prices), the others need `--provider` / `--to` until they are calibrated.
 
+## Experimental: lean sub-agent switches (`[subagent]`, off until measured)
+
+Three switches in `config/tiers.toml` (override in `hub/ccx/tiers.toml`) change what a delegated sub-agent loads at
+its start. Each ships at today's behaviour and stays there until a before / after measurement shows the right-rate does
+not drop ([plan and arms](research/2026-10-30-b3-lean-switches-plan.md)). There is no per-run flag. Every run records
+the switches it ran with in run.json (`subagent_switches`); a ledger row names the ones away from the default.
+
+| Key (default) | When changed | Risk |
+|---|---|---|
+| `codex_memories = true` | `false`: every Codex rung gets only the three memory settings the evaluation's clean room uses (`features.memories`, `memories.use_memories`, `memories.generate_memories` = false); never `--ignore-user-config`, which would also drop provider and sandbox settings | low: the hold-out run hc1 ran with memories off |
+| `clean = false` | `true`: Codex / dsh get an empty HOME of their own per run (`hub/ccx/agent-home/<run>`, emptied at the start, others removed after a day). That removes only `~/.agents/skills`: CODEX_HOME stays, so `~/.codex/AGENTS.md`, `~/.codex/skills` and memories still load; DSH_HOME, the git config and toolchain homes that exist (`~/.rustup`, `~/.cargo`, `~/.local`) stay pinned to the person's own, but other tools a test command runs see the empty HOME too. Claude gets `--disable-slash-commands` and `--setting-sources project,local` (no user settings or skills; MCP stays as `--mcp` / `[claude_subagent] mcp` asks). The prompt gains one line asking for the summary in the brief's language; a Claude sub-run gets the Agent tool only with `--parallel`. A `--fork` run keeps the lead's start on every attempt | medium: on Claude, personal skills (a verification skill, say) and user settings no longer reach the sub-agent; on Codex only the `~/.agents` skills go |
+| `codex_lean_tools = false` | `true`, write runs only: Codex without web search (`-c web_search="disabled"`), image generation and goals (`--disable`), and on OpenAI's own server without apps / plugins (checked on codex-cli 0.164.0); read runs keep web | low; a write task that needs current docs from the web loses them |
+
+Not to be confused with `[subagents]`, which caps what a sub-agent's own sub-agents may spend.
+
 ## Safety
 
 - Sub-agents **may edit files** by default:

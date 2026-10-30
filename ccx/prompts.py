@@ -35,6 +35,11 @@ Final message = the JSON result (schema enforced). summary <= 120 words, facts o
 """
 
 
+# [subagent] clean (experimental, off until measured): a clean Claude sub-agent loses the person's user settings (their
+# `language` among them; a Codex one keeps CODEX_HOME's AGENTS.md); this one line keeps the language part (B3 item 4).
+CLEAN_LANG = " Write summary and open_questions in the language the task above is written in."
+
+
 SELFCHECK = ("Before you finish, check your own work: run the relevant tests or commands that exist (iterate with "
              "targeted runs: one file, -x, -k NAME; run the full set once at the end), and re-read your changes against the task. " + WIRING + "List what you ran in commands_run and the outcome in verification. In summary "
              "say what changed and why; put anything you are unsure of, or that the lead must decide, in open_questions.")

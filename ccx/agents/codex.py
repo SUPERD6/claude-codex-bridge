@@ -22,9 +22,17 @@ CODEX_KEEP = (("windows", "sandbox"),)
 # plugins / remote_plugin / apps (codex-cli 0.164.0 `codex features list`: stable, on by default): with the plugin
 # features on, a start syncs the account's remote curated plugins (gmail, google-drive, github, ...) into CODEX_HOME
 # and offers them to the run; apps are the account's ChatGPT connectors. Not part of ccx's defaults: only this opt-in.
-ISOLATE_SETTINGS = ("-c", "features.memories=false", "-c", "memories.use_memories=false",
-                    "-c", "memories.generate_memories=false",
+MEMORIES_OFF = ("-c", "features.memories=false", "-c", "memories.use_memories=false",
+                "-c", "memories.generate_memories=false")
+ISOLATE_SETTINGS = (*MEMORIES_OFF,
                     "-c", "features.plugins=false", "-c", "features.remote_plugin=false", "-c", "features.apps=false")
+
+# [subagent] codex_lean_tools (experimental, off until measured): tools a write piece does not need. Each key checked
+# on codex-cli 0.164.0 (2026-10-30): `codex features list` has image_generation and goals (stable, on) and apps /
+# plugins (stable, on); `web_search` is a config key (`-c web_search="bogus"` fails to load, "disabled" loads).
+# apps / plugins only on OpenAI's own server: a provider run already turns them off (delegate.py).
+LEAN_TOOLS = ("-c", 'web_search="disabled"', "--disable", "image_generation", "--disable", "goals")
+LEAN_TOOLS_NATIVE = ("--disable", "apps", "--disable", "plugins")
 
 
 def _codex_kept_settings() -> list[str]:
@@ -41,7 +49,11 @@ def _codex_kept_settings() -> list[str]:
 
 
 def codex_invocation(*, model: str, effort: str, perm: list[str], cwd: Path, prompt: str,
-                     run_dir: Path, resume_id: str | None = None, lean: bool = False) -> Invocation:
+                     run_dir: Path, resume_id: str | None = None, lean: bool = False,
+                     memories: bool = True) -> Invocation:
+    """memories=False ([subagent] codex_memories = false): Codex memories off with the same three settings the
+    evaluation's clean room uses (MEMORIES_OFF), and nothing else: --ignore-user-config would also drop the person's
+    provider and sandbox settings."""
     last = run_dir / "last_message.json"
     common = ["--json", "-m", model, "-c", f'model_reasoning_effort="{effort}"', *perm,
               "--skip-git-repo-check", "--output-schema", str(RESULT_SCHEMA), "-o", str(last)]
@@ -52,6 +64,8 @@ def codex_invocation(*, model: str, effort: str, perm: list[str], cwd: Path, pro
         # opt-in (an evaluation's clean room): no execpolicy .rules files and no Codex memories, whatever the
         # effort (codex-cli 0.164.0 exec --help: --ignore-rules, -c key=value; also on `exec resume`)
         common += ["--ignore-rules", *ISOLATE_SETTINGS]
+    elif not memories:
+        common += list(MEMORIES_OFF)
     prompt = EXEC_NOTE + prompt                  # every system, fresh exec and exec resume alike
     if resume_id:
         argv = [*bin_argv("codex"), "exec", "resume", resume_id, *common, "-"]

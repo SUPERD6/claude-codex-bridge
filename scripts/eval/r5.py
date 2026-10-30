@@ -20,6 +20,18 @@ so doing it takes many requests. Arms (the lead is a fresh headless Claude Code,
            ccx's own default stays "warn". Every row records the hub's mode (`namecheck_mode`) and each builder
            run's own (`ccx_namecheck`: mode, hits, climbs past a hit), counted per arm in the summary
            (`namecheck`), so ccx2 vs ccx2nc measures the change before / after
+  ccx2daily, ccx2daily_nomem, ccx2daily_clean, ccx2daily_leantools
+           opt-in (B3, docs/research/2026-10-30-b3-lean-switches-plan.md): exactly ccx2's lead, but the sub-agents
+           start with the person's daily setup: Codex in a per-unit home (scripts/eval/daily_home.py) holding copies
+           of their ~/.codex memories/, AGENTS.md and skills/ and of ~/.agents/skills, the login copied from the eval
+           Codex home (never their auth, credentials, config.toml, sessions or logs), no CCX_CODEX_ISOLATE; Claude
+           sub-agents with setting sources user,project,local and skills. Each variant writes one [subagent] switch
+           into the unit hub's tiers.toml (read back before the lead starts): codex_memories = false, clean = true,
+           codex_lean_tools = true. The eval Codex home gets nothing of the person's (only a login the unit
+           refreshed is written back to it, daily_home.sync_login), so every other arm's checks stay as strict; the
+           daily arms need --jobs 1. Rows carry `daily` (with the snapshot's sha256) and `sub_usage` (sub-agent
+           tokens per class); their sub-agents' skills are recorded by the audit, not problems; summary applies the
+           fixed B3 rule (`b3_rules`). `daily-check` builds one such home in a temp folder, lists it, removes it
   builtin2 opt-in (--arms builtin2): builtin's Agent-tool hand-off with ccx2's brief and acceptance wording, word
            for word (the worker reports check / files_changed / diffstat / status); not in the default schedule
   builtin2r opt-in (--arms builtin2r): builtin2 whose worker's own prompt also carries ccx's KEEP_TESTS and WIRING
@@ -150,6 +162,7 @@ from ccx.prompts import KEEP_TESTS, WIRING  # noqa: E402
 import ext_repo  # noqa: E402
 import r5_timeline as TL  # noqa: E402
 import harness_audit as HA  # noqa: E402
+import daily_home as DH  # noqa: E402
 import tasks_holdout  # noqa: E402
 import tasks_r5  # noqa: E402
 
@@ -310,11 +323,17 @@ TIER_LEAD_ARMS = ("balanced", "save")            # the lead sizes with ccx propo
 SKILL_ARMS = PF.SKILL_ARMS                       # the lead loads the agent-delegate skill (needs ccx-home)
 # namecheck arms (opt-in): ccx2 in a unit hub whose tiers.toml sets [defaults] namecheck to this mode
 NAMECHECK_ARMS = {"ccx2nc": "fail"}
+# daily-config arms (opt-in, B3 item 2; scripts/eval/daily_home.py): ccx2's lead and wording, but its sub-agents
+# start with the person's everyday setup (Codex memories, AGENTS.md and skills copied into a per-unit Codex home whose
+# login is the eval home's; Claude with the user settings layer and skills), and each variant turns one experimental
+# [subagent] switch on in the unit hub's tiers.toml (a config overlay, the code is the same)
+DAILY_ARMS = {"ccx2daily": {}, "ccx2daily_nomem": {"codex_memories": False}, "ccx2daily_clean": {"clean": True},
+              "ccx2daily_leantools": {"codex_lean_tools": True}}
 # leads that may hand work to ccx (session file, metrics)
-CCX_ARMS = ("ccx", "ccx2", *NAMECHECK_ARMS, *SKILL_ARMS, *TIER_LEAD_ARMS)
+CCX_ARMS = ("ccx", "ccx2", *NAMECHECK_ARMS, *SKILL_ARMS, *TIER_LEAD_ARMS, *DAILY_ARMS)
 BUILTIN_ARMS = PF.BUILTIN_ARMS
 # not in ARMS: the default schedule (and old tags' done-keys) stay
-OPT_IN_ARMS = ("ccx2", "builtin2", "builtin2r", *TIER_ARMS, *SKILL_ARMS, *NAMECHECK_ARMS)
+OPT_IN_ARMS = ("ccx2", "builtin2", "builtin2r", *TIER_ARMS, *SKILL_ARMS, *NAMECHECK_ARMS, *DAILY_ARMS)
 DEFAULT_LEAD = (r3.LEAD_MODEL, r3.LEAD_EFFORT)
 # --lead-model auto: each task's lead model from its difficulty by ccx's lead.model_by_task rule (ccx/leadmodel.py,
 # this checkout's config/tiers.toml [lead] / [lead_by_task], never the hub's settings), so the next round can compare
@@ -534,7 +553,7 @@ def lead_how(arm: str, label: str, lead: tuple[str, str] = DEFAULT_LEAD) -> str:
     lead passes to ccx propose as --lead)."""
     if arm == "ccx":
         return HOW_CCX.format(ccx=r3.CCX_CMD, label=label)
-    if arm == "ccx2" or arm in NAMECHECK_ARMS:    # ccx2nc: ccx2's lead; only its hub's namecheck differs
+    if arm == "ccx2" or arm in NAMECHECK_ARMS or arm in DAILY_ARMS:   # ccx2's lead; only the hub / homes differ
         return HOW_CCX2.format(ccx=r3.CCX_CMD, label=label)
     if arm in SKILL_ARMS:
         return HOW_CCX2_SKILL
@@ -667,12 +686,15 @@ def lead_unit(u: dict, a, work: Path, repo: Path, hub: Path, iso: PF.Unit | None
     cost = r2.hub_cost(hub)
     by_model = r3.model_split(fin.get("modelUsage") or {})
     lead_usd = float(fin.get("total_cost_usd") or 0)
+    sub_use = sub_usage(hub) if is_ccx else None
     row = {"rc": rc, "wall_s": wall, "subtype": fin.get("subtype"), "lead_usd": round(lead_usd, 6),
            "by_model_usd": by_model, "ccx_usd": cost["usd"], "ccx_review_usd": cost["review_usd"],
            "ccx_agents": cost["agents"], "ccx_run_ids": cost["run_ids"], "usd": round(lead_usd + cost["usd"], 6), **lm}
     row["sub_usd"] = round(sum(v for m, v in by_model.items() if r3.WORKER_MODEL in m), 6) if is_builtin \
         else cost["usd"]
     row["lead_only_usd"] = round(row["usd"] - row["sub_usd"], 6)
+    if sub_use is not None:
+        row["sub_usage"] = sub_use
     ccx_runs = len([x for x in cost["run_ids"] if not str(x).startswith("review")])
     row["delegated"] = bool(lm["agent_calls"]) if is_builtin else bool(cost["run_ids"]) \
         if is_ccx else None
@@ -692,6 +714,26 @@ def lead_unit(u: dict, a, work: Path, repo: Path, hub: Path, iso: PF.Unit | None
     row["timeline"] = TL.unit_timeline(hub, cost["run_ids"], out, wall, row.get("phases"),
                                        worker_usd=row["sub_usd"] if is_builtin else None)
     return row
+
+
+def sub_usage(hub: Path) -> dict:
+    """What ccx's sub-agents read and wrote in this unit, per token class, from the hub's ledger (read before the hub
+    goes): `input` (uncached), `cached`, `output` of the work runs, `prompt` = input + cached (what the B3 rule
+    compares: memories, skills and tool definitions are prompt), the same for ccx's reviews apart (`review_*`), and
+    how many runs."""
+    from ccx import ledger as _ledger
+    out = {"input": 0, "cached": 0, "output": 0, "runs": 0, "review_input": 0, "review_cached": 0,
+           "review_output": 0, "reviews": 0}
+    for r in _ledger.rows(r2.Paths(hub)):
+        if r.get("type"):
+            continue
+        u = r.get("usage") or {}
+        pre = "review_" if str(r.get("label") or "").startswith("review:") else ""
+        for k in ("input", "cached", "output"):
+            out[pre + k] += int(u.get(k, 0) or 0)
+        out["reviews" if pre else "runs"] += 1
+    out["prompt"] = out["input"] + out["cached"]
+    return out
 
 
 def namecheck_stats(rows: list[dict]) -> dict | None:
@@ -850,6 +892,80 @@ def set_namecheck(hub: Path, mode: str) -> str:
     if got != mode:
         raise RuntimeError(f"the unit hub runs namecheck {got!r} after setting [defaults] namecheck = {mode!r}")
     return got
+
+
+def daily_sources(a) -> tuple[Path, Path]:
+    """The person's own Codex home and ~/.agents a daily arm copies from (--daily-codex-source / --daily-agents-source;
+    default ~/.codex and ~/.agents)."""
+    codex = getattr(a, "daily_codex_source", "") or str(Path.home() / ".codex")
+    agents = getattr(a, "daily_agents_source", "") or str(Path.home() / ".agents")
+    return Path(codex).expanduser(), Path(agents).expanduser()
+
+
+def set_daily(iso: PF.Unit, hub: Path, env: dict, arm: str, a) -> tuple[dict, dict]:
+    """A daily arm's unit: its own Codex home and HOME (daily_home.build, in the unit's x- folder), its environment
+    (daily_home.unit_env) and its [subagent] overlay written into the unit hub's tiers.toml, read back the way ccx
+    reads it. Raises unless the hub now runs with exactly the arm's switches. Returns (info, env)."""
+    if not iso.codex_home:
+        raise RuntimeError(f"arm {arm} needs --codex-home: its Codex login comes from the eval Codex home")
+    codex_src, agents_src = daily_sources(a)
+    info = DH.build(iso.x, iso.codex_home, codex_src, agents_src, kept=PF.codex_kept_toml(codex_src),
+                    features_off=PF.CODEX_FEATURES_OFF)
+    over = DH.overlay_toml(DAILY_ARMS[arm])
+    if over:
+        f = r2.Paths(hub).user_tiers
+        text = f.read_text(encoding="utf-8") if f.exists() else ""
+        if re.search(r"(?m)^\[subagent\][ \t]*$", text):
+            raise RuntimeError("the unit hub's tiers.toml already has a [subagent] table")
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(text + ("" if not text or text.endswith("\n") else "\n") + over, encoding="utf-8")
+    from ccx.config import SUBAGENT_SWITCHES, load_config, subagent_switches
+    got = subagent_switches(load_config(r2.Paths(hub)))
+    want = {**SUBAGENT_SWITCHES, **DAILY_ARMS[arm]}
+    if got != want:
+        raise RuntimeError(f"the unit hub runs [subagent] {got} instead of {want}")
+    info["switches"] = got
+    return info, DH.unit_env(env, info)
+
+
+def daily_plan_lines(arms: list[str], a) -> list[str]:
+    """What --dry-run says about the daily arms it would run (nothing is copied or written)."""
+    daily = [x for x in arms if x in DAILY_ARMS]
+    if not daily:
+        return []
+    codex_src, agents_src = daily_sources(a)
+    out = [f"[dry] daily arms copy {', '.join(DH.DAILY_COPY)} from {codex_src} and "
+           f"{', '.join(DH.AGENTS_COPY)} from {agents_src} into a per-unit home (never auth, credentials, "
+           "config.toml, sessions or logs); the Codex login is the eval Codex home's; Claude sub-agents load "
+           f"setting sources {DH.DAILY_CLAUDE_SOURCES}"]
+    out += [f"[dry]   {x}: [subagent] {DAILY_ARMS[x] or '(none: the daily baseline)'}" for x in daily]
+    if not getattr(a, "codex_home", ""):
+        out.append("[dry] note: the daily arms need --codex-home (their login comes from it)")
+    return out
+
+
+def cmd_daily_check(a) -> int:
+    """Build one daily home in a temporary folder from --codex-home and the person's sources, print what it holds
+    (names only) and remove it: the self-test of the daily arms, with nothing started."""
+    if not a.codex_home:
+        print("daily-check needs --codex-home (the eval Codex home whose login the daily home copies)")
+        return 2
+    codex_src, agents_src = daily_sources(a)
+    tmp = Path(tempfile.mkdtemp(prefix="ccx-daily-"))
+    try:
+        info = DH.build(tmp, Path(PF.codex_home_arg(a.codex_home)), codex_src, agents_src,
+                        kept=PF.codex_kept_toml(codex_src), features_off=PF.CODEX_FEATURES_OFF)
+        names = sorted(p.relative_to(tmp).as_posix() for p in tmp.rglob("*") if p.is_file())
+        print(json.dumps({"copied": info["copied"], "files": info["files"], "auth": info["auth"],
+                          "memory_settings": info["memory_settings"], "features_off": info["features_off"],
+                          "top": sorted({"/".join(n.split("/")[:2]) for n in names})}, indent=1))
+        print("daily-check: ok (removed)")
+        return 0
+    except RuntimeError as e:
+        print(f"daily-check: {e}")
+        return 3
+    finally:
+        r2._rmtree(tmp)
 
 
 def hub_namecheck(hub: Path) -> str:
@@ -1124,6 +1240,9 @@ def unit_models(u: dict, row: dict) -> dict:
         out["tier_picked"] = u["arm"]
     if u["arm"] in NAMECHECK_ARMS:                # the hub's [defaults] namecheck
         out["namecheck"] = NAMECHECK_ARMS[u["arm"]]
+    if u["arm"] in DAILY_ARMS:                    # the daily home and the hub's [subagent] overlay
+        out["daily"] = {"subagent": DAILY_ARMS[u["arm"]], "claude_setting_sources": DH.DAILY_CLAUDE_SOURCES,
+                        "sha256": (row.get("daily") or {}).get("sha256")}    # the snapshot of the copied setup
     seen = ((row.get("audit") or {}).get("init") or {}).get("model")
     if seen:
         out["lead_seen"] = seen
@@ -1166,6 +1285,8 @@ def run_unit(u: dict, a, work: Path) -> dict:
         hinfo["namecheck"] = (set_namecheck(hub, NAMECHECK_ARMS[u["arm"]]) if u["arm"] in NAMECHECK_ARMS
                               else hub_namecheck(hub))
         row["namecheck_mode"] = hinfo["namecheck"]
+        if u["arm"] in DAILY_ARMS:                # its own Codex home and HOME, and its [subagent] overlay
+            row["daily"], env = set_daily(iso, hub, env, u["arm"], a)
         row.update(direct_unit(u, a, repo, hub, env, job) if not has_lead(u["arm"]) else
                    lead_unit(u, a, work, repo, hub, iso, env, job))
         row.update(changed(repo))
@@ -1182,10 +1303,21 @@ def run_unit(u: dict, a, work: Path) -> dict:
         row.setdefault("wall_s", 0)
     finally:
         try:
-            row["audit"] = PF.audit(iso, stream.read_text(encoding="utf-8") if stream.exists() else "")
+            row["audit"] = PF.audit(iso, stream.read_text(encoding="utf-8") if stream.exists() else "",
+                                    daily=u["arm"] in DAILY_ARMS)
         except Exception as e:  # noqa: BLE001
             row["audit"] = {"clean": False, "problems": [f"audit failed: {type(e).__name__}: {e}"[:200]],
                             "session_ids": []}
+        if row.get("daily") and iso is not None and iso.codex_home:
+            # before the x- folder goes: a login the unit refreshed goes back to the eval home (daily_home.sync_login)
+            try:
+                row["daily"]["login"] = DH.sync_login(row["daily"], iso.codex_home)
+            except OSError as e:
+                row["daily"]["login"] = {"auth": "conflict", "note": f"not written back: {type(e).__name__}"}
+            if row["daily"]["login"]["auth"] == "conflict":
+                row["audit"]["clean"] = False
+                row["audit"].setdefault("problems", []).append("daily login: " + row["daily"]["login"].get(
+                    "note", "conflict"))
         fresh = u.get("taskset", "r5") != "r5"     # hold-out: nothing of a finished unit stays in the work dir
         if fresh and stream.exists():
             keep = OUT / "streams" / str(u.get("tag") or "untagged")
@@ -1526,6 +1658,11 @@ def cmd_run(a) -> int:
         raise SystemExit(f"arm {', '.join(skill)} needs --claude-isolation ccx-home: its lead must load the "
                          "agent-delegate skill from a Claude home that has ccx's install and nothing else (that "
                          "also needs CLAUDE_CODE_OAUTH_TOKEN, which you export yourself)")
+    daily = [x for x in arms if x in DAILY_ARMS]
+    if daily and a.jobs > 1 and not a.dry_run:
+        # each daily unit runs on a copy of the eval home's login; a refresh rotates the token, and a copy taken by a
+        # unit running at the same time would then hold a spent one (daily_home.sync_login)
+        raise SystemExit(f"arm {', '.join(daily)} needs --jobs 1: its units share the eval Codex home's login")
     done = {done_key(r) for r in read_jsonl(out)}
     lead = {"lead_model": a.lead_model or DEFAULT_LEAD[0], "lead_effort": a.lead_effort or DEFAULT_LEAD[1]}
     auto = lead["lead_model"] == LEAD_AUTO
@@ -1562,6 +1699,8 @@ def cmd_run(a) -> int:
             print(line)
         if skill and a.claude_isolation != "ccx-home":
             print(f"[dry] note: {', '.join(skill)} needs --claude-isolation ccx-home to run")
+        for line in daily_plan_lines(arms, a):
+            print(line)
         pinned, probs = pin_check(read_jsonl(out), a.tag, PF.commit_state()["commit"], a.pin_commit)
         for p in probs:
             print(f"[dry] commit: {p}")
@@ -1948,6 +2087,69 @@ def tier_rule(rows: list[dict], bal: str = TIER_RULE_ARMS[0], save: str = TIER_R
     return out
 
 
+B3_BASE = "ccx2daily"
+B3_INPUT_DROP = 0.15          # the sub-agent's median prompt tokens per unit must be at least this much lower
+
+
+def b3_rule(rows: list[dict], arm: str, base: str = B3_BASE) -> dict | None:
+    """The B3 decision rule fixed before any run (docs/research/2026-10-30-b3-lean-switches-plan.md), on the clean
+    units both arms share: a switch's default changes only if right_B >= right_A (right not lower), at most 2 lost pairs (A right,
+    B wrong), no task B got wrong in every round while A got it right at least once, and the sub-agent's median
+    prompt tokens per unit (sub_usage.prompt: input + cached of ccx's work runs) at least B3_INPUT_DROP lower. Any
+    unclean pair lost on one side only (lost_pairs note), or a missing token count, makes it Unknown. Result pass /
+    fail / unknown; None unless both arms have clean rows."""
+    every = [r for r in rows if "error" not in r]
+    clean, excluded = clean_rows(every)
+    ps = pair_units(clean, base, arm)
+    if not ps:
+        return None
+    a_ok, b_ok = sum(bool(x.get("ok")) for x, _ in ps), sum(bool(y.get("ok")) for _, y in ps)
+    lost = sum(bool(x.get("ok")) and not y.get("ok") for x, y in ps)
+    tasks: dict = {}
+    for x, y in ps:
+        t = tasks.setdefault(x["task"], {"a": 0, "b": 0, "n": 0})
+        t["a"] += bool(x.get("ok"))
+        t["b"] += bool(y.get("ok"))
+        t["n"] += 1
+    always_lost = sorted(k for k, t in tasks.items() if t["b"] == 0 and t["a"] > 0)
+    pa = [(x.get("sub_usage") or {}).get("prompt") for x, _ in ps]
+    pb = [(y.get("sub_usage") or {}).get("prompt") for _, y in ps]
+    have = None not in pa and None not in pb
+    ma, mb = (_med(pa), _med(pb)) if have else (None, None)
+    pf = lambda v: "pass" if v else "fail"  # noqa: E731
+    cond = {"right": {"rule": f"{arm} right >= {base} right", "value": [b_ok, a_ok], "result": pf(b_ok >= a_ok)},
+            "lost_pairs": {"rule": f"at most 2 pairs {base} right, {arm} wrong", "value": lost,
+                           "result": pf(lost <= 2)},
+            "always_lost": {"rule": f"no task {arm} got wrong in every round that {base} got right once",
+                            "value": always_lost, "result": pf(not always_lost)},
+            "input": {"rule": f"{arm} sub-agent median prompt tokens <= {1 - B3_INPUT_DROP:.0%} of {base}'s",
+                      "value": [mb, ma],
+                      "result": "unknown" if not have or not ma else pf(mb <= (1 - B3_INPUT_DROP) * ma)}}
+    res = [c["result"] for c in cond.values()]
+    lp = lost_pairs(every, base, arm)
+    out = {"units": len(ps), "tasks": len(tasks), "conditions": cond, "excluded_rows": excluded, "lost_pairs": lp,
+           "result": "fail" if "fail" in res else "unknown" if "unknown" in res else "pass"}
+    if lp.get("note"):
+        out["exclusion_note"] = lp["note"]
+        if out["result"] == "pass":
+            out["result"] = "unknown"
+    return out
+
+
+def b3_rules(rows: list[dict]) -> dict:
+    """b3_rule for every daily variant that shares clean units with the daily baseline."""
+    arms = {arm_of(r) for r in rows if "error" not in r}
+    out = {}
+    if B3_BASE not in arms:
+        return out
+    for arm in DAILY_ARMS:
+        if arm != B3_BASE and arm in arms:
+            br = b3_rule(rows, arm)
+            if br:
+                out[f"{B3_BASE} vs {arm}"] = br
+    return out
+
+
 def tier_rule_lines(tr: dict | None) -> list[str]:
     """The tier decision rule as plain lines (cmd_summary prints them after the JSON, on stderr)."""
     if not tr:
@@ -2101,6 +2303,9 @@ def summarize(rows: list[dict], include_unclean: bool = False) -> dict:
     if ex_arm:
         res["excluded_by_arm"] = ex_arm
         res["excluded_by_tag"] = ex_tag
+    b3 = b3_rules(every)
+    if b3:
+        res["b3_rules"] = b3
     trs = tier_rules(every)
     if trs:
         res["tier_rules"] = trs
@@ -2174,6 +2379,13 @@ def cmd_export(a) -> int:
     return 0
 
 
+def daily_options(ap: argparse.ArgumentParser) -> None:
+    ap.add_argument("--daily-codex-source", default="", help="daily arms: the person's Codex home to copy memories, "
+                    "AGENTS.md and skills from (default ~/.codex; auth, config, sessions and logs are never copied)")
+    ap.add_argument("--daily-agents-source", default="", help="daily arms: the person's ~/.agents to copy skills/ "
+                    "from (default ~/.agents)")
+
+
 def parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -2206,8 +2418,14 @@ def parser() -> argparse.ArgumentParser:
     r.add_argument("--ext-python", default="", help="the Python that runs the other repositories' tests (needs "
                    "Python 3.11+, pytest and their test modules, e.g. freezegun, and not the libraries themselves; "
                    "keep it away from the --ext-cache folder; default: this one)")
+    daily_options(r)
     PF.add_options(r)
     r.set_defaults(fn=cmd_run)
+    dc = sub.add_parser("daily-check", help="build one daily-config home in a temporary folder, list it, remove it")
+    dc.add_argument("--codex-home", default=os.environ.get("CCX_EVAL_CODEX_HOME", ""),
+                    help="the eval Codex home whose login the daily home copies")
+    daily_options(dc)
+    dc.set_defaults(fn=cmd_daily_check)
     s = sub.add_parser("summary")
     s.add_argument("--tag", default=None, help="only this round's rows (default: all; the tags are listed)")
     s.add_argument("--taskset", choices=sorted(TASKSETS), default="r5")

@@ -11,7 +11,7 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
-from .config import Paths
+from .config import SUBAGENT_SWITCHES, Paths
 
 
 def new_run_id(p: Paths) -> str:
@@ -69,6 +69,10 @@ def _slim(record: dict) -> dict:
     slim["actual_mode"] = "direct" if unchecked else "ccx2"
     if record.get("resume_chain"):
         slim["resume_chain"] = record["resume_chain"]     # follow-ups of the same task that led to this run
+    changed = sorted(k for k, v in (record.get("subagent_switches") or {}).items()
+                     if k in SUBAGENT_SWITCHES and v != SUBAGENT_SWITCHES[k])
+    if changed:            # [subagent] switches away from today's default (absent: every one at its default)
+        slim["subagent_switches"] = changed
     ae = [a["ae_usd"] for a in record["attempts"] if a.get("ae_usd") is not None]
     slim["ae_usd"] = round(sum(ae), 6) if ae else None
     by: dict[str, float] = {}

@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import socket
 import sys
 import threading
@@ -27,13 +28,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import agents, context_share, learn, ledger, recover, subagents
-from .config import DELEGATE_AGENTS, Paths, load_config, provider_of
+from .config import DELEGATE_AGENTS, SUBAGENT_SWITCHES, Paths, load_config, provider_of, subagent_switches  # noqa: F401
 from .runners import BUILDERS, Outcome, execute, usage_dict
 # split out by job (J11); re-exported so `from ccx.delegate import ...` keeps working
 from .agents.codex import _add_children, _codex_growth, _codex_seen, _codex_total  # noqa: F401
 from .ledger import write_record as _write_record  # noqa: F401
 from .plan import _fallback_plan, _plan, _provider_envs, _rung_spec, _usable, _within_budget, other  # noqa: F401
-from .prompts import (CHECK_RETRY, CHECK_RETRY_SAME, CHECK_RETRY_STRONGER, CHECK_TAIL_CHARS, CONTINUE, ESCALATE, FOLLOWUP, LEAD_NOTE, NEEDS_WRITE, POLICY_MARKERS, POLICY_RETRY, PROMPT,  # noqa: F401
+from .prompts import (CLEAN_LANG, CHECK_RETRY, CHECK_RETRY_SAME, CHECK_RETRY_STRONGER, CHECK_TAIL_CHARS, CONTINUE, ESCALATE, FOLLOWUP, LEAD_NOTE, NEEDS_WRITE, POLICY_MARKERS, POLICY_RETRY, PROMPT,  # noqa: F401
                       REVIEW_CALLER, REVIEW_FINISH, REVIEW_PERMISSION, SELFCHECK, SELFCHECK_CMD, _policy_rejections,
                       review_permission)
 from .review import review_run as _review  # noqa: F401
@@ -230,6 +231,29 @@ def _brief_notes(p: Paths, cfg: dict, to: str, brief: str, cwd: Path) -> str:
         "".join(f"- #{e['seq']} ({e.get('topic')}): {e['text']}\n" for e in notes)
 
 
+CLEAN_HOME_KEEP_S = 24 * 3600          # other runs' clean homes older than this are removed when a new one is made
+
+
+def clean_home(p: Paths, run_id: str) -> Path:
+    """[subagent] clean: the empty HOME / USERPROFILE a Codex or dsh sub-agent gets (no ~/.agents/skills), the
+    evaluation's CCX_AGENT_HOME made by ccx itself: one per run, made empty when the run starts (what an earlier run
+    wrote to HOME never builds up), and other runs' homes older than a day are removed."""
+    base = p.state / "agent-home"
+    d = base / run_id
+    if base.is_dir():
+        now = time.time()
+        for old in base.iterdir():
+            try:
+                if old != d and old.is_dir() and now - old.stat().st_mtime > CLEAN_HOME_KEEP_S:
+                    shutil.rmtree(old, ignore_errors=True)
+            except OSError:
+                pass
+    if d.exists():
+        shutil.rmtree(d, ignore_errors=True)
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
 def claude_slim_flags(cfg: dict, mode: str, mcp: bool | None = None, agent_tool: bool = False) -> list[str]:
     """Shrink a headless Claude start: fewer tool definitions, no MCP tool schemas unless wanted, and a
     system prompt that doesn't change per folder (so the prompt cache is reused across runs and projects).
@@ -337,7 +361,15 @@ def _provider_url(url: str | None) -> bool:
                for pv in provs)
 
 
-def _child_env(to: str, run_id: str, extra: dict | None = None, provider: bool = False) -> dict:
+# [subagent] clean: tool locations under HOME pinned to the person's own when they exist (POSIX defaults; on Windows
+# pip's user base is under APPDATA, which the clean HOME does not change)
+CLEAN_HOME_PINS = (("RUSTUP_HOME", ".rustup"), ("CARGO_HOME", ".cargo"), ("PYTHONUSERBASE", ".local"))
+
+
+def _child_env(to: str, run_id: str, extra: dict | None = None, provider: bool = False,
+               clean_home: Path | None = None) -> dict:
+    """clean_home ([subagent] clean): the HOME a Codex / dsh sub-agent gets instead of CCX_AGENT_HOME or the
+    person's own; their logins stay where they were (CODEX_HOME, DSH_HOME and the git config pinned first)."""
     env = dict(os.environ)
     if provider:
         for k in HOST_AUTH:
@@ -356,6 +388,19 @@ def _child_env(to: str, run_id: str, extra: dict | None = None, provider: bool =
         # (real run, Claude Code 2.1.309, 2026-10-25)
         env.pop("CLAUDE_CODE_SIMPLE", None)
     agent_home = env.get("CCX_AGENT_HOME", "").strip()
+    if clean_home is not None and to in ("codex", "dsh"):
+        home = Path.home()
+        env.setdefault("CODEX_HOME", str(home / ".codex"))
+        env.setdefault("DSH_HOME", str(home / ".dsh"))
+        for git_cfg in (home / ".gitconfig", home / ".config" / "git" / "config"):   # the XDG one when no ~/.gitconfig
+            if git_cfg.exists():
+                env.setdefault("GIT_CONFIG_GLOBAL", str(git_cfg))
+                break
+        # the person's toolchains stay usable from the empty HOME (test commands: cargo, rustup, pip --user)
+        for var, sub in CLEAN_HOME_PINS:
+            if (home / sub).exists():
+                env.setdefault(var, str(home / sub))
+        agent_home = str(clean_home)
     if agent_home and to in ("codex", "dsh"):
         # opt-in (an evaluation's clean room): a home of their own, so Codex does not load the person's
         # ~/.agents/skills (codex-cli 0.164.0 reads user skills from $HOME/.agents/skills; its login stays in
@@ -462,6 +507,13 @@ def run(req: Request, p: Paths) -> dict:
         mode_text += "; do not start sub-agents of your own (no spawn_agent / Agent tool)"
     selfcheck = (REVIEW_FINISH if reviewer
                  else SELFCHECK_CMD.format(check=req.check) if req.check else SELFCHECK)
+    switches = subagent_switches(cfg)
+    # a fork run keeps the lead's own start on every Claude attempt (the forked session is resumed with the same
+    # flags and prompt; its cache is the point): clean's Claude side and its prompt line stay out of it
+    clean_claude = switches["clean"] and not req.fork_lead
+    if clean_claude and not reviewer:
+        selfcheck += CLEAN_LANG
+    chome = clean_home(p, run_id) if switches["clean"] else None    # one empty HOME for the whole run's attempts
     brief = req.brief.strip()
     if req.allow_subagents and req.parallel:
         # F14: the explicit request Codex's own instructions wait for, only on --parallel. No longer added just
@@ -526,6 +578,7 @@ def run(req: Request, p: Paths) -> dict:
         # keeps the setting of the run it fixes
         "review_mode": ((prev or {}).get("review_mode") or "auto") if req.review_round else req.review,
         "shared_context": shared_meta,
+        "subagent_switches": switches,         # [subagent]: what this run's sub-agent loaded (ledger / eval group by it)
         **({"base_note": stale_base} if stale_base else {}),
     }
     _write_record(run_dir, record)          # visible to `ccx show` at once (background runs, crashes)
@@ -603,7 +656,9 @@ def run(req: Request, p: Paths) -> dict:
             resume_id = req.fork_lead
             perm += ["--fork-session"]
         elif cli == "claude":
-            perm += claude_slim_flags(cfg, req.mode, req.mcp, agent_tool=req.allow_subagents and not extra)
+            # clean: the Agent tool's definition only when --parallel asked for sub-agents (B3 item 4)
+            perm += claude_slim_flags(cfg, req.mode, req.mcp, agent_tool=req.allow_subagents and not extra
+                                      and (req.parallel or not clean_claude))
         if req.ephemeral and not req.keep_session:
             perm += {"claude": ["--no-session-persistence"], "codex": ["--ephemeral"]}.get(cli, [])
         if not req.allow_subagents:
@@ -629,6 +684,11 @@ def run(req: Request, p: Paths) -> dict:
                 perm += ["-c", f"agents.max_concurrent_threads_per_session={sp['threads']}"]
             if sp["model"]:
                 perm += ["-c", f'agents.default_subagent_model="{sp["model"]}"']
+        if cli == "codex" and switches["codex_lean_tools"] and req.mode != "read":
+            # [subagent] codex_lean_tools: a write piece without web search, image generation and goals (read and
+            # research runs keep web); apps / plugins too on OpenAI's own server (a provider run has them off above)
+            from .agents.codex import LEAN_TOOLS, LEAN_TOOLS_NATIVE
+            perm += [*LEAN_TOOLS, *([] if extra else LEAN_TOOLS_NATIVE)]
         if extra and cli == "claude":
             # --bare: auth is strictly ANTHROPIC_API_KEY, OAuth and keychain are never read (claude 2.1.309 --help),
             # so the caller's Claude login can't reach the provider's server
@@ -637,6 +697,10 @@ def run(req: Request, p: Paths) -> dict:
         # write (the subscription default for -p runs) is paid for and never read; lead and builder runs untouched
         ttl = str((cfg.get("review") or {}).get("cache_ttl") or "").strip()
         kw = {"cache_ttl": ttl} if (cli == "claude" and not extra and reviewer and ttl in ("5m", "1h")) else {}
+        if cli == "codex" and not switches["codex_memories"]:
+            kw["memories"] = False             # [subagent] codex_memories = false: every Codex rung
+        if cli == "claude" and clean_claude:
+            kw["clean"] = True                 # not in a fork run (see clean_claude)
         inv = BUILDERS[cli](model=spec["model"], effort=spec["effort"], perm=perm, cwd=cwd,
                            prompt=prompt, run_dir=run_dir, resume_id=resume_id, lean=spec["lean"], **kw)
         t0 = time.time()
@@ -647,7 +711,8 @@ def run(req: Request, p: Paths) -> dict:
         hb = _Heartbeat(p, cwd, req.task if req.step else None, cli)
         try:
             env = {**extra, **(run_env(req.mode) if run_env else {})}
-            oc, so, se = execute(cli, inv, timeout, _child_env(cli, run_id, env, provider=bool(extra)),
+            oc, so, se = execute(cli, inv, timeout, _child_env(cli, run_id, env, provider=bool(extra),
+                                                               clean_home=chome),
                                  on_session=on_session, watch=_spend_watch(p, cfg, cli, spec, record, t0,
                                                                            req.budget_usd, cwd)
                                  if req.allow_subagents else None,
