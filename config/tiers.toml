@@ -243,10 +243,10 @@ max_tokens = 200000     # 车道里某一块用的 token（新读 + 缓存读 + 
 max_blocks = 5          # 一个会话最多做这么多块，再换新会话
 
 [merge]
-# 合并小块（B3 第 5 项，ccx/merge.py）：ccx batch --merge 把同一目录、同一家、同一模型档、同一读写模式、
-# 声明的文件不重叠的小块合成一次运行（每块 <= piece_minutes 分钟，没写按它算；一组最多 max_pieces 块、合计 <= total_minutes）。
-# 每块仍有自己的 --check（运行后由 ccx 逐块跑）和结果行；没过的块在同一会话里修一次，还不过就单独跑一次（照常升档），
-# 整组不升档、不开子智能体。默认关：等 M4（6 组 × 合并/不合并 × 3 轮）证明做对不低于逐块跑再说。
+# 合并小块（B3 第 5 项，ccx/merge.py）：ccx batch --merge 把同一目录、同一家、同一模型档、同一读写模式（只合并写入块）、
+# 写了估计（minutes <= piece_minutes，没写的不合并）、声明的路径（paths）不重叠的小块合成一次运行，一组最多 max_pieces 块、合计 <= total_minutes。
+# 之后逐块判定：有 check 看 check，没有看它自己那行 [id] done|partial|failed，都没有标 unconfirmed；没做完的同会话修一次，再不过单独跑（照常升档）；
+# 额度/登录/停止/超时等停下时不再起运行。整组不升档、不开子智能体。默认关：等 M4（6 组 × 合并/不合并 × 3 轮）证明做对不低于逐块跑再说。
 default = false
 max_pieces = 5
 piece_minutes = 5

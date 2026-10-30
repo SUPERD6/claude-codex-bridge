@@ -48,6 +48,8 @@ def _slim(record: dict) -> dict:
     slim = {k: record.get(k) for k in ("run_id", "label", "to", "caller", "caller_vendor", "tier", "start_tier",
                                        "mode", "ok", "ts", "kind", "task", "step", "cwd", "session_id",
                                        "lead_session", "continue_depth", "ephemeral", "mode_source")}
+    if record.get("merge_of"):        # a follow-up / spun-off run of a `ccx batch --merge` run: count it with that plan
+        slim["merge_of"] = record["merge_of"]
     slim["rungs"] = [a.get("rung") for a in record["attempts"]]
     slim["sessions"] = sorted({a["session_id"] for a in record["attempts"] if a.get("session_id")})
     slim["b"] = (record.get("route") or {}).get("b")

@@ -748,11 +748,11 @@ def cmd_batch(a) -> int:
         extra["stale_base"] = {"ids": stale, "why": STALE_WHY}
     threads = int(cfg["defaults"].get("max_parallel", 3))
     n = lanes.width(getattr(a, "lanes", None), cfg)
-    if merge.wanted(getattr(a, "merge", None), cfg):
-        if n:
-            _out({"error": "--merge and --lanes do not mix: --merge puts small pieces in one run, --lanes keeps a "
-                           "run per piece in a few sessions; pick one (--lanes 0 or --merge 0)"})
-            return 2
+    use_merge, why = merge.choose(getattr(a, "merge", None), getattr(a, "lanes", None), cfg)
+    if why:
+        _out({"error": why})
+        return 2
+    if use_merge:
         return _batch_merged(p, cfg, reqs, req_tasks, skipped, extra, threads)
     if n:
         # warm lanes (ccx/lanes.py): same project + agent + mode share at most n sessions, piece after piece
@@ -789,21 +789,26 @@ def _batch_merged(p, cfg: dict, reqs: list, tasks: list[dict], skipped: list, ex
     groups = merge.groups(list(zip(reqs, tasks)), cfg)
 
     def job(idx: list[int]) -> list[tuple[int, dict, bool]]:
-        if len(idx) == 1:
-            rec = run(reqs[idx[0]], p)
-            return [(idx[0], compact(rec), exit_ok(rec))]
-        rs, ts = [reqs[i] for i in idx], [tasks[i] for i in idx]
-        rec = run(merge.merged_request(rs, ts), p)
-        got = merge.finish(rec, rs, ts, p, cfg)
-        jobs_merged.append(got["merged"])
-        return [(i, r, bool(r.get("ok"))) for i, r in zip(idx, got["results"])]
+        try:
+            if len(idx) == 1:
+                rec = run(reqs[idx[0]], p)
+                return [(idx[0], compact(rec), exit_ok(rec))]
+            rs, ts = [reqs[i] for i in idx], [tasks[i] for i in idx]
+            rec = run(merge.merged_request(rs, ts), p)
+            got = merge.finish(rec, rs, ts, p, cfg)
+            jobs_merged.append(got["merged"])
+            return [(i, r, bool(r.get("ok"))) for i, r in zip(idx, got["results"])]
+        except Exception as e:  # noqa: BLE001 — one group's error must not hide the others' results
+            why = f"{type(e).__name__}: {e}"[:300]
+            return [(i, {"label": reqs[i].label, "ok": False, "error": why}, False) for i in idx]
 
     jobs_merged: list[dict] = []
     with ThreadPoolExecutor(max_workers=threads) as ex:
         done = [x for part in ex.map(job, groups) for x in part]
     done.sort(key=lambda x: x[0])
     merged_runs = sorted(jobs_merged, key=lambda m: m["run_id"])
-    _out({"results": [r for _, r, _ in done], "do_yourself": skipped, "merged": merged_runs, **extra})
+    _out({"results": [r for _, r, _ in done], "do_yourself": skipped,
+          **({"merged": merged_runs} if merged_runs else {}), **extra})
     return 0 if all(ok for _, _, ok in done) else 2
 
 
@@ -1278,10 +1283,11 @@ def register(sub) -> None:
     b.add_argument("--lanes", type=int, metavar="N", help="warm lanes: pieces for the same project and agent share "
                    "at most N sub-sessions, one piece after another (each still its own run, check and ledger row); "
                    "0 = every piece its own session (default: [lanes] default, 0)")
-    b.add_argument("--merge", nargs="?", const=1, type=int, choices=[0, 1], metavar="0|1",
-                   help="experimental: small independent pieces for the same folder, agent, model and mode run as one "
-                   "run (each piece keeps its own check and result line; a failing piece gets one follow-up, then "
-                   "a run of its own); --merge 0 = off (default: [merge] default, off)")
+    b.add_argument("--merge", dest="merge", action="store_const", const=1, default=None,
+                   help="experimental: small write pieces (minutes <= 5) for the same folder, agent, model and mode "
+                   "run as one run; each keeps its own check, result line and `ccx undo --piece`; a piece not done "
+                   "gets one follow-up, then a run of its own (default: [merge] default, off)")
+    b.add_argument("--no-merge", dest="merge", action="store_const", const=0, help="off, whatever [merge] default says")
     b.set_defaults(fn=cmd_batch)
     ro = sub.add_parser("route", help="which agent/model/effort for a task (rubric -> task-routing)")
     ro.add_argument("text", nargs="*", help="the task description (used to recommend read or write)")

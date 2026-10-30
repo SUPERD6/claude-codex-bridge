@@ -466,8 +466,8 @@ def register(sub) -> None:
                     help="really restore the files; without it, only shows what would change")
     ud.add_argument("--wrong", action="store_true", help="with --apply: also record the run as wrong (teaches "
                     "routing). Without it undoing records no verdict")
-    ud.add_argument("--piece", metavar="ID", help="a `ccx batch --merge` run: put back only the files this piece "
-                    "declared (its `files`); no verdict is recorded for a piece")
+    ud.add_argument("--piece", metavar="ID", help="a `ccx batch --merge` run: put back only the paths this piece "
+                    "declared (its `paths` in the plan); no verdict is recorded for a piece")
     ud.set_defaults(fn=cmd_undo)
     sh = sub.add_parser("show", help="show a run (compact by default); --wait blocks until it is finished; "
                                      "several ids with --any: every one that has finished")

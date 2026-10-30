@@ -138,12 +138,17 @@ Fail（做对 29 对 30），事后解读为未定。按配对看，三个都没
 
 ### 实验性：`ccx batch --merge`（`[merge]`，实测前不开）
 
-子智能体的输入大半是每次请求都重发的前缀，五个小块分开跑就要付五次启动。加 `--merge`（或设 `[merge] default = true`）后，同一批里
-同一目录、同一家、同一模型档、同一读写模式、每块不超过 `piece_minutes`（5 分钟；没写 `minutes` 按 5 算）、声明的路径（`paths`，列表；
-批处理计划里的 `files` 仍是选模型用的文件数估计）不重叠的块，合成一次运行，最多 `max_pieces`（5）块、合计 `total_minutes`（15 分钟）。
-这次运行不升档、不开自己的子智能体。运行后 ccx 逐块跑各自的 `check`；没过的块在同一会话里修一次，还不过就单独跑一次（照常升档）。
-`results` 仍然每块一项（多了 `merged_run` / `merged_with`），`ccx undo <运行> --piece <id>` 只还原这一块声明的路径。代价：整个改动只审一次
-（50 行门槛按所有块合计）、墙钟变长。不能和 `--lanes` 一起用。
+子智能体的输入大半是每次请求都重发的前缀，五个小块分开跑就要付五次启动。加 `--merge`（或设 `[merge] default = true`；`--no-merge`
+单次关掉）后，同一批里同一目录、同一家、同一模型档、同一 worktree 和 namecheck 设置、写了估计且不超过 `piece_minutes`（5 分钟；没写
+`minutes` 的块不合并）、声明的路径（`paths`，列表；批处理计划里的 `files` 仍是选模型用的文件数估计）不重叠的写入块，合成一次运行，
+最多 `max_pieces`（5）块、合计 `total_minutes`（15 分钟）。这次运行不升档、不开自己的子智能体。之后逐块判定：有 `check` 的看 check
+（不管整次运行的状态），没有的看它在 summary 里自己那行 `[id] done|partial|failed`；两样都没有的标 `unconfirmed`（不算做完，也不重做，
+请看 diff）。没做完的块在同一会话里修一次；check 还不过、或者仍报 failed/partial 的块，单独跑一次（照常升档）。如果运行是因为重试也过不去的
+原因停下的（额度、登录、`ccx stop`、超时、机器问题、预算），就不再起任何运行，这些块标 `not_run`，用 `ccx resume` 接着做。`results` 仍然每块
+一项（多了 `merged_run`、`merged_with`、`piece_state`），`ccx undo <运行> --piece <id>` 只还原这一块声明的路径（不记对错）。修复和拆出去的
+运行在 run.json 和账本里带 `merge_of`，账本另有一条 `merge` 事件列出每块的结果。代价：审查按整个改动判（50 行门槛按所有块合计；修复和拆出去
+的运行可能再审一次）、墙钟变长；只要有合并的块没做完，退出码就是 2（单独跑的块仍按 `ccx run` 原来的退出码）。命令行上的 `--merge` 优先于
+`[lanes] default`，命令行上的 `--lanes` 优先于 `[merge] default`；两个都写在命令行上会报错。
 
 ## 安全边界
 

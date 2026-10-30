@@ -260,14 +260,22 @@ went on to another agent). Off until measured (M3).
 ### Experimental: `ccx batch --merge` (`[merge]`, off until measured)
 
 A sub-agent's input is mostly a prefix re-sent on every request, so five small pieces run separately pay that start
-five times. With `--merge` (or `[merge] default = true`), pieces of one batch that share folder, agent, model rung and
-mode, take at most `piece_minutes` (5; a piece without `minutes` counts as 5) and declare no common path (`paths`, a
-list; in a batch plan `files` stays the routing estimate) run as one run of up to `max_pieces` (5) pieces and
-`total_minutes` (15). The run never escalates and starts no sub-agents of its own. Afterwards ccx runs each piece's own
-`check`; failed pieces get one follow-up in the same session, and a piece that still fails becomes a run of its own on
-the usual ladder. `results` still has one entry per piece (with `merged_run` / `merged_with`), and
-`ccx undo <run> --piece <id>` puts back only the paths that piece declared. Costs: one review for the whole diff
-(the 50-line trigger counts every piece) and longer wall time. Not with `--lanes`.
+five times. With `--merge` (or `[merge] default = true`; `--no-merge` turns it off for one batch), write pieces of one
+batch that share folder, agent, model rung or tier, worktree and namecheck setting, carry an estimate of at most
+`piece_minutes` (5; a piece without `minutes` is never merged) and declare no common path (`paths`, a list; in a batch
+plan `files` stays the routing estimate) run as one run of up to `max_pieces` (5) pieces and `total_minutes` (15).
+That run never escalates and starts no sub-agents of its own. Afterwards each piece is judged on its own: by its
+`check` when it has one (whatever the run's overall status), else by its own `[id] done|partial|failed` line in the
+summary; a piece with neither is `unconfirmed` (not done, not redone: look at the diff). Pieces not done get one
+follow-up in the same session; a piece whose check still fails, or that still reports failed or partial, becomes a
+run of its own on the usual ladder. If the run stopped for a reason a retry would meet again (quota, login, `ccx
+stop`, timeout, the machine, budget), nothing more starts: those pieces are `not_run`, for `ccx resume`. `results`
+keeps one entry per piece (with `merged_run`, `merged_with`, `piece_state`), and `ccx undo <run> --piece <id>` puts
+back only the paths that piece declared (no verdict). Follow-up and spun-off runs carry `merge_of` in run.json and the
+ledger, and a `merge` ledger event lists every piece's outcome. Costs: reviews judge the whole diff (the 50-line
+trigger counts every piece; a follow-up and a spun-off run may be reviewed again), wall time is longer, and the exit
+code is 2 when any merged piece is not done (a piece run alone keeps `ccx run`'s exit code). An explicit `--merge`
+wins over `[lanes] default` and an explicit `--lanes` over `[merge] default`; both on the command line is an error.
 
 ## Safety
 
