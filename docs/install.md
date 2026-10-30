@@ -6,7 +6,8 @@ English · [中文](install.zh.md) · back to the [README](../README.md)
 
 **Requirements:**
 - Python 3.11+ (standard library only).
-- `codex` and `claude` CLIs, both logged in. `gemini` is optional.
+- `codex` and `claude` CLIs, both logged in. `dsh` (DeepSeek Harness) optional; `gemini` optional and only as a
+  sub-agent (adapter written from its docs, not run for real).
 
 **Without a clone** (the skills and config ship inside the package):
 

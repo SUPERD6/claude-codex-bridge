@@ -146,7 +146,7 @@ common ones are listed, **unconfirmed whether either was the one intended**.
   one flow for both directions, plus Gemini CLI and DeepSeek as workers.
 - Not in ccx: a visible split-screen workspace (CCB), adding instructions mid-run (umum-ai), multi-provider API consensus
   (PAL), moving the whole conversation into Codex (official plugin), chat-app front ends.
-- ccx's weak points: v0.4, 0 stars (2026-10-24); savings not measured yet (stated at the top of the README); Gemini CLI
+- ccx's weak points: version 0.4.0 at the time, 0 stars (2026-10-24); savings not measured yet (stated at the top of the README); Gemini CLI
   never run for real.
 
 ## 3. J10: name options (for the user to decide)

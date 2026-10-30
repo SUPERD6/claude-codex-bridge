@@ -113,8 +113,8 @@ there. The task timeline shows which lead worked when.
 | DeepSeek (`dsh`, or through Claude Code; as a sub-agent also through Codex) | yes | yes |
 | Gemini CLI; Kimi, GLM, Qwen, OpenRouter through Claude Code | no | adapted, not run for real |
 
-All "yes" cells ran for real on one Windows machine; macOS and Linux run in CI only. This is v0.5, work in progress:
-what is verified and how is in [docs/STATUS.md](docs/STATUS.md).
+All "yes" cells ran for real on one Windows machine; macOS and Linux run in CI only. Still work in progress (the
+release badge above says which version): what is verified and how is in [docs/STATUS.md](docs/STATUS.md).
 
 ## More
 

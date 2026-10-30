@@ -4,7 +4,7 @@
 
 ## 安装
 
-需要 Python 3.11+（只用标准库），并且 `codex` 和 `claude` 两个 CLI 都已登录（`gemini` 可选）。
+需要 Python 3.11+（只用标准库），并且 `codex` 和 `claude` 两个 CLI 都已登录；`dsh`（DeepSeek Harness）可选；`gemini` 可选，且只能当子智能体（适配器按它的文档写的，没真跑过）。
 
 **不克隆仓库**（技能和配置都打在包里）：
 
