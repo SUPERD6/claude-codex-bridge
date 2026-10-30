@@ -339,9 +339,7 @@ def test_existing_arms_keep_their_models_fingerprint_fields():
     u = {"arm": "ccx2", "task": r5.IDS[0], "lead_model": "sonnet", "lead_effort": "medium"}
     assert "daily" not in r5.unit_models(u, {})
     d = r5.unit_models({**u, "arm": "ccx2daily_clean"}, {})
-    win = {"windows_sandbox": "unelevated"} if sys.platform == "win32" else {}
-    assert d["daily"] == {"subagent": {"clean": True}, "claude_setting_sources": "user,project,local", "sha256": None,
-                          **win}
+    assert d["daily"] == {"subagent": {"clean": True}, "claude_setting_sources": "user,project,local", "sha256": None}
     d = r5.unit_models({**u, "arm": "ccx2daily"}, {"daily": {"sha256": "abc"}})
     assert d["daily"]["sha256"] == "abc"
 
@@ -392,8 +390,7 @@ def test_build_records_the_windows_sandbox(homes, tmp_path, platform):
         assert "windows_sandbox" not in info and cfg["windows"]["sandbox"] == "elevated"
 
 
-def test_daily_fingerprint_and_models_record_the_windows_sandbox(homes, monkeypatch):
-    monkeypatch.setattr(DH, "windows_sandbox", lambda platform=None: "unelevated")      # as on Windows
+def test_daily_fingerprint_and_models_record_the_windows_sandbox(homes):
     u = {"arm": "ccx2daily", "task": r5.IDS[0], "lead_model": "sonnet", "lead_effort": "medium"}
     models = r5.unit_models(u, {"daily": {"sha256": "abc", "windows_sandbox": "unelevated"}})
     assert models["daily"]["windows_sandbox"] == "unelevated"
@@ -403,6 +400,10 @@ def test_daily_fingerprint_and_models_record_the_windows_sandbox(homes, monkeypa
     fp = PF.fingerprint(rep_, _unit(homes, homes["tmp"] / "h-w"), {}, models)["isolation"]
     assert fp["daily_windows_sandbox"] == "unelevated"
     assert "daily_windows_sandbox" not in PF.fingerprint(rep_, _unit(homes, homes["tmp"] / "h-w"), {}, {})["isolation"]
-    monkeypatch.setattr(DH, "windows_sandbox", lambda platform=None: None)              # as elsewhere
+    # Only what the row says was written: a unit whose home was never built (or built off Windows) claims nothing,
+    # whatever platform the report is made on.
     assert "windows_sandbox" not in r5.unit_models(u, {"daily": {"sha256": "abc"}})["daily"]
+    bare = r5.unit_models(u, {})
+    assert "windows_sandbox" not in bare["daily"]
+    assert "daily_windows_sandbox" not in PF.fingerprint(rep_, _unit(homes, homes["tmp"] / "h-w"), {}, bare)["isolation"]
 

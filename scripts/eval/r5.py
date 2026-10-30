@@ -1249,7 +1249,7 @@ def unit_models(u: dict, row: dict) -> dict:
     if u["arm"] in DAILY_ARMS:                    # the daily home and the hub's [subagent] overlay
         out["daily"] = {"subagent": DAILY_ARMS[u["arm"]], "claude_setting_sources": DH.DAILY_CLAUDE_SOURCES,
                         "sha256": (row.get("daily") or {}).get("sha256")}    # the snapshot of the copied setup
-        sandbox = (row.get("daily") or {}).get("windows_sandbox") or DH.windows_sandbox()
+        sandbox = (row.get("daily") or {}).get("windows_sandbox")    # only what build() actually wrote
         if sandbox:                               # Windows: every daily home runs Codex's unelevated sandbox
             out["daily"]["windows_sandbox"] = sandbox
     seen = ((row.get("audit") or {}).get("init") or {}).get("model")
