@@ -73,7 +73,8 @@ def test_daily_config_keeps_only_memory_settings_and_turns_connectors_off(homes)
     cfg = tomllib.loads((Path(info["codex_home"]) / "config.toml").read_text(encoding="utf-8"))
     assert cfg["features"] == {"apps": False, "plugins": False, "remote_plugin": False, "memories": True}
     assert cfg["memories"] == {"use_memories": True, "generate_memories": False}
-    assert set(cfg) == {"features", "memories"}                   # no model, hooks, projects (trust) or anything else
+    # no model, hooks, projects (trust) or anything else; on Windows the daily homes' own sandbox
+    assert set(cfg) == {"features", "memories"} | ({"windows"} if sys.platform == "win32" else set())
     assert info["memory_settings"] == {"features.memories": True, "memories.use_memories": True,
                                        "memories.generate_memories": False}
 
@@ -89,6 +90,7 @@ def test_daily_home_without_person_files_is_just_the_login(homes, tmp_path):
     empty.mkdir()
     info = DH.build(tmp_path / "x2", homes["eval"], empty / ".codex", empty / ".agents")
     assert info["copied"] == [] and info["files"] == 2          # auth.json + config.toml
+    assert info.get("windows_sandbox") == ("unelevated" if sys.platform == "win32" else None)
     assert info["memory_settings"] == {}
 
 
@@ -358,4 +360,50 @@ def test_daily_check_builds_lists_and_removes(homes, capsys):
                   "--daily-agents-source", str(homes["agents"])])
     out = capsys.readouterr().out
     assert rc == 0 and "daily-check: ok" in out and SECRET not in out and '"auth": "eval-codex-home"' in out
+    want = '"unelevated"' if sys.platform == "win32" else "null"
+    assert f'"windows_sandbox": {want}' in out
     assert r5.main(["daily-check", "--codex-home", ""]) == 2
+
+
+@pytest.mark.parametrize("platform", ["win32", "linux", "darwin"])
+def test_config_toml_sets_the_unelevated_sandbox_on_windows_only(platform):
+    kept = '[windows]\nsandbox = "elevated"\n'                       # the person's own, carried over by CODEX_KEEP
+    cfg = tomllib.loads(DH.config_toml(kept, PF.CODEX_FEATURES_OFF, {}, platform))
+    if platform == "win32":
+        assert cfg["windows"] == {"sandbox": "unelevated"}             # replaced, one [windows] table
+    else:
+        assert cfg["windows"] == {"sandbox": "elevated"}               # nothing new written: as before
+    plain = tomllib.loads(DH.config_toml("", PF.CODEX_FEATURES_OFF, {}, platform))
+    assert ("windows" in plain) == (platform == "win32")
+    assert plain.get("windows", {}).get("sandbox", "unelevated") == "unelevated"
+    assert DH.windows_sandbox(platform) == ("unelevated" if platform == "win32" else None)
+
+
+@pytest.mark.parametrize("platform", ["win32", "linux"])
+def test_build_records_the_windows_sandbox(homes, tmp_path, platform):
+    info = DH.build(tmp_path / f"x-{platform}", homes["eval"], homes["codex"], homes["agents"],
+                    kept='[windows]\nsandbox = "elevated"\n', features_off=PF.CODEX_FEATURES_OFF, platform=platform)
+    cfg = tomllib.loads((Path(info["codex_home"]) / "config.toml").read_text(encoding="utf-8"))
+    if platform == "win32":
+        assert info["windows_sandbox"] == "unelevated" and cfg["windows"]["sandbox"] == "unelevated"
+    else:
+        assert "windows_sandbox" not in info and cfg["windows"]["sandbox"] == "elevated"
+
+
+def test_daily_fingerprint_and_models_record_the_windows_sandbox(homes):
+    u = {"arm": "ccx2daily", "task": r5.IDS[0], "lead_model": "sonnet", "lead_effort": "medium"}
+    models = r5.unit_models(u, {"daily": {"sha256": "abc", "windows_sandbox": "unelevated"}})
+    assert models["daily"]["windows_sandbox"] == "unelevated"
+    assert "daily" not in r5.unit_models({**u, "arm": "ccx2"}, {})     # existing arms unchanged
+    rep_ = {"commit": "c" * 40, "dirty": False, "tasks_sha256": "t", "cli": {}, "jobs": 1, "result": "pass",
+            "force_unclean": False, "codex": {"mode": "eval"}}
+    fp = PF.fingerprint(rep_, _unit(homes, homes["tmp"] / "h-w"), {}, models)["isolation"]
+    assert fp["daily_windows_sandbox"] == "unelevated"
+    assert "daily_windows_sandbox" not in PF.fingerprint(rep_, _unit(homes, homes["tmp"] / "h-w"), {}, {})["isolation"]
+    # Only what the row says was written: a unit whose home was never built (or built off Windows) claims nothing,
+    # whatever platform the report is made on.
+    assert "windows_sandbox" not in r5.unit_models(u, {"daily": {"sha256": "abc"}})["daily"]
+    bare = r5.unit_models(u, {})
+    assert "windows_sandbox" not in bare["daily"]
+    assert "daily_windows_sandbox" not in PF.fingerprint(rep_, _unit(homes, homes["tmp"] / "h-w"), {}, bare)["isolation"]
+

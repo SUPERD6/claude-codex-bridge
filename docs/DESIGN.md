@@ -19,7 +19,9 @@ mechanism; the content stays on their own machine.
 ## Parts
 
 1. **Delegation** (`ccx/delegate.py`, `ccx/runners.py`): runs another tool headless:
-   - Codex: `codex exec --json`;
+   - Codex: `codex exec --json`. On Windows, several CODEX_HOMEs on one machine share Codex's elevated sandbox
+     accounts (their passwords are in each home's `.sandbox-secrets`): whichever home last ran the sandbox setup is
+     the one that works (seen with codex-cli 0.164.0; the eval's per-unit homes use the unelevated sandbox for this);
    - Claude Code: `claude -p --output-format stream-json --verbose`;
    - Gemini CLI: `gemini -p -o stream-json`.
    - DeepSeek Harness: `dsh --profile headless --patch <run>/dsh.patch.yml --json -` (model in the patch, sandbox in

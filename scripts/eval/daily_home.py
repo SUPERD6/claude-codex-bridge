@@ -7,8 +7,9 @@ folder (removed with it after the unit):
 
   daily-codex-home/   auth.json        copied from the eval CODEX_HOME (its own login; never the person's)
                       config.toml      written here: the settings ccx carries over on a lean start (CODEX_KEEP), the
-                                       eval's features off (apps, plugins, remote_plugin: no account connectors) and
+                                       eval's features off (apps, plugins, remote_plugin: no account connectors),
                                        only the person's own memory settings ([features] memories, [memories] values)
+                                       and, on Windows only, [windows] sandbox = "unelevated" (WINDOWS_SANDBOX)
                       memories/ AGENTS.md skills/   copied from the person's Codex home (DAILY_COPY), nothing else
   daily-agent-home/   .agents/skills/  copied from the person's ~/.agents/skills (codex-cli 0.164 reads user skills
                                        from $HOME/.agents/skills): the sub-agent's HOME through CCX_AGENT_HOME
@@ -32,6 +33,15 @@ time (r5 refuses --jobs > 1 for them), so no unit holds a spent token.
 Codex reads skills from CODEX_HOME/skills as well as from $HOME/.agents/skills, and AGENTS.md and memories from
 CODEX_HOME: `[subagent] clean` changes only HOME, so on the Codex side ccx2daily_clean differs from ccx2daily by the
 ~/.agents/skills copy alone (`copied` says which sources were there).
+
+Windows: Codex's elevated sandbox runs commands as machine-wide sandbox accounts (CodexSandboxOffline /
+CodexSandboxOnline) whose passwords sit in each CODEX_HOME's .sandbox-secrets. A fresh per-unit home has none, so
+Codex starts its setup helper, which needs UAC; with nobody at the machine that is cancelled and every shell command
+fails (seen live with codex-cli 0.164.0, 2026-10-30). Running setup again from any home rotates the shared accounts
+and breaks the other homes. So on Windows every daily arm alike gets [windows] sandbox = "unelevated" (it replaces
+the person's own windows.sandbox from CODEX_KEEP): no UAC, no secrets, nothing shared with other homes. The limit:
+the person's real setup uses the elevated sandbox; the daily arms compare the switches with each other under the
+unelevated one. Elsewhere nothing is added. Rows record it as daily.windows_sandbox.
 """
 from __future__ import annotations
 
@@ -40,6 +50,7 @@ import hashlib
 import os
 import shutil
 import stat
+import sys
 import tomllib
 from pathlib import Path
 
@@ -59,6 +70,13 @@ MAX_DEPTH = 16
 # is project,local for every other arm)
 DAILY_CLAUDE_SOURCES = "user,project,local"
 CODEX_DIR, AGENT_DIR = "daily-codex-home", "daily-agent-home"
+# the Windows sandbox of every daily home (see the module text); None elsewhere
+WINDOWS_SANDBOX = "unelevated"
+
+
+def windows_sandbox(platform: str | None = None) -> str | None:
+    """The [windows] sandbox a daily home is given on this platform: WINDOWS_SANDBOX on win32, else None."""
+    return WINDOWS_SANDBOX if (platform or sys.platform) == "win32" else None
 
 
 def never(name: str) -> bool:
@@ -150,7 +168,24 @@ def _toml(v) -> str:
     return '"' + str(v).replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def config_toml(kept: str, features_off: tuple, mem: dict) -> str:
+def with_windows_sandbox(kept: str, sandbox: str) -> str:
+    """The kept settings' TOML (flat tables of scalars, preflight.codex_kept_toml) with [windows] sandbox set to
+    `sandbox`, replacing the person's own value: one [windows] table."""
+    try:
+        cfg = tomllib.loads(kept) if kept else {}
+    except tomllib.TOMLDecodeError:
+        cfg = {}
+    win = cfg.get("windows") if isinstance(cfg.get("windows"), dict) else {}
+    cfg["windows"] = {**win, "sandbox": sandbox}
+    return "".join(f"[{t}]\n" + "".join(f"{k} = {_toml(v)}\n" for k, v in vals.items())
+                   for t, vals in cfg.items() if isinstance(vals, dict))
+
+
+def config_toml(kept: str, features_off: tuple, mem: dict, platform: str | None = None) -> str:
+    """The daily home's config.toml. On win32 (or `platform`) [windows] sandbox is WINDOWS_SANDBOX (module text)."""
+    sandbox = windows_sandbox(platform)
+    if sandbox:
+        kept = with_windows_sandbox(kept, sandbox)
     feats = "".join(f"{f} = false\n" for f in features_off)
     if "features.memories" in mem:
         feats += f"memories = {_toml(mem['features.memories'])}\n"
@@ -176,7 +211,7 @@ def found_never(root: Path, allow: tuple = ()) -> list[str]:
 
 
 def build(dest: Path, eval_codex_home: Path, codex_src: Path, agents_src: Path | None, kept: str = "",
-          features_off: tuple = ("apps", "plugins", "remote_plugin")) -> dict:
+          features_off: tuple = ("apps", "plugins", "remote_plugin"), platform: str | None = None) -> dict:
     """Make dest/daily-codex-home and dest/daily-agent-home (see the module text). `kept`: the TOML of the settings
     ccx carries over on a lean start (preflight.codex_kept_toml). Raises when the eval home has no login or when a
     name that must never be copied ended up in either folder. Returns what was made, by name only."""
@@ -195,15 +230,19 @@ def build(dest: Path, eval_codex_home: Path, codex_src: Path, agents_src: Path |
     if agents_src:
         copied += [f"agents:{n}" for n in AGENTS_COPY if _copy(Path(agents_src) / n, home / ".agents" / n, stats)]
     mem = memory_settings(Path(codex_src))
-    (codex / "config.toml").write_text(config_toml(kept, tuple(features_off), mem), encoding="utf-8")
+    (codex / "config.toml").write_text(config_toml(kept, tuple(features_off), mem, platform), encoding="utf-8")
     bad = found_never(codex, allow=("auth.json", "config.toml")) + [f".agents/{x}" for x in found_never(home)]
     if bad:
         raise RuntimeError(f"the daily home holds what must never be copied: {bad[:5]}")
     files = sum(1 for d in (codex, home) for p in d.rglob("*") if p.is_file())
-    return {"codex_home": str(codex), "agent_home": str(home), "copied": copied, "files": files,
-            "links_followed": stats.get("links_followed", 0), "skipped_type": stats.get("skipped_type", 0),
-            "sha256": tree_sha256([codex, home]), "auth": "eval-codex-home", "auth_sha256": file_sha256(auth), "memory_settings": mem, "features_off": list(features_off),
-            "claude_setting_sources": DAILY_CLAUDE_SOURCES}
+    out = {"codex_home": str(codex), "agent_home": str(home), "copied": copied, "files": files,
+           "links_followed": stats.get("links_followed", 0), "skipped_type": stats.get("skipped_type", 0),
+           "sha256": tree_sha256([codex, home]), "auth": "eval-codex-home", "auth_sha256": file_sha256(auth),
+           "memory_settings": mem, "features_off": list(features_off), "claude_setting_sources": DAILY_CLAUDE_SOURCES}
+    sandbox = windows_sandbox(platform)
+    if sandbox:                                         # Windows only: the sandbox every daily home runs under
+        out["windows_sandbox"] = sandbox
+    return out
 
 
 def file_sha256(f: Path) -> str | None:

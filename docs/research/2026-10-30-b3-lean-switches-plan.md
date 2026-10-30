@@ -53,6 +53,16 @@ How the per-unit home is made (`scripts/eval/daily_home.py`):
   features off (apps, plugins, remote_plugin: no account connectors) and only the person's own memory settings.
   So the apps / plugins part of `codex_lean_tools` is not measured by these arms; web search, image generation and
   goals are.
+- On Windows, that config.toml also has `[windows] sandbox = "unelevated"`, for all four daily arms alike (it replaces
+  the person's own `windows.sandbox`); elsewhere nothing is added. Why: Codex's elevated Windows sandbox runs commands
+  as machine-wide sandbox accounts (`CodexSandboxOffline` / `CodexSandboxOnline`) whose passwords sit in each
+  CODEX_HOME's `.sandbox-secrets`. A fresh per-unit home has none, so Codex starts its setup helper, which needs UAC;
+  with nobody at the machine it is cancelled and every command fails, and the sub-agent stops blocked with no files
+  changed (seen live, codex-cli 0.164.0, 2026-10-30). Running setup again from any home rotates the shared accounts
+  and breaks the other homes. With the unelevated sandbox the same home runs commands and writes files with no UAC and
+  no secrets. Limitation: the person's real daily setup uses the elevated sandbox; these arms measure the switches
+  against each other under the unelevated one, not the elevated sandbox itself. Rows record it as
+  `daily.windows_sandbox` (and `isolation.daily_windows_sandbox`); `daily-check` prints it.
 - It lives in the unit's `x-` folder and is removed with it after the unit.
 - The eval Codex home gets nothing of the person's (its own refreshed login is the only write), so the preflight and
   between-unit checks of every other arm, which refuse memories, AGENTS.md or skills there, are unchanged. This

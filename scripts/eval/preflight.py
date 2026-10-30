@@ -1692,6 +1692,8 @@ def fingerprint(rep: dict, u: Unit | None, env: dict | None, models: dict | None
             fp["isolation"].update({"setting_sources": env.get("CCX_CLAUDE_SETTING_SOURCES") or SETTING_SOURCES,
                                     "agent_home": "daily", "codex_home": "daily",
                                     "daily_sha256": daily.get("sha256")})
+            if daily.get("windows_sandbox"):     # Windows: the daily homes' Codex sandbox (daily_home.py)
+                fp["isolation"]["daily_windows_sandbox"] = daily["windows_sandbox"]
     return fp
 
 
