@@ -258,3 +258,16 @@ main{padding:16px !important}.grid{grid-template-columns:minmax(0,1fr) !importan
 .runrow .rm{font-size:13px;color:var(--muted)}
 .runrow .btn{min-height:34px;padding:5px 11px;font-size:13.5px}
 .runrow .cmd{flex-basis:100%}
+/* B1: measured results and where tokens go */
+.twrap{overflow-x:auto;margin:6px 0 4px}
+.ttab{border-collapse:collapse;font-size:13.5px;min-width:100%}
+.ttab th,.ttab td{border-bottom:1px solid var(--line);padding:5px 8px;text-align:right;white-space:nowrap}
+.ttab th:first-child,.ttab td:first-child{text-align:left;white-space:normal;overflow-wrap:anywhere}
+.ttab th{color:var(--muted);font-weight:650;font-size:12.5px}
+.ttab tr.kid td{color:var(--muted);font-size:12.5px;border-bottom-style:dashed}
+.ttab tr.kid td:first-child{padding-left:26px}
+details.tflow{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 12px;margin:8px 0}
+details.tflow summary{cursor:pointer;overflow-wrap:anywhere}
+details.tflow summary .cost{display:inline;margin-left:6px}
+.tok-h3{font-size:15px;margin:14px 0 4px}
+.tfilters select{border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:3px 10px;font-size:13px}
