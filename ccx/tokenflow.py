@@ -102,6 +102,17 @@ def _model(row: dict) -> str:
     return ""
 
 
+def _request_stats(pairs: list[tuple[int, int | None]]) -> dict:
+    """Over the runs that recorded their requests: how many there are, the mean requests a run, the median
+    prefix (median of the runs' own medians). {} when none did, so the page shows nothing rather than zeros."""
+    if not pairs:
+        return {}
+    import statistics
+    pre = [int(p) for _, p in pairs if p]
+    return {"measured_runs": len(pairs), "requests_per_run": round(sum(n for n, _ in pairs) / len(pairs), 1),
+            "prefix_median": int(statistics.median(pre)) if pre else None}
+
+
 def _is_review(row: dict) -> str | None:
     label = str(row.get("label") or "")
     return label[len("review:"):] if label.startswith("review:") else None
@@ -215,6 +226,7 @@ class Flow:
 
         # 2: totals across vendors, every run in the filter
         totals = {"runs": len(runs), "tokens": _zero(), "usd": 0.0, "by_agent": {}}
+        reqs: dict[str, list[tuple[int, int | None]]] = {}     # agent -> (requests, prefix) of the runs that have them
         for r in runs:
             t = tokens_of(r)
             _add(totals["tokens"], t)
@@ -222,6 +234,8 @@ class Flow:
             a = totals["by_agent"].setdefault(str(r.get("to") or "?"), {"runs": 0, "tokens": _zero(), "usd": 0.0})
             a["runs"] += 1
             _add(a["tokens"], t)
+            if r.get("requests"):
+                reqs.setdefault(str(r.get("to") or "?"), []).append((int(r["requests"]), r.get("prefix_tokens")))
             by = r.get("ae_by_agent") or {}
             if by:
                 for ag, v in by.items():
@@ -230,8 +244,10 @@ class Flow:
             else:
                 a["usd"] += float(r.get("ae_usd") or 0.0)
         totals["usd"] = round(totals["usd"], 4)
-        for a in totals["by_agent"].values():
+        for name, a in totals["by_agent"].items():
             a["usd"] = round(a["usd"], 4)
+            a.update(_request_stats(reqs.get(name) or []))
+        totals.update(_request_stats([x for v in reqs.values() for x in v]))
         totals["by_agent"] = dict(sorted(totals["by_agent"].items(),          # the biggest first
                                          key=lambda x: (-x[1]["tokens"]["total"], -x[1]["usd"])))
 
@@ -381,6 +397,10 @@ class Flow:
                 "status": clip(r.get("status"), 40), "ok": bool(r.get("ok")), "ts": r.get("ts"),
                 "mode": clip(r.get("actual_mode") or r.get("mode"), 20), "review": _is_review(r) is not None,
                 "label": clip(r.get("label")), "tokens": t,
+                # B3 ruler (ccx/reqstats.py): requests this run made and the median input of one; null for a run
+                # that recorded none (older runs, gemini / dsh, a session file that was gone)
+                "requests": int(r["requests"]) if r.get("requests") else None,
+                "prefix_tokens": int(r["prefix_tokens"]) if r.get("prefix_tokens") else None,
                 "usd": None if r.get("ae_usd") is None else round(float(r["ae_usd"]), 5),
                 "children": shown, "children_more": max(0, len(kids) - KIDS_MAX), "children_tokens": ct,
                 # not capped: above 1 the counts disagree, and the page says so
