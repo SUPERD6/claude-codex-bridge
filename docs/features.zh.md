@@ -110,7 +110,7 @@ DeepSeek Harness（`--to dsh`）：T1–T3 用 deepseek-flash 的 low / high / m
 | 键（默认） | 改了以后 | 风险 |
 |---|---|---|
 | `codex_memories = true` | `false`：每一档 Codex 只加评测隔离用的那三项 memory 设置（`features.memories`、`memories.use_memories`、`memories.generate_memories` = false）；不加 `--ignore-user-config`（那会连 provider 和 sandbox 设置一起丢） | 低：留出集运行 hc1 就是关着 memories 跑的 |
-| `clean = false` | `true`：Codex / dsh 的 HOME 换成 hub 里的空目录（`hub/ccx/agent-home`：不加载 `~/.agents/skills`；CODEX_HOME、DSH_HOME 和 git 配置不变）；Claude 加 `--disable-slash-commands` 和 `--setting-sources project,local`；提示里加一句"总结用任务描述的语言写"；Claude 子运行只在 `--parallel` 时才有 Agent 工具 | 中：个人技能（比如验证类技能）和个人规则不再传给子智能体 |
+| `clean = false` | `true`：Codex / dsh 每次运行用自己的空 HOME（`hub/ccx/agent-home/<运行>`，开始时清空，别的运行的超过一天就删）。这只去掉 `~/.agents/skills`：CODEX_HOME 不变，所以 `~/.codex/AGENTS.md`、`~/.codex/skills` 和 memories 照常加载；DSH_HOME、git 配置和已存在的工具链目录（`~/.rustup`、`~/.cargo`、`~/.local`）固定在用户原处，但测试命令调用的其他工具也会看到这个空 HOME。Claude 加 `--disable-slash-commands` 和 `--setting-sources project,local`（不加载用户设置和技能；MCP 仍按 `--mcp` / `[claude_subagent] mcp`）。提示里加一句"总结用任务描述的语言写"；Claude 子运行只在 `--parallel` 时才有 Agent 工具。`--fork` 运行每次尝试都保持主导原样 | 中：Claude 这边个人技能（比如验证类技能）和用户设置不再传给子智能体；Codex 这边只少了 `~/.agents` 的技能 |
 | `codex_lean_tools = false` | `true`，只对写入任务：Codex 关网页搜索（`-c web_search="disabled"`）、图片生成和 goals（`--disable`），直连 OpenAI 时再关 apps / plugins（codex-cli 0.164.0 核对过）；只读任务保留网页搜索 | 低；需要上网查最新文档的写入任务会受影响 |
 
 别和 `[subagents]` 搞混：那个是子智能体自己再开子智能体的花费上限。

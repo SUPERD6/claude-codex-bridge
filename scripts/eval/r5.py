@@ -27,8 +27,11 @@ so doing it takes many requests. Arms (the lead is a fresh headless Claude Code,
            Codex home (never their auth, credentials, config.toml, sessions or logs), no CCX_CODEX_ISOLATE; Claude
            sub-agents with setting sources user,project,local and skills. Each variant writes one [subagent] switch
            into the unit hub's tiers.toml (read back before the lead starts): codex_memories = false, clean = true,
-           codex_lean_tools = true. The eval Codex home is never written to, so every other arm's checks stay as
-           strict; rows carry `daily`. `daily-check` builds one such home in a temp folder, lists it, removes it
+           codex_lean_tools = true. The eval Codex home gets nothing of the person's (only a login the unit
+           refreshed is written back to it, daily_home.sync_login), so every other arm's checks stay as strict; the
+           daily arms need --jobs 1. Rows carry `daily` (with the snapshot's sha256) and `sub_usage` (sub-agent
+           tokens per class); their sub-agents' skills are recorded by the audit, not problems; summary applies the
+           fixed B3 rule (`b3_rules`). `daily-check` builds one such home in a temp folder, lists it, removes it
   builtin2 opt-in (--arms builtin2): builtin's Agent-tool hand-off with ccx2's brief and acceptance wording, word
            for word (the worker reports check / files_changed / diffstat / status); not in the default schedule
   builtin2r opt-in (--arms builtin2r): builtin2 whose worker's own prompt also carries ccx's KEEP_TESTS and WIRING
@@ -683,12 +686,15 @@ def lead_unit(u: dict, a, work: Path, repo: Path, hub: Path, iso: PF.Unit | None
     cost = r2.hub_cost(hub)
     by_model = r3.model_split(fin.get("modelUsage") or {})
     lead_usd = float(fin.get("total_cost_usd") or 0)
+    sub_use = sub_usage(hub) if is_ccx else None
     row = {"rc": rc, "wall_s": wall, "subtype": fin.get("subtype"), "lead_usd": round(lead_usd, 6),
            "by_model_usd": by_model, "ccx_usd": cost["usd"], "ccx_review_usd": cost["review_usd"],
            "ccx_agents": cost["agents"], "ccx_run_ids": cost["run_ids"], "usd": round(lead_usd + cost["usd"], 6), **lm}
     row["sub_usd"] = round(sum(v for m, v in by_model.items() if r3.WORKER_MODEL in m), 6) if is_builtin \
         else cost["usd"]
     row["lead_only_usd"] = round(row["usd"] - row["sub_usd"], 6)
+    if sub_use is not None:
+        row["sub_usage"] = sub_use
     ccx_runs = len([x for x in cost["run_ids"] if not str(x).startswith("review")])
     row["delegated"] = bool(lm["agent_calls"]) if is_builtin else bool(cost["run_ids"]) \
         if is_ccx else None
@@ -708,6 +714,26 @@ def lead_unit(u: dict, a, work: Path, repo: Path, hub: Path, iso: PF.Unit | None
     row["timeline"] = TL.unit_timeline(hub, cost["run_ids"], out, wall, row.get("phases"),
                                        worker_usd=row["sub_usd"] if is_builtin else None)
     return row
+
+
+def sub_usage(hub: Path) -> dict:
+    """What ccx's sub-agents read and wrote in this unit, per token class, from the hub's ledger (read before the hub
+    goes): `input` (uncached), `cached`, `output` of the work runs, `prompt` = input + cached (what the B3 rule
+    compares: memories, skills and tool definitions are prompt), the same for ccx's reviews apart (`review_*`), and
+    how many runs."""
+    from ccx import ledger as _ledger
+    out = {"input": 0, "cached": 0, "output": 0, "runs": 0, "review_input": 0, "review_cached": 0,
+           "review_output": 0, "reviews": 0}
+    for r in _ledger.rows(r2.Paths(hub)):
+        if r.get("type"):
+            continue
+        u = r.get("usage") or {}
+        pre = "review_" if str(r.get("label") or "").startswith("review:") else ""
+        for k in ("input", "cached", "output"):
+            out[pre + k] += int(u.get(k, 0) or 0)
+        out["reviews" if pre else "runs"] += 1
+    out["prompt"] = out["input"] + out["cached"]
+    return out
 
 
 def namecheck_stats(rows: list[dict]) -> dict | None:
@@ -1215,7 +1241,8 @@ def unit_models(u: dict, row: dict) -> dict:
     if u["arm"] in NAMECHECK_ARMS:                # the hub's [defaults] namecheck
         out["namecheck"] = NAMECHECK_ARMS[u["arm"]]
     if u["arm"] in DAILY_ARMS:                    # the daily home and the hub's [subagent] overlay
-        out["daily"] = {"subagent": DAILY_ARMS[u["arm"]], "claude_setting_sources": DH.DAILY_CLAUDE_SOURCES}
+        out["daily"] = {"subagent": DAILY_ARMS[u["arm"]], "claude_setting_sources": DH.DAILY_CLAUDE_SOURCES,
+                        "sha256": (row.get("daily") or {}).get("sha256")}    # the snapshot of the copied setup
     seen = ((row.get("audit") or {}).get("init") or {}).get("model")
     if seen:
         out["lead_seen"] = seen
@@ -1276,10 +1303,21 @@ def run_unit(u: dict, a, work: Path) -> dict:
         row.setdefault("wall_s", 0)
     finally:
         try:
-            row["audit"] = PF.audit(iso, stream.read_text(encoding="utf-8") if stream.exists() else "")
+            row["audit"] = PF.audit(iso, stream.read_text(encoding="utf-8") if stream.exists() else "",
+                                    daily=u["arm"] in DAILY_ARMS)
         except Exception as e:  # noqa: BLE001
             row["audit"] = {"clean": False, "problems": [f"audit failed: {type(e).__name__}: {e}"[:200]],
                             "session_ids": []}
+        if row.get("daily") and iso is not None and iso.codex_home:
+            # before the x- folder goes: a login the unit refreshed goes back to the eval home (daily_home.sync_login)
+            try:
+                row["daily"]["login"] = DH.sync_login(row["daily"], iso.codex_home)
+            except OSError as e:
+                row["daily"]["login"] = {"auth": "conflict", "note": f"not written back: {type(e).__name__}"}
+            if row["daily"]["login"]["auth"] == "conflict":
+                row["audit"]["clean"] = False
+                row["audit"].setdefault("problems", []).append("daily login: " + row["daily"]["login"].get(
+                    "note", "conflict"))
         fresh = u.get("taskset", "r5") != "r5"     # hold-out: nothing of a finished unit stays in the work dir
         if fresh and stream.exists():
             keep = OUT / "streams" / str(u.get("tag") or "untagged")
@@ -1620,6 +1658,11 @@ def cmd_run(a) -> int:
         raise SystemExit(f"arm {', '.join(skill)} needs --claude-isolation ccx-home: its lead must load the "
                          "agent-delegate skill from a Claude home that has ccx's install and nothing else (that "
                          "also needs CLAUDE_CODE_OAUTH_TOKEN, which you export yourself)")
+    daily = [x for x in arms if x in DAILY_ARMS]
+    if daily and a.jobs > 1 and not a.dry_run:
+        # each daily unit runs on a copy of the eval home's login; a refresh rotates the token, and a copy taken by a
+        # unit running at the same time would then hold a spent one (daily_home.sync_login)
+        raise SystemExit(f"arm {', '.join(daily)} needs --jobs 1: its units share the eval Codex home's login")
     done = {done_key(r) for r in read_jsonl(out)}
     lead = {"lead_model": a.lead_model or DEFAULT_LEAD[0], "lead_effort": a.lead_effort or DEFAULT_LEAD[1]}
     auto = lead["lead_model"] == LEAD_AUTO
@@ -2044,6 +2087,69 @@ def tier_rule(rows: list[dict], bal: str = TIER_RULE_ARMS[0], save: str = TIER_R
     return out
 
 
+B3_BASE = "ccx2daily"
+B3_INPUT_DROP = 0.15          # the sub-agent's median prompt tokens per unit must be at least this much lower
+
+
+def b3_rule(rows: list[dict], arm: str, base: str = B3_BASE) -> dict | None:
+    """The B3 decision rule fixed before any run (docs/research/2026-10-30-b3-lean-switches-plan.md), on the clean
+    units both arms share: a switch's default changes only if right_B >= right_A - 1, at most 2 lost pairs (A right,
+    B wrong), no task B got wrong in every round while A got it right at least once, and the sub-agent's median
+    prompt tokens per unit (sub_usage.prompt: input + cached of ccx's work runs) at least B3_INPUT_DROP lower. Any
+    unclean pair lost on one side only (lost_pairs note), or a missing token count, makes it Unknown. Result pass /
+    fail / unknown; None unless both arms have clean rows."""
+    every = [r for r in rows if "error" not in r]
+    clean, excluded = clean_rows(every)
+    ps = pair_units(clean, base, arm)
+    if not ps:
+        return None
+    a_ok, b_ok = sum(bool(x.get("ok")) for x, _ in ps), sum(bool(y.get("ok")) for _, y in ps)
+    lost = sum(bool(x.get("ok")) and not y.get("ok") for x, y in ps)
+    tasks: dict = {}
+    for x, y in ps:
+        t = tasks.setdefault(x["task"], {"a": 0, "b": 0, "n": 0})
+        t["a"] += bool(x.get("ok"))
+        t["b"] += bool(y.get("ok"))
+        t["n"] += 1
+    always_lost = sorted(k for k, t in tasks.items() if t["b"] == 0 and t["a"] > 0)
+    pa = [(x.get("sub_usage") or {}).get("prompt") for x, _ in ps]
+    pb = [(y.get("sub_usage") or {}).get("prompt") for _, y in ps]
+    have = None not in pa and None not in pb
+    ma, mb = (_med(pa), _med(pb)) if have else (None, None)
+    pf = lambda v: "pass" if v else "fail"  # noqa: E731
+    cond = {"right": {"rule": f"{arm} right >= {base} right - 1", "value": [b_ok, a_ok], "result": pf(b_ok >= a_ok - 1)},
+            "lost_pairs": {"rule": f"at most 2 pairs {base} right, {arm} wrong", "value": lost,
+                           "result": pf(lost <= 2)},
+            "always_lost": {"rule": f"no task {arm} got wrong in every round that {base} got right once",
+                            "value": always_lost, "result": pf(not always_lost)},
+            "input": {"rule": f"{arm} sub-agent median prompt tokens <= {1 - B3_INPUT_DROP:.0%} of {base}'s",
+                      "value": [mb, ma],
+                      "result": "unknown" if not have or not ma else pf(mb <= (1 - B3_INPUT_DROP) * ma)}}
+    res = [c["result"] for c in cond.values()]
+    lp = lost_pairs(every, base, arm)
+    out = {"units": len(ps), "tasks": len(tasks), "conditions": cond, "excluded_rows": excluded, "lost_pairs": lp,
+           "result": "fail" if "fail" in res else "unknown" if "unknown" in res else "pass"}
+    if lp.get("note"):
+        out["exclusion_note"] = lp["note"]
+        if out["result"] == "pass":
+            out["result"] = "unknown"
+    return out
+
+
+def b3_rules(rows: list[dict]) -> dict:
+    """b3_rule for every daily variant that shares clean units with the daily baseline."""
+    arms = {arm_of(r) for r in rows if "error" not in r}
+    out = {}
+    if B3_BASE not in arms:
+        return out
+    for arm in DAILY_ARMS:
+        if arm != B3_BASE and arm in arms:
+            br = b3_rule(rows, arm)
+            if br:
+                out[f"{B3_BASE} vs {arm}"] = br
+    return out
+
+
 def tier_rule_lines(tr: dict | None) -> list[str]:
     """The tier decision rule as plain lines (cmd_summary prints them after the JSON, on stderr)."""
     if not tr:
@@ -2197,6 +2303,9 @@ def summarize(rows: list[dict], include_unclean: bool = False) -> dict:
     if ex_arm:
         res["excluded_by_arm"] = ex_arm
         res["excluded_by_tag"] = ex_tag
+    b3 = b3_rules(every)
+    if b3:
+        res["b3_rules"] = b3
     trs = tier_rules(every)
     if trs:
         res["tier_rules"] = trs

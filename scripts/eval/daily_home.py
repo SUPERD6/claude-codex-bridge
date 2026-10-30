@@ -13,26 +13,48 @@ folder (removed with it after the unit):
   daily-agent-home/   .agents/skills/  copied from the person's ~/.agents/skills (codex-cli 0.164 reads user skills
                                        from $HOME/.agents/skills): the sub-agent's HOME through CCX_AGENT_HOME
 
-Never copied, at any depth: the person's auth or credential files, config.toml (its hooks, trust state, profiles,
-MCP servers), sessions, logs, history, databases, rules, hooks and plugins (NEVER); links are not followed. After
-the copy the two folders are walked again and any such name other than the eval login stops the unit.
+Copied: only files of a known text type (TEXT_SUFFIXES: .md, .txt, scripts, .json, .toml, .yaml ...); everything
+else is left out and counted. Never copied, at any depth, whatever the type: the person's auth or credential files,
+keys and certificates (id_*, *.pem, *.key, *.p12, *.pfx), secrets, .netrc / .npmrc / .pypirc, .ssh / .aws / .gnupg /
+.git folders, config.toml (its hooks, trust state, profiles, MCP servers), sessions, logs, history, databases, rules,
+hooks and plugins (NEVER). Links (symbolic links and Windows junctions; skill folders are often one) are followed
+into their target, since that is what Codex loads, and every file found there passes the same filters; a folder seen
+twice (a loop) is walked once. The copy holds plain files only. After the copy the two folders are walked again and
+any NEVER name, link or file of another type (other than the eval login and the written config.toml) stops the
+unit. `sha256` (names and bytes of what was copied) lets paired units with different snapshots be told apart.
 
-The eval CODEX_HOME itself is never written to, so the preflight and between-unit checks of every other arm (which
-refuse memories, AGENTS.md or skills there) stay exactly as strict: the daily arms' exception is this per-unit home.
+The eval CODEX_HOME gets nothing of the person's: the preflight and between-unit checks of every other arm (which
+refuse memories, AGENTS.md or skills there) stay exactly as strict; the daily arms' exception is this per-unit home.
+The one write to it is its own login: a ChatGPT login refreshes and rotates its token inside the unit's copy, so
+sync_login puts a refreshed copy back (atomically) before the unit's folder goes, and the daily arms run one unit at a
+time (r5 refuses --jobs > 1 for them), so no unit holds a spent token.
+
+Codex reads skills from CODEX_HOME/skills as well as from $HOME/.agents/skills, and AGENTS.md and memories from
+CODEX_HOME: `[subagent] clean` changes only HOME, so on the Codex side ccx2daily_clean differs from ccx2daily by the
+~/.agents/skills copy alone (`copied` says which sources were there).
 """
 from __future__ import annotations
 
 import fnmatch
+import hashlib
+import os
 import shutil
+import stat
 import tomllib
 from pathlib import Path
 
 DAILY_COPY = ("memories", "AGENTS.md", "skills")        # from the person's Codex home
 AGENTS_COPY = ("skills",)                               # from the person's ~/.agents
 # names never copied from the person's homes (lower case, fnmatch patterns)
-NEVER = ("auth.json", "*credential*", "*.pem", "*.key", "token", "token.json", "*.token", ".env", "config.toml", "sessions",
-         "archived_sessions", "log", "logs", "*.log", "history.jsonl", "*.sqlite", "*.sqlite-*", "*.db", "*.db-*",
-         "rules", "hooks", "plugins", "tmp", "cache")
+NEVER = ("auth.json", "*credential*", "*.pem", "*.key", "token", "token.json", "*.token", ".env", ".env.*", "config.toml",
+         "sessions", "archived_sessions", "log", "logs", "*.log", "history.jsonl", "*.sqlite", "*.sqlite-*", "*.db",
+         "*.db-*", "rules", "hooks", "plugins", "tmp", "cache",
+         "id_*", "*.p12", "*.pfx", "*.jks", "*.kdbx", "*secret*", "oauth*", ".netrc", ".npmrc", ".pypirc", ".ssh", ".aws",
+         ".gnupg", ".git", ".git-credentials", "node_modules")
+# the only file types copied (lower-case suffixes): what memories, AGENTS.md and skills are written in
+TEXT_SUFFIXES = (".md", ".markdown", ".txt", ".rst", ".json", ".toml", ".yaml", ".yml", ".py", ".sh", ".ps1", ".bat",
+                 ".cmd", ".js", ".mjs", ".cjs", ".ts", ".html", ".css", ".csv", ".xml", ".svg")
+MAX_DEPTH = 16
 # the Claude sub-agents of a daily arm load the user settings layer too (scripts/eval/preflight.py SETTING_SOURCES
 # is project,local for every other arm)
 DAILY_CLAUDE_SOURCES = "user,project,local"
@@ -44,23 +66,62 @@ def never(name: str) -> bool:
     return any(fnmatch.fnmatch(n, p) for p in NEVER)
 
 
-def _ignore(_dir, names):
-    return [n for n in names if never(n)]
+def text_file(name: str) -> bool:
+    return Path(name).suffix.lower() in TEXT_SUFFIXES
 
 
-def _copy(src: Path, dst: Path) -> bool:
-    """A file or a folder, links not followed (a link itself is left out), NEVER names left out."""
-    if src.is_symlink() or not src.exists() or never(src.name):
+def is_link(p: Path) -> bool:
+    """A symbolic link or a Windows junction (Path.is_symlink() does not see a junction)."""
+    try:
+        if os.path.islink(p):
+            return True
+        isj = getattr(os.path, "isjunction", None)            # 3.12+
+        if isj and isj(p):
+            return True
+        return bool(getattr(os.lstat(p), "st_file_attributes", 0) & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0))
+    except OSError:
+        return False
+
+
+def _copy(src: Path, dst: Path, stats: dict, seen: set | None = None, depth: int = 0) -> bool:
+    """A file or a folder as plain files: links followed into their target, NEVER names and other file types left
+    out (counted in stats), a folder already walked (a loop through a link) walked once."""
+    seen = set() if seen is None else seen
+    if never(src.name) or not src.exists():
+        return False
+    if is_link(src):
+        stats["links_followed"] = stats.get("links_followed", 0) + 1
+    if src.is_dir():
+        real = os.path.realpath(src)
+        if real in seen or depth > MAX_DEPTH:
+            return False
+        seen.add(real)
+        dst.mkdir(parents=True, exist_ok=True)
+        for child in sorted(src.iterdir(), key=lambda c: c.name):
+            _copy(child, dst / child.name, stats, seen, depth + 1)
+        return True
+    if not src.is_file():
+        return False
+    if not text_file(src.name):
+        stats["skipped_type"] = stats.get("skipped_type", 0) + 1
         return False
     dst.parent.mkdir(parents=True, exist_ok=True)
-    if src.is_dir():
-        shutil.copytree(src, dst, symlinks=True, ignore=_ignore)
-        for p in sorted(dst.rglob("*"), reverse=True):        # links inside the tree: copied as links, so drop them
-            if p.is_symlink():
-                p.unlink()
-    else:
-        shutil.copyfile(src, dst)
+    shutil.copyfile(src, dst)                               # follows a link: the copy is a plain file
     return True
+
+
+def tree_sha256(roots: list[Path], skip: tuple = ("auth.json",)) -> str:
+    """Names and bytes of every file under the roots (the eval login left out): equal for equal snapshots."""
+    h = hashlib.sha256()
+    for i, root in enumerate(roots):
+        for f in sorted(p for p in Path(root).rglob("*") if p.is_file()):
+            rel = f.relative_to(root).as_posix()
+            if i == 0 and rel in skip:
+                continue
+            h.update(f"{i}:{rel}\0".encode("utf-8"))
+            h.update(f.read_bytes())
+            h.update(b"\0")
+    return h.hexdigest()
 
 
 def memory_settings(codex_src: Path) -> dict:
@@ -99,14 +160,18 @@ def config_toml(kept: str, features_off: tuple, mem: dict) -> str:
 
 
 def found_never(root: Path, allow: tuple = ()) -> list[str]:
-    """NEVER names (and links) under root, except the relative paths in `allow`."""
+    """NEVER names, links (junctions included) and files of a type not copied under root, except the relative paths
+    in `allow`. Walked without following links."""
     out = []
-    for p in root.rglob("*"):
-        rel = p.relative_to(root).as_posix()
-        if rel in allow:
-            continue
-        if p.is_symlink() or never(p.name):
-            out.append(rel)
+    for dirpath, dirnames, filenames in os.walk(root, followlinks=False):
+        for n in dirnames + filenames:
+            q = Path(dirpath) / n
+            rel = q.relative_to(root).as_posix()
+            if rel in allow:
+                continue
+            if is_link(q) or never(n) or (n in filenames and not text_file(n)):
+                out.append(rel)
+        dirnames[:] = [d for d in dirnames if not is_link(Path(dirpath) / d)]
     return sorted(out)
 
 
@@ -125,9 +190,10 @@ def build(dest: Path, eval_codex_home: Path, codex_src: Path, agents_src: Path |
         raise RuntimeError(f"the eval CODEX_HOME {eval_codex_home} has no login (auth.json): the daily home's login "
                            "comes from there, never from the person's own Codex home")
     shutil.copyfile(auth, codex / "auth.json")         # copied, never opened
-    copied = [f"codex:{n}" for n in DAILY_COPY if _copy(Path(codex_src) / n, codex / n)]
+    stats: dict = {}
+    copied = [f"codex:{n}" for n in DAILY_COPY if _copy(Path(codex_src) / n, codex / n, stats)]
     if agents_src:
-        copied += [f"agents:{n}" for n in AGENTS_COPY if _copy(Path(agents_src) / n, home / ".agents" / n)]
+        copied += [f"agents:{n}" for n in AGENTS_COPY if _copy(Path(agents_src) / n, home / ".agents" / n, stats)]
     mem = memory_settings(Path(codex_src))
     (codex / "config.toml").write_text(config_toml(kept, tuple(features_off), mem), encoding="utf-8")
     bad = found_never(codex, allow=("auth.json", "config.toml")) + [f".agents/{x}" for x in found_never(home)]
@@ -135,8 +201,35 @@ def build(dest: Path, eval_codex_home: Path, codex_src: Path, agents_src: Path |
         raise RuntimeError(f"the daily home holds what must never be copied: {bad[:5]}")
     files = sum(1 for d in (codex, home) for p in d.rglob("*") if p.is_file())
     return {"codex_home": str(codex), "agent_home": str(home), "copied": copied, "files": files,
-            "auth": "eval-codex-home", "memory_settings": mem, "features_off": list(features_off),
+            "links_followed": stats.get("links_followed", 0), "skipped_type": stats.get("skipped_type", 0),
+            "sha256": tree_sha256([codex, home]), "auth": "eval-codex-home", "auth_sha256": file_sha256(auth), "memory_settings": mem, "features_off": list(features_off),
             "claude_setting_sources": DAILY_CLAUDE_SOURCES}
+
+
+def file_sha256(f: Path) -> str | None:
+    try:
+        return hashlib.sha256(Path(f).read_bytes()).hexdigest()
+    except OSError:
+        return None
+
+
+def sync_login(info: dict, eval_codex_home: Path) -> dict:
+    """After a daily unit: a ChatGPT login refreshes its token and writes the new one into the unit's copy of
+    auth.json, and a refresh token works once, so the eval home's own copy may now be spent. The rotated copy is
+    written back to the eval home (atomically) when the eval home's file is still the one the unit copied; when both
+    changed (another unit refreshed too) nothing is written and the round should stop: `conflict`. Returns what
+    happened, for the row (hashes only; the file is never opened as text)."""
+    copy, orig = Path(info["codex_home"]) / "auth.json", Path(eval_codex_home) / "auth.json"
+    start, now, ours = info.get("auth_sha256"), file_sha256(orig), file_sha256(copy)
+    if ours is None or ours == start:
+        return {"auth": "unchanged"}
+    if now != start:
+        return {"auth": "conflict", "note": "the unit's login was refreshed and the eval home's changed too: stop the "
+                "round and log in to the eval Codex home again"}
+    tmp = orig.with_name(orig.name + ".ccx-daily.tmp")
+    shutil.copyfile(copy, tmp)
+    os.replace(tmp, orig)
+    return {"auth": "refreshed", "written_back": True}
 
 
 def unit_env(env: dict, info: dict) -> dict:

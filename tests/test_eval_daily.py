@@ -92,17 +92,192 @@ def test_daily_home_without_person_files_is_just_the_login(homes, tmp_path):
     assert info["memory_settings"] == {}
 
 
-def test_links_are_not_followed(homes, tmp_path):
-    target = tmp_path / "elsewhere"
-    target.mkdir()
-    (target / "auth.json").write_text(SECRET, encoding="utf-8")
+def _link_dir(link: Path, target: Path) -> str:
+    """A Windows junction where one can be made (what skill folders often are), else a symbolic link; '' if
+    neither."""
     try:
-        (homes["codex"] / "skills" / "link").symlink_to(target, target_is_directory=True)
+        import _winapi
+        _winapi.CreateJunction(str(target), str(link))
+        return "junction"
+    except (ImportError, AttributeError, OSError):
+        pass
+    try:
+        link.symlink_to(target, target_is_directory=True)
+        return "symlink"
     except OSError:
-        pytest.skip("this machine cannot make symlinks")
+        return ""
+
+
+def test_links_are_followed_and_what_they_hold_is_filtered(homes, tmp_path):
+    target = tmp_path / "elsewhere"
+    (target / "sub").mkdir(parents=True)
+    for n in ("auth.json", "id_rsa", "id_ed25519.pub", "cert.p12", "secrets.yaml", ".netrc", ".npmrc", "oauth_token.json",
+              "blob.bin", "noext"):
+        (target / n).write_text(SECRET, encoding="utf-8")
+    (target / ".ssh").mkdir()
+    (target / ".ssh" / "config.md").write_text(SECRET, encoding="utf-8")
+    (target / "SKILL.md").write_text("---\nname: linked\n---\n", encoding="utf-8")
+    (target / "sub" / "helper.py").write_text("print(1)\n", encoding="utf-8")
+    kind = _link_dir(homes["codex"] / "skills" / "linked", target)
+    if not kind:
+        pytest.skip("this machine can make neither a junction nor a symbolic link")
+    assert DH.is_link(homes["codex"] / "skills" / "linked")
     info = build(homes)
-    assert not (Path(info["codex_home"]) / "skills" / "link").exists()
+    linked = Path(info["codex_home"]) / "skills" / "linked"
+    assert sorted(p.relative_to(linked).as_posix() for p in linked.rglob("*") if p.is_file()) == \
+        ["SKILL.md", "sub/helper.py"]
+    assert not DH.is_link(linked) and info["links_followed"] >= 1 and info["skipped_type"] >= 2
     assert SECRET not in all_text(Path(info["codex_home"]))
+
+
+def test_a_link_loop_is_walked_once(homes, tmp_path):
+    loop = homes["codex"] / "skills" / "mine" / "again"
+    if not _link_dir(loop, homes["codex"] / "skills"):
+        pytest.skip("this machine can make neither a junction nor a symbolic link")
+    info = build(homes)                                    # returns: the loop is cut, nothing raised
+    assert (Path(info["codex_home"]) / "skills" / "mine" / "SKILL.md").exists()
+
+
+def test_the_after_copy_check_sees_links_and_other_file_types(tmp_path):
+    root = tmp_path / "home"
+    (root / "skills").mkdir(parents=True)
+    (root / "skills" / "SKILL.md").write_text("x", encoding="utf-8")
+    assert DH.found_never(root) == []
+    (root / "skills" / "tool.exe").write_text("x", encoding="utf-8")
+    (root / "skills" / "id_rsa").write_text("x", encoding="utf-8")
+    assert DH.found_never(root) == ["skills/id_rsa", "skills/tool.exe"]
+    if _link_dir(root / "skills" / "lnk", tmp_path):
+        assert "skills/lnk" in DH.found_never(root)
+
+
+def test_the_snapshot_hash_tells_different_copies_apart(homes, tmp_path):
+    a = build(homes, tmp_path / "xa")
+    b = build(homes, tmp_path / "xb")
+    assert a["sha256"] == b["sha256"] and len(a["sha256"]) == 64
+    (homes["codex"] / "memories" / "notes.md").write_text("remember: spaces", encoding="utf-8")
+    assert build(homes, tmp_path / "xc")["sha256"] != a["sha256"]
+
+
+def test_a_refreshed_login_goes_back_to_the_eval_home(homes, tmp_path):
+    info = build(homes)
+    assert DH.sync_login(info, homes["eval"]) == {"auth": "unchanged"}
+    (Path(info["codex_home"]) / "auth.json").write_text("EVAL-LOGIN-2", encoding="utf-8")   # Codex refreshed it
+    assert DH.sync_login(info, homes["eval"])["auth"] == "refreshed"
+    assert (homes["eval"] / "auth.json").read_text(encoding="utf-8") == "EVAL-LOGIN-2"
+    info2 = build(homes, tmp_path / "x-two")
+    (Path(info2["codex_home"]) / "auth.json").write_text("EVAL-LOGIN-3", encoding="utf-8")
+    (homes["eval"] / "auth.json").write_text("EVAL-LOGIN-OTHER", encoding="utf-8")      # someone else refreshed too
+    assert DH.sync_login(info2, homes["eval"])["auth"] == "conflict"
+    assert (homes["eval"] / "auth.json").read_text(encoding="utf-8") == "EVAL-LOGIN-OTHER"   # nothing written
+
+
+def test_daily_arms_refuse_parallel_units(tmp_path):
+    with pytest.raises(SystemExit, match="--jobs 1"):
+        r5.main(["run", "--rounds", "1", "--tasks", r5.IDS[0], "--arms", "ccx2daily", "--jobs", "2",
+                 "--out", str(tmp_path / "r.jsonl"), "--workdir", str(tmp_path / "w")])
+
+
+def _init(**kw) -> str:
+    import json
+    base = {"type": "system", "subtype": "init", "model": "m", "mcp_servers": [], "skills": [], "slash_commands": [],
+            "output_style": "default", "agents": ["claude"], "plugins": []}
+    return json.dumps({**base, **kw}) + "\n"
+
+
+def test_daily_sub_agent_skills_are_recorded_not_problems(homes):
+    loaded = _init(skills=["mine", "shared"], slash_commands=["/mine", "/review"],
+                   plugins=[{"name": "p", "source": "p@market", "path": "x"}])
+    assert len(PF.check_init(loaded, [])[0]) == 3                     # every other arm: three problems
+    probs, info = PF.check_init(loaded, [], record_skills=True)
+    assert probs == [] and info["skills_loaded"] == 2 and info["slash_commands"] == 2 and info["plugins_nonbuiltin"] == 1
+    assert PF.check_init(_init(mcp_servers=["x"]), [], record_skills=True)[0] == ["mcp servers loaded: 1"]
+    hub = homes["tmp"] / "h-1-t-ccx2daily"
+    run = hub / "ccx" / "runs" / "20261030-000001-aaaa"
+    run.mkdir(parents=True)
+    (run / "events.0.log").write_text(loaded, encoding="utf-8")
+    u = _unit(homes, hub)
+    plain, daily = PF.audit(u, ""), PF.audit(u, "", daily=True)
+    assert plain["clean"] is False and daily["clean"] is True
+    assert daily["sub_skills"] == {"20261030-000001-aaaa/events.0.log": {"skills_loaded": 2, "slash_commands": 2,
+                                                                         "plugins_nonbuiltin": 1}}
+
+
+def test_daily_fingerprint_describes_the_daily_homes(homes):
+    hub = homes["tmp"] / "h-fp"
+    u = _unit(homes, hub)
+    rep = {"commit": "c" * 40, "dirty": False, "tasks_sha256": "t", "cli": {}, "jobs": 1, "result": "pass",
+           "force_unclean": False, "codex": {"mode": "eval"}}
+    env = {"CCX_CLAUDE_SETTING_SOURCES": "user,project,local"}
+    plain = PF.fingerprint(rep, u, env, {})["isolation"]
+    daily = PF.fingerprint(rep, u, env, {"daily": {"sha256": "abc"}})["isolation"]
+    assert plain["setting_sources"] == PF.SETTING_SOURCES and plain["codex_home"] == "eval"
+    assert daily["setting_sources"] == "user,project,local" and daily["codex_home"] == daily["agent_home"] == "daily"
+    assert daily["daily_sha256"] == "abc"
+
+
+def test_reading_the_units_own_daily_memories_is_not_a_private_read(tmp_path):
+    import importlib
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    T = importlib.import_module("test_eval_harness_audit")
+    H = T.H
+    work = tmp_path / "b3x"
+    dh = work / "x-1-t-ccx2daily" / DH.CODEX_DIR
+    rows = []
+    for key, cmd, daily in (("1-t-ccx2daily", f"Get-Content {dh}/memories/MEMORY.md", True),
+                            ("2-t-ccx2daily", "Get-Content $env:CODEX_HOME/memories/MEMORY.md", True),
+                            ("3-t-ccx2daily", "Get-Content D:/h/.codex/memories/MEMORY.md", True),
+                            ("4-t-ccx2", f"Get-Content {dh}/memories/MEMORY.md", False)):
+        repo, hub = work / key, work / f"h-{key}"
+        repo.mkdir(parents=True)
+        a = T.make_run(hub, "20261030-000001-aaaa", cwd=repo, events=T.codex_events(repo, cmds=[(cmd, 0, "")]))
+        T.finish_hub(hub, [a])
+        rd, _, arm = key.partition("-t-")
+        rows.append({"tag": "b3x", "round": int(rd), "task": "t", "arm": arm, "ok": True,
+                     **({"daily": {"codex_home": str(dh), "agent_home": str(dh.parent / DH.AGENT_DIR)}} if daily else {})})
+    got = {u.key: H.audit_unit(u)["criteria"]["ctx.no_private_context"]["status"]
+           for u in H.discover(work, "b3x", rows)}
+    assert got == {"1-t-ccx2daily": H.PASS, "2-t-ccx2daily": H.PASS, "3-t-ccx2daily": H.FAIL, "4-t-ccx2": H.FAIL}
+
+
+def _b3row(arm, rd, task, ok, prompt, clean=True):
+    return {"tag": "b3", "round": rd, "task": task, "arm": arm, "ok": ok, "env_clean": clean,
+            "sub_usage": {"prompt": prompt}}
+
+
+def test_b3_rule_applies_the_fixed_rule():
+    base = [_b3row("ccx2daily", rd, t, True, 100_000) for rd in (1, 2) for t in ("a", "b", "c", "d")]
+    good = [_b3row("ccx2daily_nomem", rd, t, True, 80_000) for rd in (1, 2) for t in ("a", "b", "c", "d")]
+    br = r5.b3_rule(base + good, "ccx2daily_nomem")
+    assert br["result"] == "pass" and br["units"] == 8
+    small = [{**r, "sub_usage": {"prompt": 90_000}} for r in good]                      # only 10% less
+    assert r5.b3_rule(base + small, "ccx2daily_nomem")["conditions"]["input"]["result"] == "fail"
+    lost = [{**r, "ok": r["task"] != "a"} for r in good]                                # task a lost in every round
+    br = r5.b3_rule(base + lost, "ccx2daily_nomem")
+    assert br["result"] == "fail" and br["conditions"]["always_lost"]["value"] == ["a"]
+    assert br["conditions"]["right"]["result"] == "fail"                                # 6 vs 8: more than one fewer
+    one = [{**r, "ok": not (r["task"] == "a" and r["round"] == 1)} for r in good]      # one pair lost: allowed
+    assert r5.b3_rule(base + one, "ccx2daily_nomem")["result"] == "pass"
+    unclean = good[:-1] + [{**good[-1], "env_clean": False}]                            # one-sided loss: Unknown
+    assert r5.b3_rule(base + unclean, "ccx2daily_nomem")["result"] == "unknown"
+    nocount = [{k: v for k, v in r.items() if k != "sub_usage"} for r in good]
+    assert r5.b3_rule(base + nocount, "ccx2daily_nomem")["result"] == "unknown"
+    res = r5.summarize(base + good)
+    assert res["b3_rules"]["ccx2daily vs ccx2daily_nomem"]["result"] == "pass"
+    assert "b3_rules" not in r5.summarize(good)
+
+
+def test_sub_usage_reads_the_hub_ledger_by_token_class(tmp_path):
+    import json
+    hub = tmp_path / "hub"
+    led = hub / "ccx" / "ledger.jsonl"
+    led.parent.mkdir(parents=True)
+    rows = [{"run_id": "r1", "label": "eval:x", "usage": {"input": 10, "cached": 90, "output": 5}},
+            {"run_id": "r2", "label": "review:r1", "usage": {"input": 3, "cached": 7, "output": 1}},
+            {"type": "verdict", "run_id": "r1"}]
+    led.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+    got = r5.sub_usage(hub)
+    assert got["prompt"] == 100 and got["runs"] == 1 and got["output"] == 5
+    assert got["review_input"] == 3 and got["review_cached"] == 7 and got["reviews"] == 1
 
 
 def test_unit_env_drops_isolation_and_points_at_the_daily_home(homes):
@@ -160,7 +335,9 @@ def test_existing_arms_keep_their_models_fingerprint_fields():
     u = {"arm": "ccx2", "task": r5.IDS[0], "lead_model": "sonnet", "lead_effort": "medium"}
     assert "daily" not in r5.unit_models(u, {})
     d = r5.unit_models({**u, "arm": "ccx2daily_clean"}, {})
-    assert d["daily"] == {"subagent": {"clean": True}, "claude_setting_sources": "user,project,local"}
+    assert d["daily"] == {"subagent": {"clean": True}, "claude_setting_sources": "user,project,local", "sha256": None}
+    d = r5.unit_models({**u, "arm": "ccx2daily"}, {"daily": {"sha256": "abc"}})
+    assert d["daily"]["sha256"] == "abc"
 
 
 def test_dry_run_lists_the_daily_arms_and_copies_nothing(homes, tmp_path, capsys):

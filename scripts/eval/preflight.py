@@ -886,7 +886,8 @@ def _builtin_plugin(p) -> bool:
 def check_init(text: str, allowed: list[Path], prefixes: list[str] = (), agents: set[str] = frozenset(),
                ok_skills: set[str] = frozenset(), ok_hooks: tuple[str, ...] = (),
                skill_dirs: list[Path] = (),
-               bundled_ok: frozenset[str] = CLAUDE_BUNDLED_SKILLS) -> tuple[list[str], dict]:
+               bundled_ok: frozenset[str] = CLAUDE_BUNDLED_SKILLS,
+               record_skills: bool = False) -> tuple[list[str], dict]:
     """Problems in a Claude stream's start: hooks that ran, MCP servers, skills, slash commands, an output style,
     non-builtin plugins or agents, memory paths outside the unit (`allowed` folders; `prefixes`: folder-name prefixes
     paths of the unit's own <claude home>/projects/<folder>, one ending in "-" a prefix). Also returns the init
@@ -897,7 +898,11 @@ def check_init(text: str, allowed: list[Path], prefixes: list[str] = (), agents:
     allow-list by name) and has no folder of its name in `skill_dirs` (every place outside the unit's own home, which
     holds ccx's only, a skill on disk could come from: the person's Claude home, the repository's and its parents'
     .claude/skills, managed folders) is taken for one of those, allowed and recorded (`bundled_skills`); any other
-    skill, a bundled one not on the list included, is still a problem (the skill canary says so before a round)."""
+    skill, a bundled one not on the list included, is still a problem (the skill canary says so before a round).
+    `record_skills` (a daily-config arm's sub-agent runs, r5.DAILY_ARMS: their Claude sub-agents load the person's
+    skills and user settings on purpose): skills, slash commands and non-builtin plugins are recorded
+    (`skills_loaded`, `slash_commands`, `plugins_nonbuiltin`), not problems; hooks, MCP servers, agents, an output
+    style and memory paths are checked as for every other run."""
     probs, info = [], {}
     ran: list[str] = []
     roots = [_norm(p) for p in allowed]
@@ -914,6 +919,11 @@ def check_init(text: str, allowed: list[Path], prefixes: list[str] = (), agents:
             if ev.get("mcp_servers"):
                 probs.append(f"mcp servers loaded: {len(ev['mcp_servers'])}")
             raw = [str((x.get("name") if isinstance(x, dict) else x) or "") for x in ev.get("skills") or []]
+            if record_skills:
+                info["skills_loaded"] = len(raw)
+                info["slash_commands"] = len(ev.get("slash_commands") or [])
+                info["plugins_nonbuiltin"] = sum(not _builtin_plugin(p) for p in ev.get("plugins") or [])
+                raw = []
             ccx = [_skill_name(x) for x in raw if _skill_name(x) in ok_skills]
             other = [_skill_name(x) for x in raw if _skill_name(x) not in ok_skills]
             if ok_skills:
@@ -928,7 +938,7 @@ def check_init(text: str, allowed: list[Path], prefixes: list[str] = (), agents:
                 probs.append(f"skills loaded: {len(other)}" + (f" not ccx's: {other[:5]}" if ok_skills else ""))
             if ccx:
                 info["skills"] = ccx
-            if ev.get("slash_commands"):
+            if ev.get("slash_commands") and not record_skills:
                 if ok_skills:          # a lead allowed skills gets the commands that come with them: recorded
                     info["slash_commands"] = len(ev["slash_commands"])
                 else:
@@ -937,7 +947,7 @@ def check_init(text: str, allowed: list[Path], prefixes: list[str] = (), agents:
                 probs.append(f"output style: {ev.get('output_style')}")
             plugins = ev.get("plugins") or []
             info["plugins"] = len(plugins)
-            if any(not _builtin_plugin(p) for p in plugins):
+            if any(not _builtin_plugin(p) for p in plugins) and not record_skills:
                 probs.append("non-builtin plugin loaded")
             extra = sorted(str(a) for a in (ev.get("agents") or []) if str(a) not in ok_agents)
             if extra:
@@ -1047,8 +1057,10 @@ def path_hits(inputs: list[str], u: Unit) -> list[str]:
     return hits
 
 
-def audit(u: Unit, stream: str) -> dict:
-    """The unit's lead stream and every ccx sub-agent log in its hub."""
+def audit(u: Unit, stream: str, daily: bool = False) -> dict:
+    """The unit's lead stream and every ccx sub-agent log in its hub. `daily` (r5.DAILY_ARMS): the sub-agent runs'
+    skills, slash commands and plugins are the arm's point, so they are recorded (`sub_skills`: per run that loaded
+    any), not problems; the lead is checked as in ccx2."""
     allowed = [u.x, u.repo, u.hub, u.worktrees] + ([u.claude_dir] if u.fresh_home else [])
     pre = u.own_project_dirs()
     ok = {"ok_skills": set(ccx_skill_names()), "ok_hooks": CCX_HOOK_EVENTS, "skill_dirs": foreign_skill_dirs(u)} \
@@ -1057,18 +1069,25 @@ def audit(u: Unit, stream: str) -> dict:
     inputs = tool_inputs(stream)
     sids = session_ids(stream)
     runs = u.hub / "ccx" / "runs"
+    sub_skills: dict = {}
     for f in sorted(runs.glob("*/events*")) if runs.exists() else []:
         try:
             text = f.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        p2, _ = check_init(text, allowed, pre)
+        p2, i2 = check_init(text, allowed, pre, record_skills=daily)
         probs += [f"sub-agent {f.parent.name}: {p}" for p in p2]
+        if daily and (i2.get("skills_loaded") or i2.get("slash_commands") or i2.get("plugins_nonbuiltin")):
+            sub_skills[f"{f.parent.name}/{f.name}"] = {k: i2[k] for k in
+                                                       ("skills_loaded", "slash_commands", "plugins_nonbuiltin")}
         inputs += tool_inputs(text)
         sids += session_ids(text)
     hits = path_hits(inputs, u)
-    return {"init": info, "problems": sorted(set(probs)), "path_hits": hits[:20], "n_path_hits": len(hits),
-            "session_ids": sorted(set(sids)), "clean": not probs and not hits}
+    out = {"init": info, "problems": sorted(set(probs)), "path_hits": hits[:20], "n_path_hits": len(hits),
+           "session_ids": sorted(set(sids)), "clean": not probs and not hits}
+    if daily:
+        out["sub_skills"] = sub_skills
+    return out
 
 
 # ------------------------------------------------------------------ after a unit (E2)
@@ -1655,6 +1674,7 @@ def fingerprint(rep: dict, u: Unit | None, env: dict | None, models: dict | None
         fp["skill_canary"] = rep["skill_canary"]
         fp["bundled_skills"] = (rep.get("skill_canary_init") or {}).get("bundled_skills")
         fp["bundled_skills_allowed"] = sorted(CLAUDE_BUNDLED_SKILLS)   # the allow-list by name the audit used
+    daily = (models or {}).get("daily")
     if u is not None:
         fp["isolation"] = {"claude": u.claude, "setting_sources": SETTING_SOURCES, "hooks": "disabled",
                            **({"claude_home": "ccx", "lead_setting_sources": LEAD_SETTING_SOURCES,
@@ -1668,6 +1688,10 @@ def fingerprint(rep: dict, u: Unit | None, env: dict | None, models: dict | None
                            "ccx_config": "fresh", "git_config": "eval", "tmp": "unit", "bash_unconfined": True,
                            "codex_shell_reads_unconfined": True,
                            "oauth_token_env": "CLAUDE_CODE_OAUTH_TOKEN" in env}
+        if daily:                        # r5.DAILY_ARMS: the sub-agents ran in the unit's daily homes
+            fp["isolation"].update({"setting_sources": env.get("CCX_CLAUDE_SETTING_SOURCES") or SETTING_SOURCES,
+                                    "agent_home": "daily", "codex_home": "daily",
+                                    "daily_sha256": daily.get("sha256")})
     return fp
 
 

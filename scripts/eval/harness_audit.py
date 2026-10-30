@@ -403,9 +403,22 @@ def c_false_start(u: Unit) -> Result:
     return _res(fails, bool(ws))
 
 
+DAILY_REST = r"""[^\s"';|&]*"""            # the rest of a path that starts in a daily home
+
+
+def daily_homes(u: Unit) -> list[str]:
+    """A daily-config unit's own Codex home and HOME (r5.DAILY_ARMS, row `daily`), lower case with / separators:
+    copies the arm gives its sub-agents on purpose, inside the unit's x- folder."""
+    d = (u.row or {}).get("daily") or {}
+    return [str(d[k]).replace("\\", "/").lower().rstrip("/") for k in ("codex_home", "agent_home") if d.get(k)]
+
+
 def c_private_context(u: Unit) -> Result:
-    """No sub-agent read the person's private agent context (memories, the tools' homes) outside the workspace."""
+    """No sub-agent read the person's private agent context (memories, the tools' homes) outside the workspace. A
+    daily-config unit's own homes (daily_homes: its copies of memories, AGENTS.md and skills, and CODEX_HOME, which
+    points there) are that arm's documented exception, not the person's real homes."""
     fails, ex = [], False
+    own = daily_homes(u)
     for r in u.runs.values():
         cwd = str(r.rec.get("cwd") or "")
         for i, evs in enumerate(r.events):
@@ -415,6 +428,11 @@ def c_private_context(u: Unit) -> Result:
             for s in [c["cmd"] for c in commands(evs)] + file_reads(evs):
                 if SETS_CODEX_HOME.search(s):
                     s = CODEX_HOME_VAR.sub("CODEX_HOME", s)
+                if own:
+                    for h in own:
+                        for v in (h, h.replace("/", "\\"), h.replace("/", "\\\\")):
+                            s = re.sub(re.escape(v) + DAILY_REST, "<daily-home>", s, flags=re.I)
+                    s = re.sub(f"(?:{CODEX_HOME_VAR.pattern}){DAILY_REST}", "<daily-home>", s, flags=re.I)
                 m = PRIVATE_CONTEXT.search(s)
                 if m and not (cwd and cwd.lower() in s.lower() and not re.search(r"[\\/]memories[\\/]", s, re.I)):
                     fails.append((u.rel(r.dir / f"events.{i}.log"), f"{r.id}: {s[max(0, m.start() - 60):m.end() + 40]!r}"))
