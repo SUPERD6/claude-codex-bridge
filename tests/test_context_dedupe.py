@@ -56,6 +56,23 @@ def test_every_ab_task_keeps_its_settled_point_with_dedupe(tmp_path):
             assert text.index(t["reversed"][:20]) < text.rindex(t["settle"][:30]), t["id"]
 
 
+def test_a_decision_the_lead_restated_after_a_reopened_question_stays(tmp_path):
+    evs: list[dict] = []
+    t = time.time() - 100
+    cs._said(t, "person", "We decided to store config as JSON.", evs)
+    cs._said(t + 10, "person", "Hmm, maybe switch to YAML instead?", evs)
+    cs._said(t + 20, "claude", "We decided to store config as JSON. YAML adds a dependency.", evs)
+    cs._said(t + 25, "person", "Nobody said we must keep the v1 API. Drop it.", evs)
+    cs._said(t + 30, "claude", "We must keep the v1 API for now.", evs)
+    stats: dict = {}
+    text = cs.summary(evs, "claude", "s", tmp_path, "t", dedupe=True, stats=stats)
+    settled = _settled(text)
+    assert "[" in settled and "claude] We decided to store config as JSON." in settled   # the lead's word stays
+    assert "We must keep the v1 API for now." in settled
+    assert "person] Nobody said" not in settled      # the person's own sentence: shown in the ask above
+    assert stats["deduped"] >= 1
+
+
 class TestRunRecord(AdapterEnv):
     LEAD = {"CLAUDECODE": "1", "CLAUDE_CODE_SESSION_ID": SID}
 

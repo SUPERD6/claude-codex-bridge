@@ -354,14 +354,16 @@ def summary(evs: list[dict], agent: str, sid: str, root: Path, what: str, max_ch
             asks: int = 5, decisions: int = 8, said: int = 1, dedupe: bool = False,
             stats: dict | None = None) -> str:
     """The lead's recent asks, decisions, plan and files, newest last, each with time and source.
-    dedupe ([shared_context] dedupe, B3 item 9, off by default): a "Settled" sentence that already stands whole in
-    one of the asks shown above it is left out (the same words twice; nothing else is cut). `stats` gets how many
-    were left out and their characters."""
+    dedupe ([shared_context] dedupe, B3 item 9, off by default): a "Settled" sentence that was cut from one of the
+    person's asks shown above it (same person, same message, its words shown there whole) is left out: the same words
+    twice. A decision the lead stated later, even in the same words, stays (it may be the lead settling a question the
+    person reopened), and nothing else is cut. `stats` gets how many were left out and their characters."""
     ask = [e for e in evs if e["kind"] == "ask"][-asks:]
     dec = list({e["text"]: e for e in evs if e["kind"] == "decision"}.values())[-decisions:]
     if dedupe and ask and dec:
-        shown = [_norm(_short(e["text"], NEWEST_ASK if i == len(ask) - 1 else 500)) for i, e in enumerate(ask)]
-        keep = [e for e in dec if not any(_norm(e["text"]) in s for s in shown)]
+        shown = {e["ts"]: _norm(_short(e["text"], NEWEST_ASK if i == len(ask) - 1 else 500)).removesuffix("...")
+                 for i, e in enumerate(ask)}
+        keep = [e for e in dec if not (e["who"] == "person" and e["ts"] in shown and _norm(e["text"]) in shown[e["ts"]])]
         if stats is not None:
             stats.update(deduped=len(dec) - len(keep), deduped_chars=sum(len(e["text"]) for e in dec if e not in keep))
         dec = keep

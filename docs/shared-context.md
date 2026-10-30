@@ -13,8 +13,9 @@ in three ways.
 | `ccx peek claude\|codex\|deepseek` | a read-only look at that tool's newest open session in this project (or `--session ID`) | — |
 | The per-turn hook (`ccx turn`) | one line per other tool that did something since this reader last looked: what its person asked, what was settled, which files changed | `[shared_context] turn = false` |
 
-Experimental, off by default: `[shared_context] dedupe = true` leaves out a "Settled" sentence that already stands
-whole in one of the person's asks shown above it (the same words twice); nothing else is cut and the size stays. Every
+Experimental, off by default: `[shared_context] dedupe = true` leaves out a "Settled" sentence that was cut from one
+of the person's asks shown above it and stands there whole (the same words twice); a decision the lead stated later
+stays, even in the same words, nothing else is cut and the size limit is unchanged. Every
 run records the block's rough size as `est_tokens` in run.json's `shared_context`, and with the switch on how many
 sentences it left out. It stays off until a rerun of the 2026-10-25 A/B shows first-try-right does not drop.
 
