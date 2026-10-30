@@ -37,9 +37,13 @@ def _extra_settings() -> dict:
     return data
 
 
+# [subagent] clean: no user settings layer (~/.claude/settings.json, its hooks, `language`, `env`)
+CLEAN_SETTING_SOURCES = "project,local"
+
+
 def claude_invocation(*, model: str, effort: str, perm: list[str], cwd: Path, prompt: str,
                       run_dir: Path, resume_id: str | None = None, lean: bool = False,
-                      cache_ttl: str | None = None) -> Invocation:
+                      cache_ttl: str | None = None, clean: bool = False) -> Invocation:
     """cache_ttl: "5m" or "1h" sets Claude Code's `promptCacheTtl` for this run's main conversation (only ccx's
     one-shot reviewer, when `[review] cache_ttl` is set; None = Claude Code's own choice). Checked 2026-10-26 against
     code.claude.com/docs/en/prompt-caching ("Choose the TTL yourself": `promptCacheTtl` takes 5m or 1h, applies to
@@ -52,12 +56,13 @@ def claude_invocation(*, model: str, effort: str, perm: list[str], cwd: Path, pr
     if lean and "--strict-mcp-config" not in argv:
         argv += ["--strict-mcp-config"]
     # opt-in (an evaluation's clean room): no skills or slash commands and no MCP servers, whatever the effort
-    no_skills = os.environ.get("CCX_CLAUDE_NO_SKILLS") == "1"
+    # clean ([subagent] clean = true, experimental, off until measured): the same switches for a normal run
+    no_skills = clean or os.environ.get("CCX_CLAUDE_NO_SKILLS") == "1"
     if (lean or no_skills) and "--disable-slash-commands" not in argv:
         argv += ["--disable-slash-commands"]
     if no_skills and "--strict-mcp-config" not in argv:
         argv += ["--strict-mcp-config"]
-    sources = os.environ.get("CCX_CLAUDE_SETTING_SOURCES", "").strip()
+    sources = CLEAN_SETTING_SOURCES if clean else os.environ.get("CCX_CLAUDE_SETTING_SOURCES", "").strip()
     if sources and "--setting-sources" not in argv:
         # opt-in (an evaluation's clean room): which settings layers load, e.g. "project,local" leaves out the
         # user's ~/.claude/settings.json and its hooks (claude 2.1.309 --help: --setting-sources user,project,local)

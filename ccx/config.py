@@ -243,6 +243,18 @@ def load_config(p: Paths | None = None) -> dict:
     return cfg
 
 
+# [subagent] (config/tiers.toml): experimental switches for what a sub-agent loads, each at today's behaviour until a
+# before / after measurement passes (scripts/eval/r5.py, arms ccx2daily*). Not [subagents]: that one caps the
+# sub-agent's own sub-agents.
+SUBAGENT_SWITCHES = {"codex_memories": True, "clean": False, "codex_lean_tools": False}
+
+
+def subagent_switches(cfg: dict) -> dict:
+    """The [subagent] switches a run uses (a missing or non-boolean key: its default)."""
+    c = cfg.get("subagent") or {}
+    return {k: (c[k] if isinstance(c.get(k), bool) else d) for k, d in SUBAGENT_SWITCHES.items()}
+
+
 def path_list(raw: str) -> list[str]:
     """`ccx config set` value for a list of folders: separated by ';' (a ':' is part of a Windows path)."""
     return [x.strip() for x in raw.replace("\n", ";").split(";") if x.strip()]
