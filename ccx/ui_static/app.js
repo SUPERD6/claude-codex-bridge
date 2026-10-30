@@ -309,7 +309,7 @@
   function shortPath(p) { if (!p) return ""; const s = String(p).replace(/\\/g, "/").split("/").filter(Boolean); return s[s.length - 1] || p; }
   function weekHTML() {
     const w = (D && D.week) || {runs: 0};
-    /* spend first (month, then week); the saving after it, as the estimate it is (PM review 2026-10-29) */
+    /* spend first (month, then week); a saving after it only once ccx trial measured one (P1-4) */
     let h = `<h2>${t("worth")}</h2>` + monthSpentHTML() + `<p class="stat">${t("week_spent", {u: usd(w.usd || 0), n: w.runs || 0})}${w.cash_usd ? " " + t("week_cash", {u: usd(w.cash_usd)}) : ""}</p>` + monthSavingHTML();
     return h + trackHTML();
   }
@@ -342,9 +342,8 @@
   function monthSavingHTML() {
     const m = D && D.month;
     if (!m) return "";
-    if (m.saving == null) return `<p class="stat cost">${t("month_saving_none")}</p>`;
     const link = {__html: `<a href="${esc(t("measured_url"))}" target="_blank" rel="noopener">docs/measured.md</a>`};   /* the address lives in strings.json: no URL in the page code */
-    if (m.kind !== "measured") return `<p class="stat cost">${t("month_unmeasured", {link})}</p>`;
+    if (m.kind !== "measured" || m.saving == null) return `<p class="stat cost">${t("month_unmeasured", {link})}</p>`;
     const ci = m.ci95 && m.ci95.length === 2 ? t("month_ci", {a: usd(Math.abs(m.ci95[0])) , b: usd(Math.abs(m.ci95[1])), neg: m.ci95[0] < 0 ? "−" : ""}) : "";
     const key = m.saving >= 0 ? "month_saving_m" : "month_extra_m";
     return `<p class="stat cost">${t(key, {u: usd(Math.abs(m.saving)), ci, n: m.n || 0})}</p>`

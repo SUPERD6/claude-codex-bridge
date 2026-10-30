@@ -11,7 +11,8 @@ Numbers, and how each one is computed (kept simple so anyone can re-derive them)
   Saving                    measured when a `ccx trial` has enough tasks in both halves (`saving_kind`
                             "measured"): the trial's saving per task (lead's own $ when it did the task minus
                             lead + sub-agent $ when it delegated) x delegated runs in the window.
-                            Otherwise a MODEL (`saving_kind` "model"), shown as such and after the spend: per
+                            Otherwise a MODEL (`saving_kind` "model"), kept in the data for scripts and never
+                            shown on the page (P1-4: the page says "not measured yet"): per
                             delegated run, the task-sized part of the sub-agent's tokens (fresh input + output,
                             minus the sub-agent's cache reads and writes, ~93k tokens a run in round 2: the run's
                             whole input, mostly cache reads, its fixed prefix re-sent on each of ~5 requests;
@@ -458,7 +459,7 @@ def render_html(s: dict) -> str:
          f"≈{t['lead_turn_tokens_median'] / 1000:,.0f}k tokens",
          f"median of {t.get('lead_turns', 0)} turns · ≈ {_usd(t.get('lead_turn_ae_median'))} a turn · shorter "
          f"conversations cost less (`ccx lead`)"
-         + (f" · one model rung down would have cost {_usd(t['lead_one_rung_down_saving'])} less "
+         + (f" · estimate: one model rung down would have cost {_usd(t['lead_one_rung_down_saving'])} less "
             f"(`ccx lead --suggest`)" if t.get("lead_one_rung_down_saving") else "")),
         ("Cache-read share", "–" if t["cache_read_share"] is None else f"{t['cache_read_share'] * 100:.0f}%",
          "of all input tokens"),

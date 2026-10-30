@@ -67,10 +67,16 @@ class TestTaskSizedEstimate(ReportEnv):
         tiles = re.findall(r'<div class="k">([^<]+)</div>', html)
         self.assertEqual(tiles[-1], "Saving")                              # after every spend tile
         self.assertLess(tiles.index("Sub-agent spend"), tiles.index("Saving"))
-        self.assertIn("not measured yet", html)                            # P1-4: no model figure until ccx trial
+        values = re.findall(r'<div class="v">([^<]*)</div>', html)
+        self.assertEqual(len(values), len(tiles))
+        self.assertEqual(values[tiles.index("Saving")], "not measured yet")  # P1-4: no model figure until ccx trial
         self.assertNotIn("Estimated saving", html)
         self.assertNotIn("est. saving", html)
         self.assertIsNotNone(s["totals"]["saving"])                        # the data keeps the model for scripts
+        runs = html.split("<h2>Delegated runs</h2>", 1)[1].split("</table>", 1)[0]
+        self.assertEqual(runs.split("</tr>", 1)[0].count("<th"), 7)          # day … tokens, AE$; no saving column
+        for row in re.findall(r"<tr><td>.*?</tr>", runs):
+            self.assertEqual(row.count("<td"), 7, row)
         self.assertIn("measured totals so far about even (docs/measured.md)", html)
 
     def test_stats_summary_puts_spend_first_and_labels_the_saving(self):
