@@ -13,6 +13,11 @@ in three ways.
 | `ccx peek claude\|codex\|deepseek` | a read-only look at that tool's newest open session in this project (or `--session ID`) | — |
 | The per-turn hook (`ccx turn`) | one line per other tool that did something since this reader last looked: what its person asked, what was settled, which files changed | `[shared_context] turn = false` |
 
+Experimental, off by default: `[shared_context] dedupe = true` leaves out a "Settled" sentence that already stands
+whole in one of the person's asks shown above it (the same words twice); nothing else is cut and the size stays. Every
+run records the block's rough size as `est_tokens` in run.json's `shared_context`, and with the switch on how many
+sentences it left out. It stays off until a rerun of the 2026-10-25 A/B shows first-try-right does not drop.
+
 Everything is framed as **data, not instructions**: the block's header says so, the sub-agent's rules name it, the
 leads' memory block and the project's AGENTS.md (via `ccx board --init`) say it again. A sub-agent's own task and the
 person's instructions decide; a line from another session never does.

@@ -346,11 +346,25 @@ def _rel(f: str, root: Path) -> str | None:
         return None
 
 
+def _norm(t: str) -> str:
+    return " ".join(t.split()).casefold()
+
+
 def summary(evs: list[dict], agent: str, sid: str, root: Path, what: str, max_chars: int = MAX_CHARS,
-            asks: int = 5, decisions: int = 8, said: int = 1) -> str:
-    """The lead's recent asks, decisions, plan and files, newest last, each with time and source."""
+            asks: int = 5, decisions: int = 8, said: int = 1, dedupe: bool = False,
+            stats: dict | None = None) -> str:
+    """The lead's recent asks, decisions, plan and files, newest last, each with time and source.
+    dedupe ([shared_context] dedupe, B3 item 9, off by default): a "Settled" sentence that already stands whole in
+    one of the asks shown above it is left out (the same words twice; nothing else is cut). `stats` gets how many
+    were left out and their characters."""
     ask = [e for e in evs if e["kind"] == "ask"][-asks:]
     dec = list({e["text"]: e for e in evs if e["kind"] == "decision"}.values())[-decisions:]
+    if dedupe and ask and dec:
+        shown = [_norm(_short(e["text"], NEWEST_ASK if i == len(ask) - 1 else 500)) for i, e in enumerate(ask)]
+        keep = [e for e in dec if not any(_norm(e["text"]) in s for s in shown)]
+        if stats is not None:
+            stats.update(deduped=len(dec) - len(keep), deduped_chars=sum(len(e["text"]) for e in dec if e not in keep))
+        dec = keep
     last_said = [e for e in evs if e["kind"] == "said"][-said:] if said else []
     plan = next((json.loads(e["text"]) for e in reversed(evs) if e["kind"] == "plan"), [])
     files: dict[str, float] = {}
@@ -389,7 +403,8 @@ def summary(evs: list[dict], agent: str, sid: str, root: Path, what: str, max_ch
     text = redact("\n\n".join(parts))
     if len(text) > max_chars:
         if asks > 2 or decisions > 4:            # fewer items first; then cut what is left
-            return summary(evs, agent, sid, root, what, max_chars, max(2, asks - 2), max(4, decisions - 3), 0)
+            return summary(evs, agent, sid, root, what, max_chars, max(2, asks - 2), max(4, decisions - 3), 0,
+                           dedupe, stats)
         text = text[: max_chars - 40].rsplit("\n", 1)[0] + "\n... (trimmed)"
     return text
 
@@ -419,12 +434,19 @@ def for_run(p, cfg: dict, caller: str, lead_session: str | None, cwd: Path) -> t
     if not evs:
         return "", {"source": str(f), "why": "nothing readable in the lead's session", "lead_only_dropped": dropped}
     sid = lead_session or (f.parent.name if caller == "deepseek" else f.stem)
+    dedupe = setting(cfg, "dedupe", False) is True
+    stats: dict = {}
     text = summary(evs, caller, sid, cwd, f"what your lead ({caller}) and its person have been working on, "
-                   f"for background", int(setting(cfg, "max_chars", MAX_CHARS)))
+                   f"for background", int(setting(cfg, "max_chars", MAX_CHARS)), dedupe=dedupe, stats=stats)
     if text and dropped:
         text += (f"\n\n(ccx left out {len(dropped)} clause(s) that only told the lead how to hand this work off or "
                  f"accept it; that was done by giving you this task.)")
-    meta = {"source": str(f), "chars": len(text), "items": sum(1 for e in evs if e["kind"] != "said")}
+    from .leadcost import est_tokens
+    meta = {"source": str(f), "chars": len(text), "est_tokens": int(est_tokens(text)),
+            "items": sum(1 for e in evs if e["kind"] != "said")}
+    if dedupe:                       # B3 M5: what the switch left out, to measure it
+        meta["deduped"] = stats.get("deduped", 0)
+        meta["deduped_chars"] = stats.get("deduped_chars", 0)
     if dropped:
         meta["lead_only_dropped"] = [_short(d, 200) for d in dropped[:20]]
     return text, meta
