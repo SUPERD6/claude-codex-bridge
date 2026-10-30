@@ -9,12 +9,16 @@ on:
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
+permissions:
+  contents: read
 concurrency:
   group: hygiene-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}   # every main commit keeps its result
 jobs:
   personal-data:
     runs-on: ubuntu-latest
+    env:
+      PYTHONUTF8: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
