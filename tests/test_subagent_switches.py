@@ -112,6 +112,8 @@ def test_clean_claude_on_a_full_rung_turns_skills_off(tmp_path, monkeypatch):
     from ccx.agents.claude import claude_invocation
     for k in ("CCX_CLAUDE_NO_SKILLS", "CCX_CLAUDE_SETTING_SOURCES", "CCX_CLAUDE_SETTINGS"):
         monkeypatch.delenv(k, raising=False)
+    # the fake CLI, never the real one: CI machines have no claude on PATH
+    monkeypatch.setenv("CCX_CLAUDE_BIN", str(Path(__file__).parent / "fakes" / "fake_claude.py"))
     kw = dict(model="sonnet", effort="medium", perm=[], cwd=tmp_path, prompt="x", run_dir=tmp_path)
     off, on = claude_invocation(**kw).argv, claude_invocation(**kw, clean=True).argv
     assert "--disable-slash-commands" not in off and "--setting-sources" not in off
