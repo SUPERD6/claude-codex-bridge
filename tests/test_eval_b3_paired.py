@@ -1,0 +1,82 @@
+"""The B3 eval harness's paired evidence (scripts/eval/r5.py): the registered rule's true median, report-only paired
+token statistics, combined results files, snapshot-split pairs, run-level switches, the frozen daily snapshot,
+balanced arm order, kept artifacts of failed units and postflight ledger attribution. Fake rows and homes only."""
+import argparse
+import json
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "eval"))
+import pytest  # noqa: E402
+import r5  # noqa: E402
+
+
+def _row(arm, rd, task, ok, prompt, tag="b3", clean=True, sha="s1"):
+    return {"tag": tag, "round": rd, "task": task, "arm": arm, "ok": ok, "env_clean": clean,
+            "sub_usage": {"prompt": prompt}, "daily": {"sha256": sha}}
+
+
+def _pairs(base_prompts, arm_prompts, arm="ccx2daily_nomem", tag="b3"):
+    rows = []
+    for i, (a, b) in enumerate(zip(base_prompts, arm_prompts)):
+        rows += [_row("ccx2daily", 1, f"t{i}", True, a, tag), _row(arm, 1, f"t{i}", True, b, tag)]
+    return rows
+
+
+def test_registered_median_is_the_true_median():
+    assert r5.b3_median([1, 2, 3, 4]) == 2.5 and r5.b3_median([3, 1, 2]) == 2 and r5.b3_median([]) is None
+    # an even count where the upper middle passes and the true median does not: 4 pairs
+    base = [100, 100, 100, 100]
+    arm = [70, 80, 90, 100]               # true median 85 (= 0.85 * 100: passes); upper middle 90 (would fail)
+    br = r5.b3_rule(_pairs(base, arm), "ccx2daily_nomem")
+    assert br["conditions"]["input"]["value"] == [85.0, 100.0] and br["conditions"]["input"]["result"] == "pass"
+    arm2 = [80, 84, 88, 100]              # true median 86 > 85: fails (upper middle 88 fails too)
+    assert r5.b3_rule(_pairs(base, arm2), "ccx2daily_nomem")["conditions"]["input"]["result"] == "fail"
+
+
+def test_paired_statistics_are_report_only_and_deterministic():
+    base = [100_000] * 10
+    arm = [60_000] * 4 + [130_000] * 6     # median ratio passes the rule, but most pairs are higher and the total too
+    rows = _pairs(base, arm)
+    br = r5.b3_rule(rows, "ccx2daily_nomem")
+    p = br["paired"]
+    assert p["pairs"] == 10 and p["share_lower"] == 0.4 and p["total_ratio"] == 1.02
+    assert p["ratio_median"] == 1.3 and p["ratio_of_medians"] == 1.3
+    assert br["token_effect"] == "not shown"
+    assert r5.b3_rule(rows, "ccx2daily_nomem")["paired"]["ratio_of_medians_ci"] == p["ratio_of_medians_ci"]
+    lo, hi = p["ratio_of_medians_ci"]
+    assert lo <= p["ratio_of_medians"] <= hi and p["boot"] == {"n": r5.B3_BOOT_N, "seed": r5.B3_BOOT_SEED}
+    good = r5.b3_rule(_pairs(base, [70_000] * 8 + [110_000] * 2), "ccx2daily_nomem")
+    assert good["result"] == "pass" and good["paired"]["share_lower"] == 0.8 and good["paired"]["total_ratio"] == 0.78
+    assert good["token_effect"] == "consistent"
+    # the rule passes on the median, but the total is above 0.85: the effect is not shown, the result stays pass
+    mixed = r5.b3_rule(_pairs(base, [80_000] * 6 + [140_000] * 4), "ccx2daily_nomem")
+    assert mixed["result"] == "pass" and mixed["paired"]["total_ratio"] == 1.04 and mixed["token_effect"] == "not shown"
+
+
+def test_pairs_on_different_daily_snapshots_are_left_out():
+    rows = _pairs([100] * 4, [70] * 4)
+    rows[1] = {**rows[1], "daily": {"sha256": "other"}}             # t0's arm unit ran on another snapshot
+    rows[2] = {**rows[2], "daily": {}}                              # a side that does not say: kept
+    br = r5.b3_rule(rows, "ccx2daily_nomem")
+    assert br["units"] == 3 and br["snapshot_mismatch"]["pairs"] == 1
+    assert br["snapshot_mismatch"]["units"][0]["task"] == "t0" and br["paired"]["pairs"] == 3
+    assert "snapshot_mismatch" not in r5.b3_rule(_pairs([100] * 4, [70] * 4), "ccx2daily_nomem")
+
+
+def test_summary_reads_several_results_files_and_tags(tmp_path, capsys):
+    a, b = tmp_path / "a.jsonl", tmp_path / "b.jsonl"
+    half1 = _pairs([100] * 3, [70] * 3, tag="m1h2")
+    half2 = _pairs([100] * 2, [70] * 2, tag="m1r5") + [_row("ccx2daily", 1, "x", True, 1, tag="other")]
+    a.write_text("".join(json.dumps(r) + "\n" for r in half1), encoding="utf-8")
+    b.write_text("".join(json.dumps(r) + "\n" for r in half2), encoding="utf-8")
+    assert r5.main(["summary", "--results", str(a), str(b), str(a), "--tag", "m1h2", "--tag", "m1r5"]) == 0
+    cap = capsys.readouterr()
+    res = json.loads(cap.out)
+    assert res["tags"] == ["m1h2", "m1r5"]
+    br = res["b3_rules"]["ccx2daily vs ccx2daily_nomem"]
+    assert br["units"] == 5 and br["result"] == "pass" and br["token_effect"] == "consistent"
+    assert "b3 rule ccx2daily vs ccx2daily_nomem: pass on 5 pairs" in cap.err
+    ns = argparse.Namespace(results=[str(a)], tag=["m1h2"], taskset="r5")
+    assert len(r5.summary_rows(ns)) == 6
+    assert r5.tagged(half2, "m1r5") == half2[:4]                    # one tag as a string still works

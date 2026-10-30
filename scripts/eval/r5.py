@@ -144,6 +144,7 @@ import os
 import random
 import shutil
 import re
+import statistics
 import subprocess
 import sys
 import tarfile
@@ -2098,18 +2099,86 @@ def tier_rule(rows: list[dict], bal: str = TIER_RULE_ARMS[0], save: str = TIER_R
 
 B3_BASE = "ccx2daily"
 B3_INPUT_DROP = 0.15          # the sub-agent's median prompt tokens per unit must be at least this much lower
+# report-only paired token statistics (b3_paired); none of them changes the registered rule's result
+B3_TOTAL_RATIO = 0.85         # token_effect "consistent" needs the arm's total prompt <= this share of the base's
+B3_SHARE_LOWER = 0.6          # ... and the arm's prompt lower than the base's in at least this share of pairs
+B3_BOOT_N = 2000              # pair-bootstrap resamples of the ratio of medians
+B3_BOOT_SEED = 30             # fixed: the same rows give the same interval
+
+
+def b3_median(xs) -> float | None:
+    """The registered rule's median: the true median (statistics.median, the mean of the two middle values for an
+    even count), not the upper middle the wall_med fields take."""
+    xs = list(xs)
+    return statistics.median(xs) if xs else None
+
+
+def snapshot_of(r: dict) -> str | None:
+    """The daily snapshot a row's unit ran on (daily.sha256 over the names and bytes of its copied setup)."""
+    return (r.get("daily") or {}).get("sha256") if isinstance(r.get("daily"), dict) else None
+
+
+def split_snapshots(ps: list[tuple[dict, dict]]) -> tuple[list[tuple[dict, dict]], list[dict]]:
+    """(pairs whose two units ran on the same daily snapshot, or where a side does not say, and the pairs whose
+    snapshots differ, by unit). A pair on two snapshots compares two different setups of the person's, not a switch:
+    it is left out of the rule and of the paired statistics, both units together (b3_rule says how many)."""
+    keep, split = [], []
+    for x, y in ps:
+        a, b = snapshot_of(x), snapshot_of(y)
+        if a and b and a != b:
+            split.append({"tag": x.get("tag"), "round": x.get("round"), "task": x.get("task"),
+                          "base": a[:12], "arm": b[:12]})
+        else:
+            keep.append((x, y))
+    return keep, split
+
+
+def b3_paired(pa: list[float], pb: list[float], n: int = B3_BOOT_N, seed: int = B3_BOOT_SEED) -> dict:
+    """Report-only paired statistics of the sub-agent prompt tokens (pa: the base's per pair, pb: the arm's, the same
+    order): the share of pairs where the arm's is lower, the median of the per-pair ratio arm / base (pairs with a
+    base of 0 left out), the total ratio, and a pair-bootstrap 95% CI of the ratio of medians (resampling pairs,
+    random.Random(seed), n resamples; percentile interval)."""
+    k = len(pa)
+    if not k:
+        return {"pairs": 0, "share_lower": None, "ratio_median": None, "total_ratio": None, "ratio_of_medians": None,
+                "ratio_of_medians_ci": None}
+    ratios = [b / a for a, b in zip(pa, pb) if a]
+    ma, mb = b3_median(pa), b3_median(pb)
+    rom = (mb / ma) if ma else None
+    ci = None
+    if k >= 2:
+        rnd = random.Random(seed)
+        vals = []
+        for _ in range(n):
+            idx = [rnd.randrange(k) for _ in range(k)]
+            a = b3_median([pa[i] for i in idx])
+            if a:
+                vals.append(b3_median([pb[i] for i in idx]) / a)
+        vals.sort()
+        if vals:
+            ci = [round(vals[int(0.025 * len(vals))], 4), round(vals[int(0.975 * len(vals)) - 1], 4)]
+    return {"pairs": k, "share_lower": round(sum(b < a for a, b in zip(pa, pb)) / k, 4),
+            "ratio_median": round(b3_median(ratios), 4) if ratios else None,
+            "total_ratio": round(sum(pb) / sum(pa), 4) if sum(pa) else None,
+            "ratio_of_medians": round(rom, 4) if rom is not None else None, "ratio_of_medians_ci": ci,
+            "boot": {"n": n, "seed": seed}}
 
 
 def b3_rule(rows: list[dict], arm: str, base: str = B3_BASE) -> dict | None:
     """The B3 decision rule fixed before any run (docs/research/2026-10-30-b3-lean-switches-plan.md), on the clean
     units both arms share: a switch's default changes only if right_B >= right_A (right not lower), at most 2 lost pairs (A right,
     B wrong), no task B got wrong in every round while A got it right at least once, and the sub-agent's median
-    prompt tokens per unit (sub_usage.prompt: input + cached of ccx's work runs) at least B3_INPUT_DROP lower. Any
-    unclean pair lost on one side only (lost_pairs note), or a missing token count, makes it Unknown. Result pass /
-    fail / unknown; None unless both arms have clean rows."""
+    prompt tokens per unit (sub_usage.prompt: input + cached of ccx's work runs; the true median, b3_median) at least
+    B3_INPUT_DROP lower. Any unclean pair lost on one side only (lost_pairs note), or a missing token count, makes it
+    Unknown. Result pass / fail / unknown; None unless both arms have clean rows.
+
+    Report-only, next to the rule (never changing `result`): `paired` (b3_paired) and `token_effect`: "consistent"
+    only when the rule's token condition passes, the total ratio is <= B3_TOTAL_RATIO and the arm's prompt is lower in
+    at least B3_SHARE_LOWER of the pairs; else "not shown". Pairs whose units ran on different daily snapshots are
+    left out of everything (`snapshot_mismatch` lists them)."""
     every = [r for r in rows if "error" not in r]
     clean, excluded = clean_rows(every)
-    ps = pair_units(clean, base, arm)
+    ps, split = split_snapshots(pair_units(clean, base, arm))
     if not ps:
         return None
     a_ok, b_ok = sum(bool(x.get("ok")) for x, _ in ps), sum(bool(y.get("ok")) for _, y in ps)
@@ -2124,7 +2193,7 @@ def b3_rule(rows: list[dict], arm: str, base: str = B3_BASE) -> dict | None:
     pa = [(x.get("sub_usage") or {}).get("prompt") for x, _ in ps]
     pb = [(y.get("sub_usage") or {}).get("prompt") for _, y in ps]
     have = None not in pa and None not in pb
-    ma, mb = (_med(pa), _med(pb)) if have else (None, None)
+    ma, mb = (b3_median(pa), b3_median(pb)) if have else (None, None)
     pf = lambda v: "pass" if v else "fail"  # noqa: E731
     cond = {"right": {"rule": f"{arm} right >= {base} right", "value": [b_ok, a_ok], "result": pf(b_ok >= a_ok)},
             "lost_pairs": {"rule": f"at most 2 pairs {base} right, {arm} wrong", "value": lost,
@@ -2142,6 +2211,16 @@ def b3_rule(rows: list[dict], arm: str, base: str = B3_BASE) -> dict | None:
         out["exclusion_note"] = lp["note"]
         if out["result"] == "pass":
             out["result"] = "unknown"
+    if split:
+        out["snapshot_mismatch"] = {"pairs": len(split), "units": split,
+                                    "note": "left out of the rule and of the paired statistics: the two units ran "
+                                            "on different snapshots of the person's daily setup"}
+    paired = (b3_paired([float(v) for v in pa], [float(v) for v in pb]) if have else
+              {"pairs": len(ps), "note": "a token count is missing: no paired statistics"})
+    out["paired"] = paired
+    consistent = (cond["input"]["result"] == "pass" and paired.get("total_ratio") is not None
+                  and paired["total_ratio"] <= B3_TOTAL_RATIO and (paired.get("share_lower") or 0) >= B3_SHARE_LOWER)
+    out["token_effect"] = "consistent" if consistent else "not shown"
     return out
 
 
@@ -2156,6 +2235,25 @@ def b3_rules(rows: list[dict]) -> dict:
             br = b3_rule(rows, arm)
             if br:
                 out[f"{B3_BASE} vs {arm}"] = br
+    return out
+
+
+def b3_rule_lines(name: str, br: dict) -> list[str]:
+    """One B3 rule as plain lines (cmd_summary prints them after the JSON, on stderr)."""
+    c = br["conditions"]
+    p = br.get("paired") or {}
+    out = [f"b3 rule {name}: {br['result']} on {br['units']} pairs ({br['tasks']} tasks); right {c['right']['value']}, "
+           f"lost {c['lost_pairs']['value']}, always lost {c['always_lost']['value'] or 'none'}, median prompt "
+           f"{c['input']['value']} ({c['input']['result']})"]
+    if p.get("pairs"):
+        out.append(f"  paired (report only): lower in {p.get('share_lower')} of pairs, per-pair ratio median "
+                   f"{p.get('ratio_median')}, total ratio {p.get('total_ratio')}, ratio of medians "
+                   f"{p.get('ratio_of_medians')} 95% CI {p.get('ratio_of_medians_ci')}; token effect "
+                   f"{br['token_effect']}")
+    if br.get("snapshot_mismatch"):
+        out.append(f"  {br['snapshot_mismatch']['pairs']} pairs on different daily snapshots left out")
+    if br.get("exclusion_note"):
+        out.append(f"  {br['exclusion_note']}")
     return out
 
 
@@ -2338,9 +2436,27 @@ def summarize(rows: list[dict], include_unclean: bool = False) -> dict:
     return res
 
 
-def tagged(rows: list[dict], tag: str | None) -> list[dict]:
-    """Rows of one tag (round), so rounds run under different conditions are never counted together."""
-    return [r for r in rows if not tag or r.get("tag") == tag]
+def tagged(rows: list[dict], tag) -> list[dict]:
+    """Rows of one tag (round), so rounds run under different conditions are never counted together; a list of tags
+    keeps the rows of any of them (summary --tag a --tag b: two halves of one registered measurement)."""
+    if not tag:
+        return list(rows)
+    tags = {tag} if isinstance(tag, str) else set(tag)
+    return [r for r in rows if r.get("tag") in tags]
+
+
+def summary_rows(a) -> list[dict]:
+    """The rows a summary reads: --results files in the order given (default: the task set's results file), then
+    --tag. A row read twice (the same file named twice) is counted once."""
+    files = [Path(f) for f in (getattr(a, "results", None) or [])] or [results_file(a.taskset)]
+    rows, seen = [], set()
+    for f in files:
+        for r in read_jsonl(f):
+            key = json.dumps(r, sort_keys=True, ensure_ascii=False)
+            if key not in seen:
+                seen.add(key)
+                rows.append(r)
+    return tagged(rows, getattr(a, "tag", None))
 
 
 def excluded_line(res: dict) -> str | None:
@@ -2356,7 +2472,7 @@ def excluded_line(res: dict) -> str | None:
 
 
 def cmd_summary(a) -> int:
-    res = summarize(tagged(read_jsonl(results_file(a.taskset)), a.tag), a.include_unclean)
+    res = summarize(summary_rows(a), a.include_unclean)
     print(json.dumps(res, ensure_ascii=False, indent=1))
     line = excluded_line(res)
     if line:
@@ -2365,6 +2481,9 @@ def cmd_summary(a) -> int:
         for line in tier_rule_lines(tr):
             print(line if name == "balanced vs save" else line.replace("tier rule", f"tier rule {name}", 1),
                   file=sys.stderr)
+    for name, br in (res.get("b3_rules") or {}).items():
+        for line in b3_rule_lines(name, br):
+            print(line, file=sys.stderr)
     return 0
 
 
@@ -2376,8 +2495,9 @@ def cmd_export(a) -> int:
             "env_clean", "fingerprint", "lead_model", "lead_effort", "lead_pick", "lead_b", "lead_band", "phases", "tier", "tier_plan", "ref_size",
             "actual_mode", "misband", "misband_overall", "followed_plan", "ccx_check_passed", "may_be_wrong",
             "ccx_routes", "bookkeeping_error", "lead_usage", "timeline", "skill_used", "skills_used",
-            "namecheck_mode", "ccx_namecheck", "ccx_check_reason")
-    rows = tagged(read_jsonl(results_file(a.taskset)), a.tag)
+            "namecheck_mode", "ccx_namecheck", "ccx_check_reason", "sub_usage", "switches_applied",
+            "hidden_failed", "artifacts", "arm_order", "arm_pos")
+    rows = summary_rows(a)
     data = {"summary": summarize(rows, a.include_unclean),
             "rows": [r3.scrub({**{k: r[k] for k in keep if k in r},
                                **({"audit": {"problems": r["audit"].get("problems"),
@@ -2436,14 +2556,18 @@ def parser() -> argparse.ArgumentParser:
     daily_options(dc)
     dc.set_defaults(fn=cmd_daily_check)
     s = sub.add_parser("summary")
-    s.add_argument("--tag", default=None, help="only this round's rows (default: all; the tags are listed)")
+    s.add_argument("--tag", action="append", default=None, help="only this round's rows (default: all; the tags are "
+                   "listed); give it again to keep several tags (two halves of one measurement)")
+    s.add_argument("--results", nargs="+", default=None, help="results files to read together (default: the task "
+                   "set's own); a row in two of them is counted once")
     s.add_argument("--taskset", choices=sorted(TASKSETS), default="r5")
     s.add_argument("--include-unclean", action="store_true", help="count rows that are not env_clean too (the "
                    "tier rule still takes clean rows only)")
     s.set_defaults(fn=cmd_summary)
     e = sub.add_parser("export")
     e.add_argument("dest")
-    e.add_argument("--tag", default=None)
+    e.add_argument("--tag", action="append", default=None)
+    e.add_argument("--results", nargs="+", default=None)
     e.add_argument("--taskset", choices=sorted(TASKSETS), default="r5")
     e.add_argument("--include-unclean", action="store_true")
     e.set_defaults(fn=cmd_export)
