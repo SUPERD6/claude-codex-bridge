@@ -35,8 +35,8 @@ Final message = the JSON result (schema enforced). summary <= 120 words, facts o
 """
 
 
-# [subagent] clean (experimental, off until measured): a clean sub-agent loses the person's own rules, among them the
-# language they read results in; this one line keeps that part (the B3 plan, item 4).
+# [subagent] clean (experimental, off until measured): a clean Claude sub-agent loses the person's user settings (their
+# `language` among them; a Codex one keeps CODEX_HOME's AGENTS.md); this one line keeps the language part (B3 item 4).
 CLEAN_LANG = " Write summary and open_questions in the language the task above is written in."
 
 

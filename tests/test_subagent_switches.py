@@ -19,7 +19,7 @@ from ccx.prompts import CLEAN_LANG  # noqa: E402
 
 GOLDEN = json.loads((Path(__file__).resolve().parent / "data" / "b3_golden.json").read_text(encoding="utf-8"))
 CASES = {name: (to, mode, par) for name, to, mode, par in B.CASES}
-CLEAN_HOME = "<TMP>/hub/ccx/agent-home"
+CLEAN_HOME = "<TMP>/hub/ccx/agent-home/<RUN>"        # one empty HOME per run
 
 
 def cap(name: str, **kw) -> dict:
@@ -115,8 +115,25 @@ def test_clean_claude_on_a_full_rung_turns_skills_off(tmp_path, monkeypatch):
     kw = dict(model="sonnet", effort="medium", perm=[], cwd=tmp_path, prompt="x", run_dir=tmp_path)
     off, on = claude_invocation(**kw).argv, claude_invocation(**kw, clean=True).argv
     assert "--disable-slash-commands" not in off and "--setting-sources" not in off
-    assert without(without(without(on, ["--disable-slash-commands"]), ["--strict-mcp-config"]),
-                   ["--setting-sources", "project,local"]) == off
+    # MCP is left to the run (claude_slim_flags): clean adds no --strict-mcp-config of its own
+    assert without(without(on, ["--disable-slash-commands"]), ["--setting-sources", "project,local"]) == off
+
+
+def test_clean_keeps_mcp_a_run_asked_for():
+    full = {"model": "sonnet", "effort": "medium"}                      # a full rung (a lean one never has MCP)
+    asked = cap("claude-write", subagent={"clean": True}, req_kw={**full, "mcp": True})
+    assert "--strict-mcp-config" not in asked["argv"] and "--setting-sources" in asked["argv"]
+    default = cap("claude-write", subagent={"clean": True}, req_kw=full)
+    assert default["argv"].count("--strict-mcp-config") == 1          # not asked: off, as without clean
+
+
+def test_a_fork_run_keeps_the_leads_start_on_every_attempt():
+    kw = dict(req_kw={"fork_lead": "lead-1", "escalate": True},
+              results=[{"status": "blocked", "summary": "stuck"}, {"status": "done", "summary": "ok"}])
+    got, off = cap("claude-write", subagent={"clean": True}, **kw), cap("claude-write", **kw)
+    assert len(got["attempts_argv"]) == 2 and "--fork-session" in got["attempts_argv"][0]
+    assert got["attempts_argv"] == off["attempts_argv"] and got["attempts_prompt"] == off["attempts_prompt"]
+    assert not any("--setting-sources" in a for a in got["attempts_argv"])
 
 
 def test_clean_setting_sources_win_over_an_evaluation_daily_setting():
@@ -133,8 +150,12 @@ def test_clean_home_keeps_the_logins_where_they_were(tmp_path, monkeypatch):
     monkeypatch.setenv("USERPROFILE", str(home))
     for k in ("CODEX_HOME", "DSH_HOME", "GIT_CONFIG_GLOBAL", "CCX_AGENT_HOME"):
         monkeypatch.delenv(k, raising=False)
+    (home / ".cargo").mkdir()
+    for k in ("RUSTUP_HOME", "CARGO_HOME", "PYTHONUSERBASE"):
+        monkeypatch.delenv(k, raising=False)
     env = delegate._child_env("codex", "r1", {}, clean_home=tmp_path / "empty")
     assert env["HOME"] == env["USERPROFILE"] == str(tmp_path / "empty")
+    assert env["CARGO_HOME"] == str(home / ".cargo") and "RUSTUP_HOME" not in env    # only what exists is pinned
     assert env["CODEX_HOME"] == str(home / ".codex") and env["DSH_HOME"] == str(home / ".dsh")
     assert env["GIT_CONFIG_GLOBAL"] == str(home / ".gitconfig")
     monkeypatch.setenv("CCX_AGENT_HOME", str(tmp_path / "eval-home"))       # clean wins over an eval's own home
@@ -167,3 +188,18 @@ def test_shipped_config_has_every_switch_at_its_default():
     from ccx.config import load_config
     assert subagent_switches(load_config()) == SUBAGENT_SWITCHES
     assert SUBAGENT_SWITCHES == {"codex_memories": True, "clean": False, "codex_lean_tools": False}
+
+
+def test_clean_home_is_one_per_run_and_starts_empty(tmp_path):
+    from ccx.config import Paths
+    p = Paths(tmp_path / "hub")
+    d = delegate.clean_home(p, "run-a")
+    (d / "left-over").write_text("x", encoding="utf-8")
+    assert not any(delegate.clean_home(p, "run-a").iterdir())             # the same run again: empty
+    assert delegate.clean_home(p, "run-b") != d and d.exists()            # another run: its own, a fresh one kept
+    import os
+    import time
+    old = time.time() - delegate.CLEAN_HOME_KEEP_S - 60
+    os.utime(d, (old, old))
+    delegate.clean_home(p, "run-c")
+    assert not d.exists()                                                 # older than a day: removed

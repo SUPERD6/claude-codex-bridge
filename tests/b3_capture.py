@@ -35,8 +35,10 @@ def _norm(text: str, subs: list[tuple[str, str]]) -> str:
 
 
 def capture(to: str, mode: str, parallel: bool = False, subagent: dict | None = None,
-            env_extra: dict | None = None) -> dict:
-    """One sub-agent start in a throwaway hub and home. `subagent`: a [subagent] table for the hub's tiers.toml."""
+            env_extra: dict | None = None, req_kw: dict | None = None, results: list[dict] | None = None) -> dict:
+    """One sub-agent start in a throwaway hub and home. `subagent`: a [subagent] table for the hub's tiers.toml.
+    `req_kw`: more Request fields; `results`: what each attempt returns in turn (default one "done"); every attempt's
+    argv is in `attempts_argv`."""
     from ccx import delegate
     from ccx.agents import codex as codex_agent
     from ccx.config import RESULT_SCHEMA, Paths
@@ -65,15 +67,19 @@ def capture(to: str, mode: str, parallel: bool = False, subagent: dict | None = 
         cwd = tmp / "work"
         cwd.mkdir()
 
+        todo = list(results or [])
+
         def fake_execute(cli, inv, timeout, env, **_kw):
             seen.append({"argv": list(inv.argv), "prompt": inv.stdin,
                          "env": {k: env.get(k) for k in ENV_KEYS}})
-            return (Outcome(ok=True, kind="ok", result={"status": "done", "summary": "ok"}, session_id="s-1"), "", "")
+            res = todo.pop(0) if todo else {"status": "done", "summary": "ok"}
+            return (Outcome(ok=True, kind="ok", result=res, session_id="s-1"), "", "")
         delegate.execute = fake_execute
         model, effort = MODELS[to]
-        req = delegate.Request(to=to, brief="Add a docstring to a.py.", mode=mode, cwd=cwd, caller="test",
-                               model=model, effort=effort, review="off", escalate=False, fallback=False,
-                               parallel=parallel or None, share_context="off")
+        kw = {"to": to, "brief": "Add a docstring to a.py.", "mode": mode, "cwd": cwd, "caller": "test",
+              "model": model, "effort": effort, "review": "off", "escalate": False, "fallback": False,
+              "parallel": parallel or None, "share_context": "off", **(req_kw or {})}
+        req = delegate.Request(**kw)
         rec = delegate.run(req, p)
         first = seen[0]
         bin_len = 2
@@ -82,6 +88,8 @@ def capture(to: str, mode: str, parallel: bool = False, subagent: dict | None = 
         prompt = first["prompt"].replace(codex_agent.WINDOWS_SHELL, "")
         return {"argv": argv, "prompt": _norm(prompt, subs),
                 "env": {k: (_norm(v, subs) if isinstance(v, str) else v) for k, v in first["env"].items()},
+                "attempts_argv": [[_norm(x, subs) for x in a["argv"][bin_len:]] for a in seen],
+                "attempts_prompt": [_norm(a["prompt"], subs) for a in seen],
                 "record": {"subagent_switches": rec.get("subagent_switches"),
                            "ledger": [json.loads(x).get("subagent_switches") for x in
                                       p.ledger.read_text(encoding="utf-8").splitlines() if x.strip()]

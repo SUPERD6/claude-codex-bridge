@@ -56,9 +56,10 @@ def claude_invocation(*, model: str, effort: str, perm: list[str], cwd: Path, pr
     if lean and "--strict-mcp-config" not in argv:
         argv += ["--strict-mcp-config"]
     # opt-in (an evaluation's clean room): no skills or slash commands and no MCP servers, whatever the effort
-    # clean ([subagent] clean = true, experimental, off until measured): the same switches for a normal run
-    no_skills = clean or os.environ.get("CCX_CLAUDE_NO_SKILLS") == "1"
-    if (lean or no_skills) and "--disable-slash-commands" not in argv:
+    no_skills = os.environ.get("CCX_CLAUDE_NO_SKILLS") == "1"
+    # clean ([subagent] clean = true, experimental, off until measured): no skills or slash commands for a normal run
+    # too; MCP stays as the run asked (--mcp / [claude_subagent] mcp, claude_slim_flags decides --strict-mcp-config)
+    if (lean or no_skills or clean) and "--disable-slash-commands" not in argv:
         argv += ["--disable-slash-commands"]
     if no_skills and "--strict-mcp-config" not in argv:
         argv += ["--strict-mcp-config"]
