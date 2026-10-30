@@ -541,7 +541,7 @@ def render_html(s: dict) -> str:
     return f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>ccx Usage Dashboard</title>
 <style>{CSS}</style></head><body><div class="viz-root"><div class="wrap">
-<h1>Token and quota usage</h1><p class="sub">Claude Code ⇄ Codex (⇄ Gemini) via ccx · generated {s['generated']} ·
+<h1>Token and quota usage</h1><p class="sub">Claude Code ⇄ Codex ⇄ DeepSeek via ccx · generated {s['generated']} ·
 last {s['days']} days · amounts are API-equivalent USD (AE$), not your subscription bill</p>
 <div class="tiles">{tiles_html}</div>
 <div class="card"><h2>Spend per day, by who spent it</h2><div class="legend">{legend1}</div><div class="chart">{_daily_chart(s['days_series'])}</div>
