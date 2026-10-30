@@ -10,12 +10,20 @@ requests per run, and the input of one request (its prefix). m1h2 (2026-10-30) s
 Sources, both written by the tools themselves (checked 2026-10-30 on Claude Code 2.1.309 and codex-cli 0.164.0):
 - Claude: the stream-json stdout ccx keeps as runs/<id>/events.N.log. Each request is one `assistant` message
   whose `message.usage` has input_tokens + cache_creation_input_tokens + cache_read_input_tokens; a message spans
-  several lines (one per content block), so it is counted once by message.id; sidechain (Agent tool) messages are
-  the sub-agent's own helpers, not this conversation's requests.
+  several lines (one per content block), so it is counted once by message.id. The stream marks an Agent-tool
+  helper's message with a non-null `parent_tool_use_id` (a transcript file uses `isSidechain`): those are the
+  sub-agent's own helpers, not this conversation's requests, and are left out, as Codex children are (they write
+  their own rollout files). So `requests` counts the run's own conversation only, while its token totals include
+  children: two columns, two scopes, said on the page.
 - Codex: `exec --json` prints only the turn's total, so the session's rollout file is read: codex-cli 0.164 writes
   a `token_usage_record` per request (payload.usage.input_tokens, cached part inside), with a timestamp, so one
   attempt's records are those since it began (recover._codex_attempt reads the same lines after a kill).
-A run that cannot be read (older record, no session id, file gone) records nothing: no guess.
+A run that cannot be read (older record, no session id, file gone, gemini / dsh) records nothing: no guess.
+
+Which number to compare (review of 2026-10-30): the per-request inputs grow through a run (each request carries the
+one before), so their median moves with the number of rounds, the very confounder m1h2 hit. The ruler is therefore
+`first_input` (the first request of a fresh session: system prompt + tools + instructions + the task, what a leaner
+start has to lower), `requests`, and the mean input per request; the median is kept per attempt for the record.
 """
 from __future__ import annotations
 
@@ -37,7 +45,7 @@ def claude_inputs(lines) -> list[int]:
             e = json.loads(line)
         except ValueError:
             continue
-        if e.get("type") != "assistant" or e.get("isSidechain"):
+        if e.get("type") != "assistant" or e.get("isSidechain") or e.get("parent_tool_use_id"):
             continue
         m = e.get("message") or {}
         u = m.get("usage")
@@ -91,18 +99,39 @@ def attempt_inputs(cli: str, stdout: str, sid: str | None, since: float, home: P
     return []
 
 
-def fields(inputs: list[int]) -> dict:
-    """What an attempt records: requests, the median input of one (prefix_tokens), the inputs themselves (capped)."""
+def fields(inputs: list[int], fresh_session: bool = True) -> dict:
+    """What an attempt records: requests, prefix_tokens (median input of one), input_per_request (mean), the inputs
+    themselves (capped), and first_input when the attempt started its session (a resumed session's first request
+    already carries history, so it is no start-up measure)."""
     if not inputs:
         return {}
-    return {"requests": len(inputs), "prefix_tokens": int(statistics.median(inputs)), "request_inputs": inputs[:KEEP]}
+    out = {"requests": len(inputs), "prefix_tokens": int(statistics.median(inputs)),
+           "input_per_request": int(sum(inputs) / len(inputs)), "request_inputs": inputs[:KEEP]}
+    if fresh_session:
+        out["first_input"] = int(inputs[0])
+    return out
 
 
 def run_fields(attempts: list[dict]) -> dict:
-    """The ledger row's requests (all attempts) and prefix_tokens (median over every request); {} when no attempt
-    recorded them."""
-    reqs = sum(int(a.get("requests") or 0) for a in attempts)
+    """The ledger row's numbers: requests (all attempts), prefix_tokens (mean input per request over every request,
+    weighted by each attempt's count), first_input (the first attempt that started a session). {} when no attempt
+    recorded them; a malformed attempt is skipped, never an error (ledger.append must not fail a run)."""
+    reqs, total, first = 0, 0, None
+    for a in attempts:
+        try:
+            n = int(a.get("requests") or 0)
+            if n <= 0:
+                continue
+            per = a.get("input_per_request")
+            if per is None:
+                ins = [int(x) for x in a.get("request_inputs") or []]
+                per = sum(ins) / len(ins) if ins else a.get("prefix_tokens")
+            reqs += n
+            total += n * int(per or 0)
+            if first is None and a.get("first_input") is not None:
+                first = int(a["first_input"])
+        except (TypeError, ValueError):
+            continue
     if not reqs:
         return {}
-    inputs = [int(x) for a in attempts for x in (a.get("request_inputs") or [])]
-    return {"requests": reqs, "prefix_tokens": int(statistics.median(inputs)) if inputs else None}
+    return {"requests": reqs, "prefix_tokens": int(total / reqs) if total else None, "first_input": first}

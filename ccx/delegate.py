@@ -774,7 +774,7 @@ def run(req: Request, p: Paths) -> dict:
         try:                           # how many requests, how big each one's input (ccx/reqstats.py): display only
             from . import reqstats
             record["attempts"][-1].update(reqstats.fields(reqstats.attempt_inputs(cli, so, oc.session_id or session,
-                                                                                   t0)))
+                                                                                   t0), fresh_session=not resume_id))
         except Exception:  # noqa: BLE001 — a ruler, never a reason to fail the run
             pass
         record["session_id"] = session

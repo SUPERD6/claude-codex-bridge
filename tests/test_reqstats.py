@@ -15,8 +15,9 @@ from test_ccx import Env  # noqa: E402
 from test_ui import put_run  # noqa: E402
 
 
-def _asst(mid, fresh, write, read, side=False, model="claude-sonnet-5-5"):
-    return json.dumps({"type": "assistant", "isSidechain": side, "message": {
+def _asst(mid, fresh, write, read, side=False, model="claude-sonnet-5-5", parent=None):
+    # the stream (stream-json stdout) marks an Agent-tool helper with parent_tool_use_id; a transcript, isSidechain
+    return json.dumps({"type": "assistant", "isSidechain": side, "parent_tool_use_id": parent, "message": {
         "id": mid, "model": model, "usage": {"input_tokens": fresh, "cache_creation_input_tokens": write,
                                              "cache_read_input_tokens": read, "output_tokens": 5}}})
 
@@ -26,12 +27,15 @@ def test_claude_requests_are_messages_once_each_main_conversation_only():
              _asst("m1", 2, 15693, 0), _asst("m1", 2, 15693, 0),            # one reply, two content blocks
              _asst("m2", 2, 522, 15693),
              _asst("m3", 2, 177, 16215), _asst("m3", 2, 177, 16215),
-             _asst("h1", 9, 9, 9, side=True),                                 # an Agent-tool helper: not counted
+             _asst("h1", 9, 9, 9, side=True),                                 # transcript-style helper
+             _asst("h2", 10924, 0, 0, parent="toolu_01abc"),                  # stream-style helper (real run b8a0)
              _asst("x", 1, 1, 1, model="<synthetic>"),                        # Claude Code's own synthetic line
              "not json at all", json.dumps({"type": "result", "usage": {"input_tokens": 2}})]
     got = reqstats.claude_inputs(lines)
     assert got == [15695, 16217, 16394]
-    assert reqstats.fields(got) == {"requests": 3, "prefix_tokens": 16217, "request_inputs": got}
+    assert reqstats.fields(got) == {"requests": 3, "prefix_tokens": 16217, "input_per_request": 16102,
+                                    "request_inputs": got, "first_input": 15695}
+    assert "first_input" not in reqstats.fields(got, fresh_session=False)    # a resumed session carries history
     assert reqstats.fields([]) == {}
 
 
@@ -61,12 +65,15 @@ def test_codex_requests_come_from_the_rollout_since_the_attempt_began(tmp_path):
     assert reqstats.attempt_inputs("gemini", "anything", "g", t0) == []
 
 
-def test_run_fields_sum_requests_and_take_the_median_over_every_request():
-    atts = [{"requests": 3, "prefix_tokens": 20, "request_inputs": [10, 20, 30]},
+def test_run_fields_sum_requests_and_weigh_the_mean_input_by_requests():
+    atts = [{"requests": 3, "input_per_request": 20, "first_input": 10, "request_inputs": [10, 20, 30]},
             {"usage": {}},                                                  # an attempt that recorded nothing
-            {"requests": 2, "prefix_tokens": 40, "request_inputs": [40, 50]}]
-    assert reqstats.run_fields(atts) == {"requests": 5, "prefix_tokens": 30}
+            {"requests": 2, "request_inputs": [40, 50]}]                    # no mean stored: computed from the list
+    assert reqstats.run_fields(atts) == {"requests": 5, "prefix_tokens": 30, "first_input": 10}
     assert reqstats.run_fields([{"usage": {}}]) == {}
+    # malformed attempts are skipped, never an error: ledger.append must not fail a run
+    bad = [{"requests": "x"}, {"requests": 2, "request_inputs": [None, 3]}, {"requests": 1, "input_per_request": 7}]
+    assert reqstats.run_fields(bad) == {"requests": 1, "prefix_tokens": 7, "first_input": None}
 
 
 class TestLedgerAndPage(Env):
@@ -91,23 +98,25 @@ class TestLedgerAndPage(Env):
         self._run("rCl", "claude", [{"agent": "claude", **base, "rung": "claude:sonnet:medium", "model": "sonnet",
                                      "requests": 5, "prefix_tokens": 14000, "request_inputs": [14000] * 5}])
         rows = {r["run_id"]: r for r in ledger.rows(self.p) if not r.get("type")}
-        assert (rows["rNew"]["requests"], rows["rNew"]["prefix_tokens"]) == (4, 18400)
+        assert (rows["rNew"]["requests"], rows["rNew"]["prefix_tokens"]) == (4, 18700)     # mean of the four
         assert "requests" not in rows["rOld"] and "prefix_tokens" not in rows["rOld"]
         d = tokenflow.Flow(self.p).tokens(ledger.rows(self.p), period="all")
         items = {r["run_id"]: r for g in d["tasks"] for r in g["runs"]}
-        assert (items["rNew"]["requests"], items["rNew"]["prefix_tokens"]) == (4, 18400)
+        assert (items["rNew"]["requests"], items["rNew"]["prefix_tokens"]) == (4, 18700)
         assert (items["rOld"]["requests"], items["rOld"]["prefix_tokens"]) == (None, None)
         cx = d["totals"]["by_agent"]["codex"]
-        # over the codex runs that recorded it: (4 + 2) / 2 requests a run; the median of the runs' medians
-        assert (cx["measured_runs"], cx["requests_per_run"], cx["prefix_median"]) == (2, 3.0, 19200)
+        # over the codex runs that recorded it: (4 + 2) / 2 requests a run; the median of the runs' means
+        assert (cx["measured_runs"], cx["requests_per_run"], cx["prefix_median"]) == (2, 3.0, 19350)
         assert "requests_per_run" not in d["totals"]["by_agent"].get("?", {})
         assert (d["totals"]["measured_runs"], d["totals"]["requests_per_run"]) == (3, 3.7)
         # the page's strings for both lines exist in both languages (app.js uses t("tok_req") / t("tok_req_avg"))
         s = json.loads((Path(tokenflow.__file__).resolve().parent / "ui_static" / "strings.json").read_text(
             encoding="utf-8"))
         for lg in ("zh", "en"):
-            assert "{n}" in s[lg]["tok_req"] and "{k}" in s[lg]["tok_req"]
-            assert all(x in s[lg]["tok_req_avg"] for x in ("{n}", "{k}", "{m}"))
+            assert "{n}" in s[lg]["tok_req"] and "{f}" in s[lg]["tok_req_first"] and "{k}" in s[lg]["tok_req_each"]
+            assert all(x in s[lg]["tok_req_avg"] for x in ("{n}", "{m}"))
+            assert "{f}" in s[lg]["tok_req_first_med"] and "{k}" in s[lg]["tok_req_each_med"]
+        assert "{n}" not in s["en"]["tok_req_1"]
 
     def test_nothing_measured_adds_no_keys(self):
         self._run("rOld", "codex", [{"agent": "codex", "rung": "codex:gpt-6-luna:low", "model": "gpt-6-luna",
@@ -126,9 +135,9 @@ class TestEndToEnd(Env):
         out = json.loads(r.stdout)
         rec = json.loads((self.hub / "ccx" / "runs" / out["run_id"] / "run.json").read_text(encoding="utf-8"))
         a = rec["attempts"][-1]
-        assert a["requests"] >= 1 and a["prefix_tokens"] == 19245 and a["request_inputs"][0] == 19245
+        assert a["requests"] >= 1 and a["prefix_tokens"] == 19245 and a["first_input"] == 19245
         row = next(x for x in ledger.rows(Paths(self.hub)) if x.get("run_id") == out["run_id"])
-        assert (row["requests"], row["prefix_tokens"]) == (a["requests"], 19245)
+        assert (row["requests"], row["prefix_tokens"], row["first_input"]) == (a["requests"], 19245, 19245)
 
     def test_a_run_without_records_adds_nothing(self):
         r = self.ccx("run", "--from", "claude", "--to", "codex", "--tier", "T1", "--mode", "read", "x")

@@ -670,7 +670,7 @@
   function money(x) { return x == null ? "–" : usd(+x); }
   function runRows(r) {
     const tag = r.review ? ` <span class="cost">${t("tok_review")}</span>` : "";
-    let h = `<tr><td><span class="mono">${esc(r.run_id)}</span>${tag}<br>${who(r.agent, r.model)} <span class="cost">${esc(r.status)}${r.ts ? " · " + clock(r.ts) : ""}${r.requests ? " · " + t("tok_req", {n: r.requests, k: tok(r.prefix_tokens)}) : ""}</span>`
+    let h = `<tr><td><span class="mono">${esc(r.run_id)}</span>${tag}<br>${who(r.agent, r.model)} <span class="cost">${esc(r.status)}${r.ts ? " · " + clock(r.ts) : ""}${r.requests ? " · " + t("tok_req", {n: r.requests}) + (r.first_input ? " · " + t("tok_req_first", {f: tok(r.first_input)}) : "") + (r.prefix_tokens ? " · " + t("tok_req_each", {k: tok(r.prefix_tokens)}) : "") : ""}</span>`
       + (r.children_share != null ? `<br><span class="cost">${t("tok_kids", {n: (r.children || []).length + (r.children_more || 0), s: pct(r.children_share)})}</span>` : "")
       + (r.children_share > 1 ? `<br><span class="warn">${t("tok_kids_over")}</span>` : "")
       + `</td>${tokCells(r.tokens)}<td>${money(r.usd)}</td></tr>`;
@@ -684,7 +684,7 @@
     if (!T.runs) return h + `<p class="lead">${t("tok_empty", {cmd: raw("<code>ccx demo</code>")})}</p>`;
     h += `<p class="stat">${t("tok_total", {n: T.runs, t: tok((T.tokens || {}).total), u: usd(T.usd || 0)})}</p>`;
     h += `<div class="twrap"><table class="ttab">${tokHead(t("tok_col_agent"))}<tbody>`;
-    for (const [a, b] of Object.entries(T.by_agent || {})) h += `<tr><td>${who(a)} <span class="cost">${t("tok_task_runs", {n: +b.runs || 0})}${b.requests_per_run ? " · " + t("tok_req_avg", {n: b.requests_per_run, k: tok(b.prefix_median), m: b.measured_runs}) : ""}</span></td>${tokCells(b.tokens)}<td>${money(b.usd)}</td></tr>`;
+    for (const [a, b] of Object.entries(T.by_agent || {})) h += `<tr><td>${who(a)} <span class="cost">${t("tok_task_runs", {n: +b.runs || 0})}${b.requests_per_run ? " · " + t("tok_req_avg", {n: b.requests_per_run, m: b.measured_runs}) + (b.first_input_median ? " · " + t("tok_req_first_med", {f: tok(b.first_input_median)}) : "") + (b.prefix_median ? " · " + t("tok_req_each_med", {k: tok(b.prefix_median)}) : "") : ""}</span></td>${tokCells(b.tokens)}<td>${money(b.usd)}</td></tr>`;
     h += `</tbody></table></div><p class="cost">${t("tok_by_agent_note")}</p>`;
     const kt = (d.children_shown || {}).total || 0;
     h += `<p class="cost">${t("tok_kids_shown", {t: tok(kt)})} ${t("tok_kids_codex_note")}</p>`;
