@@ -463,8 +463,11 @@ def render_html(s: dict) -> str:
         ("Cache-read share", "–" if t["cache_read_share"] is None else f"{t['cache_read_share'] * 100:.0f}%",
          "of all input tokens"),
         ("Codex credits", f"{t['codex_credits']:,}", f"AE$ × {CREDITS_PER_USD} · quota stops {t['quota_stops']}"),
-        # after what was spent: a measured saving, or a model estimate said to be one (measured totals: about even)
-        ("Saving (measured)" if measured else "Estimated saving (model)", _usd(t["saving"]), saving_note),
+        # after what was spent: a saving only when `ccx trial` measured it. Until then no model figure is shown
+        # (P1-4); `ccx stats --summary` still carries the labelled model for scripts.
+        ("Saving (measured)", _usd(t["saving"]), saving_note) if measured else
+        ("Saving", "not measured yet", "`ccx trial start` measures it (the lead does a share of the tasks itself); "
+         "measured totals so far about even (docs/measured.md)"),
     ]
     tiles_html = "".join(f'<div class="tile"><div class="k">{_esc(k)}</div><div class="v">{_esc(v)}</div>'
                          f'<div class="n">{_esc(n)}</div></div>' for k, v, n in tiles)
@@ -490,8 +493,7 @@ def render_html(s: dict) -> str:
         f"<tr><td>{r['day']}</td><td>{_esc(r['label'] or r['task'] or r['run_id'])}</td><td>{_esc(r['caller'])} → "
         f"{_esc(r['agent'])}</td><td>{_esc(' → '.join(x.split(':', 1)[1] for x in r['rungs'] if x))}</td>"
         f"<td>{verdict(r)}{'' if r['kind'] in (None, 'ok') else ' · ' + _esc(r['kind'])}</td>"
-        f'<td class="r">{_num(r["tokens"])}</td><td class="r">{_usd(r["ae"])}</td>'
-        f'<td class="r">{_usd(r["saving"])}</td></tr>' for r in s["runs"][:200])
+        f'<td class="r">{_num(r["tokens"])}</td><td class="r">{_usd(r["ae"])}</td></tr>' for r in s["runs"][:200])
     ab_html = ""
     if s["ab"]:
         ab_html = ('<div class="card"><h2>A/B check — lead did it itself vs delegated (same difficulty b)</h2>'
@@ -500,8 +502,8 @@ def render_html(s: dict) -> str:
                    + "".join(f'<tr><td>{a["b"]}</td><td class="r">{a["self_n"]}</td><td class="r">{_usd(a["self_mean"])}</td>'
                              f'<td class="r">{a["delegated_n"]}</td><td class="r">{_usd(a["delegated_mean"])}</td></tr>'
                              for a in s["ab"])
-                   + '</table></div><p class="note">Measured samples; the estimated saving above assumes equal token '
-                     'counts — this table is how that assumption is checked.</p></div>')
+                   + '</table></div><p class="note">Measured samples from the runs the lead did itself (`ab_self_rate`); '
+                     'a few runs per difficulty are noise, `ccx trial` is the measurement.</p></div>')
     tr = s.get("trial")
     if tr:
         a, d = tr["arms"]["self"], tr["arms"]["delegated"]
@@ -554,11 +556,10 @@ last {s['days']} days · amounts are API-equivalent USD (AE$), not your subscrip
 first use, so delegations close together are cheaper.</p></div>
 {ab_html}{cmp_html}{quota_html}{accuracy.card_html(s.get('accuracy'))}
 <div class="card"><h2>Delegated runs</h2><div class="scroll"><table class="tbl"><tr><th>day</th><th>task</th><th>who</th>
-<th>model → escalation</th><th>result</th><th class="r">tokens</th><th class="r">AE$</th><th class="r">est. saving (model)</th></tr>
-{run_rows or '<tr><td colspan="8">No runs yet.</td></tr>'}</table></div>
-<p class="note">Estimated saving (a model, not measured) = the task-sized tokens (fresh input + output, minus the
-sub-agent's start-up: ~20k fresh tokens for Codex) at the lead's model price − sub-agent cost − brief/review overhead. Negative means delegating cost more than doing it yourself would
-have. Measured totals so far were about even (docs/measured.md).</p></div>
+<th>model → escalation</th><th>result</th><th class="r">tokens</th><th class="r">AE$</th></tr>
+{run_rows or '<tr><td colspan="7">No runs yet.</td></tr>'}</table></div>
+<p class="note">What each run cost. No per-run saving is shown: a saving is only reported once `ccx trial` has
+measured one (measured totals so far were about even, docs/measured.md).</p></div>
 </div></div><div id="tip" role="tooltip"></div><script>{JS}</script></body></html>"""
 
 

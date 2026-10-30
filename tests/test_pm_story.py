@@ -60,13 +60,17 @@ class TestTaskSizedEstimate(ReportEnv):
         self.assertIn("measured.md", t["saving_note"])
         self.assertIn("about even", t["saving_note"])
 
-    def test_report_shows_spend_before_the_labelled_estimate(self):
+    def test_report_shows_spend_and_no_unmeasured_saving(self):
         out = self.j("run", "--from", "claude", "--to", "codex", "--b", "4", "implement")
         self.j("verify", out["run_id"], "--ok", "1")
-        _, _, html = self._summary()
+        _, s, html = self._summary()
         tiles = re.findall(r'<div class="k">([^<]+)</div>', html)
-        self.assertEqual(tiles[-1], "Estimated saving (model)")            # demoted: after every spend tile
-        self.assertLess(tiles.index("Sub-agent spend"), tiles.index("Estimated saving (model)"))
+        self.assertEqual(tiles[-1], "Saving")                              # after every spend tile
+        self.assertLess(tiles.index("Sub-agent spend"), tiles.index("Saving"))
+        self.assertIn("not measured yet", html)                            # P1-4: no model figure until ccx trial
+        self.assertNotIn("Estimated saving", html)
+        self.assertNotIn("est. saving", html)
+        self.assertIsNotNone(s["totals"]["saving"])                        # the data keeps the model for scripts
         self.assertIn("measured totals so far about even (docs/measured.md)", html)
 
     def test_stats_summary_puts_spend_first_and_labels_the_saving(self):
@@ -118,17 +122,21 @@ class TestUiWording(unittest.TestCase):
         self.strings = json.loads((STATIC / "strings.json").read_text(encoding="utf-8"))
         self.js = (STATIC / "app.js").read_text(encoding="utf-8")
 
-    def test_model_estimate_is_labelled_and_links_the_measurements(self):
+    def test_only_a_measured_saving_is_shown_and_the_rest_links_the_measurements(self):
         for lang in ("en", "zh"):
             s = self.strings[lang]
-            for k in ("month_saving", "month_extra"):
-                self.assertIn("{link}", s[k], (lang, k))
+            self.assertIn("{link}", s["month_unmeasured"], lang)
+            self.assertIn("ccx trial", s["month_unmeasured"], lang)
             for k in ("month_saving_m", "month_extra_m"):
                 self.assertIn(k, s, (lang, k))
-        self.assertIn("Model estimate", self.strings["en"]["month_saving"])
-        self.assertIn("about even", self.strings["en"]["month_saving"])
-        self.assertIn("基本持平", self.strings["zh"]["month_saving"])
+            for k in ("month_saving", "month_extra", "month_model"):      # P1-4: the model estimate is not shown
+                self.assertNotIn(k, s, (lang, k))
+        self.assertIn("about even", self.strings["en"]["month_unmeasured"])
+        self.assertIn("基本持平", self.strings["zh"]["month_unmeasured"])
         self.assertNotIn("Relative estimate", json.dumps(self.strings))
+        saving = self.js.split("function monthSavingHTML()", 1)[1].split("\n  }", 1)[0]
+        self.assertIn('m.kind !== "measured"', saving)
+        self.assertLess(saving.index("month_unmeasured"), saving.index("usd(Math.abs(m.saving))"))
         for lang in ("en", "zh"):
             self.assertTrue(self.strings[lang]["measured_url"].endswith("relayline/blob/main/docs/measured.md"))
         self.assertIn('t("measured_url")', self.js)

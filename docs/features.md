@@ -119,7 +119,7 @@ In Claude Code you say: "make `loader.py` accept a custom delimiter and add test
      change them; `ccx task resume` always keeps them).
    - You want it to stop: `ccx stop <run_id>` ends the sub-agent and everything it started; `ccx resume` goes on.
 6. **Learn and report.** Every run goes into a ledger and back into task-routing / task-split, so the next pick is
-   better. `ccx report` builds a dashboard: who spent how many tokens of which kind, quota use, spend first and then a labelled saving estimate.
+   better. `ccx report` builds a dashboard: who spent how many tokens of which kind, quota use and spend; a saving only once `ccx trial` has measured one.
 
 The other way round, run the same command inside Codex with `--to claude`: Codex leads, Claude Code is the sub-agent.
 Codex's sandbox decides whether that works: ccx writes its run records into the hub and the sub-agent needs the
