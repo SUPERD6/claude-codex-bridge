@@ -10,8 +10,10 @@ is shown as the rest.
 
 J2. Cache reads are cheap; a turn that has to write the whole conversation into the cache again is not. Such a
 turn is found by its cache writes (Claude) or uncached input (Codex) jumping, and the likely cause is named: idle
-longer than the cache lives, a model switch, the conversation compacted, an instruction file edited, the tool list
-changed — else unknown."""
+longer than the cache lives, a model switch, an effort change (Codex), the conversation compacted, an instruction
+file edited, the tool list changed — else unknown. For Claude it counts only when the turn read at least 20k fewer
+tokens than the cache held after the last turn (its cache reads + writes) and under 90% of it: a turn that merely adds a big tool result writes a
+lot but reads the old prefix back, and is no break."""
 from __future__ import annotations
 
 import json
@@ -55,6 +57,63 @@ def _mcp_server(tool_name: str) -> str | None:
     if not tool_name.startswith("mcp__"):
         return None
     return tool_name.split("__")[1] if tool_name.count("__") >= 2 else tool_name
+
+
+def _mcp_namespace(name: str) -> str | None:
+    """Codex groups an MCP server's tools under a namespace `mcp__<server>` (older logs: `mcp<...>`)."""
+    if name.startswith("mcp__"):
+        return name[5:].strip("_") or name
+    return name if name.startswith("mcp") else None
+
+
+# Codex sends its developer message as several blocks, each opened by a tag or a heading; named here so a big
+# one (the skill list, the Memory folder) shows as its own part instead of one lump.
+_DEV_BLOCKS = (("<skills_instructions", "skills"), ("## Skills", "skills"), ("## Memory", "Memory"),
+               ("<oai-mem-citation", "Memory"), ("<permissions", "permissions"),
+               ("<collaboration_mode", "collaboration mode"), ("<multi_agent", "multi-agent"),
+               ("<recommended_plugins", "app context"), ("<apps_instructions", "app context"),
+               ("<app-context", "app context"), ("<app_context", "app context"),
+               ("<environment_context", "environment"))
+_TAG = re.compile(r"<([A-Za-z][\w-]*)")
+
+
+def _developer_block(text: str) -> str:
+    head = text.lstrip()[:200]
+    for prefix, label in _DEV_BLOCKS:
+        if head.startswith(prefix):
+            return label
+    m = _TAG.match(head)
+    return m.group(1).replace("_", " ") if m else "other"
+
+
+def _mcp_calls(agent: str, evs: list[dict]) -> dict[str, int]:
+    """How often each MCP server was called in this session (Claude tool_use names; Codex function calls by name
+    or namespace, and its mcp_tool_call events)."""
+    calls: dict[str, int] = {}
+
+    def add(srv):
+        if srv:
+            calls[srv] = calls.get(srv, 0) + 1
+    if agent == "claude":
+        seen = set()
+        for e in evs:
+            if e.get("type") != "assistant":
+                continue
+            for c in (e.get("message") or {}).get("content") or []:
+                if isinstance(c, dict) and c.get("type") == "tool_use" and c.get("id") not in seen:
+                    seen.add(c.get("id"))
+                    add(_mcp_server(str(c.get("name", ""))))
+        return calls
+    ended: dict[str, int] = {}          # the same call can be logged both ways: take the larger count per server
+    for e in evs:
+        pl = e.get("payload") or {}
+        if e.get("type") == "response_item" and pl.get("type") in ("function_call", "custom_tool_call"):
+            add(_mcp_server(str(pl.get("name", ""))) or _mcp_namespace(str(pl.get("namespace") or "")))
+        elif e.get("type") == "event_msg" and pl.get("type") == "mcp_tool_call_end":
+            srv = str(((pl.get("invocation") or {}).get("server")) or "")
+            if srv:
+                ended[srv] = ended.get(srv, 0) + 1
+    return {s: max(calls.get(s, 0), ended.get(s, 0)) for s in set(calls) | set(ended)}
 
 
 # ---------------------------------------------------------------- J1
@@ -114,14 +173,15 @@ def _codex_parts(evs: list[dict]) -> tuple[list[dict], int | None, str]:
             for ns in pl.get("tools") or []:
                 name = ns.get("name") or "functions"
                 for tool in ns.get("tools") or [ns]:
-                    srv = _mcp_server(str(tool.get("name", ""))) or (name if name.startswith("mcp") else None)
+                    srv = _mcp_server(str(tool.get("name", ""))) or _mcp_namespace(name)
                     key = f"MCP server {srv} (tool definitions)" if srv else "built-in tool definitions"
                     parts[key] = parts.get(key, 0) + est_tokens(json.dumps(tool, ensure_ascii=False))
         elif t == "response_item" and pl.get("type") == "message" and pl.get("role") == "developer" \
                 and measured is None:
-            text = "".join(c.get("text", "") for c in pl.get("content") or [] if isinstance(c, dict))
-            parts["developer messages (permissions, environment)"] = \
-                parts.get("developer messages (permissions, environment)", 0) + est_tokens(text)
+            for c in pl.get("content") or []:          # one block per content item, each named by its tag
+                if isinstance(c, dict) and c.get("text"):
+                    key = f"developer message: {_developer_block(c['text'])}"
+                    parts[key] = parts.get(key, 0) + est_tokens(c["text"])
         elif t == "world_state" and measured is None:
             am = ((pl.get("state") or {}).get("agents_md")) or {}
             if am.get("text"):
@@ -147,11 +207,18 @@ def breakdown(p, agent: str, path: Path) -> dict:
             parts.append({"part": "the first message and everything else", "tokens": rest})
     parts.sort(key=lambda x: -x["tokens"])
     total = measured or sum(x["tokens"] for x in parts)
+    calls = _mcp_calls(agent, evs)
     for x in parts:
         x["share"] = round(x["tokens"] / total, 3) if total else None
         x["usd_per_100_turns"] = round(100 * _price_read(p, agent, model, x["tokens"]), 3)
+        m = MCP_PART.match(x["part"])
+        if m:
+            x["calls"] = calls.get(m.group(1), 0)
     return {"agent": agent, "session_file": str(path), "model": model, "first_turn_tokens": measured,
             "estimated": True, "parts": parts, "advice": _advice(parts)}
+
+
+MCP_PART = re.compile(r"MCP server (.+) \(tool definitions\)$")
 
 
 def _advice(parts: list[dict]) -> list[str]:
@@ -160,8 +227,20 @@ def _advice(parts: list[dict]) -> list[str]:
         if x["tokens"] < BIG_PART:
             continue
         cost = f"~{x['tokens']:,} tokens every turn (≈ ${x['usd_per_100_turns']:.2f} per 100 turns)"
-        if x["part"].startswith("MCP server"):
-            out.append(f"{x['part']}: {cost}. If this project doesn't use it, turn that server off here.")
+        if x["part"] == "MCP server instructions":
+            # The servers' own usage notes, not one server: only worth acting on when some server is unused.
+            unused = [m.group(1) for y in parts if (m := MCP_PART.match(y["part"])) and y.get("calls") == 0]
+            if unused:
+                out.append(f"MCP server instructions: {cost}. Servers never called in this session: "
+                           f"{', '.join(unused)}; turning those off here also drops their instructions.")
+        elif MCP_PART.match(x["part"]):
+            if x.get("calls"):          # called in this session: it is in use, turning it off is no advice
+                continue
+            never = " and was never called in this session" if "calls" in x else ""
+            out.append(f"{x['part']}: {cost}{never}. If this project doesn't use it, turn that server off here.")
+        elif x["part"] == "developer message: skills":
+            out.append(f"Codex skill list (developer message): {cost}. Link only the skills you use "
+                       f"(layout.skills_include).")
         elif x["part"].startswith("instruction file"):
             out.append(f"{x['part']}: {cost}. Keep it to what every turn needs; move the rest to files read "
                        f"on demand.")
@@ -275,7 +354,7 @@ def _claude_breaks(evs: list[dict]) -> tuple[list[dict], str]:
     breaks, prev, model, ttl = [], None, "", CLAUDE_TTL_MIN
     pending: list[str] = []
     shape = None
-    seen = set()
+    seen, seen_tw = set(), set()
     for e in evs:
         t = e.get("type")
         if t == "api-request":
@@ -305,7 +384,16 @@ def _claude_breaks(evs: list[dict]) -> tuple[list[dict], str]:
             ts = _ts(e.get("timestamp"))
             w = int(u.get("cache_creation_input_tokens", 0) or 0)
             r = int(u.get("cache_read_input_tokens", 0) or 0)
-            if prev and w >= BREAK_MIN and w > 0.3 * (w + r):
+            ctx = w + r       # what the cache held after this turn; uncached input was never in it, so not "lost"
+            key = (e.get("timestamp"), w)
+            if key[0] and key in seen_tw:     # the same reply logged again under another id (needs a timestamp)
+                continue
+            seen_tw.add(key)
+            # A break is the cache losing what it held: this turn read clearly less than the cache held after the
+            # last turn (its cache reads + writes). A turn that only adds a big tool result writes a lot too, but
+            # reads the old prefix back.
+            lost = prev[2] - r if prev else 0
+            if prev and w >= BREAK_MIN and w > 0.3 * (w + r) and lost >= BREAK_MIN and r < 0.9 * prev[2]:
                 why = []
                 gap = (ts - prev[0]) / 60 if ts and prev[0] else 0
                 if gap > ttl:
@@ -316,7 +404,7 @@ def _claude_breaks(evs: list[dict]) -> tuple[list[dict], str]:
                     [x for x in dict.fromkeys(pending)]
                 breaks.append({"ts": e.get("timestamp"), "rewritten_tokens": w, "read_tokens": r,
                                "model": m.get("model"), "why": why or ["unknown"]})
-            prev = (ts, m.get("model"))
+            prev = (ts, m.get("model"), ctx)
             model = m.get("model") or model
             pending = []
     return breaks, model
@@ -324,12 +412,15 @@ def _claude_breaks(evs: list[dict]) -> tuple[list[dict], str]:
 
 def _codex_breaks(evs: list[dict]) -> tuple[list[dict], str]:
     breaks, prev_ts, model, prev_model, pending = [], None, "", "", []
+    effort, prev_effort = "", ""
     from .usage import _ts
     for e in evs:
         pl = e.get("payload") or {}
         t = e.get("type")
         if t == "turn_context":
             model = pl.get("model") or model
+            cm = pl.get("collaboration_mode") if isinstance(pl.get("collaboration_mode"), dict) else {}
+            effort = str(pl.get("effort") or ((cm.get("settings") or {}).get("reasoning_effort")) or effort)
         elif t == "compacted":
             pending.append("the conversation was compacted")
         elif t == "event_msg" and pl.get("type") == "token_count":
@@ -346,11 +437,26 @@ def _codex_breaks(evs: list[dict]) -> tuple[list[dict], str]:
                     why.append(f"idle {gap:.0f} min (cached prefixes last about {CODEX_TTL_MIN} min)")
                 if prev_model and model != prev_model:
                     why.append(f"model switched {prev_model} → {model}")
+                if prev_effort and effort != prev_effort:
+                    why.append(f"effort changed {prev_effort} → {effort}")
                 why += list(dict.fromkeys(pending))
-                breaks.append({"ts": e.get("timestamp"), "rewritten_tokens": fresh, "read_tokens": cached,
-                               "model": model, "why": why or ["unknown"]})
-            prev_ts, prev_model, pending = ts, model, []
+                b = {"ts": e.get("timestamp"), "rewritten_tokens": fresh, "read_tokens": cached,
+                     "model": model, "why": why or ["unknown"]}
+                if why and all(w.startswith("effort changed") for w in why):
+                    b["effort_only"] = True       # the same model at another effort: only the effort broke it
+                breaks.append(b)
+            prev_ts, prev_model, prev_effort, pending = ts, model, effort, []
     return breaks, model
+
+
+def cause_key(why: str) -> str:
+    """A break's cause without its numbers or from/to names, for counting causes."""
+    if why.startswith("idle"):
+        return "idle longer than the cache lives"
+    key = why.split(" → ")[0]
+    if key.startswith(("model switched", "effort changed")):
+        key = " ".join(key.split()[:2])
+    return key
 
 
 def cache_breaks(p, agent: str, path: Path) -> dict:
@@ -369,8 +475,7 @@ def cache_breaks(p, agent: str, path: Path) -> dict:
     causes: dict[str, int] = {}
     for b in breaks:
         for w in b["why"]:
-            key = w.split(" (")[0] if w.startswith("idle") else w.split(" → ")[0]
-            key = "idle longer than the cache lives" if key.startswith("idle") else key
+            key = cause_key(w)
             causes[key] = causes.get(key, 0) + 1
     return {"agent": agent, "session_file": str(path), "breaks": breaks, "extra_usd": round(extra, 4),
             "causes": causes,

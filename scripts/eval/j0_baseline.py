@@ -263,7 +263,7 @@ def lead_cache_breaks(p, agent: str, sessions: set[str], since: float, until: fl
             n += 1
             usd += br.get("extra_usd") or 0
             for w in br["why"]:
-                key = "idle longer than the cache lives" if w.startswith("idle") else w.split(" → ")[0]
+                key = leadcost.cause_key(w)        # the same cause names as `ccx lead --cache`
                 causes[key] = causes.get(key, 0) + 1
     return {"breaks": n, "extra_usd": round(usd, 2), "causes": causes}
 

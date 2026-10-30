@@ -31,7 +31,7 @@ from pathlib import Path
 
 from .transcript import _plan_update, _user_text, redact
 
-MAX_CHARS = 5000                 # ~1.2k tokens for a delegated task
+MAX_CHARS = 5000                 # ~1.2k tokens in English; 5000 Chinese chars ~2.2-3k tokens
 NEWEST_ASK = 3000                # the person's latest request, kept nearly whole
 TURN_CHARS = 400                 # one hook turn: a line or two per other tool
 RECENT_SEC = 2 * 3600            # "open" session: written to in the last two hours

@@ -13,7 +13,8 @@ Numbers, and how each one is computed (kept simple so anyone can re-derive them)
                             lead + sub-agent $ when it delegated) x delegated runs in the window.
                             Otherwise a MODEL (`saving_kind` "model"), shown as such and after the spend: per
                             delegated run, the task-sized part of the sub-agent's tokens (fresh input + output,
-                            minus the sub-agent's start-up: cache reads and writes, ~93k tokens a run in round 2,
+                            minus the sub-agent's cache reads and writes, ~93k tokens a run in round 2: the run's
+                            whole input, mostly cache reads, its fixed prefix re-sent on each of ~5 requests;
                             and for Codex ~20k start-up tokens it reads fresh, STARTUP_FRESH) at the lead's
                             model price, minus what the sub-agent cost, minus the lead's brief+review overhead
                             (400 output + 1500+1000*b input tokens at the lead's price); 95% CI by bootstrap over
@@ -83,7 +84,8 @@ STARTUP_FRESH = {"claude": 0, "codex": 20000, "gemini": 20000}
 def task_sized(u: dict, agent: str | None = None) -> dict:
     """The part of a sub-agent's usage the lead would also spend doing the task itself: fresh input and output,
     minus the agent's own start-up. Cache reads and cache writes are the sub-agent's start-up and its re-reading of it
-    (~93k tokens a run in round 2); Codex also reads ~20k start-up tokens fresh (STARTUP_FRESH). The lead, already
+    (~93k tokens a run in round 2: not a one-off start-up but the fixed prefix, Codex ~18-25k and Claude ~13-15k,
+    re-sent on each of ~5 requests); Codex also reads ~20k start-up tokens fresh (STARTUP_FRESH). The lead, already
     running, would not pay for any of it again. Unknown agents are treated like Codex."""
     fresh = u.get("input_tokens", 0) or 0
     startup = STARTUP_FRESH.get(agent or "", STARTUP_FRESH["codex"]) if agent is not None else 0

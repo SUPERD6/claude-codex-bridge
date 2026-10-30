@@ -31,7 +31,7 @@ not tested):
 | Shape | When | Why |
 |---|---|---|
 | **One cheap model + another vendor's cheap review** (default) | almost always | as often right as the costlier ways of splitting the work, at about 7% of the cost of `ccx way` (review ~$0.006 a task) |
-| **Parallel** | only if the person wants it fast *and* the work is independent pieces | faster, never cheaper: each extra run costs ~93k start-up tokens; 10 runs used ~4.7× the tokens of 1. Say "faster, not cheaper" when you choose it |
+| **Parallel** | only if the person wants it fast *and* the work is independent pieces | faster, never cheaper: each extra run costs ~93k input tokens (its fixed prefix re-sent on each of ~5 requests, not a one-off start-up); 10 runs used ~4.7× the tokens of 1. Say "faster, not cheaper" when you choose it |
 | **Draft, then reviewed draft** | large work (many files, several hours, unclear seams) | settle the split before paying for it |
 
 Default:
