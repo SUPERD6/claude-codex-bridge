@@ -144,6 +144,7 @@ import os
 import random
 import shutil
 import re
+import statistics
 import subprocess
 import sys
 import tarfile
@@ -531,14 +532,63 @@ def score(repo: Path, task: dict, work: Path, job: PF.Job | None = None, python:
         if spec:
             env.update(ext_repo.run_env(spec))
         color = ["--color=no"] if spec else []         # humanize's addopts asks for colour: keep the row's text plain
-        out, _err, rc, _left = PF.run([py, "-m", "pytest", "-q", "-p", "no:cacheprovider", *color,
-                                       *pytest_args(task)], cwd=repo, env=env, timeout=900, job=job)
+        out, err, rc, _left = PF.run([py, "-m", "pytest", "-q", "-p", "no:cacheprovider", *color,
+                                      *pytest_args(task)], cwd=repo, env=env, timeout=900, job=job)
+        full = ANSI.sub("", (out or "") + (f"\n--- stderr ---\n{err}" if err else ""))
         if rc == -9:
-            return {"ok": False, "pytest": "timeout"}
+            return {"ok": False, "pytest": "timeout", "output": full, "failed": failed_ids(full)}
         tail = ANSI.sub("", (out.strip().splitlines() or [""])[-1])
-        return {"ok": rc == 0, "pytest": tail[:200]}
+        return {"ok": rc == 0, "pytest": tail[:200], "output": full, "failed": failed_ids(full)}
     finally:
         r2._rmtree(iso)
+
+
+FAILED_LINE = re.compile(r"^(?:FAILED|ERROR) (\S+)", re.M)
+
+
+def failed_ids(output: str, limit: int = 100) -> list[str]:
+    """The failing test ids of a pytest run, from its short summary (`FAILED path::test - ...`, `ERROR path`)."""
+    out = []
+    for m in FAILED_LINE.finditer(output or ""):
+        if m.group(1) not in out:
+            out.append(m.group(1))
+    return out[:limit]
+
+
+ARTIFACT_MAX = 5_000_000      # bytes kept of one artifact file
+
+
+def final_diff(repo: Path) -> str | None:
+    """Everything the unit changed since the start commit, committed or not, new files included (before scoring: the
+    hidden tests are not in it)."""
+    if not (Path(repo) / ".git").exists():
+        return None
+    start = (git(repo, "rev-list", "--max-parents=0", "HEAD").split() or [None])[0]
+    if not start:
+        return None
+    git(repo, "add", "-A", "-N")
+    # bytes, not git()'s text mode: universal newlines would drop the \r of CRLF lines and the patch would not apply
+    out = subprocess.run(["git", "diff", "--binary", start], cwd=repo, capture_output=True).stdout
+    return out.decode("utf-8", errors="surrogateescape")
+
+
+def keep_artifacts(dest: Path, row: dict, sc: dict | None, diff: str | None) -> None:
+    """A unit that was not right: its failing hidden test ids in the row (`hidden_failed`) and, under dest, the full
+    hidden pytest output and its final diff, written before the unit's folders are cleaned (`artifacts`: where)."""
+    dest = Path(dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    kept = []
+    if sc is not None:
+        row["hidden_failed"] = sc.get("failed") or []
+        (dest / "hidden-pytest.txt").write_text((sc.get("output") or "")[:ARTIFACT_MAX], encoding="utf-8",
+                                                newline="")
+        kept.append("hidden-pytest.txt")
+    if diff is not None:
+        # newline="": git's exact bytes back (write_text would turn every \n into \r\n on Windows)
+        (dest / "final.diff").write_text(diff[:ARTIFACT_MAX], encoding="utf-8", errors="surrogateescape", newline="")
+        kept.append("final.diff")
+    if kept:
+        row["artifacts"] = {"dir": dest.name, "files": kept}
 
 
 def changed(repo: Path) -> dict:
@@ -896,12 +946,49 @@ def set_namecheck(hub: Path, mode: str) -> str:
     return got
 
 
-def daily_sources(a) -> tuple[Path, Path]:
+def daily_sources(a, frozen: bool = True) -> tuple[Path, Path]:
     """The person's own Codex home and ~/.agents a daily arm copies from (--daily-codex-source / --daily-agents-source;
-    default ~/.codex and ~/.agents)."""
+    default ~/.codex and ~/.agents). Once `run` froze them (freeze_daily), every unit copies from that frozen
+    snapshot instead (frozen=False: the person's own folders even then)."""
+    snap = getattr(a, "daily_frozen", None) if frozen else None
+    if snap:
+        return Path(snap["codex"]), Path(snap["agents"])
     codex = getattr(a, "daily_codex_source", "") or str(Path.home() / ".codex")
     agents = getattr(a, "daily_agents_source", "") or str(Path.home() / ".agents")
     return Path(codex).expanduser(), Path(agents).expanduser()
+
+
+DAILY_SNAPSHOT = "daily-snapshot"
+
+
+def freeze_daily(a, dest: Path) -> dict:
+    """Copy the person's daily setup ONCE per `run` invocation into dest (codex/: memories, AGENTS.md, skills and a
+    config.toml holding only the settings a daily home takes from theirs, the kept ones and the memory settings;
+    agents/: ~/.agents/skills), with daily_home's filters. Every daily unit of the invocation then copies from this
+    snapshot (daily_sources), so a rewrite of the person's real memories in the middle of a run cannot give the two
+    units of a pair different setups. Returns where it is and its sha256 (names and bytes); a.daily_frozen is set."""
+    codex_src, agents_src = daily_sources(a, frozen=False)
+    dest = Path(dest)
+    r2._rmtree(dest)
+    codex, agents = dest / "codex", dest / "agents"
+    codex.mkdir(parents=True)
+    agents.mkdir(parents=True)
+    stats: dict = {}
+    copied = [f"codex:{n}" for n in DH.DAILY_COPY if DH._copy(codex_src / n, codex / n, stats)]
+    copied += [f"agents:{n}" for n in DH.AGENTS_COPY if DH._copy(agents_src / n, agents / n, stats)]
+    # only what build() reads from the person's config.toml, written so it reads back the same (no sandbox override:
+    # build() adds that per unit)
+    (codex / "config.toml").write_text(DH.config_toml(PF.codex_kept_toml(codex_src), (),
+                                                      DH.memory_settings(codex_src), platform="frozen"),
+                                       encoding="utf-8")
+    bad = DH.found_never(codex, allow=("config.toml",)) + [f"agents/{x}" for x in DH.found_never(agents)]
+    if bad:
+        raise RuntimeError(f"the frozen daily snapshot holds what must never be copied: {bad[:5]}")
+    info = {"codex": str(codex), "agents": str(agents), "copied": copied, "sha256": DH.tree_sha256([codex, agents],
+                                                                                                   skip=()),
+            "frozen_at": round(time.time(), 1), "sources": [str(codex_src), str(agents_src)]}
+    a.daily_frozen = info
+    return info
 
 
 def set_daily(iso: PF.Unit, hub: Path, env: dict, arm: str, a) -> tuple[dict, dict]:
@@ -927,6 +1014,9 @@ def set_daily(iso: PF.Unit, hub: Path, env: dict, arm: str, a) -> tuple[dict, di
     if got != want:
         raise RuntimeError(f"the unit hub runs [subagent] {got} instead of {want}")
     info["switches"] = got
+    snap = getattr(a, "daily_frozen", None)
+    info["snapshot"] = ({"frozen": True, "sha256": snap["sha256"], "frozen_at": snap["frozen_at"]} if snap
+                        else {"frozen": False})
     return info, DH.unit_env(env, info)
 
 
@@ -1002,6 +1092,41 @@ def ccx_namecheck(hub: Path, run_ids: list) -> list[dict]:
                                       for a in att),
                         "final_fail": chk.get("reason") == "namecheck",
                         "attempts_hit": sum(bool(x.get("hits")) for x in per) if per else None})
+    return out
+
+
+def switches_applied(hub: Path, run_ids: list, want: dict | None = None) -> dict:
+    """What the [subagent] switches did at run level in this unit, from each ccx run's run.json: its
+    `subagent_switches` (what ccx resolved and handed to the sub-agent), its mode, the CLIs its attempts ran on and,
+    for Codex attempts, the memory / web_search / image_generation flags those switches add (delegate.py and
+    agents/codex.py: memories off on every Codex rung; lean tools on write runs only). ccx's run.json does not record
+    the CLI's argv, so the flags are derived from the recorded switches, not read back (`argv_recorded` False).
+    `want`: the switches the arm set; `match` says whether every run that recorded them ran with them."""
+    from ccx.agents.codex import MEMORIES_OFF
+    runs = []
+    for rid in run_ids or []:
+        rec = r2.record(hub, rid)
+        if not rec:
+            runs.append({"run": rid, "record": "missing"})
+            continue
+        sw = rec.get("subagent_switches") if isinstance(rec.get("subagent_switches"), dict) else None
+        agents = sorted({str(a.get("agent")) for a in rec.get("attempts") or [] if isinstance(a, dict)})
+        one = {"run": rid, "review": str(rec.get("label") or "").startswith("review:"), "mode": rec.get("mode"),
+               "agents": agents, "provider": rec.get("provider"), "subagent_switches": sw}
+        if sw is not None and "codex" in agents:
+            lean = bool(sw.get("codex_lean_tools")) and rec.get("mode") != "read"
+            one["codex_flags"] = {"memories_off": " ".join(MEMORIES_OFF) if sw.get("codex_memories") is False else None,
+                                  "web_search_off": lean, "image_generation_off": lean, "goals_off": lean,
+                                  "apps_plugins_off": lean and not rec.get("provider")}
+        runs.append(one)
+    seen = [r["subagent_switches"] for r in runs if r.get("subagent_switches") is not None]
+    out = {"runs": runs, "argv_recorded": False,
+           "note": "run.json records subagent_switches, not the CLI argv: codex_flags are derived from them"}
+    if want is not None:
+        from ccx.config import SUBAGENT_SWITCHES
+        full = {**SUBAGENT_SWITCHES, **want}
+        out["want"] = full
+        out["match"] = (all(x == full for x in seen) if seen else None)
     return out
 
 
@@ -1271,6 +1396,7 @@ def run_unit(u: dict, a, work: Path) -> dict:
     stream.unlink(missing_ok=True)              # an earlier, unfinished try of this unit must not be audited
     row: dict = {**u}
     env = None
+    sc, diff, scored = None, None, False
     before, job = PF.snapshot(), PF.Job()
     try:
         r2._rmtree(hub)
@@ -1299,10 +1425,21 @@ def run_unit(u: dict, a, work: Path) -> dict:
         row.update(direct_unit(u, a, repo, hub, env, job) if not has_lead(u["arm"]) else
                    lead_unit(u, a, work, repo, hub, iso, env, job))
         row.update(changed(repo))
+        try:
+            diff = final_diff(repo)
+        except Exception:  # noqa: BLE001 — an artifact only
+            diff = None
         bookkeeping(row, u["arm"], hub, task)
         must_telemetry(row, hub, repo)
+        try:                                      # what the [subagent] switches did, per ccx run (telemetry only)
+            row["switches_applied"] = switches_applied(hub, row.get("ccx_run_ids") or [], DAILY_ARMS.get(u["arm"]))
+        except Exception as e:  # noqa: BLE001
+            row["switches_applied"] = {"error": f"{type(e).__name__}: {e}"[:300]}
         sc = score(repo, task, work, job, **({"python": ext_python(a), "source": xkw["source"]} if xkw else {}))
+        scored = True
         row.update({**u, "ok": sc["ok"], "pytest": sc["pytest"], "hub": hinfo})
+        if not sc["ok"]:
+            row["hidden_failed"] = sc.get("failed") or []
         for rid in row.get("ccx_run_ids") or []:
             ccx_verify(rid, bool(sc["ok"]), f"eval-r2 hidden acceptance: {sc['pytest']}", hub=hub, env=env)
         row["archived_sessions"] = archive_hub(hub, env=env)
@@ -1327,6 +1464,14 @@ def run_unit(u: dict, a, work: Path) -> dict:
                 row["audit"]["clean"] = False
                 row["audit"].setdefault("problems", []).append("daily login: " + row["daily"]["login"].get(
                     "note", "conflict"))
+        art = getattr(a, "artifacts_dir", None)
+        if art and not row.get("ok"):              # before the clean-up: what the unit left and how it failed
+            try:
+                if diff is None and not scored:    # it broke before scoring: the repo has no hidden tests in it yet
+                    diff = final_diff(repo)
+                keep_artifacts(Path(art) / f"{u.get('tag') or 'untagged'}-{iso.key}", row, sc, diff)
+            except Exception as e:  # noqa: BLE001
+                row["artifacts"] = {"error": f"{type(e).__name__}: {e}"[:200]}
         fresh = u.get("taskset", "r5") != "r5"     # hold-out: nothing of a finished unit stays in the work dir
         if fresh and stream.exists():
             keep = OUT / "streams" / str(u.get("tag") or "untagged")
@@ -1349,17 +1494,75 @@ def run_unit(u: dict, a, work: Path) -> dict:
     return row
 
 
-def schedule(rounds: int, seed: int, tasks: list[str], arms: list[str]) -> list[dict]:
+ARM_ORDERS = ("shuffle", "balanced")
+
+
+def williams(n: int) -> list[list[int]]:
+    """A Williams design over n arms (a balanced Latin square): first row 0, 1, n-1, 2, n-2, ..., each later row +1
+    mod n; for an odd n the reversed rows are added too (2n rows). Over all its rows every arm takes every place
+    equally often and every arm runs before every other arm in exactly half of the rows, so no switch's comparison
+    with the baseline lines up with run order."""
+    if n <= 0:
+        return [[]]
+    row0, lo, hi = [0], 1, n - 1
+    while len(row0) < n:
+        row0.append(lo)
+        lo += 1
+        if len(row0) < n:
+            row0.append(hi)
+            hi -= 1
+    rows = [[(x + i) % n for x in row0] for i in range(n)]
+    return rows + [r[::-1] for r in rows] if n % 2 else rows
+
+
+def schedule(rounds: int, seed: int, tasks: list[str], arms: list[str], order: str = "shuffle") -> list[dict]:
+    """Units in run order: per round the tasks shuffled (seeded), per task its arms one after another. `shuffle` (the
+    default, every earlier run's schedule): the arms shuffled per task. `balanced`: the rows of a Williams design
+    (williams) over one seeded arm order, taken in turn by the task's place in `tasks` and the round, so over every
+    full cycle of rows each arm runs in each place equally often and before every other arm in half of the units
+    (order_balance counts it); when the task count is a multiple of the rows, each round shifts by one so a task's
+    rounds still differ. Rows say `arm_order` and `arm_pos`."""
+    if order not in ARM_ORDERS:
+        raise ValueError(f"unknown arm order {order!r} (known: {', '.join(ARM_ORDERS)})")
+    base = list(arms)
+    random.Random(f"{seed}:r5:arms").shuffle(base)
+    rows = williams(len(base))
+    shift = 1 if tasks and len(tasks) % len(rows) == 0 else 0
     out = []
     for rd in range(1, rounds + 1):
         rnd = random.Random(f"{seed}:r5:{rd}")
         ts = list(tasks)
         rnd.shuffle(ts)
         for t in ts:
+            if order == "balanced":
+                row = rows[((rd - 1) * (len(tasks) + shift) + tasks.index(t)) % len(rows)]
+                arm_list = [base[j] for j in row]
+                out += [{"exp": "r5", "round": rd, "task": t, "arm": arm, "arm_order": order, "arm_pos": i}
+                        for i, arm in enumerate(arm_list)]
+                continue
             arm_list = list(arms)
             rnd.shuffle(arm_list)
             out += [{"exp": "r5", "round": rd, "task": t, "arm": arm} for arm in arm_list]
     return out
+
+
+def order_balance(units: list[dict], base: str) -> dict:
+    """For every other arm: [units of a task and round where `base` ran before it, task-rounds with both]. A paired
+    comparison against base is confounded with run order (drift, rate limits, provider cache) when this is far
+    from half."""
+    by: dict = {}
+    for i, u in enumerate(units):
+        by.setdefault((u["round"], u["task"]), {})[u["arm"]] = i
+    out: dict = {}
+    for g in by.values():
+        if base not in g:
+            continue
+        for arm, i in g.items():
+            if arm != base:
+                c = out.setdefault(arm, [0, 0])
+                c[0] += g[base] < i
+                c[1] += 1
+    return dict(sorted(out.items()))
 
 
 def spent(f: Path, tag: str | None = None) -> float:
@@ -1676,7 +1879,8 @@ def cmd_run(a) -> int:
     lead = {"lead_model": a.lead_model or DEFAULT_LEAD[0], "lead_effort": a.lead_effort or DEFAULT_LEAD[1]}
     auto = lead["lead_model"] == LEAD_AUTO
     todo = []
-    for u in schedule(a.rounds, a.seed, tasks, tokens):   # tokens: `x` and `x@auto` interleave as two arms
+    for u in schedule(a.rounds, a.seed, tasks, tokens, getattr(a, "arm_order", "shuffle")):   # tokens: `x` and
+        # `x@auto` interleave as two arms
         arm, _, pick = u["arm"].partition("@")
         u = {**u, "arm": arm, "tag": a.tag, "seed": a.seed, "taskset": a.taskset,
              **(lead if has_lead(arm) else {})}
@@ -1708,6 +1912,10 @@ def cmd_run(a) -> int:
             print(line)
         if skill and a.claude_isolation != "ccx-home":
             print(f"[dry] note: {', '.join(skill)} needs --claude-isolation ccx-home to run")
+        ob = order_balance(todo, B3_BASE)
+        if ob:
+            print("[dry] run order vs " + B3_BASE + " (base first / pairs): "
+                  + ", ".join(f"{k} {v[0]}/{v[1]}" for k, v in ob.items()))
         for line in daily_plan_lines(arms, a):
             print(line)
         pinned, probs = pin_check(read_jsonl(out), a.tag, PF.commit_state()["commit"], a.pin_commit)
@@ -1749,11 +1957,24 @@ def cmd_run(a) -> int:
     print(f"[preflight] {rep['result']}: commit {rep['commit'][:12]} cli {rep['cli']} codex {rep['codex']['mode']} "
           f"claude {rep['claude_isolation']} jobs {a.jobs} canary {rep['canary']}", flush=True)
     a.preflight = rep
+    a.artifacts_dir = out.parent / f"{out.stem}-artifacts"    # a unit that was not right keeps its evidence here
+    if daily:                                      # one snapshot of the person's setup for the whole invocation
+        try:
+            snap = freeze_daily(a, work / DAILY_SNAPSHOT)
+        except (OSError, RuntimeError) as e:
+            r2._rmtree(work / DAILY_SNAPSHOT)      # a half-made copy of the person's setup does not stay behind
+            print(f"[daily] could not freeze the daily setup: {type(e).__name__}: {e}"[:400], flush=True)
+            return 3
+        rep["daily_snapshot"] = {k: snap[k] for k in ("sha256", "frozen_at", "copied")}
+        (work / "preflight.json").write_text(json.dumps(rep, ensure_ascii=False, indent=1), encoding="utf-8")
+        print(f"[daily] froze the daily setup once for this run: sha256 {snap['sha256'][:12]} "
+              f"({', '.join(snap['copied']) or 'nothing'})", flush=True)
     need_codex = any(x in PF.CODEX_ARMS for x in arms)
     ours = [PF._norm(work), PF._norm(f"eval-r5:{a.tag}:")]
     watch = PF.Watch(ours).start()
     lock, stop = threading.Lock(), threading.Event()
     run_usd = [0.0]                       # this invocation's own spend
+    unit_runs: set = set()                # every ccx run id of this invocation's units (postflight attribution)
 
     def one(u):
         with lock:
@@ -1789,6 +2010,7 @@ def cmd_run(a) -> int:
         with lock:
             append_jsonl(out, row)
             run_usd[0] += row.get("usd") or 0
+            unit_runs.update(str(x) for x in row.get("ccx_run_ids") or [])
             print(f"r{u['round']} {u['task']:18} {u['arm']:8} ok={row.get('ok')} ${row.get('usd', 0):.4f} "
                   f"(lead ${row.get('lead_only_usd', 0) or 0:.4f}) req={row.get('lead_requests')} "
                   f"lead_tok={row.get('lead_tokens')} {row.get('wall_s')}s deleg={row.get('delegated')} "
@@ -1804,16 +2026,61 @@ def cmd_run(a) -> int:
             list(ex.map(lambda us: [one(u) for u in us], groups.values()))
     finally:
         watch.close()
+        if getattr(a, "daily_frozen", None):       # the person's setup does not stay in the work dir
+            r2._rmtree(work / DAILY_SNAPSHOT)
     print(f"spent: {spend_line(out, a.tag, a.extra_spent, run_usd[0])} (budget ${a.budget} counts tag)", flush=True)
     # the person's own state, by size and count only: the hub ledger must not have grown, no Claude session folder
     # named after this work dir may be left in the real ~/.claude
     rep["real_state_after"] = post = PF.real_state(PF.real_paths(), work)
     rep["postflight"] = "same" if post == rep["real_state"] else "changed"
     (work / "preflight.json").write_text(json.dumps(rep, ensure_ascii=False, indent=1), encoding="utf-8")
+    if post.get("hub_ledger_bytes") != rep["real_state"].get("hub_ledger_bytes"):
+        # which rows: a real session of the person's running at the same time, or one of this run's units
+        att = ledger_attribution(PF.real_paths()["hub"] / "ccx" / "ledger.jsonl",
+                                 int(rep["real_state"].get("hub_ledger_bytes") or 0), unit_runs, a.tag)
+        rep["postflight_ledger"] = att
+        (work / "preflight.json").write_text(json.dumps(rep, ensure_ascii=False, indent=1), encoding="utf-8")
+        print(f"[postflight] the real hub ledger gained {att.get('n', 0)} rows: {att.get('unit_runs', 0)} with a run "
+              f"id of this run's units, {att.get('eval_labels', 0)} with this tag's label", flush=True)
+        for r in att.get("rows") or []:
+            print(f"[postflight]   type={r['type']} run_id={r['run_id']} ts={r['ts']} "
+                  f"unit_run={'yes' if r['unit_run'] else 'no'}", flush=True)
     if post != rep["real_state"]:
         print(f"[postflight] the person's own state changed: {rep['real_state']} -> {post}", flush=True)
         return 4
     return 2 if stop.is_set() else 0
+
+
+def ledger_attribution(led: Path, start: int, run_ids: set, tag: str = "", limit: int = 200) -> dict:
+    """The rows the person's real hub ledger gained during a run (from byte `start`, its size before), each by type,
+    run_id and ts only, and whether its run_id is one of this run's units' ccx_run_ids (`unit_run`: an eval leak) or
+    its label one of this tag's (`eval_label`). Neither: most likely a real session of the person's running at the
+    same time. The ledger only grows; a smaller file is read from its start and says so."""
+    try:
+        data = Path(led).read_bytes()
+    except OSError as e:
+        return {"rows": [], "error": f"{type(e).__name__}"}
+    out: dict = {}
+    if len(data) < start:
+        out["note"] = "the ledger is smaller than before the run: read from its start"
+        start = 0
+    rows = []
+    for line in data[start:].decode("utf-8", errors="replace").splitlines():
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(r, dict):
+            continue
+        rid = r.get("run_id")
+        rows.append({"type": r.get("type") or "run", "run_id": rid, "ts": r.get("ts"),
+                     "unit_run": rid in run_ids,
+                     "eval_label": bool(tag) and str(r.get("label") or "").startswith(f"eval-r5:{tag}:")})
+    out.update({"rows": rows[:limit], "n": len(rows), "unit_runs": sum(r["unit_run"] for r in rows),
+                "eval_labels": sum(r["eval_label"] for r in rows)})
+    if len(rows) > limit:
+        out["truncated"] = True
+    return out
 
 
 def wall_stats(rs: list[dict]) -> dict:
@@ -2098,19 +2365,107 @@ def tier_rule(rows: list[dict], bal: str = TIER_RULE_ARMS[0], save: str = TIER_R
 
 B3_BASE = "ccx2daily"
 B3_INPUT_DROP = 0.15          # the sub-agent's median prompt tokens per unit must be at least this much lower
+# report-only paired token statistics (b3_paired); none of them changes the registered rule's result
+B3_TOTAL_RATIO = 0.85         # token_effect "consistent" needs the arm's total prompt <= this share of the base's
+B3_SHARE_LOWER = 0.6          # ... and the arm's prompt lower than the base's in at least this share of pairs
+B3_BOOT_N = 2000              # pair-bootstrap resamples of the ratio of medians
+B3_BOOT_SEED = 30             # fixed: the same rows give the same interval
+
+
+def b3_median(xs) -> float | None:
+    """The registered rule's median: the true median (statistics.median, the mean of the two middle values for an
+    even count), not the upper middle the wall_med fields take."""
+    xs = list(xs)
+    return statistics.median(xs) if xs else None
+
+
+def snapshot_of(r: dict) -> str | None:
+    """The daily snapshot a row's unit ran on (daily.sha256 over the names and bytes of its copied setup)."""
+    return (r.get("daily") or {}).get("sha256") if isinstance(r.get("daily"), dict) else None
+
+
+def split_snapshots(ps: list[tuple[dict, dict]]) -> tuple[list[tuple[dict, dict]], list[dict]]:
+    """(pairs whose two units ran on the same daily snapshot, or where a side does not say, and the pairs whose
+    snapshots differ, by unit). A pair on two snapshots compares two different setups of the person's, not a switch:
+    it is left out of the rule and of the paired statistics, both units together (b3_rule says how many)."""
+    keep, split = [], []
+    for x, y in ps:
+        a, b = snapshot_of(x), snapshot_of(y)
+        if a and b and a != b:
+            split.append({"tag": x.get("tag"), "round": x.get("round"), "task": x.get("task"),
+                          "base": a[:12], "arm": b[:12]})
+        else:
+            keep.append((x, y))
+    return keep, split
+
+
+def _rom(pa: list[float], pb: list[float]) -> float | None:
+    """The ratio of medians arm / base (None when the base's median is 0 or there are no pairs)."""
+    a = b3_median(pa)
+    return b3_median(pb) / a if a else None
+
+
+def b3_paired(pa: list[float], pb: list[float], n: int = B3_BOOT_N, seed: int = B3_BOOT_SEED,
+              tasks: list[str] | None = None) -> dict:
+    """Report-only paired statistics of the sub-agent prompt tokens (pa: the base's per pair, pb: the arm's, the same
+    order): the share of pairs where the arm's is lower, the median of the per-pair ratio arm / base (pairs with a
+    base of 0 left out), the total ratio, and two percentile 95% CIs of the ratio of medians (random.Random(seed), n
+    resamples each): `ratio_of_medians_ci` resamples pairs as if independent, `ratio_of_medians_task_ci` resamples
+    tasks with all their pairs (as task_boot; given `tasks`, one per pair), which is the honest one when a task has
+    several rounds, since a task's rounds are correlated. `boot` says how many resamples had a base median of 0 and
+    were dropped."""
+    k = len(pa)
+    if not k:
+        return {"pairs": 0, "share_lower": None, "ratio_median": None, "total_ratio": None, "ratio_of_medians": None,
+                "ratio_of_medians_ci": None, "ratio_of_medians_task_ci": None}
+    ratios = [b / a for a, b in zip(pa, pb) if a]
+    rom = _rom(pa, pb)
+    ci, dropped = None, 0
+    if k >= 2:
+        rnd = random.Random(seed)
+        vals = []
+        for _ in range(n):
+            idx = [rnd.randrange(k) for _ in range(k)]
+            v = _rom([pa[i] for i in idx], [pb[i] for i in idx])
+            if v is not None:
+                vals.append(v)
+        dropped = n - len(vals)
+        vals.sort()
+        if vals:
+            ci = [round(vals[int(0.025 * len(vals))], 4), round(vals[int(0.975 * len(vals)) - 1], 4)]
+    task_ci, tinfo = None, {"n": 0, "dropped": 0}
+    if tasks is not None and len(tasks) == k:
+        ps = [({"task": t, "a": a}, {"b": b}) for t, a, b in zip(tasks, pa, pb)]
+        tci = task_boot(ps, lambda xs: _rom([x["a"] for x, _ in xs], [y["b"] for _, y in xs]) if xs else None,
+                        n=n, seed=seed, info=tinfo)
+        task_ci = list(tci) if tci else None
+    return {"pairs": k, "share_lower": round(sum(b < a for a, b in zip(pa, pb)) / k, 4),
+            "ratio_median": round(b3_median(ratios), 4) if ratios else None,
+            "total_ratio": round(sum(pb) / sum(pa), 4) if sum(pa) else None,
+            "ratio_of_medians": round(rom, 4) if rom is not None else None, "ratio_of_medians_ci": ci,
+            "ratio_of_medians_task_ci": task_ci,
+            "tasks": len(set(tasks)) if tasks is not None else None,
+            "boot": {"n": n, "seed": seed, "dropped": dropped, "task_n": tinfo.get("n", 0),
+                     "task_dropped": tinfo.get("dropped", 0)}}
 
 
 def b3_rule(rows: list[dict], arm: str, base: str = B3_BASE) -> dict | None:
     """The B3 decision rule fixed before any run (docs/research/2026-10-30-b3-lean-switches-plan.md), on the clean
     units both arms share: a switch's default changes only if right_B >= right_A (right not lower), at most 2 lost pairs (A right,
     B wrong), no task B got wrong in every round while A got it right at least once, and the sub-agent's median
-    prompt tokens per unit (sub_usage.prompt: input + cached of ccx's work runs) at least B3_INPUT_DROP lower. Any
-    unclean pair lost on one side only (lost_pairs note), or a missing token count, makes it Unknown. Result pass /
-    fail / unknown; None unless both arms have clean rows."""
+    prompt tokens per unit (sub_usage.prompt: input + cached of ccx's work runs; the true median, b3_median) at least
+    B3_INPUT_DROP lower. Any unclean pair lost on one side only (lost_pairs note), or a missing token count, makes it
+    Unknown. Result pass / fail / unknown; None unless both arms have clean rows.
+
+    Report-only, next to the rule (never changing `result`): `paired` (b3_paired) and `token_effect`: "consistent"
+    only when the rule's token condition passes, the total ratio is <= B3_TOTAL_RATIO and the arm's prompt is lower in
+    at least B3_SHARE_LOWER of the pairs; else "not shown". Pairs whose units ran on different daily snapshots are
+    left out of the conditions and the statistics (`snapshot_mismatch` lists them) and, like an unclean pair lost on
+    one side, turn a pass into Unknown; when every pair is split the rule is reported as Unknown on 0 pairs."""
     every = [r for r in rows if "error" not in r]
     clean, excluded = clean_rows(every)
-    ps = pair_units(clean, base, arm)
-    if not ps:
+    ps, split = split_snapshots(pair_units(clean, base, arm))
+    if not ps and not split:
         return None
     a_ok, b_ok = sum(bool(x.get("ok")) for x, _ in ps), sum(bool(y.get("ok")) for _, y in ps)
     lost = sum(bool(x.get("ok")) and not y.get("ok") for x, y in ps)
@@ -2124,7 +2479,7 @@ def b3_rule(rows: list[dict], arm: str, base: str = B3_BASE) -> dict | None:
     pa = [(x.get("sub_usage") or {}).get("prompt") for x, _ in ps]
     pb = [(y.get("sub_usage") or {}).get("prompt") for _, y in ps]
     have = None not in pa and None not in pb
-    ma, mb = (_med(pa), _med(pb)) if have else (None, None)
+    ma, mb = (b3_median(pa), b3_median(pb)) if have else (None, None)
     pf = lambda v: "pass" if v else "fail"  # noqa: E731
     cond = {"right": {"rule": f"{arm} right >= {base} right", "value": [b_ok, a_ok], "result": pf(b_ok >= a_ok)},
             "lost_pairs": {"rule": f"at most 2 pairs {base} right, {arm} wrong", "value": lost,
@@ -2142,6 +2497,22 @@ def b3_rule(rows: list[dict], arm: str, base: str = B3_BASE) -> dict | None:
         out["exclusion_note"] = lp["note"]
         if out["result"] == "pass":
             out["result"] = "unknown"
+    if split:
+        # conservative, as lost_pairs' exclusion_note: a left-out pair could have been a lost one, so a pass becomes
+        # Unknown (a fail stays a fail)
+        out["snapshot_mismatch"] = {"pairs": len(split), "units": split,
+                                    "note": "left out of the rule's conditions and of the paired statistics: the two "
+                                            "units ran on different snapshots of the person's daily setup; a pass "
+                                            "becomes unknown"}
+        if out["result"] == "pass":
+            out["result"] = "unknown"
+    paired = (b3_paired([float(v) for v in pa], [float(v) for v in pb], tasks=[x["task"] for x, _ in ps])
+              if have else
+              {"pairs": len(ps), "note": "a token count is missing: no paired statistics"})
+    out["paired"] = paired
+    consistent = (cond["input"]["result"] == "pass" and paired.get("total_ratio") is not None
+                  and paired["total_ratio"] <= B3_TOTAL_RATIO and (paired.get("share_lower") or 0) >= B3_SHARE_LOWER)
+    out["token_effect"] = "consistent" if consistent else "not shown"
     return out
 
 
@@ -2156,6 +2527,27 @@ def b3_rules(rows: list[dict]) -> dict:
             br = b3_rule(rows, arm)
             if br:
                 out[f"{B3_BASE} vs {arm}"] = br
+    return out
+
+
+def b3_rule_lines(name: str, br: dict) -> list[str]:
+    """One B3 rule as plain lines (cmd_summary prints them after the JSON, on stderr)."""
+    c = br["conditions"]
+    p = br.get("paired") or {}
+    out = [f"b3 rule {name}: {br['result']} on {br['units']} pairs ({br['tasks']} tasks); right {c['right']['value']}, "
+           f"lost {c['lost_pairs']['value']}, always lost {c['always_lost']['value'] or 'none'}, median prompt "
+           f"{c['input']['value']} ({c['input']['result']})"]
+    if p.get("pairs"):
+        out.append(f"  paired (report only): lower in {p.get('share_lower')} of pairs, per-pair ratio median "
+                   f"{p.get('ratio_median')}, total ratio {p.get('total_ratio')}, ratio of medians "
+                   f"{p.get('ratio_of_medians')} 95% CI {p.get('ratio_of_medians_ci')} by pair, "
+                   f"{p.get('ratio_of_medians_task_ci')} by task; token effect "
+                   f"{br['token_effect']}")
+    if br.get("snapshot_mismatch"):
+        out.append(f"  {br['snapshot_mismatch']['pairs']} pairs on different daily snapshots left out (a pass "
+                   "becomes unknown)")
+    if br.get("exclusion_note"):
+        out.append(f"  {br['exclusion_note']}")
     return out
 
 
@@ -2338,9 +2730,27 @@ def summarize(rows: list[dict], include_unclean: bool = False) -> dict:
     return res
 
 
-def tagged(rows: list[dict], tag: str | None) -> list[dict]:
-    """Rows of one tag (round), so rounds run under different conditions are never counted together."""
-    return [r for r in rows if not tag or r.get("tag") == tag]
+def tagged(rows: list[dict], tag) -> list[dict]:
+    """Rows of one tag (round), so rounds run under different conditions are never counted together; a list of tags
+    keeps the rows of any of them (summary --tag a --tag b: two halves of one registered measurement)."""
+    if not tag:
+        return list(rows)
+    tags = {tag} if isinstance(tag, str) else set(tag)
+    return [r for r in rows if r.get("tag") in tags]
+
+
+def summary_rows(a) -> list[dict]:
+    """The rows a summary reads: --results files in the order given (default: the task set's results file), then
+    --tag. A row read twice (the same file named twice) is counted once."""
+    files = [Path(f) for f in (getattr(a, "results", None) or [])] or [results_file(a.taskset)]
+    rows, seen = [], set()
+    for f in files:
+        for r in read_jsonl(f):
+            key = json.dumps(r, sort_keys=True, ensure_ascii=False)
+            if key not in seen:
+                seen.add(key)
+                rows.append(r)
+    return tagged(rows, getattr(a, "tag", None))
 
 
 def excluded_line(res: dict) -> str | None:
@@ -2356,7 +2766,7 @@ def excluded_line(res: dict) -> str | None:
 
 
 def cmd_summary(a) -> int:
-    res = summarize(tagged(read_jsonl(results_file(a.taskset)), a.tag), a.include_unclean)
+    res = summarize(summary_rows(a), a.include_unclean)
     print(json.dumps(res, ensure_ascii=False, indent=1))
     line = excluded_line(res)
     if line:
@@ -2365,6 +2775,9 @@ def cmd_summary(a) -> int:
         for line in tier_rule_lines(tr):
             print(line if name == "balanced vs save" else line.replace("tier rule", f"tier rule {name}", 1),
                   file=sys.stderr)
+    for name, br in (res.get("b3_rules") or {}).items():
+        for line in b3_rule_lines(name, br):
+            print(line, file=sys.stderr)
     return 0
 
 
@@ -2376,8 +2789,9 @@ def cmd_export(a) -> int:
             "env_clean", "fingerprint", "lead_model", "lead_effort", "lead_pick", "lead_b", "lead_band", "phases", "tier", "tier_plan", "ref_size",
             "actual_mode", "misband", "misband_overall", "followed_plan", "ccx_check_passed", "may_be_wrong",
             "ccx_routes", "bookkeeping_error", "lead_usage", "timeline", "skill_used", "skills_used",
-            "namecheck_mode", "ccx_namecheck", "ccx_check_reason")
-    rows = tagged(read_jsonl(results_file(a.taskset)), a.tag)
+            "namecheck_mode", "ccx_namecheck", "ccx_check_reason", "sub_usage", "switches_applied",
+            "hidden_failed", "artifacts", "arm_order", "arm_pos")
+    rows = summary_rows(a)
     data = {"summary": summarize(rows, a.include_unclean),
             "rows": [r3.scrub({**{k: r[k] for k in keep if k in r},
                                **({"audit": {"problems": r["audit"].get("problems"),
@@ -2406,6 +2820,9 @@ def parser() -> argparse.ArgumentParser:
                    help="r5 (default: the tasks the loop was tuned on) or holdout (unseen, for final claims)")
     r.add_argument("--tasks", default="", help="comma-separated ids from the task set (default: all of it)")
     r.add_argument("--arms", default="")
+    r.add_argument("--arm-order", choices=ARM_ORDERS, default="shuffle", help="shuffle (default, every earlier "
+                   "run's schedule): the arms of a task in a seeded random order; balanced: a seeded Latin-square "
+                   "rotation over task and round, so each arm runs first about equally often")
     r.add_argument("--budget", type=float, default=3.0,
                    help="stop before a new unit once this tag's rows (plus --extra-spent) reach $")
     r.add_argument("--extra-spent", type=float, default=0.0, help="$ spent elsewhere, counted against --budget")
@@ -2436,14 +2853,18 @@ def parser() -> argparse.ArgumentParser:
     daily_options(dc)
     dc.set_defaults(fn=cmd_daily_check)
     s = sub.add_parser("summary")
-    s.add_argument("--tag", default=None, help="only this round's rows (default: all; the tags are listed)")
+    s.add_argument("--tag", action="append", default=None, help="only this round's rows (default: all; the tags are "
+                   "listed); give it again to keep several tags (two halves of one measurement)")
+    s.add_argument("--results", nargs="+", default=None, help="results files to read together (default: the task "
+                   "set's own); a row in two of them is counted once")
     s.add_argument("--taskset", choices=sorted(TASKSETS), default="r5")
     s.add_argument("--include-unclean", action="store_true", help="count rows that are not env_clean too (the "
                    "tier rule still takes clean rows only)")
     s.set_defaults(fn=cmd_summary)
     e = sub.add_parser("export")
     e.add_argument("dest")
-    e.add_argument("--tag", default=None)
+    e.add_argument("--tag", action="append", default=None)
+    e.add_argument("--results", nargs="+", default=None)
     e.add_argument("--taskset", choices=sorted(TASKSETS), default="r5")
     e.add_argument("--include-unclean", action="store_true")
     e.set_defaults(fn=cmd_export)

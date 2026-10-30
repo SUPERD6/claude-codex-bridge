@@ -958,3 +958,164 @@ def test_fresh_homes_need_a_token_the_person_sets(machine, tmp_path, monkeypatch
     assert PF.run_checks(PF.Options(work=tmp_path / "w3", arms=["self"], claude="ccx-home"))["ok"]
     ap = PF.parser()
     assert ap.parse_args(["--workdir", "w", "--claude-isolation", "ccx-home"]).claude_isolation == "ccx-home"
+
+
+# ------------------------------------------------------------------ B3 eval: frozen daily snapshot, ledger attribution
+
+def test_a_daily_run_freezes_the_setup_once_and_removes_it(machine, tmp_path, monkeypatch):
+    _stub_machine(monkeypatch)
+    seen = []
+
+    def fake_unit(u, a, work):
+        snap = a.daily_frozen
+        seen.append((snap["sha256"], Path(snap["codex"], "AGENTS.md").read_text(encoding="utf-8")))
+        # the person rewrites their real Codex rules while the run goes on: later units still copy the frozen ones
+        (machine["home"] / ".codex" / "AGENTS.md").write_text(f"rewritten {len(seen)}\n", encoding="utf-8")
+        return {**u, "ok": True, "usd": 0.0, "wall_s": 0}
+    monkeypatch.setattr(r5, "run_unit", fake_unit)
+    work = tmp_path / "w"
+    rc = r5.main(["run", "--rounds", "1", "--tasks", r5.IDS[0], "--arms", "ccx2daily,ccx2daily_nomem", "--jobs", "1",
+                  "--out", str(tmp_path / "r.jsonl"), "--workdir", str(work), "--no-canary", "--force-unclean",
+                  "--codex-home", str(machine["codex"])])
+    assert rc == 0 and len(seen) == 2
+    assert seen[0] == seen[1] and seen[0][1] == "SENTINEL-CODEX personal rules\n"
+    assert not (work / r5.DAILY_SNAPSHOT).exists()                     # the person's setup does not stay behind
+    rep = json.loads((work / "preflight.json").read_text(encoding="utf-8"))
+    assert rep["daily_snapshot"]["sha256"] == seen[0][0] and "codex:AGENTS.md" in rep["daily_snapshot"]["copied"]
+
+
+
+def test_a_leftover_daily_snapshot_does_not_block_the_next_run_and_a_failed_freeze_leaves_none(machine, tmp_path,
+                                                                                                 monkeypatch):
+    real = PF.real_paths()
+    w = tmp_path / "w"
+    (w / r5.DAILY_SNAPSHOT / "codex").mkdir(parents=True)        # a run killed after its freeze
+    probs, cleaned = PF.check_workdir(w, real)
+    assert probs == [] and cleaned == [] and (w / r5.DAILY_SNAPSHOT).exists()
+    probs, cleaned = PF.check_workdir(w, real, clean=True)
+    assert probs == [] and cleaned == [r5.DAILY_SNAPSHOT] and not (w / r5.DAILY_SNAPSHOT).exists()
+    _stub_machine(monkeypatch)
+    monkeypatch.setattr(r5.DH, "found_never", lambda d, allow=(): ["auth.json"])   # the freeze refuses after copying
+    monkeypatch.setattr(r5, "run_unit", lambda u, a, work: pytest.fail("no unit runs without a frozen setup"))
+    work = tmp_path / "w2"
+    rc = r5.main(["run", "--rounds", "1", "--tasks", r5.IDS[0], "--arms", "ccx2daily,ccx2daily_nomem", "--jobs", "1",
+                  "--out", str(tmp_path / "r.jsonl"), "--workdir", str(work), "--no-canary", "--force-unclean",
+                  "--codex-home", str(machine["codex"])])
+    assert rc == 3 and not (work / r5.DAILY_SNAPSHOT).exists()
+
+
+def test_the_kept_diff_is_byte_faithful_and_applies(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    r5.git(repo, "init", "-q")
+    r5.git(repo, "config", "core.autocrlf", "false")
+    (repo / "a.txt").write_bytes(b"one\r\ntwo\r\n")
+    (repo / "b.txt").write_bytes(b"lf\n")
+    r5.git(repo, "add", "-A")
+    r5.git(repo, "commit", "-q", "-m", "start")
+    (repo / "a.txt").write_bytes(b"one\r\nTWO\r\n")
+    (repo / "b.txt").write_bytes(b"lf 2\n")
+    diff = r5.final_diff(repo)
+    row = {}
+    r5.keep_artifacts(tmp_path / "art", row, None, diff)
+    raw = (tmp_path / "art" / "final.diff").read_bytes()
+    assert b"+TWO\r\n" in raw and b"+lf 2\n" in raw and b"diff --git a/a.txt b/a.txt\n" in raw
+    assert b"+lf 2\r\n" not in raw
+    r5.git(repo, "checkout", "--", ".")
+    done = subprocess.run(["git", "apply", str(tmp_path / "art" / "final.diff")], cwd=repo, capture_output=True)
+    assert done.returncode == 0, done.stderr
+    assert (repo / "a.txt").read_bytes() == b"one\r\nTWO\r\n" and (repo / "b.txt").read_bytes() == b"lf 2\n"
+
+
+def test_postflight_attributes_new_real_ledger_rows(machine, tmp_path, monkeypatch, capsys):
+    _stub_machine(monkeypatch)
+    led = machine["hub"] / "ccx" / "ledger.jsonl"
+    led.parent.mkdir(parents=True, exist_ok=True)
+    led.write_text(json.dumps({"run_id": "before", "ts": 1}) + "\n", encoding="utf-8")
+
+    def fake_unit(u, a, work):
+        with led.open("a", encoding="utf-8") as f:     # one leak of this unit, one real session of the person's
+            f.write(json.dumps({"run_id": "unit-run-1", "ts": 2, "label": u["label"]}) + "\n")
+            f.write(json.dumps({"type": "verdict", "run_id": "mine-7", "ts": 3, "label": "my own work"}) + "\n")
+        return {**u, "ok": True, "usd": 0.0, "wall_s": 0, "ccx_run_ids": ["unit-run-1"]}
+    monkeypatch.setattr(r5, "run_unit", fake_unit)
+    work = tmp_path / "w"
+    rc = r5.main(["run", "--rounds", "1", "--tasks", r5.IDS[0], "--arms", "self", "--out", str(tmp_path / "r.jsonl"),
+                  "--workdir", str(work), "--no-canary", "--tag", "att"])
+    out = capsys.readouterr().out
+    assert rc == 4
+    rep = json.loads((work / "preflight.json").read_text(encoding="utf-8"))
+    att = rep["postflight_ledger"]
+    assert att["n"] == 2 and att["unit_runs"] == 1 and att["eval_labels"] == 1
+    assert att["rows"] == [{"type": "run", "run_id": "unit-run-1", "ts": 2, "unit_run": True, "eval_label": True},
+                           {"type": "verdict", "run_id": "mine-7", "ts": 3, "unit_run": False, "eval_label": False}]
+    assert "type=verdict run_id=mine-7 ts=3 unit_run=no" in out and "my own work" not in out
+    assert r5.ledger_attribution(led, 10**6, set())["note"].startswith("the ledger is smaller")
+
+
+def test_a_unit_that_is_not_right_keeps_its_failing_tests_output_and_diff(machine, tmp_path, monkeypatch):
+    work = tmp_path / "w"
+    work.mkdir()
+
+    def make(task, dest):
+        dest.mkdir(parents=True, exist_ok=True)
+        (dest / "a.py").write_text("x = 1\n", encoding="utf-8")
+        r5.git(dest, "init", "-q")
+        r5.git(dest, "add", "-A")
+        r5.git(dest, "commit", "-q", "-m", "start")
+    monkeypatch.setattr(r5, "make_repo", make)
+    monkeypatch.setattr(r5.r3, "make_hub", lambda hub: (hub / "ccx").mkdir(parents=True) or {"warm": False})
+    monkeypatch.setattr(r5, "archive_hub", lambda hub, env=None: 0)
+    out = ("F.\n=== short test summary info ===\nFAILED tests/test_a.py::test_one - assert 1 == 2\n"
+           "ERROR tests/test_b.py - ImportError\n1 failed, 1 passed, 1 error in 0.1s\n")
+
+    def score(repo, task, work_, job=None):
+        (repo / "tests").mkdir(exist_ok=True)
+        (repo / "tests" / "test_hidden.py").write_text("HIDDEN\n", encoding="utf-8")   # not in the kept diff
+        return {"ok": False, "pytest": "1 failed", "output": out, "failed": r5.failed_ids(out)}
+    monkeypatch.setattr(r5, "score", score)
+
+    def lead(u, a, work_, repo, hub, iso, env, job):
+        (repo / "a.py").write_text("x = 2\n", encoding="utf-8")
+        (repo / "new.py").write_text("y = 3\n", encoding="utf-8")
+        return {"usd": 0.1, "wall_s": 1}
+    monkeypatch.setattr(r5, "lead_unit", lead)
+
+    class A:
+        claude_isolation, codex_home, dsh_home = "flags", str(machine["codex"]), "unit"
+        preflight = dict(REP)
+        artifacts_dir = tmp_path / "res-artifacts"
+    u = {"tag": "b3", "round": 1, "task": r5.IDS[0], "arm": "self", "label": f"eval-r5:b3:1:{r5.IDS[0]}:self"}
+    row = r5.run_unit(u, A, work)
+    assert row["ok"] is False and row["hidden_failed"] == ["tests/test_a.py::test_one", "tests/test_b.py"]
+    d = A.artifacts_dir / f"b3-1-{r5.IDS[0]}-self"
+    assert row["artifacts"] == {"dir": d.name, "files": ["hidden-pytest.txt", "final.diff"]}
+    assert (d / "hidden-pytest.txt").read_text(encoding="utf-8") == out
+    diff = (d / "final.diff").read_text(encoding="utf-8")
+    assert "+x = 2" in diff and "new.py" in diff and "HIDDEN" not in diff
+    assert row["switches_applied"]["runs"] == [] and "match" not in row["switches_applied"]
+
+    def broken(u_, a, work_, repo, hub, iso, env, job):
+        (repo / "a.py").write_text("x = 9\n", encoding="utf-8")
+        raise RuntimeError("lead crashed")
+    monkeypatch.setattr(r5, "lead_unit", broken)
+    row = r5.run_unit({**u, "round": 2}, A, work)
+    d2 = A.artifacts_dir / f"b3-2-{r5.IDS[0]}-self"
+    assert row["ok"] is False and row["artifacts"]["files"] == ["final.diff"] and "hidden_failed" not in row
+    assert "+x = 9" in (d2 / "final.diff").read_text(encoding="utf-8")
+
+    monkeypatch.setattr(r5, "lead_unit", lead)
+    monkeypatch.setattr(r5, "score", lambda repo, task, work_, job=None: {"ok": True, "pytest": "2 passed"})
+    row = r5.run_unit({**u, "round": 3}, A, work)
+    assert row["ok"] and "artifacts" not in row and not (A.artifacts_dir / f"b3-3-{r5.IDS[0]}-self").exists()
+
+
+def test_failed_ids_and_score_keep_the_full_output(tmp_path, monkeypatch):
+    assert r5.failed_ids("FAILED a.py::t - x\nFAILED a.py::t - x\nERROR b.py\nfailed nothing\n") == ["a.py::t", "b.py"]
+    monkeypatch.setattr(r5, "hidden", lambda task, work, source=None: {})
+    monkeypatch.setattr(r5.PF, "run", lambda *a, **k: ("FAILED tests/x.py::t - boom\n1 failed\n", "warn", 1, []))
+    repo = tmp_path / "repo"
+    (repo / "tests").mkdir(parents=True)
+    sc = r5.score(repo, {"id": "x", "tests": ["tests/x.py"]}, tmp_path)
+    assert sc["ok"] is False and sc["pytest"] == "1 failed" and sc["failed"] == ["tests/x.py::t"]
+    assert sc["output"].startswith("FAILED tests/x.py::t") and "--- stderr ---\nwarn" in sc["output"]
