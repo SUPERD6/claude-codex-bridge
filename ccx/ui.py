@@ -47,6 +47,11 @@ in size. Board text is written by agents: the page escapes it. The one write (I1
 same two steps as a button (/api/say/prepare answers what will be written and a one-time nonce, /api/say/run
 writes it once), at most SAY_MAX characters (longer is refused, never cut), written by board.post as the person
 (from user, via ui) like `ccx reply`, never run: no command, no shell.
+
+Measured & where tokens go (B1, ccx/tokenflow.py): /api/tokens (period, project, tests) answers the published
+numbers, the person's own, and one ledger across Claude and Codex grouped by task with each run's own child sessions;
+/api/leadcost (agent, session) parses one lead conversation the ledger names, only when asked, with the functions
+behind `ccx lead --breakdown` / `--cache`. Both read only, capped in size.
 """
 from __future__ import annotations
 
@@ -63,7 +68,7 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path, PureWindowsPath
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 from . import agents, board
 from . import queue as wq
@@ -1659,6 +1664,16 @@ def _board_file(root: Path) -> Path:
     return root / ".ccx" / "board.jsonl"
 
 
+def _fold_rows(state: list, line: str) -> list:
+    try:
+        row = json.loads(line)
+    except ValueError:
+        return state
+    if isinstance(row, dict):
+        state.append(row)
+    return state
+
+
 def board_entries(rd: Reader, root: Path) -> list[dict]:
     """The project's board, read from where the last read stopped (it is append-only). Never written here."""
     f = _board_file(root)
@@ -1884,6 +1899,9 @@ class UI:
         self.says: dict[str, dict] = {}            # I1: prepared replies, by nonce
         self.boards: dict[str, tuple[Path, str]] = {}   # U2: project id -> (folder, name) of the boards shown
         self.why_stopped = ""
+        from .tokenflow import Flow
+        self.flow = Flow(p)                       # B1: caches of the tokens page (children, parsed lead sessions)
+        self.flow_lock = threading.Lock()
         from .demo import is_demo
         self.demo = is_demo(p)                    # U6: a `ccx demo` hub: commands that start an agent are not run
         ui = self
@@ -1945,6 +1963,11 @@ class UI:
                     if path.startswith("/api/conv/"):         # U2: read-only, one project's board
                         return self._send(200, json.dumps(ui.conversation(path[len("/api/conv/"):]),
                                                           ensure_ascii=False).encode("utf-8"))
+                    if path in ("/api/tokens", "/api/leadcost"):  # B1: read-only, capped
+                        q = {k: v[0] for k, v in parse_qs(urlsplit(self.path).query).items() if v}
+                        out = (ui.token_flow(q.get("period", "7d"), q.get("project"), q.get("tests") == "1")
+                               if path == "/api/tokens" else ui.lead_cost(q.get("agent", ""), q.get("session", "")))
+                        return self._send(200, json.dumps(out, ensure_ascii=False, default=list).encode("utf-8"))
                 except (FileNotFoundError, ValueError) as e:
                     return self._send(404, json.dumps({"error": str(e)[:200]}).encode())
                 except Exception as e:  # noqa: BLE001 — an odd record answers 500, the server keeps going
@@ -2184,6 +2207,29 @@ class UI:
                                                             "reply_to": e["reply_to"], "chars": len(e["text"])},
                                  "via": "ui"}, ensure_ascii=False) + "\n")
         return {"ok": True, "posted": {k: e[k] for k in ("id", "thread", "to", "reply_to", "via")}}
+
+    def _ledger_rows(self) -> list[dict]:
+        """Every ledger row (read incrementally), dismissed runs marked as ledger.rows marks them."""
+        from .ledger import _mark_dismissed
+        with self.lock:
+            got = self.reader.lines(self.p.ledger, _fold_rows, []) if self.p.ledger.exists() else []
+            return _mark_dismissed([dict(r) for r in got])
+
+    def token_flow(self, period: str = "7d", project: str | None = None, tests: bool = False) -> dict:
+        """/api/tokens: the "Measured & where tokens go" page (B1)."""
+        if project is not None and not _PID.fullmatch(project):
+            raise ValueError("bad project id")
+        if project is None and self.project:
+            project = _pid(project_root(str(self.project)) or self.project)
+        rows = self._ledger_rows()
+        with self.flow_lock:
+            return self.flow.tokens(rows, period, project, tests)
+
+    def lead_cost(self, agent: str, session: str) -> dict:
+        """/api/leadcost: one lead conversation's re-read parts and cache breaks (`ccx lead --breakdown` / `--cache`)."""
+        rows = self._ledger_rows()
+        with self.flow_lock:
+            return self.flow.leadcost(rows, agent, session)
 
     @property
     def url(self) -> str:

@@ -1,0 +1,40 @@
+{
+  "source": "docs/measured.md",
+  "note": "Copied from docs/measured.md; tests/test_ui_tokens.py checks that every number here appears there.",
+  "tables": [
+    {
+      "id": "hc1",
+      "date": "2026-10-29",
+      "title": {"en": "Hold-out set (hc1)", "zh": "留出集（hc1）"},
+      "rows": [
+        {"arm": "self", "right": "29/30", "usd_per_success": "0.090", "wall_median_s": "21.0"},
+        {"arm": "builtin", "right": "27/28", "usd_per_success": "0.103", "wall_median_s": "123"},
+        {"arm": "ccx", "right": "29/30", "usd_per_success": "0.063", "wall_median_s": "60.7"}
+      ],
+      "limit": {
+        "en": "10 tasks × 3 rounds, one lead model, API-equivalent prices; the built-in arm is its default usage; this repository's 5 tasks may have their answers in ccx's code, so the external-repository row is the clean one.",
+        "zh": "10 个任务 × 3 轮，一种主导模型，金额是 API 等价价；内置子智能体是默认用法；本仓库 5 个任务的答案可能就在 ccx 的代码里，所以外部仓库那一行才是干净的。"
+      }
+    },
+    {
+      "id": "r5",
+      "date": "2026-10-26",
+      "title": {"en": "Round 5, dev set", "zh": "第 5 轮，开发集"},
+      "rows": [
+        {"arm": "self", "run": "r5", "right": "19/20", "usd_per_success": "0.211", "wall_median_s": "94"},
+        {"arm": "builtin", "run": "r5", "right": "19/20", "usd_per_success": "0.155", "wall_median_s": "278"},
+        {"arm": "builtin2", "run": "r5d", "right": "17/20", "usd_per_success": "0.114", "wall_median_s": "276"},
+        {"arm": "builtin", "run": "r5f", "right": "17/20", "usd_per_success": "0.202", "wall_median_s": "316"},
+        {"arm": "ccx", "run": "r5e", "right": "19/20", "usd_per_success": "0.131", "wall_median_s": "251"},
+        {"arm": "ccx", "run": "r5f", "right": "20/20", "usd_per_success": "0.116", "wall_median_s": "267"},
+        {"arm": "ccx", "run": "r5g", "right": "18/20", "usd_per_success": null, "wall_median_s": null},
+        {"arm": "ccx", "run": "r5h", "right": "19/20", "usd_per_success": "0.135", "wall_median_s": "236"}
+      ],
+      "limit": {
+        "en": "Dev set, signal only: the tasks were also used while fixing ccx; the lead doing it itself was run once, on older ccx; the lean built-in recipe (builtin2) was cheaper per success than r5h.",
+        "zh": "开发集，只作信号：这些任务也在修 ccx 时用过；主导自己做只跑了一轮，ccx 版本更旧；精简做法的内置子智能体（builtin2）每次成功比 r5h 便宜。"
+      }
+    }
+  ],
+  "tests": {"count": "268", "date": "2026-10-24", "en": "268, on Linux, Windows and macOS × Python 3.11–3.13 (logic only, not real CLIs)", "zh": "268 个，Linux、Windows、macOS × Python 3.11–3.13（只证明逻辑，不证明真机）"}
+}
