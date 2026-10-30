@@ -114,9 +114,9 @@ DeepSeek Harness（`--to dsh`）：T1–T3 用 deepseek-flash 的 low / high / m
 | `codex_lean_tools = false` | `true`，只对写入任务：Codex 关网页搜索（`-c web_search="disabled"`）、图片生成和 goals（`--disable`），直连 OpenAI 时再关 apps / plugins（codex-cli 0.164.0 核对过）；只读任务保留网页搜索 | 低；需要上网查最新文档的写入任务会受影响 |
 
 别和 `[subagents]` 搞混：那个是子智能体自己再开子智能体的花费上限。那一段也有一个实验性的键 `fork_turns = "all"`（默认：什么都不加）。
-设成 `"none"` 后，`--parallel` 的 Codex 运行会多收到一句：用 `fork_turns="none"` 开自己的子会话（codex-cli 0.164.0 的 `spawn_agent` 参数），
+设成 `"none"` 后，`ccx run --parallel` 的 Codex 运行（原生的，不经 provider）会多收到一句：用 `fork_turns="none"` 开自己的子会话（codex-cli 0.164.0 的 `spawn_agent` 参数），
 并把它需要的文件、目标、约束和检查方法写进给它的消息，这样子会话每次请求不再重读父会话的历史。Claude 的 Agent 工具本来就不带父对话，
-所以 Claude 运行不变。运行记录里写 `parallel_fork_turns`。实测（M3）前不开。
+所以 Claude 运行不变。这类运行在记录里写 `parallel_fork_turns`（`all` 或 `none`；换到别的智能体上跑了再加 `parallel_fork_turns_moved`）。实测（M3）前不开。
 
 ## 安全边界
 

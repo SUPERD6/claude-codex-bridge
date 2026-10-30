@@ -222,11 +222,12 @@ the switches it ran with in run.json (`subagent_switches`); a ledger row names t
 | `codex_lean_tools = false` | `true`, write runs only: Codex without web search (`-c web_search="disabled"`), image generation and goals (`--disable`), and on OpenAI's own server without apps / plugins (checked on codex-cli 0.164.0); read runs keep web | low; a write task that needs current docs from the web loses them |
 
 Not to be confused with `[subagents]`, which caps what a sub-agent's own sub-agents may spend. That section has one
-experimental key too, `fork_turns = "all"` (default: nothing added). With `"none"`, a `--parallel` Codex piece is
-also told to start its own sub-agents with `fork_turns="none"` (a `spawn_agent` parameter of codex-cli 0.164.0) and
+experimental key too, `fork_turns = "all"` (default: nothing added). With `"none"`, a `ccx run --parallel` Codex run (native,
+not through a provider) is also told to start its own sub-agents with `fork_turns="none"` (a `spawn_agent` parameter of codex-cli 0.164.0) and
 to write into each one's message the files, goal, constraints and check it needs, so a child does not re-read the
 parent's history on every request. Claude's Agent tool never passes the parent's conversation, so Claude runs are
-unchanged. The run records `parallel_fork_turns`. Off until measured (M3).
+unchanged. Such a run records `parallel_fork_turns` (`all` or `none`; `parallel_fork_turns_moved` when it
+went on to another agent). Off until measured (M3).
 
 ## Safety
 

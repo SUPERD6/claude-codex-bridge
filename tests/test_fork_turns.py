@@ -25,7 +25,7 @@ class TestForkTurns(Env):
         call, rec = self.go("codex", "--parallel")
         assert "explicitly asked to use sub-agents" in call["prompt"]
         assert "fork_turns" not in call["prompt"]
-        assert "parallel_fork_turns" not in rec
+        assert rec["parallel_fork_turns"] == "all"                  # recorded for both groups
 
     def test_none_tells_a_parallel_codex_piece_and_records_it(self):
         self.tiers('[subagents]\nfork_turns = "none"\n')
@@ -38,6 +38,7 @@ class TestForkTurns(Env):
         self.tiers('[subagents]\nfork_turns = "none"\n')
         call, rec = self.go("codex")                                     # no --parallel: no sub-agent request at all
         assert "fork_turns" not in call["prompt"] and "parallel_fork_turns" not in rec
+        assert "parallel_fork_turns_moved" not in self.go("codex", "--parallel")[1]
         call, rec = self.go("claude", "--parallel")                      # Claude's Agent tool has no such parameter
         assert "explicitly asked to use sub-agents" in call["prompt"]
         assert "fork_turns" not in call["prompt"] and "parallel_fork_turns" not in rec
