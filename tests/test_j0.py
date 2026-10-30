@@ -25,7 +25,9 @@ def _claude(home: Path, sid: str, ts: float, entry: str, cached: int, write: int
             f.write(json.dumps({"type": "assistant", "sessionId": sid, "entrypoint": entry,
                                 "timestamp": iso(ts + i * 60),
                                 "message": {"id": f"{sid}-{i}", "model": "claude-opus-5-5",
-                                            "usage": {"input_tokens": 10, "cache_read_input_tokens": cached,
+                                            # a re-write (write > 0) on the last turn: the cache lost that much
+                                            "usage": {"input_tokens": 10,
+                                                      "cache_read_input_tokens": cached - (write if i == 2 else 0),
                                                       "cache_creation_input_tokens": write if i == 2 else 0,
                                                       "output_tokens": 100}}}) + "\n")
 
