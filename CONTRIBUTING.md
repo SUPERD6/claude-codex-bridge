@@ -32,7 +32,7 @@ the installed `ccx` (`tests/smoke_installed.py`).
 - **Tests with every change.** A fix comes with a test that fails without it.
 - **Keep the core.** Commands and options are not removed; a PR that changes one says in a line what it kept and how
   that was checked. Paths not run for real are called experimental where they are described.
-- **Nothing personal in the repo**: no names, local paths, e-mail addresses or data. Personal things live in the
+- **Nothing personal in the repo**: no names, local paths, e-mail addresses, machine names or data. Personal things live in the
   user's hub. `tests/test_repo_hygiene.py` checks every tracked file (text, and the strings inside images) on every
   push; look at screenshots yourself too, since a path drawn in the pixels is not caught.
 - **Two languages for docs**: `x.md` (English) and `x.zh.md` (Chinese), linking to each other. Record real decisions
