@@ -984,6 +984,49 @@ def test_a_daily_run_freezes_the_setup_once_and_removes_it(machine, tmp_path, mo
     assert rep["daily_snapshot"]["sha256"] == seen[0][0] and "codex:AGENTS.md" in rep["daily_snapshot"]["copied"]
 
 
+
+def test_a_leftover_daily_snapshot_does_not_block_the_next_run_and_a_failed_freeze_leaves_none(machine, tmp_path,
+                                                                                                 monkeypatch):
+    real = PF.real_paths()
+    w = tmp_path / "w"
+    (w / r5.DAILY_SNAPSHOT / "codex").mkdir(parents=True)        # a run killed after its freeze
+    probs, cleaned = PF.check_workdir(w, real)
+    assert probs == [] and cleaned == [] and (w / r5.DAILY_SNAPSHOT).exists()
+    probs, cleaned = PF.check_workdir(w, real, clean=True)
+    assert probs == [] and cleaned == [r5.DAILY_SNAPSHOT] and not (w / r5.DAILY_SNAPSHOT).exists()
+    _stub_machine(monkeypatch)
+    monkeypatch.setattr(r5.DH, "found_never", lambda d, allow=(): ["auth.json"])   # the freeze refuses after copying
+    monkeypatch.setattr(r5, "run_unit", lambda u, a, work: pytest.fail("no unit runs without a frozen setup"))
+    work = tmp_path / "w2"
+    rc = r5.main(["run", "--rounds", "1", "--tasks", r5.IDS[0], "--arms", "ccx2daily,ccx2daily_nomem", "--jobs", "1",
+                  "--out", str(tmp_path / "r.jsonl"), "--workdir", str(work), "--no-canary", "--force-unclean",
+                  "--codex-home", str(machine["codex"])])
+    assert rc == 3 and not (work / r5.DAILY_SNAPSHOT).exists()
+
+
+def test_the_kept_diff_is_byte_faithful_and_applies(tmp_path):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    r5.git(repo, "init", "-q")
+    r5.git(repo, "config", "core.autocrlf", "false")
+    (repo / "a.txt").write_bytes(b"one\r\ntwo\r\n")
+    (repo / "b.txt").write_bytes(b"lf\n")
+    r5.git(repo, "add", "-A")
+    r5.git(repo, "commit", "-q", "-m", "start")
+    (repo / "a.txt").write_bytes(b"one\r\nTWO\r\n")
+    (repo / "b.txt").write_bytes(b"lf 2\n")
+    diff = r5.final_diff(repo)
+    row = {}
+    r5.keep_artifacts(tmp_path / "art", row, None, diff)
+    raw = (tmp_path / "art" / "final.diff").read_bytes()
+    assert b"+TWO\r\n" in raw and b"+lf 2\n" in raw and b"diff --git a/a.txt b/a.txt\n" in raw
+    assert b"+lf 2\r\n" not in raw
+    r5.git(repo, "checkout", "--", ".")
+    done = subprocess.run(["git", "apply", str(tmp_path / "art" / "final.diff")], cwd=repo, capture_output=True)
+    assert done.returncode == 0, done.stderr
+    assert (repo / "a.txt").read_bytes() == b"one\r\nTWO\r\n" and (repo / "b.txt").read_bytes() == b"lf 2\n"
+
+
 def test_postflight_attributes_new_real_ledger_rows(machine, tmp_path, monkeypatch, capsys):
     _stub_machine(monkeypatch)
     led = machine["hub"] / "ccx" / "ledger.jsonl"

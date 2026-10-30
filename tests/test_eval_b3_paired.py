@@ -45,7 +45,9 @@ def test_paired_statistics_are_report_only_and_deterministic():
     assert br["token_effect"] == "not shown"
     assert r5.b3_rule(rows, "ccx2daily_nomem")["paired"]["ratio_of_medians_ci"] == p["ratio_of_medians_ci"]
     lo, hi = p["ratio_of_medians_ci"]
-    assert lo <= p["ratio_of_medians"] <= hi and p["boot"] == {"n": r5.B3_BOOT_N, "seed": r5.B3_BOOT_SEED}
+    assert lo <= p["ratio_of_medians"] <= hi
+    assert p["boot"] == {"n": r5.B3_BOOT_N, "seed": r5.B3_BOOT_SEED, "dropped": 0, "task_n": r5.B3_BOOT_N,
+                         "task_dropped": 0}
     good = r5.b3_rule(_pairs(base, [70_000] * 8 + [110_000] * 2), "ccx2daily_nomem")
     assert good["result"] == "pass" and good["paired"]["share_lower"] == 0.8 and good["paired"]["total_ratio"] == 0.78
     assert good["token_effect"] == "consistent"
@@ -61,7 +63,44 @@ def test_pairs_on_different_daily_snapshots_are_left_out():
     br = r5.b3_rule(rows, "ccx2daily_nomem")
     assert br["units"] == 3 and br["snapshot_mismatch"]["pairs"] == 1
     assert br["snapshot_mismatch"]["units"][0]["task"] == "t0" and br["paired"]["pairs"] == 3
-    assert "snapshot_mismatch" not in r5.b3_rule(_pairs([100] * 4, [70] * 4), "ccx2daily_nomem")
+    assert br["result"] == "unknown"                                 # the other 3 pairs pass: conservative
+    clean = r5.b3_rule(_pairs([100] * 4, [70] * 4), "ccx2daily_nomem")
+    assert "snapshot_mismatch" not in clean and clean["result"] == "pass"
+
+
+def test_a_split_lost_pair_cannot_turn_a_fail_into_a_pass():
+    rows = []
+    for i in range(6):          # t0-t2: round 1 lost (base right, arm wrong); t3-t5: round 1 only the arm right
+        lost = i < 3
+        rows += [_row("ccx2daily", 1, f"t{i}", lost, 100), _row("ccx2daily_nomem", 1, f"t{i}", not lost, 70),
+                 _row("ccx2daily", 2, f"t{i}", True, 100), _row("ccx2daily_nomem", 2, f"t{i}", True, 70)]
+    br = r5.b3_rule(rows, "ccx2daily_nomem")
+    assert br["result"] == "fail" and br["conditions"]["lost_pairs"]["value"] == 3      # only the lost pairs fail
+    rows[1] = {**rows[1], "daily": {"sha256": "other"}}  # one lost pair ran on two snapshots: lost would drop to 2
+    br = r5.b3_rule(rows, "ccx2daily_nomem")
+    assert br["conditions"]["lost_pairs"]["value"] == 2 and br["result"] == "unknown"   # not a pass
+    every = [{**r, "daily": {"sha256": "b" if r["arm"] == "ccx2daily" else "a"}} for r in rows]
+    allsplit = r5.b3_rule(every, "ccx2daily_nomem")      # every pair split: reported, not dropped silently
+    assert allsplit["units"] == 0 and allsplit["result"] == "unknown" and allsplit["snapshot_mismatch"]["pairs"] == 12
+    assert "ccx2daily vs ccx2daily_nomem" in r5.b3_rules(every)
+    assert any("left out" in ln for ln in r5.b3_rule_lines("x", allsplit))
+
+
+def test_the_task_cluster_interval_resamples_tasks_and_counts_dropped_resamples():
+    rows = []
+    for rd in (1, 2):                                     # 5 tasks x 2 rounds: a task's rounds go together
+        for i in range(5):
+            rows += [_row("ccx2daily", rd, f"t{i}", True, 100 + i), _row("ccx2daily_nomem", rd, f"t{i}", True,
+                                                                         60 + 10 * i + rd)]
+    p = r5.b3_rule(rows, "ccx2daily_nomem")["paired"]
+    assert p["pairs"] == 10 and p["tasks"] == 5
+    lo, hi = p["ratio_of_medians_task_ci"]
+    assert lo <= p["ratio_of_medians"] <= hi and p["boot"]["task_n"] == r5.B3_BOOT_N
+    assert r5.b3_rule(rows, "ccx2daily_nomem")["paired"]["ratio_of_medians_task_ci"] == [lo, hi]
+    one = r5.b3_paired([100.0, 90.0], [70.0, 60.0], tasks=["t0", "t0"])
+    assert one["ratio_of_medians_task_ci"] is None and one["ratio_of_medians_ci"]   # one task: no task interval
+    zero = r5.b3_paired([0.0, 0.0, 100.0], [1.0, 1.0, 50.0])  # resamples with a base median of 0 are counted
+    assert zero["boot"]["dropped"] > 0
 
 
 def test_summary_reads_several_results_files_and_tags(tmp_path, capsys):
@@ -202,6 +241,10 @@ def test_balanced_arm_order_rotates_over_task_and_round():
     assert all(len(set(v)) == 2 for v in by_task.values())    # a task's two rounds start with different arms
     s2 = r5.schedule(4, 53, tasks[:4], DAILY4, "balanced")     # 4 tasks x 4 rounds: an exact Latin square
     assert Counter(s2[i]["arm"] for i in range(0, 64, 4)) == Counter({a: 4 for a in DAILY4})
+    starts = {}
+    for i in range(0, 64, 4):                                   # tasks a multiple of the rows: rounds still shift
+        starts.setdefault(s2[i]["task"], set()).add(s2[i]["arm"])
+    assert all(len(v) == 4 for v in starts.values())
     with pytest.raises(ValueError):
         r5.schedule(1, 1, tasks, DAILY4, "random")
 
@@ -211,6 +254,26 @@ def test_run_takes_the_arm_order_and_rows_record_it(tmp_path, capsys):
                   "ccx2daily,ccx2daily_nomem", "--arm-order", "balanced", "--out", str(tmp_path / "r.jsonl"),
                   "--workdir", str(tmp_path / "w")])
     assert rc == 0
-    labels = [ln.split()[1] for ln in capsys.readouterr().out.splitlines() if ln.startswith("[dry] eval-r5:")]
+    printed = capsys.readouterr().out
+    assert "[dry] run order vs ccx2daily (base first / pairs): ccx2daily_nomem 1/2" in printed
+    labels = [ln.split()[1] for ln in printed.splitlines() if ln.startswith("[dry] eval-r5:")]
     firsts = [labels[0], labels[2]]
     assert len(labels) == 4 and firsts[0].rsplit(":", 1)[1] != firsts[1].rsplit(":", 1)[1]
+
+
+def test_williams_design_balances_every_arm_against_every_other():
+    for n in range(1, 7):
+        rows = r5.williams(n)
+        assert len(rows) == (2 * n if n % 2 else n) and all(sorted(r) == list(range(n)) for r in rows)
+        for a in range(n):
+            for b in range(n):
+                if a != b:
+                    assert sum(r.index(a) < r.index(b) for r in rows) * 2 == len(rows)
+
+
+def test_balanced_order_puts_the_baseline_first_in_half_of_each_arms_pairs():
+    tasks = [f"t{i}" for i in range(10)]
+    for seed in (1, 30, 7):                               # the seeds the review found up to 16:4 with a plain rotation
+        ob = r5.order_balance(r5.schedule(2, seed, tasks, DAILY4, "balanced"), "ccx2daily")
+        assert ob == {a: [10, 20] for a in DAILY4 if a != "ccx2daily"}
+    assert set(r5.order_balance(r5.schedule(2, 1, tasks, DAILY4), "ccx2daily")) == set(DAILY4) - {"ccx2daily"}

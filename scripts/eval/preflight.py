@@ -157,7 +157,7 @@ HEAVY = (re.compile(r"scripts[/\\]+eval[/\\]+\w+\.py[\"']?\s+(run|rescore)\b", r
          re.compile(r"\bccx(\.py|\.exe|\.cmd)?[\"']?\s+(run|discuss|resume)\b", re.I),
          re.compile(r"\bcodex(\.exe|\.cmd)?[\"']?(\s+-c\s+(\"[^\"]*\"|\S+))*\s+exec(\s|$)", re.I),
          re.compile(r"\bclaude(\.exe|\.cmd)?[\"']?\s(.*\s)?(-p|--print)(\s|$)", re.I))
-WORK_ENTRY = re.compile(r"^(\d+-[\w.-]+|h-\d+-[\w.-]+|x-[\w.-]+|r5iso-\w+|\.ccx-worktrees|canary|"
+WORK_ENTRY = re.compile(r"^(\d+-[\w.-]+|h-\d+-[\w.-]+|x-[\w.-]+|r5iso-\w+|\.ccx-worktrees|canary|daily-snapshot|"
                         r"[\w.-]+\.stream\.jsonl|preflight[\w.-]*\.json|\.ccx-eval-work)$")
 # Shells and wrappers: the command they carry runs in a child of theirs, which is what busy() and naming() look at
 # (Git Bash on Windows also breaks the parent chain, so this run's own launching shell is not seen as its ancestor)
@@ -1450,7 +1450,7 @@ def check_workdir(work: Path, real: dict, clean: bool = False, procs: list[dict]
             probs.append(f"work dir has files the eval did not make: {odd[:5]}; pick another --workdir")
         elif clean and not probs:
             for p in work.iterdir():
-                if p.name.startswith(("x-", "r5iso-")) or p.name in (".ccx-worktrees", "canary"):
+                if p.name.startswith(("x-", "r5iso-")) or p.name in (".ccx-worktrees", "canary", "daily-snapshot"):
                     cleaned.append(p.name)
                     rmtree(p)
     return probs, cleaned

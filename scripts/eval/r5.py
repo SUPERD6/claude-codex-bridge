@@ -567,7 +567,9 @@ def final_diff(repo: Path) -> str | None:
     if not start:
         return None
     git(repo, "add", "-A", "-N")
-    return git(repo, "diff", "--binary", start)
+    # bytes, not git()'s text mode: universal newlines would drop the \r of CRLF lines and the patch would not apply
+    out = subprocess.run(["git", "diff", "--binary", start], cwd=repo, capture_output=True).stdout
+    return out.decode("utf-8", errors="surrogateescape")
 
 
 def keep_artifacts(dest: Path, row: dict, sc: dict | None, diff: str | None) -> None:
@@ -578,10 +580,12 @@ def keep_artifacts(dest: Path, row: dict, sc: dict | None, diff: str | None) -> 
     kept = []
     if sc is not None:
         row["hidden_failed"] = sc.get("failed") or []
-        (dest / "hidden-pytest.txt").write_text((sc.get("output") or "")[:ARTIFACT_MAX], encoding="utf-8")
+        (dest / "hidden-pytest.txt").write_text((sc.get("output") or "")[:ARTIFACT_MAX], encoding="utf-8",
+                                                newline="")
         kept.append("hidden-pytest.txt")
     if diff is not None:
-        (dest / "final.diff").write_text(diff[:ARTIFACT_MAX], encoding="utf-8")
+        # newline="": git's exact bytes back (write_text would turn every \n into \r\n on Windows)
+        (dest / "final.diff").write_text(diff[:ARTIFACT_MAX], encoding="utf-8", errors="surrogateescape", newline="")
         kept.append("final.diff")
     if kept:
         row["artifacts"] = {"dir": dest.name, "files": kept}
@@ -1493,15 +1497,37 @@ def run_unit(u: dict, a, work: Path) -> dict:
 ARM_ORDERS = ("shuffle", "balanced")
 
 
+def williams(n: int) -> list[list[int]]:
+    """A Williams design over n arms (a balanced Latin square): first row 0, 1, n-1, 2, n-2, ..., each later row +1
+    mod n; for an odd n the reversed rows are added too (2n rows). Over all its rows every arm takes every place
+    equally often and every arm runs before every other arm in exactly half of the rows, so no switch's comparison
+    with the baseline lines up with run order."""
+    if n <= 0:
+        return [[]]
+    row0, lo, hi = [0], 1, n - 1
+    while len(row0) < n:
+        row0.append(lo)
+        lo += 1
+        if len(row0) < n:
+            row0.append(hi)
+            hi -= 1
+    rows = [[(x + i) % n for x in row0] for i in range(n)]
+    return rows + [r[::-1] for r in rows] if n % 2 else rows
+
+
 def schedule(rounds: int, seed: int, tasks: list[str], arms: list[str], order: str = "shuffle") -> list[dict]:
     """Units in run order: per round the tasks shuffled (seeded), per task its arms one after another. `shuffle` (the
-    default, every earlier run's schedule): the arms shuffled per task. `balanced`: a Latin-square rotation of one
-    seeded arm order, by the task's place in `tasks` plus the round, so each arm runs first (and in each place) about
-    equally often and a task's rounds start with different arms; rows say `arm_order` and `arm_pos`."""
+    default, every earlier run's schedule): the arms shuffled per task. `balanced`: the rows of a Williams design
+    (williams) over one seeded arm order, taken in turn by the task's place in `tasks` and the round, so over every
+    full cycle of rows each arm runs in each place equally often and before every other arm in half of the units
+    (order_balance counts it); when the task count is a multiple of the rows, each round shifts by one so a task's
+    rounds still differ. Rows say `arm_order` and `arm_pos`."""
     if order not in ARM_ORDERS:
         raise ValueError(f"unknown arm order {order!r} (known: {', '.join(ARM_ORDERS)})")
     base = list(arms)
     random.Random(f"{seed}:r5:arms").shuffle(base)
+    rows = williams(len(base))
+    shift = 1 if tasks and len(tasks) % len(rows) == 0 else 0
     out = []
     for rd in range(1, rounds + 1):
         rnd = random.Random(f"{seed}:r5:{rd}")
@@ -1509,8 +1535,8 @@ def schedule(rounds: int, seed: int, tasks: list[str], arms: list[str], order: s
         rnd.shuffle(ts)
         for t in ts:
             if order == "balanced":
-                k = (tasks.index(t) + rd - 1) % len(base) if base else 0
-                arm_list = base[k:] + base[:k]
+                row = rows[((rd - 1) * (len(tasks) + shift) + tasks.index(t)) % len(rows)]
+                arm_list = [base[j] for j in row]
                 out += [{"exp": "r5", "round": rd, "task": t, "arm": arm, "arm_order": order, "arm_pos": i}
                         for i, arm in enumerate(arm_list)]
                 continue
@@ -1518,6 +1544,25 @@ def schedule(rounds: int, seed: int, tasks: list[str], arms: list[str], order: s
             rnd.shuffle(arm_list)
             out += [{"exp": "r5", "round": rd, "task": t, "arm": arm} for arm in arm_list]
     return out
+
+
+def order_balance(units: list[dict], base: str) -> dict:
+    """For every other arm: [units of a task and round where `base` ran before it, task-rounds with both]. A paired
+    comparison against base is confounded with run order (drift, rate limits, provider cache) when this is far
+    from half."""
+    by: dict = {}
+    for i, u in enumerate(units):
+        by.setdefault((u["round"], u["task"]), {})[u["arm"]] = i
+    out: dict = {}
+    for g in by.values():
+        if base not in g:
+            continue
+        for arm, i in g.items():
+            if arm != base:
+                c = out.setdefault(arm, [0, 0])
+                c[0] += g[base] < i
+                c[1] += 1
+    return dict(sorted(out.items()))
 
 
 def spent(f: Path, tag: str | None = None) -> float:
@@ -1867,6 +1912,10 @@ def cmd_run(a) -> int:
             print(line)
         if skill and a.claude_isolation != "ccx-home":
             print(f"[dry] note: {', '.join(skill)} needs --claude-isolation ccx-home to run")
+        ob = order_balance(todo, B3_BASE)
+        if ob:
+            print("[dry] run order vs " + B3_BASE + " (base first / pairs): "
+                  + ", ".join(f"{k} {v[0]}/{v[1]}" for k, v in ob.items()))
         for line in daily_plan_lines(arms, a):
             print(line)
         pinned, probs = pin_check(read_jsonl(out), a.tag, PF.commit_state()["commit"], a.pin_commit)
@@ -1913,6 +1962,7 @@ def cmd_run(a) -> int:
         try:
             snap = freeze_daily(a, work / DAILY_SNAPSHOT)
         except (OSError, RuntimeError) as e:
+            r2._rmtree(work / DAILY_SNAPSHOT)      # a half-made copy of the person's setup does not stay behind
             print(f"[daily] could not freeze the daily setup: {type(e).__name__}: {e}"[:400], flush=True)
             return 3
         rep["daily_snapshot"] = {k: snap[k] for k in ("sha256", "frozen_at", "copied")}
@@ -2349,35 +2399,54 @@ def split_snapshots(ps: list[tuple[dict, dict]]) -> tuple[list[tuple[dict, dict]
     return keep, split
 
 
-def b3_paired(pa: list[float], pb: list[float], n: int = B3_BOOT_N, seed: int = B3_BOOT_SEED) -> dict:
+def _rom(pa: list[float], pb: list[float]) -> float | None:
+    """The ratio of medians arm / base (None when the base's median is 0 or there are no pairs)."""
+    a = b3_median(pa)
+    return b3_median(pb) / a if a else None
+
+
+def b3_paired(pa: list[float], pb: list[float], n: int = B3_BOOT_N, seed: int = B3_BOOT_SEED,
+              tasks: list[str] | None = None) -> dict:
     """Report-only paired statistics of the sub-agent prompt tokens (pa: the base's per pair, pb: the arm's, the same
     order): the share of pairs where the arm's is lower, the median of the per-pair ratio arm / base (pairs with a
-    base of 0 left out), the total ratio, and a pair-bootstrap 95% CI of the ratio of medians (resampling pairs,
-    random.Random(seed), n resamples; percentile interval)."""
+    base of 0 left out), the total ratio, and two percentile 95% CIs of the ratio of medians (random.Random(seed), n
+    resamples each): `ratio_of_medians_ci` resamples pairs as if independent, `ratio_of_medians_task_ci` resamples
+    tasks with all their pairs (as task_boot; given `tasks`, one per pair), which is the honest one when a task has
+    several rounds, since a task's rounds are correlated. `boot` says how many resamples had a base median of 0 and
+    were dropped."""
     k = len(pa)
     if not k:
         return {"pairs": 0, "share_lower": None, "ratio_median": None, "total_ratio": None, "ratio_of_medians": None,
-                "ratio_of_medians_ci": None}
+                "ratio_of_medians_ci": None, "ratio_of_medians_task_ci": None}
     ratios = [b / a for a, b in zip(pa, pb) if a]
-    ma, mb = b3_median(pa), b3_median(pb)
-    rom = (mb / ma) if ma else None
-    ci = None
+    rom = _rom(pa, pb)
+    ci, dropped = None, 0
     if k >= 2:
         rnd = random.Random(seed)
         vals = []
         for _ in range(n):
             idx = [rnd.randrange(k) for _ in range(k)]
-            a = b3_median([pa[i] for i in idx])
-            if a:
-                vals.append(b3_median([pb[i] for i in idx]) / a)
+            v = _rom([pa[i] for i in idx], [pb[i] for i in idx])
+            if v is not None:
+                vals.append(v)
+        dropped = n - len(vals)
         vals.sort()
         if vals:
             ci = [round(vals[int(0.025 * len(vals))], 4), round(vals[int(0.975 * len(vals)) - 1], 4)]
+    task_ci, tinfo = None, {"n": 0, "dropped": 0}
+    if tasks is not None and len(tasks) == k:
+        ps = [({"task": t, "a": a}, {"b": b}) for t, a, b in zip(tasks, pa, pb)]
+        tci = task_boot(ps, lambda xs: _rom([x["a"] for x, _ in xs], [y["b"] for _, y in xs]) if xs else None,
+                        n=n, seed=seed, info=tinfo)
+        task_ci = list(tci) if tci else None
     return {"pairs": k, "share_lower": round(sum(b < a for a, b in zip(pa, pb)) / k, 4),
             "ratio_median": round(b3_median(ratios), 4) if ratios else None,
             "total_ratio": round(sum(pb) / sum(pa), 4) if sum(pa) else None,
             "ratio_of_medians": round(rom, 4) if rom is not None else None, "ratio_of_medians_ci": ci,
-            "boot": {"n": n, "seed": seed}}
+            "ratio_of_medians_task_ci": task_ci,
+            "tasks": len(set(tasks)) if tasks is not None else None,
+            "boot": {"n": n, "seed": seed, "dropped": dropped, "task_n": tinfo.get("n", 0),
+                     "task_dropped": tinfo.get("dropped", 0)}}
 
 
 def b3_rule(rows: list[dict], arm: str, base: str = B3_BASE) -> dict | None:
@@ -2391,11 +2460,12 @@ def b3_rule(rows: list[dict], arm: str, base: str = B3_BASE) -> dict | None:
     Report-only, next to the rule (never changing `result`): `paired` (b3_paired) and `token_effect`: "consistent"
     only when the rule's token condition passes, the total ratio is <= B3_TOTAL_RATIO and the arm's prompt is lower in
     at least B3_SHARE_LOWER of the pairs; else "not shown". Pairs whose units ran on different daily snapshots are
-    left out of everything (`snapshot_mismatch` lists them)."""
+    left out of the conditions and the statistics (`snapshot_mismatch` lists them) and, like an unclean pair lost on
+    one side, turn a pass into Unknown; when every pair is split the rule is reported as Unknown on 0 pairs."""
     every = [r for r in rows if "error" not in r]
     clean, excluded = clean_rows(every)
     ps, split = split_snapshots(pair_units(clean, base, arm))
-    if not ps:
+    if not ps and not split:
         return None
     a_ok, b_ok = sum(bool(x.get("ok")) for x, _ in ps), sum(bool(y.get("ok")) for _, y in ps)
     lost = sum(bool(x.get("ok")) and not y.get("ok") for x, y in ps)
@@ -2428,10 +2498,16 @@ def b3_rule(rows: list[dict], arm: str, base: str = B3_BASE) -> dict | None:
         if out["result"] == "pass":
             out["result"] = "unknown"
     if split:
+        # conservative, as lost_pairs' exclusion_note: a left-out pair could have been a lost one, so a pass becomes
+        # Unknown (a fail stays a fail)
         out["snapshot_mismatch"] = {"pairs": len(split), "units": split,
-                                    "note": "left out of the rule and of the paired statistics: the two units ran "
-                                            "on different snapshots of the person's daily setup"}
-    paired = (b3_paired([float(v) for v in pa], [float(v) for v in pb]) if have else
+                                    "note": "left out of the rule's conditions and of the paired statistics: the two "
+                                            "units ran on different snapshots of the person's daily setup; a pass "
+                                            "becomes unknown"}
+        if out["result"] == "pass":
+            out["result"] = "unknown"
+    paired = (b3_paired([float(v) for v in pa], [float(v) for v in pb], tasks=[x["task"] for x, _ in ps])
+              if have else
               {"pairs": len(ps), "note": "a token count is missing: no paired statistics"})
     out["paired"] = paired
     consistent = (cond["input"]["result"] == "pass" and paired.get("total_ratio") is not None
@@ -2464,10 +2540,12 @@ def b3_rule_lines(name: str, br: dict) -> list[str]:
     if p.get("pairs"):
         out.append(f"  paired (report only): lower in {p.get('share_lower')} of pairs, per-pair ratio median "
                    f"{p.get('ratio_median')}, total ratio {p.get('total_ratio')}, ratio of medians "
-                   f"{p.get('ratio_of_medians')} 95% CI {p.get('ratio_of_medians_ci')}; token effect "
+                   f"{p.get('ratio_of_medians')} 95% CI {p.get('ratio_of_medians_ci')} by pair, "
+                   f"{p.get('ratio_of_medians_task_ci')} by task; token effect "
                    f"{br['token_effect']}")
     if br.get("snapshot_mismatch"):
-        out.append(f"  {br['snapshot_mismatch']['pairs']} pairs on different daily snapshots left out")
+        out.append(f"  {br['snapshot_mismatch']['pairs']} pairs on different daily snapshots left out (a pass "
+                   "becomes unknown)")
     if br.get("exclusion_note"):
         out.append(f"  {br['exclusion_note']}")
     return out
