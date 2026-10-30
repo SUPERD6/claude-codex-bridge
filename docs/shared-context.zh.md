@@ -7,7 +7,7 @@ Claude Code、Codex、DeepSeek 各有各的上下文窗口，谁也读不到别�
 
 | 在哪 | 另一家拿到什么 | 开关 |
 |---|---|---|
-| 派活（`ccx run`） | 主导最近的工作：用户最近几条要求、定下来的句子、主导的计划、改过的文件、最后一条回复；每行带时间和来源；约 1–1.2k token | `--context auto\|on\|off`；auto（默认）= 只给可写任务；`[shared_context] run` |
+| 派活（`ccx run`） | 主导最近的工作：用户最近几条要求、定下来的句子、主导的计划、改过的文件、最后一条回复；每行带时间和来源；英文约 1–1.2k token（中文 5000 字约 2.2–3k token） | `--context auto\|on\|off`；auto（默认）= 只给可写任务；`[shared_context] run` |
 | `ccx peek claude\|codex\|deepseek` | 只读地看这一家在本项目里最新的开着的会话（或 `--session ID`） | — |
 | 每轮 hook（`ccx turn`） | 自上次看过之后，另一家每家一行：它的用户要了什么、定了什么、改了哪些文件 | `[shared_context] turn = false` |
 

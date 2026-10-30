@@ -224,7 +224,8 @@ def turn_output(agent: str, data: dict, threshold: int) -> str:
     the others' journal lines, and the H10 hint. '' when nothing is new (a hook that costs nothing)."""
     from .. import context, context_share, learn, project
     parts = []
-    if not int(os.environ.get("CCX_DEPTH", "0") or 0):          # a ccx sub-agent's turn is not the lead's
+    lead = not int(os.environ.get("CCX_DEPTH", "0") or 0)       # a ccx sub-agent's turn is not the lead's
+    if lead:
         cwd = Path(data.get("cwd") or Path.cwd())
         root = project.find_root(cwd) or learn.cp_root(cwd)
         if (root / ".ccx").is_dir():                             # never creates .ccx in a project without one
@@ -237,7 +238,8 @@ def turn_output(agent: str, data: dict, threshold: int) -> str:
             if context_share.setting(load_config(paths()), "turn", True):
                 parts.append(context_share.turn_delta(paths(), root, reader))   # what the other tools just did
             sync_in_background(root)                             # the private GitHub copy, when configured
-    parts.append(context.hint(paths(), agent, data, threshold) if agent == "claude" else "")
+    if lead and agent == "claude":                               # the context hint is advice for the lead only
+        parts.append(context.hint(paths(), agent, data, threshold))
     return "\n\n".join(x for x in parts if x)
 
 

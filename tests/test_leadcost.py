@@ -62,6 +62,75 @@ class TestClaude(Env):
         self.assertGreater(c["extra_usd"], 0)
         self.assertEqual(c["causes"]["idle longer than the cache lives"], 1)
 
+    def test_a_big_tool_result_is_no_break_and_duplicates_count_once(self):
+        rows = [asst(0, "2026-10-24T10:00:00Z", 1_000, 100_000),
+                asst(1, "2026-10-24T10:01:00Z", 99_000, 101_005),     # a 99k tool result: reads the old prefix back
+                asst(2, "2026-10-24T10:02:00Z", 5_000, 150_000),
+                asst(3, "2026-10-24T10:03:00Z", 30_000, 140_000),     # writes too little for the old rule
+                asst(4, "2026-10-24T12:00:00Z", 180_000, 0),          # idle: a real break
+                asst(5, "2026-10-24T12:00:00Z", 180_000, 0)]          # the same reply logged again, another id
+        c = leadcost.cache_breaks(Paths(self.hub), "claude", write(self.work / "big.jsonl", rows))
+        self.assertEqual([b["ts"] for b in c["breaks"]], ["2026-10-24T12:00:00Z"])
+        self.assertIn("idle", c["breaks"][0]["why"][0])
+
+    def test_the_floor_and_the_90_percent_clause_each_reject_a_turn(self):
+        # Each turn below passes the old rule (writes >= 20k and > 30% of the turn); only the new tests reject it.
+        rows = [asst(0, "2026-10-24T10:00:00Z", 1_000, 99_000),           # holds 100k
+                asst(1, "2026-10-24T10:01:00Z", 45_000, 85_000),          # lost 15k: under the 20k floor
+                asst(2, "2026-10-24T10:02:00Z", 100_000, 120_000),        # lost 10k; holds 220k
+                asst(3, "2026-10-24T10:03:00Z", 90_000, 199_000),         # lost 21k but read >= 90% of 220k
+                asst(4, "2026-10-24T10:04:00Z", 150_000, 100_000)]        # lost 189k: a break
+        c = leadcost.cache_breaks(Paths(self.hub), "claude", write(self.work / "floor.jsonl", rows))
+        self.assertEqual([b["ts"] for b in c["breaks"]], ["2026-10-24T10:04:00Z"])
+
+    def test_uncached_input_is_not_lost_and_no_timestamp_is_no_duplicate(self):
+        prev = asst(0, "2026-10-24T10:00:00Z", 0, 40_000)
+        prev["message"]["usage"]["input_tokens"] = 60_000                  # never in the cache
+        rows = [prev, asst(1, "2026-10-24T10:01:00Z", 62_000, 40_000)]     # reads all the cache held
+        c = leadcost.cache_breaks(Paths(self.hub), "claude", write(self.work / "unc.jsonl", rows))
+        self.assertEqual(c["breaks"], [])
+        rows = [asst(0, None, 0, 10_000), asst(1, None, 0, 100_000), asst(2, None, 60_000, 0)]
+        c = leadcost.cache_breaks(Paths(self.hub), "claude", write(self.work / "nots.jsonl", rows))
+        self.assertEqual(len(c["breaks"]), 1)
+
+    def test_mcp_instructions_advice_only_names_unused_servers(self):
+        tools = [{"name": "mcp__browser__click", "description": "y" * 16000},
+                 {"name": "mcp__docs__read", "description": "y" * 16000}]
+        instr = {"type": "attachment", "attachment": {"type": "mcp_instructions_delta",
+                                                      "addedBlocks": ["z" * 16000]}}
+
+        def use(i, name):
+            return {"type": "assistant", "message": {"id": f"u{i}", "model": "claude-opus-5-5", "content": [
+                {"type": "tool_use", "id": f"tu{i}", "name": name, "input": {}}],
+                "usage": {"input_tokens": 5, "cache_read_input_tokens": 10_000, "output_tokens": 5}}}
+        head = [{"type": "api-request-shape", "shape": {"system": [{"text": "s"}], "tools": tools}}, instr]
+        both = head + [asst(0, "2026-10-24T10:00:00Z", 10_000, 0), use(1, "mcp__docs__read"),
+                       use(2, "mcp__browser__click")]
+        b = leadcost.breakdown(Paths(self.hub), "claude", write(self.work / "i1.jsonl", both))
+        self.assertIn("MCP server instructions", [x["part"] for x in b["parts"]])
+        self.assertFalse(any(a.startswith("MCP server") for a in b["advice"]))
+        one = head + [asst(0, "2026-10-24T10:00:00Z", 10_000, 0), use(1, "mcp__docs__read")]
+        b = leadcost.breakdown(Paths(self.hub), "claude", write(self.work / "i2.jsonl", one))
+        ia = [a for a in b["advice"] if a.startswith("MCP server instructions")]
+        self.assertEqual(len(ia), 1)
+        self.assertIn("browser", ia[0])
+        self.assertNotIn("docs", ia[0])
+
+    def test_a_called_mcp_server_is_not_advised_off(self):
+        tools = [{"name": "mcp__browser__click", "description": "y" * 16000},
+                 {"name": "mcp__docs__read", "description": "y" * 16000}]
+        call = {"type": "assistant", "message": {"id": "m9", "model": "claude-opus-5-5", "content": [
+            {"type": "tool_use", "id": "tu1", "name": "mcp__docs__read", "input": {}}],
+            "usage": {"input_tokens": 5, "cache_read_input_tokens": 10_000, "output_tokens": 5}}}
+        rows = [{"type": "api-request-shape", "shape": {"system": [{"text": "s"}], "tools": tools}},
+                asst(0, "2026-10-24T10:00:00Z", 10_000, 0), call]
+        b = leadcost.breakdown(Paths(self.hub), "claude", write(self.work / "mcp.jsonl", rows))
+        calls = {x["part"]: x.get("calls") for x in b["parts"]}
+        self.assertEqual(calls["MCP server docs (tool definitions)"], 1)
+        self.assertEqual(calls["MCP server browser (tool definitions)"], 0)
+        self.assertFalse(any("MCP server docs" in a for a in b["advice"]))
+        self.assertTrue(any("MCP server browser" in a and "never called" in a for a in b["advice"]))
+
 
 class TestSuggest(Env):
     def turns(self, tool, path_or_cmd, model="claude-opus-5-5", n=10):
@@ -122,6 +191,49 @@ class TestCodex(Env):
         self.assertIn("instruction file AGENTS.md (/r)", parts)
         c = leadcost.cache_breaks(p, "codex", f)
         self.assertEqual([x["why"] for x in c["breaks"]], [["the conversation was compacted"]])
+
+    def test_effort_only_break_is_labelled(self):
+        def tc(ts, inp, cached):
+            return {"timestamp": ts, "type": "event_msg", "payload": {"type": "token_count", "info": {
+                "last_token_usage": {"input_tokens": inp, "cached_input_tokens": cached, "output_tokens": 9}}}}
+        ctx = lambda eff: {"type": "turn_context", "payload": {"model": "gpt-6-luna", "effort": eff}}  # noqa: E731
+        rows = [ctx("low"), tc("2026-10-24T10:00:00Z", 30_000, 0),
+                ctx("low"), tc("2026-10-24T10:01:00Z", 40_000, 29_000),
+                ctx("high"), tc("2026-10-24T10:02:00Z", 50_000, 0),                 # same model, effort up
+                ctx("high"), tc("2026-10-24T10:03:00Z", 60_000, 49_000),
+                {"type": "turn_context", "payload": {"model": "gpt-6.1-sol", "effort": "medium"}},
+                tc("2026-10-24T10:04:00Z", 70_000, 0)]                              # model and effort
+        c = leadcost.cache_breaks(Paths(self.hub), "codex", write(self.work / "eff.jsonl", rows))
+        self.assertEqual(len(c["breaks"]), 2)
+        self.assertEqual(c["breaks"][0]["why"], ["effort changed low → high"])
+        self.assertTrue(c["breaks"][0]["effort_only"])
+        self.assertNotIn("effort_only", c["breaks"][1])
+        self.assertEqual((c["causes"]["effort changed"], c["causes"]["model switched"]), (2, 1))
+
+    def test_developer_blocks_by_tag_and_mcp_calls(self):
+        dev = {"type": "response_item", "payload": {"type": "message", "role": "developer", "content": [
+            {"type": "input_text", "text": "<permissions instructions>\nsandbox " + "p" * 400},
+            {"type": "input_text", "text": "## Memory\n\nYou have a memory folder. " + "m" * 12000},
+            {"type": "input_text", "text": "<skills_instructions>\n## Skills\n" + "s" * 16000},
+            {"type": "input_text", "text": "<recommended_plugins>\n" + "r" * 800}]}}
+        tools = {"type": "response_item", "payload": {"type": "additional_tools", "tools": [
+            {"name": "mcp__cua_repl", "tools": [{"name": "js", "description": "j" * 12000}]},
+            {"name": "mcp__web", "tools": [{"name": "get", "description": "w" * 12000}]}]}}
+        call = {"type": "response_item", "payload": {"type": "function_call", "name": "js",
+                                                     "namespace": "mcp__cua_repl", "arguments": "{}"}}
+        rows = [{"type": "session_meta", "payload": {"id": "x", "base_instructions": "b" * 400}},
+                {"type": "turn_context", "payload": {"model": "gpt-6.1-sol"}}, dev, tools,
+                {"timestamp": "2026-10-24T10:00:00Z", "type": "event_msg", "payload": {"type": "token_count",
+                 "info": {"last_token_usage": {"input_tokens": 30_000, "cached_input_tokens": 0}}}}, call]
+        b = leadcost.breakdown(Paths(self.hub), "codex", write(self.work / "dev.jsonl", rows))
+        parts = {x["part"]: x for x in b["parts"]}
+        for k in ("skills", "Memory", "permissions", "app context"):
+            self.assertIn(f"developer message: {k}", parts)
+        self.assertGreater(parts["developer message: skills"]["tokens"], leadcost.BIG_PART)
+        self.assertTrue(any("Codex skill list" in a and "skills_include" in a for a in b["advice"]))
+        self.assertEqual(parts["MCP server cua_repl (tool definitions)"]["calls"], 1)
+        self.assertFalse(any("MCP server cua_repl" in a for a in b["advice"]))
+        self.assertTrue(any("MCP server web" in a and "never called" in a for a in b["advice"]))
 
     def test_cli_needs_a_session(self):
         r = self.ccx("lead", "--breakdown", "--as", "codex")

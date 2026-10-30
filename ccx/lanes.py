@@ -2,8 +2,9 @@
 (as `ccx resume` does: its context and prompt cache stay) instead of each piece paying a fresh start-up.
 Only the lanes run side by side.
 
-Round 2 (docs/research/2026-10-25-seven-cores-r2.md section 2.4) measured about 93k tokens of start-up per Codex
-run: ten pieces as ten runs were the fastest and the most expensive. A lane is a list of pieces; its first piece
+Round 2 (docs/research/2026-10-25-seven-cores-r2.md section 2.4) measured about 93k input tokens per Codex
+run (not a one-off start-up: the run's whole input, mostly cache reads, a fixed prefix of ~18-25k re-sent on each of ~5 requests): ten
+pieces as ten runs were the fastest and the most expensive. A lane is a list of pieces; its first piece
 starts a session, each later one continues it as a new task (Request.continued). Every piece is still its own ccx
 run: its own check, ledger row, undo snapshot and, inside a worktree, its own commit. A piece that fails, or a
 session whose last piece read more than [lanes] max_tokens, or that did max_blocks pieces, hands the next piece a fresh session.
