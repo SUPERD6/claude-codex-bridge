@@ -8,8 +8,10 @@ tools already write; nothing is written, no model is called.
 2. Where tokens go: one ledger across Claude and Codex. Runs are grouped by task (else label, else run); each run
    shows its tokens (fresh / cached / cache_write / output) and API-equivalent $, then its own child sessions:
    Codex children from run.json `codex_children` (child id -> running input / cached / output, input includes
-   cached; a resumed run carries the earlier children, so only the growth is shown again), Claude children from the
-   sub-run's <session>/subagents/*.jsonl (usage.session_files / _helper_parent / _claude_file). A run's own total
+   cached; a resumed or continued run carries the totals of the run it went on from, so that run's own record is
+   taken off and only the growth is shown), Claude children from the sub-run's <session>/subagents/*.jsonl
+   (usage.session_files / _helper_parent / _claude_file), each session once per run and only the helper turns from
+   the run's start to the next run that took up the same session. A run's own total
    already includes its children (Codex: delegate adds their growth; Claude: modelUsage covers the Agent tool), so
    the share is children / run total.
 3. Lead conversations: the lead sessions that delegated (ledger `lead_session`), newest first; one is parsed only
@@ -22,6 +24,7 @@ escapes them. Files read: <hub>/ccx/ledger.jsonl and runs/<id>/run.json, prompt.
 """
 from __future__ import annotations
 
+import bisect
 import json
 import re
 import time
@@ -105,16 +108,17 @@ def _is_review(row: dict) -> str | None:
 
 
 # ------------------------------------------------------------------ child sessions
-def codex_kids(rec: dict, seen: dict) -> list[dict]:
+def codex_kids(rec: dict, before: dict | None = None) -> list[dict]:
     """A run's Codex children from its record: {child: {input, cached, output}} running totals, input including
-    cached. `seen` holds what earlier runs of the same chain already showed, so a resumed run shows only growth."""
+    cached. A resumed or continued run's record starts from the totals of the run it went on from (delegate.py
+    copies them), so `before` is that run's `codex_children` and only the growth is this run's."""
     out = []
+    before = before or {}
     for child, tot in (rec.get("codex_children") or {}).items():
         if not isinstance(tot, dict):
             continue
-        before = seen.get(child) or {}
-        d = {k: max(0, int(tot.get(k, 0) or 0) - int(before.get(k, 0) or 0)) for k in ("input", "cached", "output")}
-        seen[child] = tot
+        b = before.get(child) if isinstance(before.get(child), dict) else {}
+        d = {k: max(0, int(tot.get(k, 0) or 0) - int(b.get(k, 0) or 0)) for k in ("input", "cached", "output")}
         t = {"fresh": max(0, d["input"] - d["cached"]), "cached": d["cached"], "cache_write": 0, "output": d["output"]}
         t["total"] = t["fresh"] + t["cached"] + t["output"]
         if t["total"]:
@@ -124,16 +128,21 @@ def codex_kids(rec: dict, seen: dict) -> list[dict]:
     return out
 
 
-def claude_kids(session: str, home: Path | None = None) -> list[dict]:
+def claude_kids(session: str, since: float = 0.0, until: float | None = None,
+                home: Path | None = None) -> list[dict]:
     """A Claude sub-run's own sub-agents (Agent tool), one entry per helper file under <session>/subagents/, read
-    with the same helpers as the lead-side accounting (usage.session_files, _helper_parent, _claude_file)."""
+    with the same helpers as the lead-side accounting (usage.session_files, _helper_parent, _claude_file). Only the
+    messages in [since, until): a later run that resumes the same session (ccx resume, a review fix round, ccx run
+    auto-continue) keeps the session id, so each run takes the helper turns of its own time window."""
     from .usage import _claude_file, _helper_parent, session_files
     out = []
     for f in session_files(session, home):
         if _helper_parent(f) != session:
             continue                                   # the conversation's own file: that is the run itself
         msgs: dict[str, dict] = {}
-        _claude_file(f, 0.0, set(), msgs)
+        _claude_file(f, since, set(), msgs)
+        if until is not None:
+            msgs = {k: m for k, m in msgs.items() if m["ts"] < until}
         if not msgs:
             continue
         u = {"input_tokens": 0, "cache_write_tokens": 0, "cache_write_1h_tokens": 0, "cached_input_tokens": 0,
@@ -223,18 +232,34 @@ class Flow:
         totals["usd"] = round(totals["usd"], 4)
         for a in totals["by_agent"].values():
             a["usd"] = round(a["usd"], 4)
+        totals["by_agent"] = dict(sorted(totals["by_agent"].items(),          # the biggest first
+                                         key=lambda x: (-x[1]["tokens"]["total"], -x[1]["usd"])))
+
+        # when each Claude session was taken up by a run (every ledger row, not only the filtered ones), so a run
+        # that resumes a session gets only the helper turns after it, and the earlier run only those before it
+        starts: dict[str, list[float]] = {}
+        for r in rows:
+            if r.get("type") or not r.get("run_id"):
+                continue
+            for sid in set(r.get("sessions") or []) | ({r["session_id"]} if r.get("session_id") else set()):
+                starts.setdefault(str(sid), []).append(float(r.get("ts") or 0))
+        for v in starts.values():
+            v.sort()
 
         # 2: the tree, grouped by task, else label, else run; a review run goes with the run it reviewed
         key_of: dict[str, str] = {}
         groups: dict[str, list[dict]] = {}
         for r in sorted(runs, key=lambda x: x.get("ts") or 0):
             target = _is_review(r)
+            came_from = self.resumed_from(r) if not r.get("task") and not r.get("label") else None
             if target is not None and target in key_of:
                 k = key_of[target]
             elif r.get("task"):
                 k = "task:" + str(r["task"])
             elif r.get("label") and target is None:
                 k = "label:" + str(r["label"])
+            elif came_from and came_from in key_of:  # a resume without a task or label sits with its chain
+                k = key_of[came_from]
             else:
                 k = "run:" + str(target or r["run_id"])
             key_of[r["run_id"]] = k
@@ -245,17 +270,13 @@ class Flow:
         for k in order[:TASKS_MAX]:
             rs = groups[k]
             shown = rs[-RUNS_PER_TASK_MAX:]
-            seen: dict = {}
             items = []
             gt, gusd = _zero(), 0.0
             for r in rs:
                 _add(gt, tokens_of(r))
                 gusd += float(r.get("ae_usd") or 0.0)
-            for r in rs:
-                kids = self.kids(r, seen)          # every run, in order, so a resumed run's growth is right
-                if r not in shown:
-                    continue
-                items.append(self.run_item(r, kids))
+            for r in shown:                       # each run's own children, from its own chain (not the filter)
+                items.append(self.run_item(r, self.kids(r, starts)))
             for it in items:
                 _add(kid_tot, it["children_tokens"])
             kind, _, name = k.partition(":")
@@ -268,20 +289,44 @@ class Flow:
             tasks.append({"key": clip(k, 200), "kind": kind, "name": clip(name), "title": clip(title), "runs": list(reversed(items)),
                           "runs_total": len(rs), "runs_cut": len(rs) - len(shown), "tokens": gt,
                           "usd": round(gusd, 4), "last": max(x.get("ts") or 0 for x in rs)})
-        out = {"period": period, "project": project if project in projects else None,
+        if project and project not in projects:      # filtered on a project with no runs in this period
+            projects[project] = project
+        out = {"period": period, "project": project or None,
                "projects": [{"id": i, "name": clip(n, 80)} for i, n in sorted(projects.items(), key=lambda x: x[1])],
                "measured": measured(), "mine": mine, "totals": totals, "tasks": tasks,
                "children_shown": kid_tot,
                "cut": {"tasks": max(0, len(order) - TASKS_MAX),
-                       "runs": sum(len(groups[k]) for k in order[TASKS_MAX:])},
+                       "runs": sum(len(groups[k]) for k in order[TASKS_MAX:]),
+                       "tokens": sum(tokens_of(r)["total"] for k in order[TASKS_MAX:] for r in groups[k]),
+                       "usd": round(sum(float(r.get("ae_usd") or 0.0) for k in order[TASKS_MAX:]
+                                        for r in groups[k]), 4)},
                "leads": self.leads(runs), "caps": {"tasks": TASKS_MAX, "runs": RUNS_PER_TASK_MAX, "kids": KIDS_MAX}}
         while len(json.dumps(out, ensure_ascii=False)) > BODY_MAX and out["tasks"]:
             dropped = out["tasks"].pop()
             out["cut"]["tasks"] += 1
             out["cut"]["runs"] += dropped["runs_total"]
+            out["cut"]["tokens"] += dropped["tokens"]["total"]
+            out["cut"]["usd"] = round(out["cut"]["usd"] + dropped["usd"], 4)
         return out
 
-    def kids(self, r: dict, seen: dict) -> list[dict]:
+    def record(self, run_id) -> dict:
+        rid = str(run_id or "")
+        if not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", rid):
+            return {}
+        try:
+            rec = json.loads((self.p.runs / rid / "run.json").read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+        return rec if isinstance(rec, dict) else {}
+
+    def resumed_from(self, r: dict) -> str | None:
+        """The run this one went on from (run.json `resumed_from`); read only for rows that say they follow one."""
+        if not (r.get("resume_chain") or r.get("continue_depth")):
+            return None
+        prev = self.record(r.get("run_id")).get("resumed_from")
+        return str(prev) if prev else None
+
+    def kids(self, r: dict, starts: dict[str, list[float]]) -> list[dict]:
         rid = str(r.get("run_id"))
         if not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", rid):
             return []
@@ -293,17 +338,27 @@ class Flow:
             return []
         if not isinstance(rec, dict):
             return []
-        out = codex_kids(rec, seen)
-        key = (st.st_mtime_ns, st.st_size)
+        # Codex: the record carries the totals of the run it went on from; take those off (that run's own record,
+        # whether or not it is in this answer's filter or group)
+        before = self.record(rec["resumed_from"]).get("codex_children") if rec.get("resumed_from") else None
+        out = codex_kids(rec, before if isinstance(before, dict) else None)
+        # Claude: each session once, only the helper turns from this run's start to the next run on that session
+        since = float(rec.get("ts") or r.get("ts") or 0.0)
+        sids = sorted({str(a.get("session_id")) for a in rec.get("attempts") or []
+                       if a.get("agent") == "claude" and a.get("session_id") and _SID.fullmatch(str(a["session_id"]))})
+        windows = []
+        for sid in sids:
+            later = starts.get(sid) or []
+            j = bisect.bisect_right(later, since)
+            windows.append((sid, later[j] if j < len(later) else None))
+        key = (st.st_mtime_ns, st.st_size, since, tuple(windows))
         hit = self._kids.get(rid)
         if hit and hit[0] == key:
             claude = hit[1]
         else:
             claude = []
-            for a in rec.get("attempts") or []:
-                sid = a.get("session_id")
-                if a.get("agent") == "claude" and sid and _SID.fullmatch(str(sid)):
-                    claude += claude_kids(str(sid))
+            for sid, until in windows:
+                claude += claude_kids(sid, since, until)
             if rec.get("state") != "running":       # still running: its helpers may write more
                 if len(self._kids) > 2000:
                     self._kids.clear()
@@ -328,7 +383,8 @@ class Flow:
                 "label": clip(r.get("label")), "tokens": t,
                 "usd": None if r.get("ae_usd") is None else round(float(r["ae_usd"]), 5),
                 "children": shown, "children_more": max(0, len(kids) - KIDS_MAX), "children_tokens": ct,
-                "children_share": round(min(1.0, ct["total"] / t["total"]), 3) if t["total"] and kids else None}
+                # not capped: above 1 the counts disagree, and the page says so
+                "children_share": round(ct["total"] / t["total"], 3) if t["total"] and kids else None}
 
     @staticmethod
     def leads(runs: list[dict]) -> list[dict]:

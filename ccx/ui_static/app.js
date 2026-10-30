@@ -640,12 +640,13 @@
   function measuredHTML(m) {
     let h = `<h2>${t("tok_m_title")}</h2>`;
     if (!m || !(m.tables || []).length) return h + `<p class="cost">${t("tok_m_src", {path: raw("<code>docs/measured.md</code>")})}</p>`;
+    const head = `<div class="twrap"><table class="ttab"><thead><tr><th>${t("tok_col_arm")}</th><th>${t("tok_col_right")}</th><th>${t("tok_col_usd")}</th><th>${t("tok_col_wall")}</th></tr></thead><tbody>`;
+    const rowsOf = rs => (rs || []).map(r => `<tr><td>${t("tok_arm_" + String(r.arm || "").replace(/[^a-z0-9]/g, ""))}${r.run ? ` <span class="cost">${esc(r.run)}</span>` : ""}</td>`
+      + `<td>${esc(r.right)}${r.note ? `<br><span class="cost">${esc(inLang(r.note))}</span>` : ""}</td><td>${r.usd_per_success ? "$" + esc(r.usd_per_success) : "–"}</td><td>${r.wall_median_s ? t("tok_secs", {s: r.wall_median_s}) : "–"}</td></tr>`).join("");
     for (const tb of m.tables) {
-      h += `<h3 class="tok-h3">${esc(inLang(tb.title) || tb.id)} <span class="cost">${esc(tb.date || "")}</span></h3>`
-        + `<div class="twrap"><table class="ttab"><thead><tr><th>${t("tok_col_arm")}</th><th>${t("tok_col_right")}</th><th>${t("tok_col_usd")}</th><th>${t("tok_col_wall")}</th></tr></thead><tbody>`;
-      for (const r of tb.rows || []) h += `<tr><td>${t("tok_arm_" + String(r.arm || "").replace(/[^a-z0-9]/g, ""))}${r.run ? ` <span class="cost">${esc(r.run)}</span>` : ""}</td>`
-        + `<td>${esc(r.right)}</td><td>${r.usd_per_success ? "$" + esc(r.usd_per_success) : "–"}</td><td>${r.wall_median_s ? t("tok_secs", {s: r.wall_median_s}) : "–"}</td></tr>`;
-      h += `</tbody></table></div><p class="cost">${t("tok_limit", {t: inLang(tb.limit)})}</p>`;
+      h += `<h3 class="tok-h3">${esc(inLang(tb.title) || tb.id)} <span class="cost">${esc(tb.date || "")}</span></h3>` + head + rowsOf(tb.rows) + `</tbody></table></div>`;
+      if (tb.ext && (tb.ext.rows || []).length) h += `<h3 class="tok-h3">${esc(inLang(tb.ext.title))}</h3>` + head + rowsOf(tb.ext.rows) + `</tbody></table></div>`;
+      h += `<p class="cost">${t("tok_limit", {t: inLang(tb.limit)})}</p>`;
     }
     if (m.tests) h += `<p class="cost">${t("tok_tests", {d: m.tests.date || "", t: inLang(m.tests)})}</p>`;
     return h + `<p class="cost">${t("tok_m_src", {path: raw("<code>docs/measured.md</code>")})}</p>`;
@@ -671,6 +672,7 @@
     const tag = r.review ? ` <span class="cost">${t("tok_review")}</span>` : "";
     let h = `<tr><td><span class="mono">${esc(r.run_id)}</span>${tag}<br>${who(r.agent, r.model)} <span class="cost">${esc(r.status)}${r.ts ? " · " + clock(r.ts) : ""}</span>`
       + (r.children_share != null ? `<br><span class="cost">${t("tok_kids", {n: (r.children || []).length + (r.children_more || 0), s: pct(r.children_share)})}</span>` : "")
+      + (r.children_share > 1 ? `<br><span class="warn">${t("tok_kids_over")}</span>` : "")
       + `</td>${tokCells(r.tokens)}<td>${money(r.usd)}</td></tr>`;
     for (const c of r.children || []) h += `<tr class="kid"><td>↳ <span class="mono">${esc(c.id)}</span> · ${esc(agentName(c.vendor))}</td>${tokCells(c.tokens)}<td>${money(c.usd)}</td></tr>`;
     if (r.children_more) h += `<tr class="kid"><td colspan="6">${t("tok_kids_more", {n: r.children_more})}</td></tr>`;
@@ -693,7 +695,7 @@
         + (g.runs_cut ? `<p class="cost">${t("tok_runs_cut", {n: g.runs_cut})}</p>` : "") + `</details>`;
     });
     const c = d.cut || {};
-    if (c.tasks) h += `<p class="cost">${t("tok_cut", {n: (d.tasks || []).length, t: c.tasks, r: c.runs})}</p>`;
+    if (c.tasks) h += `<p class="cost">${t("tok_cut", {n: (d.tasks || []).length, t: c.tasks, r: c.runs, k: tok(c.tokens || 0), u: usd(+c.usd || 0)})}</p>`;
     return h;
   }
   function wantLead(key) {
@@ -738,7 +740,10 @@
     if (SNAP) return h + `<p class="lead">${t("tok_snap")}</p>`;
     h += `<div class="filters tfilters">` + ["today", "7d", "all"].map(x => `<button data-tperiod="${x}" class="${TOKPERIOD === x ? "on" : ""}" aria-pressed="${TOKPERIOD === x}">${t("tok_p_" + x)}</button>`).join("");
     const ps = (TOK && TOK.projects) || [];
-    if (ps.length > 1 || TOKPROJ) h += `<select id="tokproj" aria-label="${esc(t("tok_project"))}"><option value="">${t("tok_project_all")}</option>${ps.map(p => `<option value="${esc(p.id)}"${p.id === TOKPROJ ? " selected" : ""}>${esc(p.name)}</option>`).join("")}</select>`;
+    // TOKPROJ "" sends no project (the server then shows the ui's own --project, if any); "all" asks for every
+    // project; what is selected follows what the server says it showed (TOK.project)
+    const shownProj = TOK ? (TOK.project || "all") : (TOKPROJ || "all");
+    if (ps.length > 1 || TOKPROJ || (TOK && TOK.project)) h += `<select id="tokproj" aria-label="${esc(t("tok_project"))}"><option value="all"${shownProj === "all" ? " selected" : ""}>${t("tok_project_all")}</option>${ps.map(p => `<option value="${esc(p.id)}"${p.id === shownProj ? " selected" : ""}>${esc(p.name)}</option>`).join("")}</select>`;
     h += `<button data-do="tok-refresh">${t("tok_refresh")}</button></div>`;
     if (TOKKEY !== tokKey() || (!TOK && !TOKERR)) { wantTok(); if (!TOK) return h + `<p class="lead">${t("tok_loading")}</p>`; }
     if (TOKERR) return h + `<p class="lead"><span class="warn">${t("tok_err", {e: TOKERR})}</span></p>`;

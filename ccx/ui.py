@@ -2216,10 +2216,13 @@ class UI:
             return _mark_dismissed([dict(r) for r in got])
 
     def token_flow(self, period: str = "7d", project: str | None = None, tests: bool = False) -> dict:
-        """/api/tokens: the "Measured & where tokens go" page (B1)."""
-        if project is not None and not _PID.fullmatch(project):
+        """/api/tokens: the "Measured & where tokens go" page (B1). No `project`: the ui's own project when it was
+        started with --project; `project=all`: every project, whatever the ui was started with."""
+        if project == "all":
+            project = None
+        elif project is not None and not _PID.fullmatch(project):
             raise ValueError("bad project id")
-        if project is None and self.project:
+        elif project is None and self.project:
             project = _pid(project_root(str(self.project)) or self.project)
         rows = self._ledger_rows()
         with self.flow_lock:

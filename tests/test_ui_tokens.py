@@ -40,6 +40,10 @@ def jsonl(path: Path, rows: list[dict]) -> Path:
     return path
 
 
+def iso(t: float) -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(t))
+
+
 def asst(mid: str, ts: str, fresh: int, write: int, read: int, out: int, sid: str, side: bool = False) -> dict:
     return {"type": "assistant", "timestamp": ts, "sessionId": sid, "isSidechain": side,
             "message": {"id": mid, "model": "claude-sonnet-5-5",
@@ -71,11 +75,12 @@ class Hub(Env):
             usage={"input_tokens": 100, "cache_write_tokens": 2000, "cached_input_tokens": 8000,
                    "output_tokens": 900})
         proj = self.home_claude / "projects" / "some-project"
-        jsonl(proj / "cl-sub-1.jsonl", [asst("main1", "2026-10-30T10:00:00Z", 100, 2000, 8000, 900, "cl-sub-1")])
+        now = time.time()
+        jsonl(proj / "cl-sub-1.jsonl", [asst("main1", iso(now - 60), 100, 2000, 8000, 900, "cl-sub-1")])
         jsonl(proj / "cl-sub-1" / "subagents" / "agent-a1.jsonl", [
-            asst("k1", "2026-10-30T10:00:01Z", 10, 500, 1500, 190, "cl-sub-1", True),
-            asst("k1", "2026-10-30T10:00:01Z", 10, 500, 1500, 190, "cl-sub-1", True),     # same message, 2 lines
-            asst("k2", "2026-10-30T10:00:02Z", 5, 0, 1000, 95, "cl-sub-1", True)])
+            asst("k1", iso(now - 59), 10, 500, 1500, 190, "cl-sub-1", True),
+            asst("k1", iso(now - 59), 10, 500, 1500, 190, "cl-sub-1", True),     # same message, 2 lines
+            asst("k2", iso(now - 58), 5, 0, 1000, 95, "cl-sub-1", True)])
         # an evaluation run: hidden unless asked
         run(self.hub, self.p, "rE", self.work, "codex", label="eval-x")
 
@@ -115,14 +120,94 @@ class TestTree(Hub):
         self.assertEqual(set(mine["by_agent"]), {"codex", "claude"})
         self.assertEqual(self.data(period="7d", tests=True)["totals"]["runs"], 4)
 
+    def kids_of(self, d: dict) -> dict:
+        return {r["run_id"]: r for g in d["tasks"] for r in g["runs"]}
+
     def test_resumed_run_shows_only_child_growth(self):
         run(self.hub, self.p, "r1", self.work, task="t", codex_children={"k": {"input": 100, "cached": 0, "output": 10}},
             ts=time.time() - 300)
         run(self.hub, self.p, "r2", self.work, task="t", codex_children={"k": {"input": 150, "cached": 0, "output": 10}},
-            ts=time.time() - 200)
-        runs = {r["run_id"]: r for r in self.data()["tasks"][0]["runs"]}
+            ts=time.time() - 200, resumed_from="r1", resume_chain=1)
+        runs = self.kids_of(self.data())
         self.assertEqual(runs["r1"]["children_tokens"]["total"], 110)
         self.assertEqual(runs["r2"]["children_tokens"]["total"], 50)
+
+    def test_codex_growth_does_not_depend_on_group_or_filter(self):
+        # (a) a resume with no task or label: it sits with its chain, and shows only its growth
+        run(self.hub, self.p, "r1", self.work, codex_children={"k": {"input": 100, "cached": 0, "output": 10}},
+            ts=time.time() - 10 * 86400, usage={"input_tokens": 200, "output_tokens": 20})
+        run(self.hub, self.p, "r2", self.work, codex_children={"k": {"input": 150, "cached": 0, "output": 10}},
+            ts=time.time() - 200, resumed_from="r1", resume_chain=1)
+        d = self.data(period="all")
+        self.assertEqual([[r["run_id"] for r in g["runs"]] for g in d["tasks"]], [["r2", "r1"]])
+        self.assertEqual(self.kids_of(d)["r2"]["children_tokens"]["total"], 50)
+        self.assertEqual(d["children_shown"]["total"], 160)
+        # (b) the earlier run is outside the period: still only the growth
+        d = self.data(period="7d")
+        self.assertEqual(self.kids_of(d)["r2"]["children_tokens"]["total"], 50)
+        self.assertEqual(d["children_shown"]["total"], 50)
+
+    def test_auto_continue_with_a_new_label_does_not_count_children_again(self):
+        run(self.hub, self.p, "c1", self.work, label="first job", ts=time.time() - 300,
+            usage={"input_tokens": 9000, "output_tokens": 600},
+            codex_children={"k": {"input": 5000, "cached": 0, "output": 500}})
+        run(self.hub, self.p, "c2", self.work, label="second job", ts=time.time() - 200, resumed_from="c1",
+            continued=True, continue_depth=1, usage={"input_tokens": 2300, "output_tokens": 50},
+            codex_children={"k": {"input": 5000, "cached": 0, "output": 500}})
+        d = self.data()
+        runs = self.kids_of(d)
+        self.assertEqual(runs["c1"]["children_tokens"]["total"], 5500)
+        self.assertEqual(runs["c2"]["children"], [])             # carried over, nothing new
+        self.assertIsNone(runs["c2"]["children_share"])
+        self.assertEqual(d["children_shown"]["total"], 5500)
+
+    def claude_session(self, sid: str, files: dict[str, list[dict]]):
+        proj = self.home_claude / "projects" / "some-project"
+        jsonl(proj / f"{sid}.jsonl", [asst("main-" + sid, iso(time.time() - 1000), 1, 0, 0, 1, sid)])
+        for name, rows in files.items():
+            jsonl(proj / sid / "subagents" / f"{name}.jsonl", rows)
+
+    def test_claude_session_counted_once_per_run(self):
+        # two attempts of one run on the same session (a retry resumes it): its helper file is listed once
+        now = time.time()
+        rec = put_run(self.hub, "rr", self.work, to="claude", ts=now - 300, attempts=[
+            {"agent": "claude", "rung": "claude:sonnet:medium", "session_id": "s1", "seconds": 5.0, "usage": {"input_tokens": 3000,
+             "output_tokens": 100}, "ae_usd": 0.01},
+            {"agent": "claude", "rung": "claude:sonnet:medium", "session_id": "s1", "seconds": 5.0, "usage": {"input_tokens": 1000,
+             "output_tokens": 100}, "ae_usd": 0.01}])
+        ledger.append(self.p, rec)
+        self.claude_session("s1", {"agent-a": [asst("h1", iso(now - 250), 100, 0, 900, 100, "s1", True)]})
+        r = self.kids_of(self.data())["rr"]
+        self.assertEqual([c["id"] for c in r["children"]], ["agent-a"])
+        self.assertEqual(r["children_tokens"]["total"], 1100)
+        self.assertEqual(r["children_share"], round(1100 / 4200, 3))
+
+    def test_resumed_claude_run_takes_only_its_own_helper_turns(self):
+        now = time.time()
+        run(self.hub, self.p, "cl1", self.work, "claude", task="t", session="cl-s", ts=now - 300,
+            usage={"input_tokens": 5000, "output_tokens": 200})
+        run(self.hub, self.p, "cl2", self.work, "claude", task="t", session="cl-s", ts=now - 200, resumed_from="cl1",
+            resume_chain=1, usage={"input_tokens": 600, "output_tokens": 10})
+        self.claude_session("cl-s", {
+            "agent-old": [asst("o1", iso(now - 280), 100, 0, 2000, 100, "cl-s", True)],     # during cl1
+            "agent-new": [asst("n1", iso(now - 150), 10, 0, 300, 10, "cl-s", True)]})      # during cl2
+        d = self.data()
+        runs = self.kids_of(d)
+        self.assertEqual([c["id"] for c in runs["cl1"]["children"]], ["agent-old"])
+        self.assertEqual([c["id"] for c in runs["cl2"]["children"]], ["agent-new"])
+        self.assertEqual(d["children_shown"]["total"], 2200 + 320)
+        self.assertLessEqual(runs["cl2"]["children_share"], 1)
+        # the earlier run's window ends where the later one starts, also when only the later one is in the period
+        d = self.data(period="all")
+        self.assertEqual(d["children_shown"]["total"], 2520)
+
+    def test_share_is_not_capped(self):
+        # counts that disagree (children above the run's own total) are shown as they are, and the page says so
+        run(self.hub, self.p, "big", self.work, usage={"input_tokens": 100, "output_tokens": 0},
+            codex_children={"k": {"input": 400, "cached": 0, "output": 0}})
+        self.assertEqual(self.kids_of(self.data())["big"]["children_share"], 4.0)
+        js = (STATIC / "app.js").read_text(encoding="utf-8")
+        self.assertIn('t("tok_kids_over")', js)
 
     def test_period_project_and_caps(self):
         other = self.work.parent / "other"
@@ -139,8 +224,13 @@ class TestTree(Hub):
         with mock.patch.object(tokenflow, "TASKS_MAX", 2):
             d = self.data(period="all")
         self.assertEqual(len(d["tasks"]), 2)
-        self.assertEqual(d["cut"], {"tasks": 1, "runs": 1})
+        self.assertEqual(d["cut"], {"tasks": 1, "runs": 1, "tokens": 110, "usd": 0.01})   # what was cut, in size
         self.assertEqual(d["totals"]["runs"], 3)                         # the totals still count what was cut
+
+    def test_by_agent_biggest_first(self):
+        run(self.hub, self.p, "a", self.work, "codex", usage={"input_tokens": 10, "output_tokens": 0})
+        run(self.hub, self.p, "b", self.work, "claude", usage={"input_tokens": 5000, "output_tokens": 0})
+        self.assertEqual(list(self.data()["totals"]["by_agent"]), ["claude", "codex"])
 
     def test_empty_hub(self):
         d = self.data()
@@ -162,8 +252,20 @@ class TestTree(Hub):
                      "esc(p.name)", "esc(r.status)"):
             self.assertIn(expr, js)
         block = js[js.index("B1: measured results"):js.index("function drawTokens")]
-        for raw_field in ("${g.title}", "${r.run_id}", "${x.part}", "${r.label}", "${g.session}", "${c.id}"):
-            self.assertNotIn(raw_field, block)
+        self.assertEqual(raw_fields(block), [])
+        # the check itself finds a raw field in either form
+        self.assertEqual(len(raw_fields('h += `<td>${x.why}</td>` + "<b>" + r.label;')), 2)
+
+
+def raw_fields(block: str) -> list[str]:
+    """Data fields put into HTML as they are: a template part that is only `obj.field`, or a string joined with
+    `+ obj.field` (not counting a plain `const key = a.b + "|" + a.c;`, which is escaped where it is used).
+    Everything from data goes through esc() / t() / tok() / pct() / money() / who() / ... instead (a `+x.n` right
+    after `${`, `(` or `,` is a number, not text)."""
+    out = [m.group(0) for m in re.finditer(r"\$\{\s*[A-Za-z_]+(?:\.[A-Za-z_]+)+\s*\}", block)]
+    html = "\n".join(x for x in block.splitlines() if not re.match(r"\s*(?:const|let) \w+ = [^`<]*$", x))
+    out += [m.group(0) for m in re.finditer(r"[\"'`)]\s*\+\s*[A-Za-z]{1,2}\.[A-Za-z_]+(?![\w(.])", html)]
+    return out
 
 
 class TestLeadCost(Hub):
@@ -235,6 +337,20 @@ class TestServer(Hub):
         self.assertEqual((code, json.loads(body)["found"]), (200, False))   # named, but no file on this machine
         self.assertEqual(get(self.srv, "/api/tokens", token=self.srv.token, method="POST")[0], 404)   # no write path
 
+    def test_project_all_overrides_the_ui_project(self):
+        other = self.work.parent / "other"
+        (other / ".git").mkdir(parents=True)
+        run(self.hub, self.p, "elsewhere", other)
+        pinned = ui.UI(self.p, project=self.work)
+        mine = pinned.token_flow("all")                                   # no parameter: the ui's own project
+        self.assertIsNotNone(mine["project"])
+        self.assertNotIn("elsewhere", {r["run_id"] for g in mine["tasks"] for r in g["runs"]})
+        every = pinned.token_flow("all", "all")                           # "All projects" really is all of them
+        self.assertIsNone(every["project"])
+        self.assertIn("elsewhere", {r["run_id"] for g in every["tasks"] for r in g["runs"]})
+        js = (STATIC / "app.js").read_text(encoding="utf-8")
+        self.assertIn('<option value="all"', js)
+
 
 class TestMeasuredData(unittest.TestCase):
     """The published numbers on the page come from ccx/data/measured.json; each must appear in docs/measured.md
@@ -272,17 +388,93 @@ class TestMeasuredData(unittest.TestCase):
         walk(self.m, self.en)
         self.assertGreater(checked, 40)
 
+    # where each table is in the two docs, and the names of its rows there
+    HEAD = {"hc1": ("### Hold-out set", "### 留出集"), "r5": ("### Round 5, dev set", "### 第 5 轮，开发集")}
+    ROW = {"en": {"right": "Right", "usd": "Cost per success", "wall": "Wall time, median", "runs": "Runs counted",
+                  "ext": "External repositories only (5 tasks)"},
+           "zh": {"right": "做对", "usd": "每次成功的花费", "wall": "用时中位数", "runs": "算进来的轮次",
+                  "ext": "只看外部仓库（5 个任务）"}}
+    COL = {"self": 0, "builtin": 1, "builtin2": 1, "ccx": 2}
+
+    @staticmethod
+    def table(doc: str, heading: str) -> dict[str, list[str]]:
+        """The first markdown table after `heading`: row name -> its cells (one per arm column)."""
+        lines = doc.splitlines()
+        i = next(n for n, x in enumerate(lines) if x.startswith(heading))
+        while not lines[i].startswith("|"):
+            i += 1
+        out = {}
+        while i < len(lines) and lines[i].startswith("|"):
+            cells = [c.strip() for c in lines[i].strip().strip("|").split("|")]
+            out[cells[0]] = cells[1:]
+            i += 1
+        return out
+
+    @staticmethod
+    def items(cell: str) -> list[str]:
+        return [x.strip() for x in re.split(r",\s*|、", cell)]
+
+    @staticmethod
+    def money(x: str):
+        x = x.replace("*", "").strip()
+        return None if x in ("–", "-") else x.lstrip("$")
+
+    def check_table(self, tb: dict, lang: str, doc: str):
+        rows = self.table(doc, self.HEAD[tb["id"]][lang == "zh"])
+        name = self.ROW[lang]
+        pos: dict[int, int] = {}
+        for r in tb["rows"]:                              # the k-th row of an arm column is the k-th list item there
+            col = self.COL[r["arm"]]
+            k = pos[col] = pos.get(col, -1) + 1
+            right_cell = rows[name["right"]][col]
+            if "/" in right_cell.split("(")[0].split("（")[0] and not re.search(r"\d+\s*[,、]", right_cell):
+                self.assertEqual(re.match(r"\d+/\d+", right_cell).group(0), r["right"], (lang, tb["id"], r))
+            else:                                        # "19, 17, 17 of 20" / "19、17、17（满分 20）"
+                m = re.match(r"(.*?)\s*(?:of (\d+)|（满分 (\d+)）)$", right_cell)
+                got = self.items(m.group(1))[k] + "/" + (m.group(2) or m.group(3))
+                self.assertEqual(got, r["right"], (lang, tb["id"], r))
+            self.assertEqual(self.money(self.items(rows[name["usd"]][col])[k]), r["usd_per_success"],
+                             (lang, tb["id"], r))
+            wall = re.sub(r"\s*(?:s|秒)$", "", rows[name["wall"]][col])
+            got = self.items(wall)[k]
+            self.assertEqual(None if got in ("–", "-") else got, r["wall_median_s"], (lang, tb["id"], r))
+            if r.get("run"):
+                got = re.match(r"r\d+[a-z]?", self.items(rows[name["runs"]][col])[k]).group(0)
+                self.assertEqual(got, r["run"], (lang, tb["id"], r))
+            if r.get("note"):
+                self.assertIn(r["note"][lang], right_cell)
+        for r in (tb.get("ext") or {}).get("rows") or []:
+            right, usd = self.items(rows[name["ext"]][self.COL[r["arm"]]])
+            self.assertEqual((right, self.money(usd)), (r["right"], r["usd_per_success"]), (lang, "ext", r))
+        if tb.get("ext"):
+            self.assertEqual(tb["ext"]["title"][lang], name["ext"])
+
     def test_table_cells_match(self):
+        """Each cell, by arm and run, equals the cell in the docs' tables (EN and ZH), not just "somewhere"."""
         for tb in self.m["tables"]:
-            for r in tb["rows"]:
-                if r.get("usd_per_success"):
-                    self.assertIn("$" + r["usd_per_success"], self.en)
-                    self.assertIn("$" + r["usd_per_success"], self.zh)
-        hc1 = next(t for t in self.m["tables"] if t["id"] == "hc1")
-        line = next(x for x in self.en.splitlines() if x.startswith("| Right |"))
-        for r in hc1["rows"]:
-            self.assertIn(r["right"], line)
+            self.check_table(tb, "en", self.en)
+            self.check_table(tb, "zh", self.zh)
         self.assertIn(self.m["tests"]["en"].split(" (")[0], self.en)
+
+    def test_a_swapped_or_wrong_cell_is_caught(self):
+        """The drift that matters for a cost comparison: two arms swapped, or one row changed to numbers that do
+        appear elsewhere in the doc."""
+        import copy
+        bad = []
+        m = copy.deepcopy(self.m)
+        hc1 = m["tables"][0]["rows"]
+        hc1[0]["usd_per_success"], hc1[2]["usd_per_success"] = hc1[2]["usd_per_success"], hc1[0]["usd_per_success"]
+        bad.append(m["tables"][0])
+        m = copy.deepcopy(self.m)
+        r = next(x for x in m["tables"][1]["rows"] if x["arm"] == "builtin2")
+        r.update(right="18/20", usd_per_success="0.116", wall_median_s="267")
+        bad.append(m["tables"][1])
+        m = copy.deepcopy(self.m)
+        m["tables"][0]["ext"]["rows"][1]["usd_per_success"] = "0.036"
+        bad.append(m["tables"][0])
+        for tb in bad:
+            with self.assertRaises(AssertionError):
+                self.check_table(tb, "en", self.en)
 
     def test_shipped_in_the_package(self):
         py = (REPO / "pyproject.toml").read_text(encoding="utf-8")
