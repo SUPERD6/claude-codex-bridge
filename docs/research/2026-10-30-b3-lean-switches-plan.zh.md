@@ -57,16 +57,16 @@ python scripts/eval/r5.py run --taskset holdout --rounds 3 --arms ccx2daily,ccx2
     --tag b3m1 --codex-home <评测 codex home> --budget 20 --jobs 1 --dry-run
 ```
 
-## 跑第二半之前对评测脚本的改动（只加报告证据，规则不变）
+## 跑第二半之前对评测脚本的改动（只加报告证据，规则原文不变）
 
 留出集那一半按 token 中位数条件判 `codex_memories = false` 通过，但按配对看，单看中位数很脆弱（这一组 prompt 更低的配对不到一半，总量反而更高）。在跑 r5 那一半之前，`scripts/eval/r5.py` 补了更多证据，登记好的规则本身不变：
 
-- **规则里的中位数是真正的中位数**（`statistics.median`：偶数个时取中间两个的平均），与规则原文一致，不再用 wall 字段那种“偏上的中间值”。四个条件和 Unknown 情形都和上面定的一样。
-- **旁边加配对统计，只做报告**（`b3_rules[...].paired`）：这一组 prompt 更低的配对占比、每对比值（这一组 / 基线）的中位数、总量比值，以及中位数之比的配对 bootstrap 95% CI（2000 次重抽样，固定种子）。`token_effect` 只在规则的 token 条件通过、总量比 ≤ 0.85、并且 ≥ 60% 的配对更低时才是 `consistent`，否则是 `not shown`。它从不改变 `result`。
+- **规则里的中位数是真正的中位数**（`statistics.median`：偶数个时取中间两个的平均），与规则原文一致，不再用 wall 字段那种“偏上的中间值”。四个条件和 Unknown 情形都和上面定的一样。这次改动之前报告的 m1h2 token 中位数用的是偏上的中间值（30 对，偶数个）：m1h2 要用真正的中位数重新汇总后才能引用或合并，如果因此改变了结论，以新结论为准。
+- **旁边加配对统计，只做报告**（`b3_rules[...].paired`）：这一组 prompt 更低的配对占比、每对比值（这一组 / 基线）的中位数、总量比值，以及中位数之比的配对 bootstrap 95% CI（2000 次重抽样，固定种子），旁边再给一个按题目整体重抽的 bootstrap CI（每次抽题目，带上它的所有配对，和 r5 其他区间一样）：按配对抽把同一题的几轮当成相互独立，每题 2 轮以上时区间偏窄，应看按题目的那个。基线中位数为 0 的重抽样会被计数（`boot.dropped`）。`token_effect` 只在规则的 token 条件通过、总量比 ≤ 0.85、并且 ≥ 60% 的配对更低时才是 `consistent`，否则是 `not shown`。它从不改变 `result`。
 - **两半一起判：** `summary --results a.jsonl b.jsonl --tag <留出集标签> --tag <r5 标签>` 读多个结果文件（同一行出现在两个文件里只算一次）和多个标签，登记的 50 对按一条规则判。
-- **配对的两个单元快照不同：** 两个单元的 `daily.sha256` 不同，比的是用户的两套配置，不是开关。这一对的两个单元都不进规则和配对统计（两边同时去掉，不算单侧缺失），`snapshot_mismatch` 列出它们。没有哈希的一侧照常保留。
-- **每次调用只冻结一次快照：** `run` 在开始时把用户的 memories / AGENTS.md / 技能（以及日常 home 从用户 config 里取的那几项设置）复制一次到 `<work>/daily-snapshot`；每个日常单元都从这里复制，行里记 `daily.snapshot`（`frozen` 和它的 `sha256`），跑完删除这个文件夹。
+- **配对的两个单元快照不同：** 两个单元的 `daily.sha256` 不同，比的是用户的两套配置，不是开关。这一对的两个单元都不进规则的各项条件和配对统计，`snapshot_mismatch` 列出它们。去掉的那一对可能本来是输掉的配对，所以只要有这种配对，“通过”就改成 Unknown（“不通过”仍是不通过），和单侧输掉的不干净配对一样从严；如果所有配对都分开了，规则报告为 0 对上的 Unknown。没有哈希的一侧照常保留。（m1h2 的行早于冻结快照，所以对它们适用。）
+- **每次调用只冻结一次快照：** `run` 在开始时把用户的 memories / AGENTS.md / 技能（以及日常 home 从用户 config 里取的那几项设置）复制一次到 `<work>/daily-snapshot`；每个日常单元都从这里复制，行里记 `daily.snapshot`（`frozen` 和它的 `sha256`），跑完删除这个文件夹（冻结失败时也删；被强行结束的运行留下的文件夹，工作目录检查能认出来，下次开始运行时删除）。
 - **开关在每次运行里实际做了什么：** 每行有 `switches_applied`，来自这个单元每个 ccx run.json（`subagent_switches`、mode、agents），以及这些开关会给 Codex 加的 memory / 网页搜索 / 图片生成参数。ccx 的 run.json 不记 CLI 的 argv，所以这些参数是推出来的（`argv_recorded: false`），不是读回来的。
-- **均衡的组顺序：** `run --arm-order balanced` 把一个带种子的组顺序按题目和轮次轮换（拉丁方），每组排第一的次数大致相同；行里记 `arm_order` 和 `arm_pos`。默认仍是 `shuffle`，以前各次运行的排程不变。第二半应带 `--arm-order balanced` 跑。
-- **失败单元的证据：** 没做对的单元记 `hidden_failed`（没通过的隐藏测试 id），并把完整的隐藏 pytest 输出和最终 diff（在放入隐藏测试之前取）保存在 `<结果文件名>-artifacts/<标签>-<单元>/`。
+- **均衡的组顺序：** `run --arm-order balanced` 在一个带种子的组顺序上按题目和轮次依次取 Williams 设计（平衡拉丁方）的各行：每走完一整轮行，每组在每个位置出现的次数相同，并且排在其他每组（包括基线）前面的次数正好一半（10 题 × 2 轮、4 组时，不论种子都是每组 20 次里 10 次）。`--dry-run` 会打印这些“基线在前”的次数。行里记 `arm_order` 和 `arm_pos`。默认仍是 `shuffle`，以前各次运行的排程不变。第二半应带 `--arm-order balanced` 跑。
+- **失败单元的证据：** 没做对的单元记 `hidden_failed`（没通过的隐藏测试 id），并把完整的隐藏 pytest 输出和最终 diff（在放入隐藏测试之前取）保存在 `<结果文件名>-artifacts/<标签>-<单元>/`；diff 保留 git 的原始字节（包括 CRLF 行），可以直接 apply。
 - **事后归因：** 如果运行期间用户真实 hub 的账本变大了，报告列出每条新行的 type、run_id、ts，以及 run_id 是否属于某个单元的 `ccx_run_ids`（评测泄漏），不属于的多半是同时在跑的真实会话；`preflight.json` 里存为 `postflight_ledger`。
