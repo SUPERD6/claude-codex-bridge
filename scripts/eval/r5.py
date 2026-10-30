@@ -897,12 +897,49 @@ def set_namecheck(hub: Path, mode: str) -> str:
     return got
 
 
-def daily_sources(a) -> tuple[Path, Path]:
+def daily_sources(a, frozen: bool = True) -> tuple[Path, Path]:
     """The person's own Codex home and ~/.agents a daily arm copies from (--daily-codex-source / --daily-agents-source;
-    default ~/.codex and ~/.agents)."""
+    default ~/.codex and ~/.agents). Once `run` froze them (freeze_daily), every unit copies from that frozen
+    snapshot instead (frozen=False: the person's own folders even then)."""
+    snap = getattr(a, "daily_frozen", None) if frozen else None
+    if snap:
+        return Path(snap["codex"]), Path(snap["agents"])
     codex = getattr(a, "daily_codex_source", "") or str(Path.home() / ".codex")
     agents = getattr(a, "daily_agents_source", "") or str(Path.home() / ".agents")
     return Path(codex).expanduser(), Path(agents).expanduser()
+
+
+DAILY_SNAPSHOT = "daily-snapshot"
+
+
+def freeze_daily(a, dest: Path) -> dict:
+    """Copy the person's daily setup ONCE per `run` invocation into dest (codex/: memories, AGENTS.md, skills and a
+    config.toml holding only the settings a daily home takes from theirs, the kept ones and the memory settings;
+    agents/: ~/.agents/skills), with daily_home's filters. Every daily unit of the invocation then copies from this
+    snapshot (daily_sources), so a rewrite of the person's real memories in the middle of a run cannot give the two
+    units of a pair different setups. Returns where it is and its sha256 (names and bytes); a.daily_frozen is set."""
+    codex_src, agents_src = daily_sources(a, frozen=False)
+    dest = Path(dest)
+    r2._rmtree(dest)
+    codex, agents = dest / "codex", dest / "agents"
+    codex.mkdir(parents=True)
+    agents.mkdir(parents=True)
+    stats: dict = {}
+    copied = [f"codex:{n}" for n in DH.DAILY_COPY if DH._copy(codex_src / n, codex / n, stats)]
+    copied += [f"agents:{n}" for n in DH.AGENTS_COPY if DH._copy(agents_src / n, agents / n, stats)]
+    # only what build() reads from the person's config.toml, written so it reads back the same (no sandbox override:
+    # build() adds that per unit)
+    (codex / "config.toml").write_text(DH.config_toml(PF.codex_kept_toml(codex_src), (),
+                                                      DH.memory_settings(codex_src), platform="frozen"),
+                                       encoding="utf-8")
+    bad = DH.found_never(codex, allow=("config.toml",)) + [f"agents/{x}" for x in DH.found_never(agents)]
+    if bad:
+        raise RuntimeError(f"the frozen daily snapshot holds what must never be copied: {bad[:5]}")
+    info = {"codex": str(codex), "agents": str(agents), "copied": copied, "sha256": DH.tree_sha256([codex, agents],
+                                                                                                   skip=()),
+            "frozen_at": round(time.time(), 1), "sources": [str(codex_src), str(agents_src)]}
+    a.daily_frozen = info
+    return info
 
 
 def set_daily(iso: PF.Unit, hub: Path, env: dict, arm: str, a) -> tuple[dict, dict]:
@@ -928,6 +965,9 @@ def set_daily(iso: PF.Unit, hub: Path, env: dict, arm: str, a) -> tuple[dict, di
     if got != want:
         raise RuntimeError(f"the unit hub runs [subagent] {got} instead of {want}")
     info["switches"] = got
+    snap = getattr(a, "daily_frozen", None)
+    info["snapshot"] = ({"frozen": True, "sha256": snap["sha256"], "frozen_at": snap["frozen_at"]} if snap
+                        else {"frozen": False})
     return info, DH.unit_env(env, info)
 
 
@@ -1789,11 +1829,22 @@ def cmd_run(a) -> int:
     print(f"[preflight] {rep['result']}: commit {rep['commit'][:12]} cli {rep['cli']} codex {rep['codex']['mode']} "
           f"claude {rep['claude_isolation']} jobs {a.jobs} canary {rep['canary']}", flush=True)
     a.preflight = rep
+    if daily:                                      # one snapshot of the person's setup for the whole invocation
+        try:
+            snap = freeze_daily(a, work / DAILY_SNAPSHOT)
+        except (OSError, RuntimeError) as e:
+            print(f"[daily] could not freeze the daily setup: {type(e).__name__}: {e}"[:400], flush=True)
+            return 3
+        rep["daily_snapshot"] = {k: snap[k] for k in ("sha256", "frozen_at", "copied")}
+        (work / "preflight.json").write_text(json.dumps(rep, ensure_ascii=False, indent=1), encoding="utf-8")
+        print(f"[daily] froze the daily setup once for this run: sha256 {snap['sha256'][:12]} "
+              f"({', '.join(snap['copied']) or 'nothing'})", flush=True)
     need_codex = any(x in PF.CODEX_ARMS for x in arms)
     ours = [PF._norm(work), PF._norm(f"eval-r5:{a.tag}:")]
     watch = PF.Watch(ours).start()
     lock, stop = threading.Lock(), threading.Event()
     run_usd = [0.0]                       # this invocation's own spend
+    unit_runs: set = set()                # every ccx run id of this invocation's units (postflight attribution)
 
     def one(u):
         with lock:
@@ -1829,6 +1880,7 @@ def cmd_run(a) -> int:
         with lock:
             append_jsonl(out, row)
             run_usd[0] += row.get("usd") or 0
+            unit_runs.update(str(x) for x in row.get("ccx_run_ids") or [])
             print(f"r{u['round']} {u['task']:18} {u['arm']:8} ok={row.get('ok')} ${row.get('usd', 0):.4f} "
                   f"(lead ${row.get('lead_only_usd', 0) or 0:.4f}) req={row.get('lead_requests')} "
                   f"lead_tok={row.get('lead_tokens')} {row.get('wall_s')}s deleg={row.get('delegated')} "
@@ -1844,16 +1896,61 @@ def cmd_run(a) -> int:
             list(ex.map(lambda us: [one(u) for u in us], groups.values()))
     finally:
         watch.close()
+        if getattr(a, "daily_frozen", None):       # the person's setup does not stay in the work dir
+            r2._rmtree(work / DAILY_SNAPSHOT)
     print(f"spent: {spend_line(out, a.tag, a.extra_spent, run_usd[0])} (budget ${a.budget} counts tag)", flush=True)
     # the person's own state, by size and count only: the hub ledger must not have grown, no Claude session folder
     # named after this work dir may be left in the real ~/.claude
     rep["real_state_after"] = post = PF.real_state(PF.real_paths(), work)
     rep["postflight"] = "same" if post == rep["real_state"] else "changed"
     (work / "preflight.json").write_text(json.dumps(rep, ensure_ascii=False, indent=1), encoding="utf-8")
+    if post.get("hub_ledger_bytes") != rep["real_state"].get("hub_ledger_bytes"):
+        # which rows: a real session of the person's running at the same time, or one of this run's units
+        att = ledger_attribution(PF.real_paths()["hub"] / "ccx" / "ledger.jsonl",
+                                 int(rep["real_state"].get("hub_ledger_bytes") or 0), unit_runs, a.tag)
+        rep["postflight_ledger"] = att
+        (work / "preflight.json").write_text(json.dumps(rep, ensure_ascii=False, indent=1), encoding="utf-8")
+        print(f"[postflight] the real hub ledger gained {att.get('n', 0)} rows: {att.get('unit_runs', 0)} with a run "
+              f"id of this run's units, {att.get('eval_labels', 0)} with this tag's label", flush=True)
+        for r in att.get("rows") or []:
+            print(f"[postflight]   type={r['type']} run_id={r['run_id']} ts={r['ts']} "
+                  f"unit_run={'yes' if r['unit_run'] else 'no'}", flush=True)
     if post != rep["real_state"]:
         print(f"[postflight] the person's own state changed: {rep['real_state']} -> {post}", flush=True)
         return 4
     return 2 if stop.is_set() else 0
+
+
+def ledger_attribution(led: Path, start: int, run_ids: set, tag: str = "", limit: int = 200) -> dict:
+    """The rows the person's real hub ledger gained during a run (from byte `start`, its size before), each by type,
+    run_id and ts only, and whether its run_id is one of this run's units' ccx_run_ids (`unit_run`: an eval leak) or
+    its label one of this tag's (`eval_label`). Neither: most likely a real session of the person's running at the
+    same time. The ledger only grows; a smaller file is read from its start and says so."""
+    try:
+        data = Path(led).read_bytes()
+    except OSError as e:
+        return {"rows": [], "error": f"{type(e).__name__}"}
+    out: dict = {}
+    if len(data) < start:
+        out["note"] = "the ledger is smaller than before the run: read from its start"
+        start = 0
+    rows = []
+    for line in data[start:].decode("utf-8", errors="replace").splitlines():
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(r, dict):
+            continue
+        rid = r.get("run_id")
+        rows.append({"type": r.get("type") or "run", "run_id": rid, "ts": r.get("ts"),
+                     "unit_run": rid in run_ids,
+                     "eval_label": bool(tag) and str(r.get("label") or "").startswith(f"eval-r5:{tag}:")})
+    out.update({"rows": rows[:limit], "n": len(rows), "unit_runs": sum(r["unit_run"] for r in rows),
+                "eval_labels": sum(r["eval_label"] for r in rows)})
+    if len(rows) > limit:
+        out["truncated"] = True
+    return out
 
 
 def wall_stats(rs: list[dict]) -> dict:

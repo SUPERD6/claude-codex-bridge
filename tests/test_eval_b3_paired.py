@@ -108,3 +108,51 @@ def test_switches_applied_reads_each_run_record(tmp_path):
     assert runs["gone"] == {"run": "gone", "record": "missing"}
     assert r5.switches_applied(hub, ["w1"], {})["match"] is False                      # the baseline wanted none
     assert "match" not in r5.switches_applied(hub, ["w1"])
+
+
+@pytest.fixture
+def daily_homes(tmp_path):
+    me = tmp_path / "me"
+    codex, agents, ev = me / ".codex", me / ".agents", tmp_path / "eval-codex"
+    files = {codex / "memories" / "notes.md": "remember: tabs", codex / "AGENTS.md": "# my rules\n",
+             codex / "auth.json": "PERSON-SECRET", codex / "sessions" / "s.jsonl": "PERSON-SECRET",
+             codex / "config.toml": ('[windows]\nsandbox = "elevated"\n[features]\nmemories = true\n[memories]\n'
+                                     'use_memories = true\n[hooks]\nx = "PERSON-SECRET"\n'),
+             codex / "skills" / "mine" / "SKILL.md": "---\nname: mine\n---\n",
+             agents / "skills" / "shared" / "SKILL.md": "---\nname: shared\n---\n",
+             ev / "auth.json": "EVAL-LOGIN"}
+    for f, text in files.items():
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(text, encoding="utf-8")
+    return {"codex": codex, "agents": agents, "eval": ev, "tmp": tmp_path}
+
+
+def test_daily_snapshot_is_frozen_once_per_run(daily_homes):
+    import daily_home as DH
+    import preflight as PF
+    h = daily_homes
+    a = argparse.Namespace(daily_codex_source=str(h["codex"]), daily_agents_source=str(h["agents"]))
+    snap = r5.freeze_daily(a, h["tmp"] / "w" / r5.DAILY_SNAPSHOT)
+    frozen = Path(snap["codex"])
+    assert (frozen / "memories" / "notes.md").exists() and not (frozen / "auth.json").exists()
+    assert "PERSON-SECRET" not in "".join(p.read_text(encoding="utf-8") for p in frozen.rglob("*") if p.is_file())
+    assert PF.codex_kept_toml(frozen) == PF.codex_kept_toml(h["codex"])            # reads back the same settings
+    assert DH.memory_settings(frozen) == DH.memory_settings(h["codex"])
+    assert r5.daily_sources(a) == (frozen, Path(snap["agents"]))
+    shas = []
+    for i, arm in enumerate(("ccx2daily", "ccx2daily_nomem")):
+        hub = h["tmp"] / f"h{i}"
+        r5.r3.make_hub(hub)
+        u = PF.Unit(key=f"{i}-t-{arm}", work=h["tmp"], repo=h["tmp"] / f"repo{i}", hub=hub, codex_home=h["eval"])
+        info, _env = r5.set_daily(u, hub, {}, arm, a)
+        assert info["snapshot"]["frozen"] and info["snapshot"]["sha256"] == snap["sha256"]
+        shas.append(info["sha256"])
+        # the person's real memories are rewritten between the two units of the pair
+        (h["codex"] / "memories" / "notes.md").write_text("rewritten mid-run", encoding="utf-8")
+    assert shas[0] == shas[1]
+    fresh = argparse.Namespace(daily_codex_source=str(h["codex"]), daily_agents_source=str(h["agents"]))
+    hub = h["tmp"] / "h9"
+    r5.r3.make_hub(hub)
+    u = PF.Unit(key="9-t-ccx2daily", work=h["tmp"], repo=h["tmp"] / "repo9", hub=hub, codex_home=h["eval"])
+    info, _env = r5.set_daily(u, hub, {}, "ccx2daily", fresh)                      # not frozen: the real, new setup
+    assert info["sha256"] != shas[0] and info["snapshot"] == {"frozen": False}

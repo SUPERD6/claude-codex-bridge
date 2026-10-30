@@ -958,3 +958,53 @@ def test_fresh_homes_need_a_token_the_person_sets(machine, tmp_path, monkeypatch
     assert PF.run_checks(PF.Options(work=tmp_path / "w3", arms=["self"], claude="ccx-home"))["ok"]
     ap = PF.parser()
     assert ap.parse_args(["--workdir", "w", "--claude-isolation", "ccx-home"]).claude_isolation == "ccx-home"
+
+
+# ------------------------------------------------------------------ B3 eval: frozen daily snapshot, ledger attribution
+
+def test_a_daily_run_freezes_the_setup_once_and_removes_it(machine, tmp_path, monkeypatch):
+    _stub_machine(monkeypatch)
+    seen = []
+
+    def fake_unit(u, a, work):
+        snap = a.daily_frozen
+        seen.append((snap["sha256"], Path(snap["codex"], "AGENTS.md").read_text(encoding="utf-8")))
+        # the person rewrites their real Codex rules while the run goes on: later units still copy the frozen ones
+        (machine["home"] / ".codex" / "AGENTS.md").write_text(f"rewritten {len(seen)}\n", encoding="utf-8")
+        return {**u, "ok": True, "usd": 0.0, "wall_s": 0}
+    monkeypatch.setattr(r5, "run_unit", fake_unit)
+    work = tmp_path / "w"
+    rc = r5.main(["run", "--rounds", "1", "--tasks", r5.IDS[0], "--arms", "ccx2daily,ccx2daily_nomem", "--jobs", "1",
+                  "--out", str(tmp_path / "r.jsonl"), "--workdir", str(work), "--no-canary", "--force-unclean",
+                  "--codex-home", str(machine["codex"])])
+    assert rc == 0 and len(seen) == 2
+    assert seen[0] == seen[1] and seen[0][1] == "SENTINEL-CODEX personal rules\n"
+    assert not (work / r5.DAILY_SNAPSHOT).exists()                     # the person's setup does not stay behind
+    rep = json.loads((work / "preflight.json").read_text(encoding="utf-8"))
+    assert rep["daily_snapshot"]["sha256"] == seen[0][0] and "codex:AGENTS.md" in rep["daily_snapshot"]["copied"]
+
+
+def test_postflight_attributes_new_real_ledger_rows(machine, tmp_path, monkeypatch, capsys):
+    _stub_machine(monkeypatch)
+    led = machine["hub"] / "ccx" / "ledger.jsonl"
+    led.parent.mkdir(parents=True, exist_ok=True)
+    led.write_text(json.dumps({"run_id": "before", "ts": 1}) + "\n", encoding="utf-8")
+
+    def fake_unit(u, a, work):
+        with led.open("a", encoding="utf-8") as f:     # one leak of this unit, one real session of the person's
+            f.write(json.dumps({"run_id": "unit-run-1", "ts": 2, "label": u["label"]}) + "\n")
+            f.write(json.dumps({"type": "verdict", "run_id": "mine-7", "ts": 3, "label": "my own work"}) + "\n")
+        return {**u, "ok": True, "usd": 0.0, "wall_s": 0, "ccx_run_ids": ["unit-run-1"]}
+    monkeypatch.setattr(r5, "run_unit", fake_unit)
+    work = tmp_path / "w"
+    rc = r5.main(["run", "--rounds", "1", "--tasks", r5.IDS[0], "--arms", "self", "--out", str(tmp_path / "r.jsonl"),
+                  "--workdir", str(work), "--no-canary", "--tag", "att"])
+    out = capsys.readouterr().out
+    assert rc == 4
+    rep = json.loads((work / "preflight.json").read_text(encoding="utf-8"))
+    att = rep["postflight_ledger"]
+    assert att["n"] == 2 and att["unit_runs"] == 1 and att["eval_labels"] == 1
+    assert att["rows"] == [{"type": "run", "run_id": "unit-run-1", "ts": 2, "unit_run": True, "eval_label": True},
+                           {"type": "verdict", "run_id": "mine-7", "ts": 3, "unit_run": False, "eval_label": False}]
+    assert "type=verdict run_id=mine-7 ts=3 unit_run=no" in out and "my own work" not in out
+    assert r5.ledger_attribution(led, 10**6, set())["note"].startswith("the ledger is smaller")
