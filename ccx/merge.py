@@ -36,10 +36,13 @@ from pathlib import Path
 DEFAULTS = {"default": False, "max_pieces": 5, "piece_minutes": 5.0, "total_minutes": 15.0}
 # a piece line as models write it: "- [p1] done: ...", "**[p1]** — DONE", "1. `[p1]`: 完成", several on one line
 STATUS_LINE = re.compile(r"\[(?P<id>[^\]\n]{1,80})\][*_`]*\s*[:：\-—–]?\s*[*_`]*\s*"
-                         r"(?P<st>done|partial|failed|完成|部分完成|部分|失败)", re.I)
+                         r"(?P<st>(?:done|partial|failed)(?![a-z])|完成|部分完成|部分|失败)", re.I)
 _ST = {"完成": "done", "部分完成": "partial", "部分": "partial", "失败": "failed"}
 TAIL_CHARS = 1500            # of a failed check's output, in the follow-up
 NOT_DONE = ("check_failed", "check_broken", "no_changes", "review_issues", "review_failed")
+# the merged run's own verdict that no piece can pass on its own check: the review (after its fix round) or ccx
+# turned the whole diff down, or nothing changed
+HELD = ("check_broken", "no_changes", "review_issues", "review_failed")
 # the run stopped for a reason another run would meet again: start nothing more, hand it back to the lead
 STOPPED = ("quota", "auth", "user_stopped", "env", "timeout", "over_budget", "needs_write", "interrupted", "split",
            "model")
@@ -198,19 +201,19 @@ def _route(reqs: list) -> dict | None:
 def merged_request(reqs: list, tasks: list[dict]):
     """One Request for the group: the first piece's agent / model / folder, the strictest review, the highest risk,
     no check of its own (the pieces' checks run afterwards), no escalation, no sub-agents, the merged Finish text."""
-    budgets = [r.budget_usd for r in reqs if r.budget_usd is not None]
     return dataclasses.replace(reqs[0], brief=brief(reqs, tasks), label=_label(reqs), check=None, escalate=False,
                                allow_subagents=False, parallel=None, review=_review_of(reqs), risk=_risk_of(reqs),
                                route=_route(reqs), task=None, step=None, finish_note=FINISH,
-                               budget_usd=sum(budgets) if budgets else None)
+                               budget_usd=None)       # a spending cap is for its own sub-agents: it has none
 
 
 def self_reported(summary: str | None) -> dict[str, str]:
-    """{piece id: done|partial|failed} from the summary's piece lines (the last line for an id wins)."""
+    """{piece id: done|partial|failed} from the summary's piece lines. The first line for an id wins: the per-piece
+    lines come first (FINISH asks so), later notes may mention another piece in passing."""
     out: dict[str, str] = {}
     for m in STATUS_LINE.finditer(summary or ""):
         st = m.group("st")
-        out[m.group("id").strip().strip("`*_")] = _ST.get(st, st.lower())
+        out.setdefault(m.group("id").strip().strip("`*_"), _ST.get(st, st.lower()))
     return out
 
 
@@ -223,6 +226,19 @@ def _piece_files(t: dict, changed: list[str]) -> list[str] | None:
 
 def _under(f: str, declared: set[str]) -> bool:
     return f in declared or any(f.startswith(d.rstrip("/") + "/") for d in declared)
+
+
+def _summary_lines(p, rec: dict) -> dict[str, str]:
+    """Piece lines of a run's summary; for a review fix round's record, the run it fixed first (its lines are the
+    fuller ones: the fix round lists only what it touched)."""
+    from . import ledger
+    said: dict[str, str] = {}
+    if rec.get("review_of"):
+        try:
+            said = self_reported((ledger.load_run(p, rec["review_of"]).get("result") or {}).get("summary"))
+        except Exception:  # noqa: BLE001 — the record's own lines still count
+            pass
+    return {**said, **self_reported((rec.get("result") or {}).get("summary"))}
 
 
 def _judge(x: dict, said: dict[str, str]) -> None:
@@ -241,6 +257,7 @@ def finish(rec: dict, reqs: list, tasks: list[dict], p, cfg: dict) -> dict:
     """After the merged run: each piece's check, one follow-up for the pieces not done, a run of its own for each
     still failing; writes `pieces` / `merged` into run.json (the merged run's and, after a review fix round, the
     first one's too), a `merge` ledger event, and returns {"results": [per piece, plan order], "merged": {...}}."""
+    import time
     from . import ledger
     from .delegate import Request, compact, run  # noqa: F401
     from .workspace import run_check
@@ -250,12 +267,7 @@ def finish(rec: dict, reqs: list, tasks: list[dict], p, cfg: dict) -> dict:
     base = compact(rec)
     kind = rec.get("kind")
     ids = piece_ids(reqs)
-    said = self_reported((rec.get("result") or {}).get("summary"))
-    if rec.get("review_of"):          # the fix round's summary may not list every piece: the first run's lines too
-        try:
-            said = {**self_reported((ledger.load_run(p, first).get("result") or {}).get("summary")), **said}
-        except Exception:  # noqa: BLE001 — the fix round's own lines still count
-            pass
+    said = _summary_lines(p, rec)
     pieces: list[dict] = []
     for r, t, pid in zip(reqs, tasks, ids):
         x = {"id": pid, "paths": sorted(_files(t)) or None, "check_cmd": r.check}
@@ -263,10 +275,15 @@ def finish(rec: dict, reqs: list, tasks: list[dict], p, cfg: dict) -> dict:
             x["check"] = run_check(r.check, cwd, timeout)
         _judge(x, said)
         pieces.append(x)
-    stopped = kind in STOPPED
-    fix_id = None
+    # how the group ends when no piece can be judged done on its own: the run's own verdict holds for every piece
+    held = kind if kind in HELD else None                # the review or ccx said no to the whole diff
+    stop_kind = kind if kind in STOPPED else None        # stopped: another run would meet the same wall
+    stop_run = rec["run_id"]
+    if rec.get("result") is None and not stop_kind and not held:
+        stop_kind = kind or "error"                      # it ended without a result: nothing was reported done
+    fix_id, fix_runs = None, []
     todo = [x for x in pieces if not x["ok"]]
-    if todo and not stopped and rec.get("session_id"):
+    if todo and not (stop_kind or held) and rec.get("session_id"):
         lines = []
         for x in todo:
             if x.get("check"):
@@ -281,30 +298,42 @@ def finish(rec: dict, reqs: list, tasks: list[dict], p, cfg: dict) -> dict:
                           review=_review_of(reqs), risk=_risk_of(reqs), fallback=False, label=rec.get("label") or "",
                           progress=reqs[0].progress, merge_of=first, finish_note=FINISH), p)
         fix_id = fix["run_id"]
+        fix_runs = list(dict.fromkeys([fix.get("review_of") or fix_id, fix_id]))
         fkind = fix.get("kind")
-        stopped = fkind in STOPPED
-        fsaid = self_reported((fix.get("result") or {}).get("summary"))
+        if fkind in STOPPED or fix.get("result") is None:
+            stop_kind, stop_run = fkind or "error", fix_id
+        elif fkind in HELD:
+            held = fkind
+        fsaid = _summary_lines(p, fix)
         for x in todo:
             x["fixed_in"] = fix_id
             if x.get("check_cmd"):
                 x["check"] = run_check(x["check_cmd"], cwd, timeout)
-            _judge(x, fsaid if x["id"] in fsaid or not x.get("check_cmd") else said)
-            if not x.get("check_cmd") and x["id"] not in fsaid:
-                x["state"], x["ok"] = "unconfirmed", False
+                _judge(x, {})
+            else:
+                # its line in the follow-up, else what it said before (a failed / partial stays that)
+                _judge(x, {x["id"]: fsaid.get(x["id"]) or said.get(x["id"])} if (fsaid.get(x["id"]) or said.get(
+                    x["id"])) else {})
     spun: dict[int, dict] = {}
     for n, (x, r) in enumerate(zip(pieces, reqs)):
-        if x["ok"]:
-            continue
-        if stopped:
-            x["state"] = "not_run" if x["state"] in ("unconfirmed",) or not x.get("fixed_in") else x["state"]
-            continue
-        if x["state"] == "unconfirmed":
-            continue                       # no sign it failed: redoing it could undo good work; the lead looks
+        if x["ok"] or stop_kind or held or x["state"] == "unconfirmed":
+            continue                       # unconfirmed: no sign it failed; redoing it could undo good work
         # a run of its own, in the folder the merged run worked in (a worktree stays that worktree), with the
         # piece's own settings and ladder; the follow-up above was its one shared chance
         own = run(dataclasses.replace(r, cwd=cwd, worktree=False, resume_run=None, merge_of=first), p)
         x["spun_off"] = own["run_id"]
         spun[n] = own
+    if fix_id or spun:
+        # later runs changed the same folder: a check that passed before is run again, the last result counts
+        for n, x in enumerate(pieces):
+            if n not in spun and x.get("check_cmd") and x["ok"]:
+                x["check"] = run_check(x["check_cmd"], cwd, timeout)
+                _judge(x, {})
+    for x in pieces:
+        if held:
+            x["ok"], x["state"] = False, held
+        elif stop_kind and not x["ok"]:
+            x["state"] = "not_run"
     changed = list(base.get("files_changed") or [])
     declared = set().union(*[_files(t) for t in tasks]) if tasks else set()
     unattributed = [f for f in changed if declared and not _under(_norm(f), declared)]
@@ -314,9 +343,11 @@ def finish(rec: dict, reqs: list, tasks: list[dict], p, cfg: dict) -> dict:
         if x.get("check"):
             row["check"] = {k: x["check"].get(k) for k in ("cmd", "passed", "exit")}
         rows.append(row)
-    merged = {"pieces": ids, "first_run": first, "fix_run": fix_id,
+    merged = {"pieces": ids, "first_run": first, "fix_run": fix_id, "fix_runs": fix_runs,
               "spun_off": {pieces[n]["id"]: v["run_id"] for n, v in spun.items()},
-              **({"unattributed": unattributed} if unattributed else {}), **({"stopped": kind} if kind in STOPPED else {})}
+              **({"unattributed": unattributed} if unattributed else {}),
+              **({"stopped": stop_kind, "stopped_run": stop_run} if stop_kind else {}),
+              **({"held": held} if held else {})}
     for rid in dict.fromkeys([rec["run_id"], first]):
         try:
             d = ledger.load_run(p, rid)
@@ -326,6 +357,8 @@ def finish(rec: dict, reqs: list, tasks: list[dict], p, cfg: dict) -> dict:
             pass
     try:
         ledger.append_event(p, {"type": "merge", "run_id": first, "last_run": rec["run_id"], "fix_run": fix_id,
+                                "ts": time.time(), **({"stopped": stop_kind} if stop_kind else {}),
+                                **({"held": held} if held else {}),
                                 "pieces": [{"id": x["id"], "ok": x["ok"], "state": x["state"],
                                             "check_passed": (x.get("check") or {}).get("passed"),
                                             "fixed_in": x.get("fixed_in"), "spun_off": x.get("spun_off")}
@@ -340,27 +373,37 @@ def finish(rec: dict, reqs: list, tasks: list[dict], p, cfg: dict) -> dict:
             out.update(label=x["id"], merged_run=rec["run_id"], merged_with=ids, spun_off=True,
                        ok=bool(out.get("ok")) and out.get("kind") not in NOT_DONE and
                        out.get("status") in ("done", None))
+            if x.get("fixed_in"):
+                out["piece_fix"] = x["fixed_in"]
             results.append(out)
             continue
         out = dict(base)
         files = _piece_files(t, changed)
         out.update(label=x["id"], ok=x["ok"], piece_state=x["state"], merged_run=rec["run_id"], merged_with=ids,
-                   files_changed=files if files is not None else changed)
+                   files_changed=files if files is not None else changed, status=x["state"])
         if files is None:
             out["files_note"] = "this piece declared no paths: these are the whole merged run's files"
-        out["status"] = x["state"] if x["state"] in ("done", "partial", "failed") else out.get("status")
         out.pop("check", None)
+        out.pop("kind", None)
+        out.pop("hint", None)
         if x.get("check"):
             c = x["check"]
             out["check"] = {"cmd": c["cmd"], "passed": c["passed"], "exit": c["exit"]}
         if not x["ok"]:
-            out["kind"] = {"unconfirmed": "unconfirmed", "not_run": kind or "not_run"}.get(x["state"],
-                                                                                         out.get("kind") or x["state"])
-            out["hint"] = {"unconfirmed": "no check and no line of its own in the summary: nothing shows it was done; "
-                                          f"look at the diff (`ccx show {rec['run_id']} --full`)",
-                           "not_run": f"the merged run stopped ({kind}); continue with `ccx resume {rec['run_id']}`"
-                           }.get(x["state"], f"not done after the merged run and its follow-up; see "
-                                             f"`ccx show {rec['run_id']} --full`")
+            if x["state"] == "not_run":
+                out["kind"] = stop_kind
+                out["hint"] = f"the merged run stopped ({stop_kind}); continue with `ccx resume {stop_run}`"
+            elif held:
+                out["kind"] = held
+                out["hint"] = (f"ccx or its review turned down the merged run as a whole ({held}): its pieces are not "
+                               f"taken as done; see `ccx show {rec['run_id']} --full`")
+            elif x["state"] == "unconfirmed":
+                out["kind"] = "unconfirmed"
+                out["hint"] = ("no check and no line of its own in the summary: nothing shows it was done; look at "
+                               f"the diff (`ccx show {rec['run_id']} --full`)")
+            else:
+                out["kind"] = x["state"]
+                out["hint"] = f"not done after the merged run and its follow-up; see `ccx show {rec['run_id']} --full`"
         if x.get("fixed_in"):
             out["piece_fix"] = x["fixed_in"]
         results.append(out)

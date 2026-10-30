@@ -67,7 +67,7 @@ class TestMergedRequest:
         tasks = [{"id": "a", "paths": ["a.py", "tests/test_a.py"]}, {"id": "b"}]
         m = merge.merged_request(reqs, tasks)
         assert m.label == "merge:a+b" and m.check is None and m.escalate is False and m.allow_subagents is False
-        assert (m.review, m.risk, m.route, m.budget_usd, m.finish_note) == ("auto", "visible", None, 0.75, merge.FINISH)
+        assert (m.review, m.risk, m.route, m.budget_usd, m.finish_note) == ("auto", "visible", None, None, merge.FINISH)
         b = m.brief
         assert b.index("Piece 1 of 2 - id: a (files: a.py, tests/test_a.py)") < b.index("Piece 2 of 2 - id: b")
         assert "Check for this piece: `pytest -q tests/test_a.py`" in b
@@ -85,6 +85,10 @@ class TestMergedRequest:
         assert merge.self_reported(s) == {"a": "done", "b": "failed", "c": "partial", "d": "done", "e": "failed",
                                           "f": "done"}
         assert merge.self_reported(None) == {}
+        # the per-piece lines come first; a later note that names another piece does not override it
+        assert merge.self_reported("- [b] done: x\n- [a] done: note [b] failed earlier, now fine") == \
+            {"b": "done", "a": "done"}
+        assert merge.self_reported("[a] donee") == {}
 
     def test_piece_files_and_restrict(self):
         assert merge.restrict(["a.py", "pkg/x.py", "pkg2/y.py", "b.py", '"\\346\\226\\207.py"'],
@@ -265,3 +269,80 @@ class TestBatchMerge(AdapterEnv):
         self.assertFalse((self.hub / "ccx" / "runs" / run_id / "undone.json").exists())   # the run itself stands
         r = self.ccx("undo", run_id, "--piece", "p0", "--wrong", "--apply")
         self.assertNotEqual(r.returncode, 0)                                  # a verdict is per run, not per piece
+
+
+class _Fake:
+    """merge.finish with fake runs and checks: kind / summary of each run, and check results in order."""
+
+    def __init__(self, monkeypatch, checks, runs):
+        import ccx.delegate as d
+        import ccx.ledger as led
+        import ccx.workspace as ws
+        self.checks, self.runs, self.started, self.records = list(checks), list(runs), [], {}
+        monkeypatch.setattr(ws, "run_check", lambda cmd, cwd, timeout=900, **k: self._check(cmd))
+        monkeypatch.setattr(d, "run", self._run)
+        monkeypatch.setattr(led, "load_run", lambda p, rid: dict(self.records.get(rid, {"run_id": rid})))
+        monkeypatch.setattr(led, "write_record", lambda path, rec: None)
+        monkeypatch.setattr(led, "append_event", lambda p, ev: self.records.setdefault("events", []).append(ev))
+
+    def _check(self, cmd):
+        ok = self.checks.pop(0)
+        return {"cmd": cmd, "passed": ok, "exit": 0 if ok else 1, "tail": "boom"}
+
+    def _run(self, r, p):
+        kind, summary = self.runs.pop(0)
+        rid = f"R{len(self.started) + 1}"
+        self.started.append((rid, r))
+        return rec(rid, kind, summary)
+
+
+def rec(rid, kind=None, summary="", ok=True, result=True):
+    return {"run_id": rid, "to": "codex", "tier": "T1", "cwd": ".", "session_id": "s", "kind": kind, "ok": ok,
+            "state": "finished", "attempts": [{"model": "m", "effort": "low", "usage": {}}],
+            "result": {"status": "done", "summary": summary} if result else None}
+
+
+CFG = {"defaults": {}}
+
+
+def _finish(monkeypatch, rec0, reqs, checks=(), runs=()):
+    fake = _Fake(monkeypatch, checks, runs)
+    out = merge.finish(rec0, reqs, [{} for _ in reqs], Path("."), CFG)
+    return out, fake
+
+
+def test_a_review_turning_down_the_whole_diff_holds_for_every_piece(monkeypatch):
+    out, fake = _finish(monkeypatch, rec("M", "review_issues"), [req("a", check="c"), req("b", check="c")],
+                        checks=[True, True])
+    assert [(r["ok"], r["kind"]) for r in out["results"]] == [(False, "review_issues")] * 2
+    assert fake.started == [] and out["merged"]["held"] == "review_issues"
+
+
+def test_a_follow_up_that_stops_reports_its_own_kind_and_run(monkeypatch):
+    out, fake = _finish(monkeypatch, rec("M", None, "[a] done: x"), [req("a", check="c"), req("b", check="c")],
+                        checks=[True, False, False, True], runs=[("quota", "")])
+    res = out["results"]
+    assert res[0]["ok"] and not res[1]["ok"]
+    assert (res[1]["piece_state"], res[1]["kind"]) == ("not_run", "quota")
+    assert "ccx resume R1" in res[1]["hint"] and out["merged"]["stopped_run"] == "R1"
+    assert len(fake.started) == 1                                   # nothing spun off after the stop
+
+
+def test_a_piece_reported_failed_stays_failed_when_the_follow_up_does_not_mention_it(monkeypatch):
+    out, fake = _finish(monkeypatch, rec("M", None, "[a] done: x\n[b] failed: no"), [req("a"), req("b")],
+                        runs=[(None, "[c] done"), (None, "")])
+    assert out["results"][1].get("spun_off") is True                # still failed: a run of its own
+    assert [r.resume_run for _, r in fake.started] == ["M", None]      # the follow-up, then b on its own
+    assert fake.started[1][1].label == "b"
+
+
+def test_a_check_that_passed_is_run_again_after_later_runs(monkeypatch):
+    out, fake = _finish(monkeypatch, rec("M", None, ""), [req("a", check="c"), req("b", check="c")],
+                        checks=[True, False, True, False, True], runs=[(None, "")])
+    # a: passed, then after the follow-up (which fixed b) its check fails: the last result counts
+    assert out["results"][0]["ok"] is False and out["results"][0]["check"]["passed"] is False
+
+
+def test_a_run_without_a_result_leaves_unchecked_pieces_not_run(monkeypatch):
+    out, fake = _finish(monkeypatch, rec("M", "error", ok=False, result=False), [req("a"), req("b")])
+    assert [r["piece_state"] for r in out["results"]] == ["not_run", "not_run"] and fake.started == []

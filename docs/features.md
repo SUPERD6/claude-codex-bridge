@@ -269,9 +269,13 @@ That run never escalates and starts no sub-agents of its own. Afterwards each pi
 summary; a piece with neither is `unconfirmed` (not done, not redone: look at the diff). Pieces not done get one
 follow-up in the same session; a piece whose check still fails, or that still reports failed or partial, becomes a
 run of its own on the usual ladder. If the run stopped for a reason a retry would meet again (quota, login, `ccx
-stop`, timeout, the machine, budget), nothing more starts: those pieces are `not_run`, for `ccx resume`. `results`
+stop`, timeout, the machine, budget), nothing more starts: those pieces are `not_run`, for `ccx resume` of the run
+that stopped. If the review (after its fix round) or ccx turns the merged diff down as a whole (`review_issues`,
+`review_failed`, `no_changes`, `check_broken`), no piece counts as done, whatever its own check said. After a follow-up
+or a spun-off run, checks that had passed are run again and the last result counts. `results`
 keeps one entry per piece (with `merged_run`, `merged_with`, `piece_state`), and `ccx undo <run> --piece <id>` puts
-back only the paths that piece declared (no verdict). Follow-up and spun-off runs carry `merge_of` in run.json and the
+back only the paths that piece declared (no verdict; only for a merged run in the project folder: in a clean repository
+parallel writers get worktrees, which have no undo snapshot). Follow-up and spun-off runs carry `merge_of` in run.json and the
 ledger, and a `merge` ledger event lists every piece's outcome. Costs: reviews judge the whole diff (the 50-line
 trigger counts every piece; a follow-up and a spun-off run may be reviewed again), wall time is longer, and the exit
 code is 2 when any merged piece is not done (a piece run alone keeps `ccx run`'s exit code). An explicit `--merge`
