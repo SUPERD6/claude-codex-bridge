@@ -80,3 +80,31 @@ def test_summary_reads_several_results_files_and_tags(tmp_path, capsys):
     ns = argparse.Namespace(results=[str(a)], tag=["m1h2"], taskset="r5")
     assert len(r5.summary_rows(ns)) == 6
     assert r5.tagged(half2, "m1r5") == half2[:4]                    # one tag as a string still works
+
+
+def _rec(hub, rid, **kw):
+    d = hub / "ccx" / "runs" / rid
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "run.json").write_text(json.dumps({"run_id": rid, **kw}), encoding="utf-8")
+
+
+def test_switches_applied_reads_each_run_record(tmp_path):
+    from ccx.config import SUBAGENT_SWITCHES
+    hub = tmp_path / "h"
+    on = {**SUBAGENT_SWITCHES, "codex_memories": False, "codex_lean_tools": True}
+    _rec(hub, "w1", label="L", mode="write", subagent_switches=on, attempts=[{"agent": "codex"}])
+    _rec(hub, "v1", label="review:w1", mode="read", subagent_switches=on, attempts=[{"agent": "codex"}])
+    _rec(hub, "c1", label="L", mode="write", subagent_switches=on, attempts=[{"agent": "claude"}])
+    _rec(hub, "old", label="L", mode="write", attempts=[{"agent": "codex"}])          # before the field
+    got = r5.switches_applied(hub, ["w1", "v1", "c1", "old", "gone"], {"codex_memories": False,
+                                                                       "codex_lean_tools": True})
+    runs = {r["run"]: r for r in got["runs"]}
+    assert got["argv_recorded"] is False and got["match"] is True and "derived" in got["note"]
+    w = runs["w1"]["codex_flags"]
+    assert w["memories_off"].startswith("-c features.memories=false") and w["web_search_off"] and w["apps_plugins_off"]
+    v = runs["v1"]["codex_flags"]
+    assert runs["v1"]["review"] and v["memories_off"] and not v["web_search_off"]      # read runs keep web search
+    assert "codex_flags" not in runs["c1"] and runs["old"]["subagent_switches"] is None
+    assert runs["gone"] == {"run": "gone", "record": "missing"}
+    assert r5.switches_applied(hub, ["w1"], {})["match"] is False                      # the baseline wanted none
+    assert "match" not in r5.switches_applied(hub, ["w1"])

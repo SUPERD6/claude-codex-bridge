@@ -1006,6 +1006,41 @@ def ccx_namecheck(hub: Path, run_ids: list) -> list[dict]:
     return out
 
 
+def switches_applied(hub: Path, run_ids: list, want: dict | None = None) -> dict:
+    """What the [subagent] switches did at run level in this unit, from each ccx run's run.json: its
+    `subagent_switches` (what ccx resolved and handed to the sub-agent), its mode, the CLIs its attempts ran on and,
+    for Codex attempts, the memory / web_search / image_generation flags those switches add (delegate.py and
+    agents/codex.py: memories off on every Codex rung; lean tools on write runs only). ccx's run.json does not record
+    the CLI's argv, so the flags are derived from the recorded switches, not read back (`argv_recorded` False).
+    `want`: the switches the arm set; `match` says whether every run that recorded them ran with them."""
+    from ccx.agents.codex import MEMORIES_OFF
+    runs = []
+    for rid in run_ids or []:
+        rec = r2.record(hub, rid)
+        if not rec:
+            runs.append({"run": rid, "record": "missing"})
+            continue
+        sw = rec.get("subagent_switches") if isinstance(rec.get("subagent_switches"), dict) else None
+        agents = sorted({str(a.get("agent")) for a in rec.get("attempts") or [] if isinstance(a, dict)})
+        one = {"run": rid, "review": str(rec.get("label") or "").startswith("review:"), "mode": rec.get("mode"),
+               "agents": agents, "provider": rec.get("provider"), "subagent_switches": sw}
+        if sw is not None and "codex" in agents:
+            lean = bool(sw.get("codex_lean_tools")) and rec.get("mode") != "read"
+            one["codex_flags"] = {"memories_off": " ".join(MEMORIES_OFF) if sw.get("codex_memories") is False else None,
+                                  "web_search_off": lean, "image_generation_off": lean, "goals_off": lean,
+                                  "apps_plugins_off": lean and not rec.get("provider")}
+        runs.append(one)
+    seen = [r["subagent_switches"] for r in runs if r.get("subagent_switches") is not None]
+    out = {"runs": runs, "argv_recorded": False,
+           "note": "run.json records subagent_switches, not the CLI argv: codex_flags are derived from them"}
+    if want is not None:
+        from ccx.config import SUBAGENT_SWITCHES
+        full = {**SUBAGENT_SWITCHES, **want}
+        out["want"] = full
+        out["match"] = (all(x == full for x in seen) if seen else None)
+    return out
+
+
 _TR = []
 
 
@@ -1302,6 +1337,10 @@ def run_unit(u: dict, a, work: Path) -> dict:
         row.update(changed(repo))
         bookkeeping(row, u["arm"], hub, task)
         must_telemetry(row, hub, repo)
+        try:                                      # what the [subagent] switches did, per ccx run (telemetry only)
+            row["switches_applied"] = switches_applied(hub, row.get("ccx_run_ids") or [], DAILY_ARMS.get(u["arm"]))
+        except Exception as e:  # noqa: BLE001
+            row["switches_applied"] = {"error": f"{type(e).__name__}: {e}"[:300]}
         sc = score(repo, task, work, job, **({"python": ext_python(a), "source": xkw["source"]} if xkw else {}))
         row.update({**u, "ok": sc["ok"], "pytest": sc["pytest"], "hub": hinfo})
         for rid in row.get("ccx_run_ids") or []:
