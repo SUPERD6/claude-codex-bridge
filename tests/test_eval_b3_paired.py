@@ -156,3 +156,61 @@ def test_daily_snapshot_is_frozen_once_per_run(daily_homes):
     u = PF.Unit(key="9-t-ccx2daily", work=h["tmp"], repo=h["tmp"] / "repo9", hub=hub, codex_home=h["eval"])
     info, _env = r5.set_daily(u, hub, {}, "ccx2daily", fresh)                      # not frozen: the real, new setup
     assert info["sha256"] != shas[0] and info["snapshot"] == {"frozen": False}
+
+
+def _old_schedule(rounds, seed, tasks, arms):
+    import random
+    out = []
+    for rd in range(1, rounds + 1):
+        rnd = random.Random(f"{seed}:r5:{rd}")
+        ts = list(tasks)
+        rnd.shuffle(ts)
+        for t in ts:
+            arm_list = list(arms)
+            rnd.shuffle(arm_list)
+            out += [{"exp": "r5", "round": rd, "task": t, "arm": arm} for arm in arm_list]
+    return out
+
+
+DAILY4 = ["ccx2daily", "ccx2daily_nomem", "ccx2daily_clean", "ccx2daily_leantools"]
+
+
+def test_shuffle_schedule_is_unchanged():
+    tasks = list(r5.IDS)
+    for seed in (53, 7):
+        assert r5.schedule(2, seed, tasks, DAILY4) == _old_schedule(2, seed, tasks, DAILY4)
+        assert r5.schedule(3, seed, tasks, ["self", "ccx"], "shuffle") == _old_schedule(3, seed, tasks, ["self", "ccx"])
+
+
+def test_balanced_arm_order_rotates_over_task_and_round():
+    from collections import Counter
+    tasks = [f"t{i}" for i in range(10)]
+    s = r5.schedule(2, 53, tasks, DAILY4, "balanced")
+    assert s == r5.schedule(2, 53, tasks, DAILY4, "balanced") and len(s) == 80
+    assert [u["task"] for u in s[::4]] == [u["task"] for u in _old_schedule(2, 53, tasks, DAILY4)[::4]]
+    groups = [s[i:i + 4] for i in range(0, 80, 4)]
+    assert all(sorted(u["arm"] for u in g) == sorted(DAILY4) and [u["arm_pos"] for u in g] == [0, 1, 2, 3]
+               for g in groups)
+    first = Counter(g[0]["arm"] for g in groups)
+    assert set(first) == set(DAILY4) and max(first.values()) - min(first.values()) <= 2
+    for pos in range(4):                                       # every place, not only the first, is spread out
+        c = Counter(g[pos]["arm"] for g in groups)
+        assert max(c.values()) - min(c.values()) <= 2
+    by_task = {}
+    for g in groups:
+        by_task.setdefault(g[0]["task"], []).append(g[0]["arm"])
+    assert all(len(set(v)) == 2 for v in by_task.values())    # a task's two rounds start with different arms
+    s2 = r5.schedule(4, 53, tasks[:4], DAILY4, "balanced")     # 4 tasks x 4 rounds: an exact Latin square
+    assert Counter(s2[i]["arm"] for i in range(0, 64, 4)) == Counter({a: 4 for a in DAILY4})
+    with pytest.raises(ValueError):
+        r5.schedule(1, 1, tasks, DAILY4, "random")
+
+
+def test_run_takes_the_arm_order_and_rows_record_it(tmp_path, capsys):
+    rc = r5.main(["run", "--dry-run", "--rounds", "1", "--tasks", ",".join(r5.IDS[:2]), "--arms",
+                  "ccx2daily,ccx2daily_nomem", "--arm-order", "balanced", "--out", str(tmp_path / "r.jsonl"),
+                  "--workdir", str(tmp_path / "w")])
+    assert rc == 0
+    labels = [ln.split()[1] for ln in capsys.readouterr().out.splitlines() if ln.startswith("[dry] eval-r5:")]
+    firsts = [labels[0], labels[2]]
+    assert len(labels) == 4 and firsts[0].rsplit(":", 1)[1] != firsts[1].rsplit(":", 1)[1]

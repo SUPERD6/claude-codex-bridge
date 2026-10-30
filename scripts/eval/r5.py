@@ -1429,13 +1429,30 @@ def run_unit(u: dict, a, work: Path) -> dict:
     return row
 
 
-def schedule(rounds: int, seed: int, tasks: list[str], arms: list[str]) -> list[dict]:
+ARM_ORDERS = ("shuffle", "balanced")
+
+
+def schedule(rounds: int, seed: int, tasks: list[str], arms: list[str], order: str = "shuffle") -> list[dict]:
+    """Units in run order: per round the tasks shuffled (seeded), per task its arms one after another. `shuffle` (the
+    default, every earlier run's schedule): the arms shuffled per task. `balanced`: a Latin-square rotation of one
+    seeded arm order, by the task's place in `tasks` plus the round, so each arm runs first (and in each place) about
+    equally often and a task's rounds start with different arms; rows say `arm_order` and `arm_pos`."""
+    if order not in ARM_ORDERS:
+        raise ValueError(f"unknown arm order {order!r} (known: {', '.join(ARM_ORDERS)})")
+    base = list(arms)
+    random.Random(f"{seed}:r5:arms").shuffle(base)
     out = []
     for rd in range(1, rounds + 1):
         rnd = random.Random(f"{seed}:r5:{rd}")
         ts = list(tasks)
         rnd.shuffle(ts)
         for t in ts:
+            if order == "balanced":
+                k = (tasks.index(t) + rd - 1) % len(base) if base else 0
+                arm_list = base[k:] + base[:k]
+                out += [{"exp": "r5", "round": rd, "task": t, "arm": arm, "arm_order": order, "arm_pos": i}
+                        for i, arm in enumerate(arm_list)]
+                continue
             arm_list = list(arms)
             rnd.shuffle(arm_list)
             out += [{"exp": "r5", "round": rd, "task": t, "arm": arm} for arm in arm_list]
@@ -1756,7 +1773,8 @@ def cmd_run(a) -> int:
     lead = {"lead_model": a.lead_model or DEFAULT_LEAD[0], "lead_effort": a.lead_effort or DEFAULT_LEAD[1]}
     auto = lead["lead_model"] == LEAD_AUTO
     todo = []
-    for u in schedule(a.rounds, a.seed, tasks, tokens):   # tokens: `x` and `x@auto` interleave as two arms
+    for u in schedule(a.rounds, a.seed, tasks, tokens, getattr(a, "arm_order", "shuffle")):   # tokens: `x` and
+        # `x@auto` interleave as two arms
         arm, _, pick = u["arm"].partition("@")
         u = {**u, "arm": arm, "tag": a.tag, "seed": a.seed, "taskset": a.taskset,
              **(lead if has_lead(arm) else {})}
@@ -2662,6 +2680,9 @@ def parser() -> argparse.ArgumentParser:
                    help="r5 (default: the tasks the loop was tuned on) or holdout (unseen, for final claims)")
     r.add_argument("--tasks", default="", help="comma-separated ids from the task set (default: all of it)")
     r.add_argument("--arms", default="")
+    r.add_argument("--arm-order", choices=ARM_ORDERS, default="shuffle", help="shuffle (default, every earlier "
+                   "run's schedule): the arms of a task in a seeded random order; balanced: a seeded Latin-square "
+                   "rotation over task and round, so each arm runs first about equally often")
     r.add_argument("--budget", type=float, default=3.0,
                    help="stop before a new unit once this tag's rows (plus --extra-spent) reach $")
     r.add_argument("--extra-spent", type=float, default=0.0, help="$ spent elsewhere, counted against --budget")
