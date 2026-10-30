@@ -7,6 +7,8 @@
 - [ ] `python -m pytest -q tests` passes
 - [ ] new or changed behaviour has a test
 - [ ] against a real CLI (say which version and what you ran), or: not run against a real CLI
+- [ ] no personal data added (local paths, e-mail addresses, machine names; screenshots looked at)
+- [ ] no command or option removed; if one changed: what was kept and how it was checked
 
 ## Not covered / open
 
