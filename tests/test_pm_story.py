@@ -162,10 +162,14 @@ class TestDocsAgree(unittest.TestCase):
             self.assertIn(f"The {word} relayline skills", text)
 
     def test_readme_leads_with_the_job_and_the_honest_comparison(self):
-        for name, hold in (("README.md", "hold-out confirmation pending"), ("README.zh.md", "留出集确认还没做")):
+        for name, hold in (("README.md", ("Hold-out set (hc1", "default usage", "$0.063", "2026-10-29-hc1-holdout.md")),
+                           ("README.zh.md", ("留出集（hc1", "默认用法", "$0.063", "2026-10-29-hc1-holdout.zh.md"))):
             s = self.read(name)
             first = s.split("## ", 2)[1]                           # title block + the comparison section
-            self.assertIn(hold, first, name)
+            for must in hold:                                      # the hold-out row is filled, with its qualifier
+                self.assertIn(must, first, (name, must))
+            self.assertNotIn("pending", first.lower(), name)
+            self.assertNotIn("待测", first, name)
             for must in ("builtin2", "$0.114", "$0.135", "$0.116–0.135"):
                 self.assertIn(must, first, (name, must))
             self.assertNotIn("Four pillars", s)

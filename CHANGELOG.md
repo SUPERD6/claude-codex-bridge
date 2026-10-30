@@ -79,6 +79,609 @@
   and `next: ccx show <id>`, so a lead piping the output through `tail` still has the run_id. Other keys unchanged.
 - `scripts/collect_changes.py` no longer crashes printing its preview on a GBK (or other legacy) console; unprintable
   characters become `?` in the preview only, the file it writes is unchanged UTF-8.
+- Claude sessions are found again when the project sits in a deep folder: Claude Code cuts a project folder name
+  past 200 characters to 200 plus `-<hash>`, and the full path can pass Windows' 260-character limit. Shared work
+  context, the lead's session lookup, killed-run spend and sub-agent spend all used the full name and silently found
+  nothing (seen in round 3's pilot).
+- `scripts/eval/r4.py`: round 4. Cheap models given the raw request with no lead (luna, luna + review, haiku,
+  deepseek-flash; sonnet as reference) and self / built-in / ccx in a lead session that already holds ~110k tokens of
+  history. Report: `docs/research/2026-10-26-r4.md`.
+- `scripts/eval/r5.py` + `tasks_r5.py`: round 5 on ten real changes from this repository's history (the whole code
+  base at the parent commit, the commit's own tests hidden); arms self / built-in / ccx / direct. Plan:
+  `docs/research/2026-10-26-r5-plan.md`.
+- `ccx resume` keeps the run's label, acceptance command and risk when it continues the same task: a lead's fix
+  round was never checked, and a queue piece lost its `q:<id>` label (round 5 pilot).
+- Claude sub-agents' result schema requires only `status` and `summary`: Claude Code made the model re-send a result
+  missing an optional key, 51 extra turns over 10 of 181 runs in rounds 4-5. Codex keeps the strict schema.
+- `ccx resume` refuses while a run of that session is still alive (the run itself, its fix round or a resume of it)
+  and says to wait with `ccx show` or `ccx stop` it: a lead whose Bash call timed out resumed mid fix round and Codex
+  refused the second writer (round 5).
+- Shared work context keeps the person's newest ask up to 3000 characters (older asks 500, total cap unchanged): a
+  1.6k-character spec was cut at 500 and the sub-agent never saw the interface its lead had misread (round 5).
+- A sub-agent's rules no longer say "do not delegate to other agents" next to a request to use its own sub-agents
+  (a Codex sub-agent stopped as blocked on that); the rule is about handing the task on to another CLI.
+- Windows: Codex sub-agents get a short shell note (read files with `Get-Content -Encoding UTF8` or Python, no bash
+  heredocs): plain Get-Content in PowerShell 5.1 showed UTF-8 Chinese as mojibake and a round-5 run gave up.
+- Round 5 report (`docs/research/2026-10-26-r5.md`): ten real changes from this repository as large tasks. Self 19/20
+  at $0.211 per success, built-in sub-agent 19/20 at $0.155, ccx 17/20 at $0.248, a cheap model alone 16/20 at $0.054;
+  every ccx and direct failure traced to its cause.
+- `ccx ui`: a refused POST (bad Origin, token or Host) reads the request body before answering, so Windows no longer
+  resets the connection and the client gets the 403 instead of ConnectionAbortedError (a flaky CI test, now also 10 s
+  faster).
+- Independent review raises `[must]` only for real problems with the asked-for change (round 5: fix rounds were
+  spent on robustness the task never asked for, and units with review issues were not more often right): the
+  reviewer must quote the task sentence a `[must]` rests on, or name the existing behaviour, test or task-named
+  input it breaks; hardening, extra validation, unasked edge cases, style and extra tests are `[note]`. A `[must]`
+  that labels itself out of scope right after the tag ("(out of scope)", "Hardening:", "not asked for", ...) counts
+  as a note and starts no fix round.
+- Review fix rounds: at most one per run (`[review] fix_rounds` is 0 or 1; larger counts as 1, and the round
+  counter now increases so a larger value can no longer loop); the fix round's own review is judged against the
+  first run's task instead of the issue list it was handed, and the fix brief says not to add unasked hardening.
+- `ccx show <run_id> --wait [SECONDS]` (default 540, under a 10-minute tool-call limit) blocks until the run is
+  finished and prints the same compact result as `ccx run`, recap line included; when the run started a review fix
+  round it waits for that and reports the last run of the chain. Still running at the end: `status: running` and
+  `next: ccx show <id> --wait`, exit 0. `ccx run --bg` and the "still working" refusal of `ccx resume` point to it:
+  a lead whose Bash call timed out lost the result and resumed mid fix round (round 5).
+- The compact result of a write run in a git repo has a `diffstat` line (`git diff --shortstat` since the run's
+  undo snapshot, plus new untracked files), so the lead needs no `git diff` / `git status` of its own after each
+  run (round 5). No git or no snapshot: the key is left out.
+- agent-delegate skill: a short "Delegate cheaply" section from round 5's lead transcripts. The brief is the
+  person's request verbatim (interfaces, names, strings, numbers unchanged) plus known paths and the acceptance
+  command, without reading the code base first; long work goes `ccx run --bg` then `ccx show <run_id> --wait`
+  (no `tail`/`head` pipes, no resume of a running run); a passed check plus files_changed / diffstat is enough;
+  `--review` stays auto; the sub-agent never commits. The brief template and the Chinese README say the same.
+- Round-5 evaluation: an opt-in arm `ccx2` (`--arms ccx2`) whose lead follows that guidance, next to the unchanged
+  `ccx` arm; the default schedule is unchanged, `summary` reports it, unknown arms are refused.
+- Round-5 evaluation: an opt-in arm `builtin2` (`--arms builtin2`): builtin's Agent-tool hand-off with ccx2's brief
+  and acceptance wording shared word for word (`LEAN_BRIEF` / `LEAN_ACCEPT`), so ccx2 vs builtin2 differ only in how
+  the work is handed away; the worker runs the acceptance command and reports status, check, files_changed and
+  diffstat. ccx2's prompt and the default schedule are unchanged.
+- Sub-agent prompts: when the task names a command, hook or script, test through it as a separate process from a
+  directory outside the repository (an in-process call does not test the wiring); never change what an existing
+  test sets up or asserts to make a change pass (`WIRING`, `KEEP_TESTS`).
+- Review: a new [must] for any failure of the task's behaviour on its normal path, silent ones included (undefined
+  names, swallowed exceptions, imports or subprocesses that only work from the repo). Pre-existing test files the
+  change edited (`edited_tests`) are flagged in the brief, always count as weak evidence in auto mode, and are
+  shown in the run summary even when no review runs.
+- Checks: a pytest exit 4/5 is `check_broken` (no escalation, no review, not learned as a failure); `ccx run --check`
+  rejects `tests/...py` paths that don't exist, naming close matches; `ccx resume --check CMD` replaces the stored
+  check; unquoted `*`/`?` are expanded on Windows. `review_failed` and `check_broken` runs print `ok: false` with
+  `needs_lead`, and `ccx run`/`resume` exit 2 for them.
+- Sub-agents are told to iterate with targeted test runs (one file, `-x`, `-k NAME`) and run the full acceptance
+  check once at the end, instead of re-running the whole check after every edit.
+- `ccx run/resume --check` naming a test file that does not exist: a near-identical name (a typo) is swapped in with a
+  one-line notice on stderr; otherwise the error also lists the test files that do exist.
+- The independent review now runs while ccx runs its own acceptance check, instead of after it. It is told the
+  command and is only counted when the check passes; a failed or broken check stops the review and drops it.
+  `--review off` is unchanged.
+- `check_broken` is handled like the other failures: it ends a lane's session, gets its own card and history line in
+  the dashboard, and the work queue treats it as needing the lead.
+- Round 5 follow-up in docs/research/2026-10-26-r5.md §7: after #126–#129, ccx as the agent-delegate skill now teaches
+  it was right 19/20 and 20/20 at $0.131 / $0.116 per success (builtin 17/20 at $0.202 beside it); the lean lead recipe
+  alone cut cost and correctness (builtin2 17/20); wall time is still ~2.7× the lead working alone.
+- Sub-agents with a `--check` are told to run only the tests touching their change and the full check at most once:
+  ccx runs it again outside their sandbox and that result counts. The review fix round says the same.
+- `--check` naming a missing `tests/X.py` now uses the existing `tests/X_*.py` files (an explicit list), with a
+  one-line notice; the typo match stays as the fallback.
+- `tests/test_recover.py` sweep tests skip with a reason when the `--bg` ccx process cannot be killed (a sandbox)
+  instead of timing out.
+- Evaluations start from a clean room: `scripts/eval/preflight.py` checks the machine before `r5.py run` (another eval,
+  pytest, `ccx run`, `codex exec` or `claude -p` running, modified code, a dedicated Codex home, the work dir and the
+  folders above it, a canary lead that must see only the project's instructions and must fail to read a denied
+  folder) and refuses to start on any problem unless `--force-unclean`, which every row records; checking alone
+  changes nothing on disk. Each unit gets an allow-listed environment, its own TMP / git identity / CCX_CONFIG /
+  DSH_HOME / home for Codex and dsh, Claude without user settings, hooks, CLAUDE.md, skills or auto-memory (deny rules
+  in the `//c/...` form for the real homes, every project's memory and transcripts, `~/.agents`), Codex in a dedicated
+  CODEX_HOME; its processes start suspended in a Job Object and leftovers are killed and logged. Rows carry
+  `fingerprint` (commit, task-file and tiers hashes, CLI versions, models, python / pytest / OS, isolation,
+  concurrency, preflight result), `audit`, `leftovers` and `env_clean`; commit, versions and the machine are
+  re-checked between units. `r5.py summary --tag` / `export --tag` keep rounds apart.
+- New opt-in knobs for sub-agents, unchanged by default: `CCX_CLAUDE_SETTING_SOURCES` (`--setting-sources`),
+  `CCX_CLAUDE_SETTINGS` (a JSON file merged into `--settings`), `CCX_CLAUDE_NO_SKILLS=1` (`--disable-slash-commands
+  --strict-mcp-config` at every effort), `CCX_CODEX_ISOLATE=1` (`--ignore-user-config --ignore-rules`, Codex memories
+  off, at every effort), `CCX_AGENT_HOME` (HOME / USERPROFILE of Codex and dsh sub-agents).
+- Evaluation: a hold-out task set (`scripts/eval/tasks_holdout.py`), 10 real past changes of this repository that
+  were never used while tuning on round 5 (other commits, other feature areas, same size band: 13-86 changed lines,
+  1-4 files, one hidden test file each). `scripts/eval/r5.py run --taskset holdout` runs it (results in their own
+  file, the task file's hash in every row); r5 stays the default. `scripts/eval/holdout_check.py` checks every task:
+  the hidden test fails at the parent and passes at the commit, size in band, nothing shared with r5.
+- Evaluation: a task may `deselect` unrelated tests that fail at random under load (test_bg_run in two hold-out
+  tasks); hold-out units leave nothing in the work dir after scoring (repository and hub removed, the lead stream
+  moved to `.ccx/eval/r5/streams/<tag>/`), so a later round cannot find an earlier round's answer; the checkout's
+  other git worktrees are denied to unit agents and flagged by the audit like the checkout itself.
+- Skills brought in line with current behaviour (#135): agent-delegate's result checks are one list in section 4
+  (`needs_lead`, `edited_tests`, `check_broken`, the review fix round ccx runs itself; judge `kind` only after
+  `ccx show <run_id> --wait`, and a `review_issues` left there means no fix round ran), the duplicated cheap-side and
+  project-lookup text is shortened, and `ccx stop` and project memory are taught. project-manager keeps its default
+  `--review on`, waits with `ccx show <run_id> --wait`, and names `ccx ui`, `say`/`board`/`peek`, `intake` (its
+  comments go to the person first), `stats`/`report`. task-checkpoint resumes a ccx step with
+  `ccx task resume <task>`. rubric.md and three-way.md no longer claim ccx is usually cheapest per right task
+  (round 5 says otherwise). The Chinese notes follow. New test `tests/test_skills_core.py`: every core feature is
+  still named in some SKILL.md and some README.zh.md, and every ccx command, subcommand, fixed value and flag in any
+  skill doc exists (replaces the project-manager-only check).
+- `namecheck`: after a write run, a static check (stdlib `ast` + `symtable`, a few ms a file) of the functions the
+  run changed for names no scope defines, i.e. a NameError waiting on that path. Round 5 shipped two such bugs past
+  passing tests (an import missing behind `except Exception`). Default `warn`: hits go to the record (`namecheck`),
+  the compact result and the review brief as weak evidence, and keep the run from the 12 h probable verdict;
+  `fail` turns a hit into `check_failed` (check `ccx namecheck --run <id>`, reason `namecheck`; the acceptance
+  command is not run, and with a rung left it climbs like a failed check); `off`. Set by `[defaults] namecheck` or
+  `ccx run|resume --namecheck`; `ccx resume` keeps the mode the run was started with. New command `ccx namecheck`
+  (a run's changes with `--run`, the working tree since `--base`, or whole files; exit 1 on a hit). Per-function resolution, annotations never checked, a fixed builtins set (same
+  verdict on 3.11-3.13), BOM-safe, files with star imports, `exec`, `globals()`, module-level `vars()`/`locals()`,
+  `sys.modules[__name__]`, builtins writes, enum exports or `import cython` skipped; a name imported only under
+  `TYPE_CHECKING` and read at run time is reported; a function counts when its lines changed or it uses a module
+  name the run removed.
+- `review.changes` names files from the repo root and unquoted (`--full-name`, `core.quotepath=off`): a new file
+  in a subfolder run, or a non-ASCII path, was missed or read from the wrong place by the review and the namecheck.
+- Review prompt: ccx's independent reviewer (caller `ccx-review`, read mode) no longer gets the builder's "run the
+  relevant tests" Finish text; it is told to run no tests or builds (reading with file tools or shell read commands
+  stays allowed, so a Codex reviewer can still read), to open further files in one batch and to set
+  `verification='not-run'`, and its Finish text points at the brief's Checks. Builders are unchanged. Replay of 10
+  recorded round-5 reviews (claude haiku low only): median 29.9 s -> 23.1 s and 5,618 -> 4,362 output tokens per
+  review; known real bugs found 15/28 -> 19/28, which at this n means no loss detected, not a gain. A Codex reviewer
+  with the new text is not measured.
+- Review brief: an opt-in `## Code around the change` block after the diff (`[review] context = true`, default
+  false), in what the diff leaves of `max_diff_chars`: the changed functions in full, definitions of names they call
+  (same file, or imported from the tree) and tests naming them. Off because the replay found fewer known bugs with
+  it (11/28), although reviews took about two-thirds of the time (15.3 s vs 23.1 s).
+- `scripts/eval/review_replay.py`: re-runs recorded round-5 reviews with old and new prompts (`--variants
+  old,new,finish`) through the real review path (claude haiku low, clean room), with a money cap, and counts the
+  known real findings kept. It needs the round-5 work folder of the machine that recorded them.
+- Eval: the hold-out set is now 5 tasks of this repository and 5 from two other open-source Python libraries
+  (humanize, itsdangerous), sizes 8-86 lines; the 6 candidates left out are kept in `DROPPED` with the reason.
+  `scripts/eval/ext_repo.py` reads each other repository once per run, before the canary, out of a clone in a
+  temporary folder outside the work dir (`--ext-cache` for local copies) that is then removed, pins the full sha and
+  gives every unit the parent's tree as a fresh one-commit repository (no future history). Their tests are scored
+  with `PYTHONPATH=src` and `--ext-python`, after the parent's test folder and pytest configuration are put back.
+  `holdout_check.py` checks them the same way.
+- Eval leak guard for external units: the `--ext-cache` copies are denied and flagged, Claude's WebFetch/WebSearch
+  are denied, pip gets no index, and the audit flags `pip install/download`, fetching from GitHub/PyPI, the
+  repository's URL and `ext-cache`. The run does not start when `--ext-python` is older than 3.11, lacks the test
+  modules or a new enough pytest, has the library itself installed, or sits next to the copies; a change to what is
+  installed in it during a unit stops the run. Rows record that Python's versions and the commit date, and the
+  summary reports results per repository.
+- Eval: `scripts/eval/fixround_replay.py` replays recorded review-driven fix rounds offline, with no model calls. It
+  rebuilds the tree before each fix round from the run's start commit plus the diff in its review prompt, and the tree
+  after it from the fix round's own review prompt (or the unit's final tree). It runs the task's hidden test on both
+  and counts fail->pass / pass->fail / unchanged per review reason, per kind of [must] item and per who started the
+  round. A new file cut at 4000 characters is completed from the final tree only when the recorded text is a prefix
+  of it; otherwise the round is skipped and counted. `--check-final` re-scores each unit's final tree against
+  results.jsonl as a second check.
+- Eval: `r5.py summary` / `export` add `by_tag`: per tag and arm, n / right / $ per success and wall median, mean and
+  p75, with each round kept apart; the per-arm totals also get `wall_mean` and `wall_p75`.
+- `ccx show ID... --any [--wait N]`: every finished run among several ids (`finished`) and the ones still running
+  (`running`, as asked, and `next`); one id without `--any` is unchanged.
+- `ccx q run` refills a slot as soon as a run finishes instead of waiting for the wave; a run whose attempts hit
+  quota/auth stops new submissions (`stopped: backpressure`, or a `backpressure` note when nothing is left open);
+  new `ccx q run --bg`. An item routing skipped is tried once per `q run` (also with `--lanes`) instead of looping.
+  Refill keeps the batch rules: `--gate`, dep_blocked before each fill, no two runs sharing a file, and a writer
+  started beside a running writer gets its own worktree (shared folder when uncommitted); with `--lanes`, a quota
+  hit also stops the lanes' next items.
+- One runner per queue: a second `q run` / `q resume` while one is alive exits 2 (`stopped: already running`).
+  `q ls` shows each running item's run id (`live`), the live `runner` and `last_run`.
+- Skills: agent-delegate teaches pipelining several pieces (`q add`, `q run --bg`, `show <live ids> --any --wait`)
+  and that on `review_failed` the lead checks the `[must]` items and fixes them itself; task-split says `files`
+  decides what runs in parallel.
+- `ccx q` for batches of pieces: parallel writers in a git project with no uncommitted change get one worktree each
+  (the `ccx batch` rule, one commit per piece on `ccx/<run>`; otherwise they share the folder as before, noted under
+  `shared_folder`), and what depends on such a piece waits for your merge + `ccx q done <id> --ok 1` (listed under
+  `waiting`; branches nothing waits on under `unmerged`); `q add --plan` reads task-split's `pieces` / `depends_on` /
+  `files`, resolves dependencies after every id exists and errors on an unknown id or a cycle (they were dropped
+  silently); a failed, blocked or needs_write dependency marks its dependents `dep_blocked` (naming the piece to fix)
+  instead of leaving them todo forever (back to todo once settled; `q ls` / `tree` only show it); a task-split piece
+  without a brief gets one built from the plan and runs in the mode its own title implies (the split hint made it
+  read-only); items naming a common file never run side by side; new `q run --gate` / `q ls --gate` (off by
+  default) makes every dependent wait for your verdict; `ccx ui` shows `dep_blocked` pieces as needing a decision.
+- `ccx run --bg` refused by routing writes a finished record (kind `not_delegated`), so `ccx show <id> --wait`
+  returns at once instead of waiting out its timeout.
+- Round-5 evaluation, for the confirmation run (all opt-in; the default schedule, arms and done-keys of old tags are
+  unchanged): `--lead-model` / `--lead-effort` (default sonnet medium) recorded in every row, its fingerprint and its
+  done-key, with another lead's units summarised as their own arm (`ccx2@opus-high`); an opt-in arm `builtin2r`
+  (builtin2 whose worker prompt also carries ccx's KEEP_TESTS and WIRING rules, imported from `ccx/prompts.py`), so
+  ccx2 vs builtin2r isolates ccx from those rules; the summary pairs every two arms on shared units (McNemar exact p
+  with Holm over the pairs, task-level bootstrap 95% CIs of the cost-per-success and wall-median differences), adds a
+  Wilson CI and the right count per round per arm, the wall per phase of units that used ccx (sub-agent attempts,
+  checks, reviews, fix rounds, the lead waiting; median and p75) and, with arms `balanced` and `save`, the tier
+  decision rule (pass / fail per condition). `--budget` now counts only the tag's own spend (plus `--extra-spent`);
+  each unit line and the end of a run print the run, tag and file totals.
+- Round-5 evaluation statistics, after review: the `direct` arm (no Claude lead) ignores `--lead-model` /
+  `--lead-effort`, so its units keep their key, folder, label and summary arm and are not re-run; the paired summary
+  adds an exact sign test over tasks (`task_sign_p`, Holm-adjusted too) and flags McNemar when a task has several
+  rounds; each arm adds a task-bootstrap CI of its right rate (`ok_rate_ci_tasks`) and flags the row-level Wilson CI
+  then; the cost-per-success CI says how many resamples were left out (`cps_diff_ci_dropped`, `cps_diff_note`);
+  the tier rule reports `n/a` (not `fail`) when it cannot tell, and uses the same median as `wall_med`; the phase
+  wall counts a review that ran while the check ran once (`overlap_s`, also a review stopped when an earlier
+  rung's check failed) and the checks of rungs that failed and climbed
+  (ccx now keeps that check's time on the attempt, `check_seconds`); `by_repo` keeps another lead apart; rounds sort
+  numerically; builtin2r's worker is told to run the acceptance command instead of the whole suite, so it no longer
+  contradicts the WIRING rule.
+- `ccx q` queue lock: on Windows it now waits when creating its lock file is denied (a file the last holder just
+  unlinked is "delete pending" there, which raised PermissionError instead of FileExistsError and failed the write;
+  the likely cause of a parallel `q run` row with no run on Windows CI, not reproduced locally, and that test now
+  prints the row). A lasting denial (a folder no file can be created in, or any denial off Windows) fails at once,
+  and the wait has a hard deadline (2 x timeout) even when a held lock cannot be taken over, so it never spins
+  forever. Only a stale lock is taken over (no longer any lock once the waiter has waited that long): one whose
+  mtime is older than the timeout, or one the waiter has watched sit unchanged for longer than the timeout, so a
+  lock with a future mtime (clock skew on a shared folder, a restored file) no longer blocks every write. A
+  release removes only its own lock (also when its mark could not be written), retrying a denied unlink instead
+  of failing the write.
+- `ccx q run`: an item that errors reports `status: failed` with the error (and `not_recorded` if writing that back
+  failed too) instead of raising, and clears its `live` run id; one that errors after its run keeps that run and
+  its cost in the row and the queue, and one whose run itself raised keeps the run id it was started as (and its
+  cost, if that run wrote its record); a skipped item reports `status: todo`.
+- `ccx trial report` no longer crashes with FileNotFoundError / WinError 3 on a Claude or Codex session folder it
+  cannot list (removed while walking, or past the Windows path limit): the session readers walk with `usage.walk`,
+  which lists long paths with the `\\?\` prefix (a file past the limit in a shorter folder too) and skips what it
+  still cannot list, stat or read; folders come out in the same order as `rglob` gave them. Finding one Claude
+  conversation's files follows a symlinked project folder again, and one bad folder entry no longer hides the
+  others. A delegated task whose lead conversation's files are gone or unreadable, or whose Codex lead has no
+  session file at all, is shown under `unmeasured` with the reason and left out of the comparison instead of
+  counting as zero; a lead whose files were read but had no turns in the run's window still counts as zero.
+- `ccx trial stop --void REASON` records the trial as void (the running one, or the last one if it has ended);
+  `ccx trial report`, `--markdown` and the dashboard show it as void with its reason and claim no saving or result.
+  An empty reason is an error. `ccx trial stop` without `--void` is unchanged. `ccx trial start` keeps the trial it
+  replaces (void reason included) in `state/trials.jsonl`.
+- The H11 trial `trial-20261025` is void (docs/DECISIONS.md): defaults that waited for it (`[memory] by_kind`,
+  `[lanes] default`) stay off and are decided by the confirmation run's fast vs save tiers; no default changed.
+- Whole-workflow tiers on `--tradeoff`: `save | balanced | fast | cheapest` (new value `cheapest`). task-routing
+  `tier_plan` (CLI `task_routing.py tier`) sizes a task from the brief plus `--minutes` / `--files` (any one signal
+  is enough; state-machine words match whole words, with plain endings) and says who does it: `self`, `ccx2` (delegated, the lead
+  accepts; models picked like save) or `direct` (cheapest: nobody re-checks, `may_be_wrong`). Provisional thresholds
+  and per-tier rules in `config/tiers.toml [policy.*]`; a knob 0..1 maps onto save/balanced/fast. `ccx propose` /
+  `ccx route` show it under `tier` / `policy`.
+- New setting `policy.picked` (`ccx config set policy.picked save|balanced|fast|cheapest|none`, shipped none): the
+  tier the person picks. Only it pre-authorises: `ccx propose` for that tier returns `authorized: true` with
+  `worth_offering: true` and a `say` line (proposal row `preauthorized`); that proposal's run skips the random A/B
+  self-run, keeps the proposal's tier in the ledger, and is refused if the setting changed. A pre-authorisation
+  covers one run of that task: a second run with the same id (claimed atomically when the run starts), a run
+  sized smaller than the proposal, or a run whose own brief the tier would plan `self` (its hard / uncertain rules)
+  is refused; with `--bg` the refusal comes before detaching (a refused detached child leaves a finished `refused`
+  record, so `ccx show --wait` ends);
+  its answer (`source: tier`) is written only when the run starts (an L0/L1 stop or a routing refusal records
+  nothing). Project autonomy L0/L1 still asks before edits; a proposal the picked tier planned `self` is not an
+  approval for it either (sent out anyway, its answer is `source: lead`). `policy.picked` sets the tier plan, not the
+  models: a plain run still picks models by `--tradeoff` / `defaults.tradeoff`; `proposals.stats` leaves tier-decided proposals out of the H12 chain (`tier_decided`). A
+  `--tradeoff` the lead passes authorises nothing (offer-first, A/B and the H11 trial as before). Default tier stays
+  `save`. The agent-delegate and task-routing skills say what to do with `authorized: true`.
+- A bad `[policy.*]` entry: `ccx propose` falls back to offer-first and shows `tier.error`; `ccx doctor` has a
+  `tier policy` row (it reads `policy.picked` as routing does, case-insensitive).
+- Ledger: run and proposal rows carry `policy_tier`, `band`, `planned_mode`, `tier_explicit`, `estimate_minutes`;
+  a pre-authorised proposal's run has its own band and estimate plus `proposal_band`; run rows also `actual_mode`
+  and `resume_chain` (follow-ups of the same task: `ccx resume`, review fix rounds, an
+  interrupted run resumed; a board message answered in the session is not one); a proposal answer records
+  `actual_mode` and, for a pre-authorised run, `source: tier`.
+- `ccx turn` reads the hook's stdin as UTF-8 bytes, BOM dropped (a Chinese prompt on a GBK console was garbled).
+- `--tradeoff` help no longer says "initially balanced"; `ccx config set defaults.tradeoff cheapest` is accepted.
+- Evaluation: opt-in tier arms for the round-5 script (`scripts/eval/r5.py --arms fast,balanced,save,cheapest`), so
+  the confirmation run measures every whole-workflow tier. Each unit's hub has the person's `policy.picked = <tier>`
+  (set with `ccx config set`, the choice the arm simulates) and the lead is told the person picked it: fast does it
+  itself; balanced and save size the task with `ccx propose --minutes --files` on the person's request verbatim (the
+  text its run sends, so the run's own re-plan agrees) and follow its answer (authorized: run its `next` the ccx2
+  way; otherwise, or when `ccx run` refuses the proposal, do it itself); cheapest is the shipped cheapest tier as a
+  script runs it, propose's `next` without a lead (`ccx run --to codex --tradeoff save --review off`: no explicit
+  model, so save's model pick; no fixed `--minutes`, since nobody sizes it, so ccx makes no tier plan for the run and
+  its model comes from the brief's keywords as ccx2's does; no review; its `--check` is the repository's whole existing
+  suite, the same command for every task of a repository, so it names no hidden test file, and its result is taken as it
+  is, while save's climb on a failed ccx re-check can fire), in a hub that picked cheapest, labelled may_be_wrong.
+  The explicit `--tradeoff save` wins over the hub's pick and the run is unsized, so ccx plans nothing for it: the row's
+  plan says `source: eval-script`, `ccx_planned: false`, and the summary counts plan sources (`plan_sources`); it is not the direct arm under a new name (direct keeps gpt-6-luna low, `--minutes 60` and its
+  review). Where save differs from ccx2: save's lead makes one more call (`ccx propose`) and its run carries the
+  lead's `--minutes` / `--files`, so its model is picked from that difficulty, while ccx2's run picks from the brief's
+  keywords; a save-vs-ccx2 difference is the tier path plus that model pick, not the tier path alone. ccx2 stays the all-delegated baseline; the default
+  arms, schedule and done-keys are unchanged. Rows record the tier, what `ccx propose` planned (band, mode,
+  authorized, from the unit hub's ledger), the reference change's size (non-test code lines and files, and the band
+  those files give), the mode that actually ran, the misbanding (`misband`: the lead's `--files` band vs the
+  reference files' band; `misband_overall`: the planned band vs it, which leans over by construction) and whether
+  ccx's `--check` passed; every row that used ccx also keeps each run's route (`ccx_routes`: source, difficulty, rung),
+  since save's run carries `--minutes` / `--files` and so picks its model from that difficulty while ccx2's falls back
+  to keywords; a failed read of this metadata is kept as `bookkeeping_error` and the unit is still scored. A full
+  `--lead-model` id is passed to `ccx propose --lead` as its family alias. `summary` adds a `tiers` block per arm
+  (right, $/success, wall median/mean/p75, misbanding with its basis, route sources, planned vs actual modes, check
+  passed on failures) and `tier_rules` per lead (each with its `pair`), so the balanced-vs-save rule also fires under
+  `--lead-model opus`. `run --dry-run` now prints each unit's estimated cost and a per-arm and total estimate against
+  the budget (measured r5 means per unit, an Opus lead's share x1.7, tier arms by the mode the shipped tier plans for
+  each task; cheapest from the direct arm's mean, which paid a review cheapest does not).
+- `ccx run ... --bg --wait N` and `ccx resume ... --bg [--wait N]`: one call instead of `--bg` plus
+  `ccx show ID --wait`. The run id goes to stderr at once (flushed), then the same process waits up to N s:
+  finished -> the final compact result with recap (exit 0 / 2 as a foreground run); not finished -> exactly what
+  plain `--bg` prints. The detached child gets no `--wait`; the wait starts after the routing / autonomy /
+  pre-authorisation checks, a refused child (not_delegated, refused) ends it at once, and so does a child that exits
+  before its run record exists (state failed, with the end of its log). `ccx resume` accepts `--bg` (it was an
+  unknown argument, exit 2) and, like a foreground resume, refuses before detaching when another run is still working in that session (before, plain `resume --bg` printed `started` and `ccx show ID --wait` waited out its timeout); a detached resume that finds the session busy anyway writes a finished `refused` record. A finished waited result also carries the keys a foreground run adds after the run (`route`, `continued_from`, `project`, `autonomy` with the L2 merge outcome), read from the child's own result. The child's argv loses argparse's prefixes of `--wait` (`--wai 540`) too. `--wait` without `--bg` is an error; plain `--bg` and foreground runs are unchanged.
+  The `--parallel` help no longer says it switches on by itself for a brief that lists 3+ items.
+- Windows: `run_check` turns a single-quoted token with no double quote inside into a double-quoted one, in the
+  same word pass as the glob expansion; words are split with the quote state tracked (MSVC rules: `\"` does not end a double-quoted argument), so a `'...'` inside a double-quoted argument (`"print('a b')"`, `--opt="a 'b c' d"`) is left alone (`-k 'a or b'` reached pytest as three words under cmd.exe, exit 4); the
+  rewritten command is in `check.ran`, `&&`, `|` and redirects are kept as they are. The check text shown to the
+  sub-agent (ccx/prompts.py) is not rewritten yet.
+- Run ids handed out up front (`--bg`, `ccx q run`'s `live` id) now come from `ledger.new_run_id`, which creates
+  the run folder exclusively, so two runs started in the same second can no longer draw the same id (second + 4
+  random hex digits) and share a folder: the second then found the first's `final.lock` (CI flake in
+  `test_archive_shared_session_once`). `ccx/delegate.py` draws a foreground run's id the same way. The parallel worktree test
+  (`test_unmerged_branches_nothing_waits_on_are_listed`) only prints each piece's result when it fails: its CI
+  flake was not reproduced (12/12 local passes, 120 concurrent `git worktree add` + commit clean), so its cause is
+  not known; a run-id collision is the one mechanism found that gives exactly 1 of 2, and it is closed now.
+- New batch / pipeline throughput eval (`scripts/eval/batch.py`, opt-in, its own results file; r5 and its arms,
+  schedule, done-keys and rows are unchanged), planned in `docs/research/2026-10-27-batch-plan.md`: one lead session
+  gets several hold-out changes at once, put on one common start (`scripts/eval/batch_start.py`: the first commit
+  that has all of them, every batch commit reverted on it with git's three-way revert; a code or test conflict drops
+  that change and says so). `batch.py check` builds and checks each batch (holdout_check's band and leakage checks,
+  hidden nodes that fail at the start and pass at the end, none of them in the start's test files word for word, the
+  start imports, the declared same-file overlap and end). Batches (`scripts/eval/tasks_batch.py`): five changes of
+  this repository with one deliberate same-file overlap, its largest conflict-free variant (four: no five-change set
+  is both revertible on one start and conflict-free), humanize's four (one overlap) and three (none; neither humanize batch checked
+  yet); itsdangerous has no batch (its two candidates' revert conflicted on an earlier try, not re-run). Arms `self`, `builtin` (parallel workers allowed), `ccx-batch`,
+  `ccx-pipeline` (`q add --plan`, `q run --bg`, `show <ids> --any --wait`, merge `waiting` / `unmerged`, `q done`)
+  and `balanced`; `--lead-model` / `--lead-effort` as r5 (default opus medium). Per unit: wall, lead and sub-agent
+  $, hidden tests on the final merged tree (per change and all-right, with regressions), merge conflicts and markers
+  left, the lead's turns, requests, tokens, wake-ups and idle ratio (from line arrival times), quota events (every
+  ccx attempt, not only the last); round 5's clean room, fingerprint and audit. `run --dry-run` prints the plan and a
+  cost estimate (a projection, about $27 for four batches x five arms x two repeats); the summary gives median / p90
+  wall per batch and arm and plain paired per-batch numbers with n (no bootstrap). No paid run yet.
+- Batch eval fixes after review: hidden test files run with `--continue-on-collection-errors`, so a file that does
+  not import (at the start, or a change the lead left out) fails only its own nodes instead of the whole session
+  (the first check's empty `start_passed` and false `coupled` came from this; collection errors of every run are
+  recorded); the start's commits get a fixed date and a cached check is keyed on the start tree and on the check
+  code (`batch_start.py`, `batch.py`), so `run` can reuse it; `without_one`'s cherry-pick fallback settles
+  documentation-only conflicts as `revert_all` does; a merge conflict counts once per `CONFLICT` line; review runs
+  (label `review:`) are left out of `delegated`; builtin's sub-agent $ is not split when the lead runs on the
+  worker's model, and every row keeps the worker model's share as `lead_worker_model_usd`.
+- F14 default change: the "explicitly asked to use sub-agents" words are added only with `--parallel`, no longer
+  when a brief lists 3 or more items (round 5: 40/100 first runs got them, +$0.007-0.024 a run, no wall gain).
+- The sub-task prompt says that delegation / acceptance instructions written for the lead in the shared context
+  were already carried out: the sub-agent is the implementer (only for a write run with the shared-context block;
+  not ccx's read-only reviewer or read tasks). The shared context for a delegated task also drops a clause only
+  when the whole clause is the hand-off ("Do not edit files yourself", "hand the implementation to a sub-agent
+  through ccx", ...); specs about delegation itself stay. The block says how many were left out and the run
+  record lists them (`shared_context.lead_only_dropped`).
+- A resume or review fix round of a write run inherits its chain's undo snapshot: reviewing after resuming a fix
+  run sees the whole change, and `ccx undo` of any run in the chain puts back what the chain changed (the output
+  says so). Only while nothing changed between the links: after a commit or an edit by the lead, or for a board
+  message answered in the session, the run takes its own snapshot, so undo keeps the lead's work.
+- `ccx run --parallel` help text no longer says the words are added by themselves for 3+ listed items.
+- `edited_tests` (changed pre-existing tests) is shown for every write run, also with `--review off`.
+- `[review] cache_ttl` (default off): "5m" or "1h" sets Claude Code's `promptCacheTtl` for ccx's Claude reviewer
+  only.
+- `ccx fresh` / `ccx handoff` never overwrite a hand-written or edited `.ccx/handoff.md`: it is updated only while it
+  is ccx's own unedited copy (its `<!-- ccx:handoff ... -->` header and the same text as a file in
+  `.ccx/handoffs/`); otherwise the new handoff lives only in `.ccx/handoffs/` and the result carries
+  `latest_skipped` (with `latest` pointing at that file). The session-start hook reads `.ccx/handoffs/` first, so it
+  still shows the new one once. A `.ccx/handoff.md` ccx wrote before `.ccx/handoffs/` existed (ccx header, no
+  history yet) is copied there once, byte for byte, and then updated as ccx's copy, unless it was modified more
+  than a few seconds after its header's time: then the copy is named `...-edited.md`, never counts as ccx's copy,
+  and the edited `.ccx/handoff.md` is kept like a hand-written one. Whoever was shown it stays marked as having seen
+  it. The comment in `cmd_fresh` that said fresh never wrote `.ccx/handoff.md` is fixed.
+  `scripts/eval/preflight_e2e.py` checks the handoff file the command prints, not `.ccx/handoff.md`.
+- agent-delegate (SKILL.md + README.zh.md) teaches one call for long work, `ccx run ... --bg --wait 540` with a
+  600000 ms shell timeout (Codex / DeepSeek leads set `--wait` about a minute under their own tool timeout), keeps
+  `ccx show <run_id> --wait` for a run still going, judges `kind` from either final result, and adds: the lead's own
+  sub-agents and ccx never write the same files at once; a ccx writer beside native writers uses `--worktree` or
+  `ccx q run`. `scripts/eval/batch.py` counts `run/resume --bg --wait` as a blocking wait, reading the flags with
+  quoted text blanked (a brief that mentions `--wait` or `--bg` does not count).
+- Docs no longer teach a 70% quota gate for DeepSeek (task-routing SKILL.md, the `ccx run --quota` help,
+  `config/tiers.toml`): routing prices quota by its shadow price (E4); the unread `[cash] from_quota` is removed
+  from priors.toml. three-way.md no longer calls ccx the cheapest way while saying the built-in sub-agent cost
+  less; rubric.md points to `--tier` / `ccx stats` / `ccx verify`, and says a lasting change to an agent's default
+  tier is the person's own edit of their hub tiers.toml (`ccx config set` has no per-agent tier key).
+- `tests/test_skills_core.py` guards pipelining (`ccx q ...`, `--any`), whole-workflow tiers (`--tradeoff`) and the
+  result-reading rules in every skill trim: `namecheck` / `weak`, and the rules themselves by their own wording in
+  agent-delegate SKILL.md and README.zh.md (don't re-send a run's brief, never resume a running run, judge `kind`
+  only from a final result, `review_issues` after `--wait`, no resume for `review_failed`, re-run tests when the
+  check is `weak`, own sub-agents and ccx never write the same files at the same time), plus the one-call wait
+  and the removed stale rules. `.gitignore` ignores `.claude/` (local state).
+- Eval gates (PR-E): r5 summaries and the tier rule count `env_clean` rows only and report the left-out rows per arm
+  and tag, plus pairs lost per side (`lost_pairs`; a pass with a one-sided loss is Unknown); the tier rule's right
+  condition is a paired task-bootstrap CI (>= -1 task pass, wholly below fail, else Unknown); a tag runs on one
+  pinned commit; every arm splits lead / ccx and lead-only / delegated spend; `--dry-run` prices non-Sonnet leads at
+  list prices; opt-in `ccx2-skill` arm with `--claude-isolation ccx-home` (its own `@ccx-home` arm, bundled Claude
+  Code skills allowed by name and recorded, a skill canary not yet run against a real claude); per-unit timeline
+  (`scripts/eval/r5_timeline.py`).
+- Offline experiments: C3 counts a builder run as ccx's check only when the check is one whole statement (no more substring matches such as a single `::test` id). Compound commands are judged by their pytest summary line. Corrected figures: 110 matches, 4 + 7 mismatches (the 7 are 5 sandbox and 2 PowerShell glob).
+- Offline experiments: the C4 filter gate counts every planned rescue. A rescue that is unjudged, failed, skipped or cut by the budget is not kept.
+- Offline experiments: C2 `generate` runs each test writer in the round-5 clean room and drops files whose brief carried shared notes.
+- Offline experiments: C1 reports reviewed trees it could not rebuild (`reviewed_skipped`). C5 and C2 stop when the results file is missing or has no rows. A replay insert rule whose anchor is missing fails the job.
+- New `scripts/eval/b1_skip_count.py`: `unsure` is the only review trigger in 1 of 107 first reviews (0.9%) and `tests_miss_change` in 20. The report marks B2's replay as not done.
+- Added `[review] fix_rereview` (default `"full"`, unchanged). `"focus"` gives a fix round's review the first review's problems and the fix-only diff. It stays off because its paired replay of 40 round-5 fix-round reviews saved a median of only 2.4 s against a 10 s bar ($0.70 spent). See docs/DECISIONS.md.
+- Added `scripts/eval/rereview_replay.py`, an offline paired replay of fix-round reviews (full vs focus). Its summary counts unclear verdicts in an `other` bucket. Its [must] matching requires a shared identifier when the recorded item names no file.
+- Dropped B1 (re-review only when the sub-agent says it is unsure): 2/120 (1.7%) of reviews are triggered that way only, below the 5% bar.
+- `ccx batch` with uncommitted changes: parallel writers no longer get worktrees made from the last commit (which
+  lacked those changes); like `ccx q run`, they share the project folder and the output lists them under
+  `shared_folder` with "commit first" and "keep pieces on separate files" (their checks, reviews and undo can see
+  each other's edits). Clean repos are unchanged; the plan file itself does not count, also with a non-ASCII name
+  (git status is read with `-z`, so quoted names and renames are parsed right); `--lanes` too. A task that sets
+  `"worktree": true` in a dirty project keeps its worktree and is listed under `stale_base`. The git check moved to
+  `ccx/gitstate.py`, shared by both.
+- Codex builder notes: every Codex sub-run (fresh exec and exec resume, any system) is told to print the whole
+  exec_command result or at least exit_code and session_id, and to continue a still-running command with
+  `write_stdin` instead of starting it again; the Windows note no longer recommends `python -c` (`;` not `&&`, `*` is
+  not expanded for python/pytest, Python with quotes/non-ASCII/several statements in a temp .py file, rg patterns in
+  single quotes). Checked on codex-cli 0.164.0.
+- `ccx run/ask/resume/way`: words after an option join the brief (`ccx resume R --check X "fix"` exited 2); a
+  mistyped option still exits 2. A bare word right after a one-value text option's value (`--check make test`,
+  `--check pytest tests/x.py`, `--label a b`) exits 2 with "quote a value of several words" instead of quietly
+  shortening the check. The agent-delegate skill example puts the brief first.
+- Hub config hygiene: a `~/.ccx/config.toml` or `layout.toml` that does not parse prints the file, line/column and a
+  Windows-path hint on stderr (the hub fallback was silent); `ccx doctor` has a `ccx config` row (FAIL: does not
+  parse, WARN: a control character in a value) and, with a broken `layout.toml`, still prints its whole table with a
+  `hub layout` FAIL row (it stopped with a bare JSON error); `ccx init --hub` writes a single-quoted literal string; `ccx setup`
+  counts [n/7].
+- Claude sub-runs: `errors[]` of a failed result goes into the run's error (e.g. "No conversation found"), and
+  `ccx resume` then says to send the task again with `ccx run --new` when that is the final failure (added after
+  any other hint, not in its place).
+- Eval: harness audit fixes. life.no_leftovers reads the process-audit keys preflight writes (procs, ports, unkilled, worktrees). Unit keys and arms come from r5.unit_key / r5.arm_of, so suffixed units such as ccx2@ccx-home are matched. Setting CODEX_HOME to a test's own home is no longer counted as a private-memory read. Chains are listed only for wrong units; right units keep the same pairs as co_occurring. [must] scope uses the tree the review saw when undo.json records it, with diff_basis on every item. is_test_file no longer counts latest.py-style names as tests. --skip rejects unknown criteria.
+- Docs: harness audit report (EN + ZH) corrected after re-running on r5e-r5h: 28 private-memory runs, direct 0/20 on that criterion, direct macro 0.76. The adjusted table separates the eval-environment criterion from the ccx defect fixed in #149. The final-tree [must] bias and the in-diff rules are documented.
+- Review fix round: the fixer now gets each [must] item whole (`issues_full`, up to 1500 characters, at most 8; the summary uncut when there are no items), instead of the 300-character form the lead still reads in `review.issues` / `needs_lead`. A review whose `REVIEW: issues` / `REVIEW: pass` line landed in its first item instead of the summary is read by that line (only when the summary names no verdict).
+- A write run that says done/partial but changed nothing since its undo snapshot (same HEAD, so a commit of its own counts as a change; no edit; no new file) is `kind: no_changes`: `ok` false with `needs_lead`, not learned from, never auto-judged right; its check is shown as `ran on unchanged tree` (`passed: null`). A label only: no retry. Read runs and ccx's reviewer are untouched. A pre-existing untracked file that is gone counts as a change, and files with non-ASCII names are checked too. It is measured before ccx's check runs on that attempt (also when the check runs inside the escalation loop), so files the check writes are not the builder's. Files that are .gitignore'd or outside the repo are not seen (the hint says so). `ccx q` marks such a piece `failed` (its dependents wait, `restored` = decide), a lane starts the next piece fresh, and `ccx ui` asks the person ("have it make the change" / "already met: accept") instead of showing an ordinary review card.
+- `plan_build`'s fix round also gets the planner's [must] items whole (`issues_full`).
+- `ccx run --worktree` in a project with uncommitted changes records `base: HEAD, uncommitted changes not included: commit first` (run.json `base_note`, the result's `base`); the run itself is unchanged.
+- A Claude reviewer is told to read with Read/Grep/Glob and use Bash only for git diff/log/status, without `cd` (its allow-list refused the `cat` / `rg` the old text offered); Codex's text is unchanged. Claude's `permission_denials` are counted per attempt in run.json and summed in the ledger.
+- Lead model by task (opt-in, `ccx config set lead.model_by_task on`; default off, nothing changes when off): where ccx starts or recommends a new lead conversation, its model follows the task's difficulty (the same b as `ccx route`). Up to `easy_max_b` (4.0, about 16 minutes) it uses `[lead_by_task] easy.claude` (sonnet); above that it uses the lead's own model (`[lead] claude`, opus). `--risk critical` always gets the strong lead. `ccx fresh` takes `--minutes` / `--b` (or `--difficulty`) / `--risk`. `ccx handoff` takes `--minutes` / `--difficulty` / `--risk`; it has no `--b`, so `--b` still abbreviates `--by`. Only the easy band adds `--model` (fresh's command line and `--launch`; handoff's `start` line). The hard band passes no `--model`, so the tool keeps the model it normally runs on. handoff's `--minutes` are adjusted by the handing-off lead's estimating bias, as in its own `ccx route`. `ccx route` / `ccx propose` add `new_lead`. They also add `builtin_model` (easy band only; Claude Code's Agent tool `model` for the lead's own sub-agent), but only when route's `choice` did not recommend a built-in sub-agent; when it did, that choice's `how` names the rung's model and wins. fresh, handoff and propose record a `lead_model` ledger event. A running conversation never switches model. An older task-routing copy without `--minutes` support gives no pick instead of an error.
+- Skills (EN + ZH): agent-delegate, task-routing and project-manager teach the built-in sub-agent's model (a `builtin` choice's `how` first, then `builtin_model`, else omitted) and the new-lead model.
+- Eval: `scripts/eval/r5.py run --lead-model auto` picks each task's lead model with the same rule, as its own arm (`ccx2@auto-medium`). Difficulty comes from a task's minutes, else from its reference change's size band (an oracle stand-in). `--dry-run` shows each pick and the repriced cost, for comparing auto with fixed opus and fixed sonnet. Auto with the reference band is an oracle upper bound: only tasks with pre-estimated minutes count for the on/off decision. An auto unit's done-key leaves out its picked model, so a changed rule never re-runs a done task into the same arm.
+- Removed a tracked local test log (`two-way-test-log.txt`) that held personal paths; `*-test-log.txt` is now ignored.
+- Queue lock (`ccx q`, Windows CI flake in `test_threads_never_lose_a_write`): threads of one process now take turns on an in-process lock before the lock file (polling was unfair: a writer that had just released took it again before a sleeping waiter woke, and one waiter gave up after 20 s while the others wrote). A waiter's deadline (2 x timeout) now counts from the last time it saw the lock file change hands, with a hard cap of 30 x timeout; waits are short and jittered. The "can this folder be written at all" probe got a unique name per call (two threads in one 15 ms clock tick on Windows < 3.13 drew the same name, and one hit the other's delete-pending probe and failed with a bare PermissionError). A denied release is retried for about 2 s instead of 0.2 s (a lock left behind stalls everyone until it is stale). The in-process wait has the same rules: it fails after 2 x timeout without a turn changing hands, i.e. a thread hung holding the lock. The file deadline counts from when the thread got its turn, so a long in-process wait does not make it fail on its first look at another process's lock. A change of holder is also detected by the holder's token in the lock file (Linux reuses a freed inode at once and has no birth time). Locally: max wait for one write 7.1 s -> 0.2 s (6 threads, 10 ms writes).
+- `ccx show ID` without `--wait` follows a review fix round like `--wait`. It reports the chain's final record (with `chain`) and shows a fix round still running as running. While one is about to start it says `fix_round: starting` (ok false, `next` = `--wait`), but not once the run has a verdict or was dismissed. In the moment before the parent tags its fix round it says `fix_round: finishing`. A fix round started in its parent's second is found too (run ids sort by second, then random hex; it was missed when its hex sorted lower). Only the run's own fix round is followed (`review_of`, or the new `review_round` field >= 1), not a later `ccx resume` of it. `--full` of a chain also prints the first run's logs path. A final `review_issues` (no fix round ran) is no longer `ok`: `ccx run` and `ccx batch` now exit 2 for it (they exited 0). The `--bg` output's `check` field (the `ccx show` command) is now `peek`, so it is not read as the acceptance check.
+- `review_failed`: the hint, the `ccx ui` card and the agent-delegate skill now say the same thing: the lead checks each [must] against the diff and fixes the real ones itself; another round costs a run and happens only on the person's word (a secondary ui button). `check_broken` and `over_budget` hints name the action their ui button gives. A table-driven test keeps hint, ui and skill in step for every kind.
+- After a review fix round the result has `cost_chain`: tokens, API-equivalent and billed $ of every run and review in the chain, from the ledger; `recap`'s cost is the chain's. The per-run fields are unchanged; if the ledger cannot be read, `cost_chain_error` says why instead of the field silently missing.
+- Tests: the personal-path hygiene scan now matches home folders in any case (Codex's lowercase `c:\users\...` trust entries) and Claude Code's `C--Users-<name>-...` project-folder names; `All Users` and the `…` placeholder are allowed.
+- Docs: measured.md puts the round-5 r5h ccx2 row in context: all four post-fix ccx2 runs (r5e–r5h: 19, 20, 18, 19 of 20, $0.116–0.135 per success), builtin2 (17/20, $0.114 per success), that self/builtin come from the first run on older ccx, and the harness audit headline (76/76 right ccx2 units failed at least one harness criterion). The research index's round-5 row now reads the same in English and Chinese.
+- Tests: the queue-lock churn test sets its stop flag before removing the lock file, so a waiter that takes the
+  lock in between no longer fails the test (CI ubuntu 3.13 flake after #161).
+- eval r5: opt-in arm `ccx2nc` (ccx2 with the unit hub's `[defaults] namecheck = "fail"`, asserted before the lead starts) and `<arm>@auto` entries in `--arms` (that arm's lead model picked per task), so r6a runs ccx2, ccx2nc and ccx2@auto interleaved in one invocation; ccx's shipped namecheck default stays `warn`.
+- eval r5: rows record `namecheck_mode` and `ccx_namecheck` (mode, hits, `climbs` past a hit, `final_fail`); the summary's per-arm `namecheck` stats include `climbs_by_it`. A failed unit whose last check was namecheck's stand-in gets `ccx_check_reason = "namecheck"` and is left out of `check_passed_on_fail` (counted as `failed_on_namecheck`).
+- ccx run: each attempt keeps its own namecheck result, and an in-loop namecheck failure keeps `check_reason = "namecheck"`, so a climb past a hit stays visible after a clean next rung.
+- eval preflight: a unit's process markers end at `@` too, so a ccx2 unit never claims its ccx2@auto-medium sibling's processes.
+- Eval clean room (scripts/eval): `--codex-home` is made absolute when parsed and a relative path is refused (r6a:
+  `../x` passed preflight but every Codex resolved it from its unit's work dir and failed). Eval Codex runs
+  (CCX_CODEX_ISOLATE=1 only) turn off the `plugins`, `remote_plugin` and `apps` features, the eval config.toml gets
+  the same `[features]`, a starting run removes the remote plugins codex-cli 0.164 synced into `plugins/`, and the
+  home is checked again after every unit (plugins, skills, features, connector / plugin catalog caches): a change
+  stops the run. Rows of r5.py and batch.py record `codex_home_after`; rows record `fingerprint.codex_cli` and
+  `codex_features_off`. A check-only preflight no longer fails after the canary on a home whose `[features]` table
+  a starting run would write.
+- eval preflight: the canary judges every text the lead wrote (and its result), not only its last message; an
+  isolated lead that answered, then used Read, then ended on a line about the Read was failed as not isolated.
+- `ccx ui` review cards: "agent says" (summary, verification) beside "ccx ran" (check command, exit, last output);
+  the files actually changed and the diff come from the run's own snapshots (`undo.json` to `end.json` / `after`,
+  read-only `/api/judge/<run>`, capped and marked truncated), never the live folder; a red box when the agent's
+  file list and the real change differ. Older runs keep the old view with a note.
+- `ccx ui` home: a "running now" strip (agent, time, tokens, stop with the usual confirmation); a task without a
+  title takes its first piece's.
+- `ccx ui` heartbeat: sent again when the tab is shown or focused; a hidden tab says so and the server waits 5
+  minutes instead of 60 s. To-do chips are buttons; one aria-live region announces new to-dos.
+- `ccx resume` and `ccx task resume` keep the review setting of the run they continue (`--review off` stayed off;
+  before, a resume reviewed with the default `auto`); `ccx resume --review X` still overrides it. Run records carry
+  `review_mode` (a review fix round keeps the setting of the run it fixes; older records count as `auto`).
+- eval seven_func: every check runs with a fresh hub under its own scratch dir and refuses to start when its
+  environment would point at the person's hub; its verdict reads rows only from that hub, by task or by label and
+  start time. The resume check records `killed_after_s` right after the kill (it included scoring and the resume
+  before) plus `resume_s`, and reports `mechanism_ok` (its `ok`: killed run unfinished, same task and session,
+  label/check/review inherited, resume rc 0) apart from `task_ok` (the hidden test); its visible test now covers
+  `low_stock`, so ccx's own check can catch the mistake the hidden test found.
+- seven_func codex-lead: on Windows the hand-off command starts with PowerShell's call operator `&` (a quoted program path is a syntax error without it), as the agent-delegate skill already teaches.
+- `ccx ui` Agent conversation page (per project, `#/conv/<project>`): the agents' board threads (`ccx say` /
+  `ccx reply`), newest first, each message with who, when, to whom, `via` and its text, always escaped; read only,
+  capped in size, a new message shows on the next poll. Two new to-dos on the home page: a thread stopped by the
+  machine-message cap, and a message that asks the person (`@person` in its text as a plain mention, not in code; the
+  board's `AGENTS.md` rules say so: projects set up earlier re-run `ccx board --init` to get that line). Both link to
+  the thread.
+- `ccx ui` reply: the person answers a thread from the page, through the same prepare -> confirm (one-time nonce)
+  as the other buttons; at most 4000 characters (longer is refused, never cut); written by the board code as one
+  message from the person, `via: ui`, never run. It clears the stopped-thread to-do by the board's own rules.
+- `ccx q accept <id...>` (or `--all-ready`) lands the pieces a `ccx q run` left on worktree branches: it merges them
+  one at a time in dependency order into the branch the project has checked out, runs the joint check (`--check`,
+  else each piece's own) after each merge and rolls that merge back when it fails. A merged piece gets the lead's
+  verdict, as `ccx q done --ok 1`, and a `q_accept` ledger row. Pieces that are not done (running, failed,
+  no_changes, review failed), whose review is still running, that have no evidence (no passed check, review or
+  verdict, and no `--check` here) or that wait on a piece not accepted are refused, each with the reason. A conflict
+  aborts that merge and skips what waits on it; the other pieces still land. A run you rejected (`ccx verify --ok 0`)
+  is refused, even with `--check`. When a rollback does not go through, or the joint check leaves edits in tracked
+  files, the batch stops and nothing more is merged on top. A worktree piece given `ccx q done --ok 1` before its
+  branch was merged still shows as `unmerged` and can be accepted (`q done` says so). It never pushes and never merges into
+  main or another protected branch without `--into-protected`. `--dry-run` shows the plan. The merge steps of
+  `ccx autonomy merge` are now shared helpers (its behaviour is unchanged).
+- `ccx q ls` prints one line per piece by default (id, state, agent, seconds, $, then what to do next). A worktree
+  piece that has not landed shows as `unmerged` with `next: ccx q accept qN`. `--long` prints the old JSON (anything parsing `ccx q ls` as JSON must add `--long`). The
+  `q run` summary points `unmerged` / `waiting` pieces at `ccx q accept`.
+- `ccx q add --dep 1` means q1 (before, a bare number was an unknown dependency). `ccx q done` takes several ids;
+  with `--ok 1`, each needs a passed check or review of its own, or a `--note "<id>: ..."`.
+- skills/agent-delegate: a short pipeline section. Hand off independent pieces with `ccx q`, collect them with
+  `ccx show --any --wait`, and land finished ones in dependency order with `ccx q accept` while the others run.
+- First delegation: a person at a terminal (no lead tool detected, or `--from user`) who names `--to` gets a task
+  routing calls too small delegated anyway, on the cheapest rung, with one stderr line saying doing it yourself
+  would be cheaper (`route.cheaper_self`); a lead's call is still refused as before. README, docs/install and
+  `ccx setup` now suggest the same first command, one a lead's call delegates too.
+- Environment failures (the agent CLI's own launcher could not start, seen in its stderr: ShellExecuteExW /
+  CreateProcessWithLogonW / orchestrator_helper_launch) end the run as `kind: env` with a fix hint: no climb to a
+  pricier rung, no retry, not learned from. The sub-agent's summary and generic "CreateProcess failed" lines do not
+  count, so a task about process code still climbs. `ok` is false whenever the status is blocked or failed, in
+  `ccx run` and `ccx selftest` alike (exit codes unchanged). A foreground `ccx run` / `resume` on a terminal prints
+  one progress line to stderr about every 30 s (`CCX_PROGRESS_SEC`); a lead's piped call gets none.
+- `ccx setup` without a terminal shows every remaining step as the exact command (`ccx init --hub`, `ccx sync`,
+  `ccx sync --apply`, `ccx doctor`, the first delegation) and changes nothing; a CLI that is not logged in skips the
+  selftest (also with `--yes`) and its login is listed first at the end.
+- `ccx doctor`: the login row shows the real status line and the login command; the closing lines list what to do in
+  order (logins, `ccx init`, then sync); "Codex as lead (sandbox)" is one info line unless `--codex-lead` (or Codex
+  runs doctor). The recap after an auth failure points at the login.
+- On a terminal, `ccx run` / `resume` / `route` end with two or three plain lines (result, cost, next command);
+  piped output is the same JSON as before. `ccx route` labels follow `ui.lang` (English unless set to zh).
+- `ccx undo` is listed under Everyday, `--apply` has help text, and a run that changed nothing says so in one line;
+  when git cannot list the run's files (base commit gone) it reports `git_error` instead.
+- Routing: a one-line edit ("add a line ... to README.md") no longer scores standard dev (T2); it starts on T1.
+  Briefs that also carry hard, design or critical work keep their tier, and the pull-down never makes a brief T0.
+- README (EN + ZH) states the same rule for the first command: from your own terminal `--to` delegates even a very
+  small task; a lead's call still gets it turned back.
+- `ccx demo` (also `ccx ui --demo`): `ccx ui` on made-up data in a new folder of the system's temporary folder, no
+  account, offline: two projects, runs in every state (the review card with a real snapshot diff and a file mismatch,
+  a running run, an environment failure), a three-piece queue with one unmerged piece, a board thread stopped at the
+  machine cap and an `@person` question, a month of ledger costs. Marked "demo data" on every page; your hub and tools'
+  folders are untouched; a button that would start an agent only shows its command; the folder is removed when the page
+  closes or the export is written (`--keep` and `--dir` keep it; `--dir` takes only a new or empty folder or an earlier
+  demo). The same data is the headless smoke test `tests/test_demo.py`.
+- `ccx ui` switch-lead panel (project page and under a task's history): the current lead, when each lead worked (from
+  `.ccx/handoffs/`), and "Continue with Codex / Claude" (DeepSeek where `dsh` is installed). It runs `ccx handoff --to X
+  --by <current> --cwd <project>` after the usual second click, from the current lead's conversation file when it is
+  there (`--from-transcript ... --no-model`), and shows the handoff file and the one line to paste into the other tool.
+  Without that file the page says, before and after, that the handoff is a blank template to fill in first.
+  The task timeline shows who was leading and each switch.
+- `ccx handoff --cwd DIR` (the project folder; default the current one); its answer carries `paste`, the line to give
+  the incoming lead (for dsh and gemini, which show no handoff at start-up, it tells them to read the file).
+- New setting `defaults.focused_retry` (default false): when ccx's `--check` fails after the sub-agent said done and
+  the next rung is on the same agent, that attempt continues the same session with the failing command and the last
+  ~2000 characters of its output, told to fix only what fails (re-running only the failing part when the check's command can select it). Without a session id it starts fresh as before; the
+  escalation ladder is unchanged. Off until a measured round shows it does not lower the right-rate.
+- Independent review: the brief says ccx already ran the acceptance check ("You need not run it yourself", with the
+  end of its output when ccx has it), and a Claude reviewer is asked for one plain git command per Bash call. No new
+  permission: in r6a the refused reviewer calls were compound reads (`| head`, `cd && grep`), not test commands.
+- `ccx -h`: show and q join Everyday; where, projects, intake, init, uninstall, repair and agents move to a new
+  Advanced group; trial, ab, bench, improve and namecheck move to a Developer group listed last. Every command is
+  still callable.
+- `ccx ui`: a run that stopped on an environment failure (`kind: env`) shows how to fix it (in the page's language),
+  `ccx doctor`, and `ccx resume` once fixed, instead of "Try again". An empty overview says what to run first (the same first delegation as README and `ccx setup`) and,
+  once this ccx has it, `ccx demo`.
+- `ccx sync` dry run: a missing Codex `config.toml` is one line ("will create ... with the hook block") instead of an
+  "add hook block" line plus "nothing to import"; a file that does not exist yet says "create" rather than "update
+  managed block". A community lead (dsh) found only inside its installed app, not on PATH, is no longer connected by
+  default (one optional note instead); one connected before keeps its block, and `ccx uninstall` still removes it.
+- `ccx doctor`: rows about ccx's own workings (python, tiers.toml, ccx config, hub format, hub layout, routing prior,
+  tier policy, hook timeouts) show only when they are not ok, or with the new `--verbose`; one line says how many
+  were left out. The task-routing skill's docs now point to `ccx doctor --verbose` for the "routing prior" row.
+- eval (hold-out, batch): a finished unit's stream is moved with shutil.move, so a work dir on another drive than the repo (temp on C:, repo on D:) no longer fails every unit with WinError 17; a failed move is recorded in the audit instead of losing the unit.
+- report / ui / stats: the saving estimate prices only the task-sized part of the sub-agent's tokens (fresh input
+  and output, minus its start-up: cache reads and writes, and the ~20k fresh tokens a Codex run reads to start) at
+  the lead's price; the old figure is kept for comparison as `saving_old_model` (not an upper bound; left out when
+  a trial measured the saving). `ccx ui` ("Is it worth it"), `ccx report` and `ccx stats --summary` show the spend first and the
+  estimate after it, labelled "model estimate; measured totals so far about even" with a link to docs/measured.md;
+  `ccx stats --summary` gains `spend` and `saving` (the old `totals` keys stay). `ccx -h` no longer promises savings.
+- run: a write run with no `--check` prints one reminder line on stderr; stdout and what ccx does are unchanged.
+- docs: the README's first screen is the one job (a checkable chore from Claude Code to Codex on a cheaper model)
+  with a self / built-in sub-agent / ccx table of round-5 dev-set ranges (hold-out pending) and a quick start with
+  `--check`; the four best-case numbers moved to docs/measured.md. The FAQ compares with Claude Code's built-in
+  sub-agent and no longer contradicts `ccx discuss` / `ccx send`; the plugin marketplace says five skills.
+- `ccx ui`: a finished write run's card has "Undo this run" next to the diff (`ccx undo <id> --apply`, prepare and
+  confirm like every button; it starts nothing, so it also runs in `ccx demo`), and a run that still fails its
+  independent review has "The review is wrong: accept" (`ccx verify <id> --ok 1` with a note). A text meant for your
+  lead is labelled "paste this to your lead", not "command".
+- One order for a worktree queue piece in `ccx q ls` and `ccx ui`: the verdict first, then the merge. `q ls` prints
+  `next: ccx q done qN --ok 1, then ccx q accept qN` until a verdict is in; the page says the same before the verdict
+  and shows a "Merge into the project" button (`ccx q accept`, in the background) after it. `--cwd` now works after
+  every `ccx q` subcommand, and `ccx q --cwd DIR done ...` no longer loses DIR.
+- `ccx -h` lists the person's commands; `ccx -h --all` lists every group, with peek / board / say / reply under
+  "Between agents" (all still callable). `ccx run -h` groups the routing rubric and coordinator options under
+  "advanced". Help text for `verify --ok`, `reply`'s id and `--from`; `ccx demo -h` has a description, and `ccx demo` /
+  `ccx ui` print `next: open <url or file>`.
+- Naming: the Chinese page and docs call the lead 主导 everywhere; `ccx handoff --to/--by deepseek` means dsh, and the
+  page shows "DeepSeek (dsh)" (`ccx run --to deepseek` is still the deepseek provider).
+- The overview: each waiting item says first what you need to do, with a colour per kind (your call, check the
+  result, a question for you), then the agent's own words; count badges are neutral; each project card says who leads
+  with a link to its switch-lead panel. After a verdict the side panel moves to the next waiting piece ("Next
+  waiting", keys j / k). Times past two days read in days and weeks; a machine failure with no reason shows no empty
+  brackets; the queue's top box says "Work queue: N pieces" instead of a quote you never typed.
+- `ccx ui` "Undo this run" lists the files `ccx undo`'s dry run would put back and move aside, and refuses (prepare
+  and again at run) when that goes beyond the files the run left changed (a later commit, your own edits, another
+  run's work) or a run going on from it is running: `ccx undo <id>` in a terminal shows the list first. "Merge into
+  the project" runs `ccx q accept --dry-run` first, so a refusal such as a protected branch shows on the page. On a
+  queue piece whose review failed, "The review is wrong: accept" and "I'll handle it" are `ccx q done` verdicts on
+  the piece, so it can be merged next.
 
 ## 0.5.0 — 2026-10-25 (save, check, split, share, control: cheaper defaults, review that checks the task, project catalog, shared work context, the board, stop and archive)
 - Highlights: everything since 0.4.0 (PRs up to #104), grouped by theme below; 523 tests. Measured on real CLIs:
