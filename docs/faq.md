@@ -38,7 +38,7 @@ work to Claude); ccx tells it from the environment and records the lead's vendor
 model is recognised from its config or `CCX_LEAD=deepseek-codex`, not tested as a lead. Gemini CLI and the configured providers cannot lead. **Sub-agents:** Claude Code and Codex in both directions; DeepSeek through Claude Code
 (calibrated on real tasks), through Codex (one small read-only task) and as `dsh` (read, write and resume run for real;
 ccx also finds the `dsh` that ships in the DeepSeek Harness desktop app on Windows). Gemini CLI is adapted
-(community) but **untested**; Kimi, GLM, Qwen and OpenRouter are configured, untested. One adapter per CLI (`ccx/agents/`);
+(community) but **experimental, untested**; Kimi, GLM, Qwen and OpenRouter are configured, untested. One adapter per CLI (`ccx/agents/`);
 `ccx agents` lists what each can do; adding one is described in [CONTRIBUTING.md](../CONTRIBUTING.md) (start from
 `ccx/agents/_template.py` and `tests/fakes/fake_template.py`).
 

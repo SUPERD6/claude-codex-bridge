@@ -22,8 +22,10 @@ ccx run --to codex --mode read "Summarise README.md in three lines for a new use
 ```bash
 claude plugin install relayline --marketplace SUPERD6/relayline     # Claude Code 2.1.275+，一步装好
 # 旧版 Claude Code：claude plugin marketplace add SUPERD6/relayline && claude plugin install relayline@relayline
-codex plugin marketplace add SUPERD6/relayline && codex plugin add relayline@relayline   # Codex 0.164
+codex plugin marketplace add SUPERD6/relayline && codex plugin add relayline@relayline   # Codex 0.164，实验性
 ```
+
+Claude Code 这条真跑过（用临时配置）。从 GitHub 地址装 Codex 插件是**实验性**的：按 Codex 的插件文档写，只用替身测过。
 
 - **Claude Code** 得到五个技能（名字是 `relayline:agent-delegate`、`relayline:task-routing`、`relayline:task-split`、
   `relayline:task-checkpoint`、`relayline:project-manager`）和 ccx 的两个 hook：开局的共享记忆增量、每轮的留言板/共享
