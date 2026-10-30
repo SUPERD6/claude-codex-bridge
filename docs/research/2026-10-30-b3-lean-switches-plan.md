@@ -106,3 +106,36 @@ python scripts/eval/r5.py daily-check --codex-home <eval codex home>
 python scripts/eval/r5.py run --taskset holdout --rounds 3 --arms ccx2daily,ccx2daily_nomem,ccx2daily_clean \
     --tag b3m1 --codex-home <eval codex home> --budget 20 --jobs 1 --dry-run
 ```
+
+## Harness changes before the second half (report-only evidence; the rule is unchanged)
+
+The hold-out half passed `codex_memories = false` on the median token condition, but a paired look showed the median
+alone is fragile (the arm's prompt was lower in fewer than half of the pairs, and its total higher). Before the r5 half
+runs, `scripts/eval/r5.py` gives more evidence without changing the registered rule:
+
+- **The rule's median is the true median** (`statistics.median`: the mean of the two middle values for an even count),
+  as the rule says, not the upper middle the wall fields use. The four conditions and Unknown cases are as fixed above.
+- **Paired statistics next to it, report only** (`b3_rules[...].paired`): the share of pairs where the arm's prompt is
+  lower, the median of the per-pair ratio arm / base, the total ratio, and a pair-bootstrap 95% CI of the ratio of
+  medians (2000 resamples, fixed seed). `token_effect` is `consistent` only if the rule's token condition passes,
+  the total ratio is ≤ 0.85 and the arm is lower in ≥ 60% of pairs; otherwise `not shown`. It never changes `result`.
+- **Both halves judged together:** `summary --results a.jsonl b.jsonl --tag <hold-out tag> --tag <r5 tag>` reads
+  several results files (a row in two of them counts once) and several tags, so the registered 50 pairs are one rule.
+- **Pairs on different snapshots:** a pair whose two units' `daily.sha256` differ compared two setups of the person's,
+  not a switch. Both units are left out of the rule and of the paired statistics (symmetric, so not a one-sided loss),
+  and `snapshot_mismatch` lists them. A side without a hash is kept.
+- **The snapshot is frozen per invocation:** `run` copies the person's memories / AGENTS.md / skills (and only the
+  config settings a daily home takes from theirs) once into `<work>/daily-snapshot`; every daily unit copies from it,
+  rows record `daily.snapshot` (`frozen`, its `sha256`), and the folder is removed at the end of the run.
+- **What the switches did per run:** each row has `switches_applied` from every ccx run.json of the unit
+  (`subagent_switches`, mode, agents) with the Codex memory / web search / image generation flags those switches add.
+  ccx's run.json does not record the CLI's argv, so those flags are derived (`argv_recorded: false`), not read back.
+- **Balanced arm order:** `run --arm-order balanced` rotates one seeded arm order by task and round (Latin square), so
+  each arm runs first about equally often; rows record `arm_order` and `arm_pos`. The default stays `shuffle`, so
+  earlier runs' schedules are unchanged. The second half should run with `--arm-order balanced`.
+- **Evidence of failed units:** a unit that is not right records `hidden_failed` (the failing hidden test ids) and
+  keeps the full hidden pytest output and its final diff (taken before the hidden tests go in) under
+  `<results stem>-artifacts/<tag>-<unit>/`.
+- **Postflight attribution:** when the person's real hub ledger grew during the run, the report lists each new row's
+  type, run_id and ts and whether the run_id is one of the units' `ccx_run_ids` (an eval leak) or not (most likely a
+  real session running at the same time); `preflight.json` keeps it as `postflight_ledger`.
