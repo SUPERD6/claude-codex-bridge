@@ -31,7 +31,14 @@ PATTERNS = [
     re.compile(r"(?<![A-Za-z0-9])[A-Za-z]--Users-" + SLUG_NAME, re.IGNORECASE),
     # Temp/claude/<project folder name>/...: Claude Code's scratch folder is named after the project's full path
     re.compile(r"(?<![\w.~-])(?:Temp|tmp)[\\/]+claude[\\/]+" + NAME, re.IGNORECASE),
+    # .claude/projects/<drive>--<folder>-<name>-proj: Claude Code's memory and transcript folder, for a project on
+    # any drive and in any folder; the first word after the drive is checked (a placeholder like C--someone-else passes)
+    re.compile(r"\.claude[\\/]+projects[\\/]+[A-Za-z]--" + SLUG_NAME, re.IGNORECASE),
 ]
+# In scrubbed evaluation data (docs/research/data/) no absolute drive path belongs at all, whatever its folders are
+# called: the scrubber writes ~ or <scratch>. In JSON a backslash path is written with doubled backslashes.
+DATA_DIR = "docs/research/data/"
+DRIVE_PATH = re.compile(r"(?<![\w])[A-Za-z]:(?:\\\\|/)[\w.-]+")
 
 # Folder names that are not a person: placeholders, CI runners, test stand-ins.
 PLACEHOLDERS = {
@@ -60,12 +67,12 @@ def find_personal_paths(text: str) -> list[str]:
 
 
 # An e-mail address that is not a documented placeholder. Allowed domains: RFC 2606 / 6761 names (example.*,
-# *.invalid, *.test, *.localhost), GitHub's noreply addresses, and the user.com the board docs use as a stand-in.
-# Allowed local parts, at any domain: service addresses (noreply@, git@ in SSH clone addresses).
-EMAIL = re.compile(r"(?<![\w.+-])([\w.+-]+)@([\w-]+(?:\.[\w-]+)*\.[A-Za-z]{2,})(?![\w-])")
+# *.invalid, *.test, *.localhost) and GitHub's noreply addresses. Allowed local parts, at any domain: service
+# addresses (noreply@, git@ in SSH clone addresses).
+EMAIL = re.compile(r"(?<![\w.+\\-])([\w.+-]+)@([\w-]+(?:\.[\w-]+)*\.[A-Za-z]{2,})(?![\w-])")
 EMAIL_DOMAINS_OK = re.compile(
     r"^(?:(?:[\w-]+\.)*example\.(?:com|net|org)|[\w.-]+\.(?:invalid|test|localhost)|(?:[\w-]+\.)*noreply\.github\.com"
-    r"|user\.com)$", re.IGNORECASE)
+    r")$", re.IGNORECASE)
 EMAIL_LOCAL_OK = {"noreply", "no-reply", "git"}
 # Windows names a fresh machine DESKTOP-<7 chars> (or LAPTOP-), letters and digits; such a name identifies one
 # machine. A digit is required so that words like DESKTOP-FRIENDLY pass.
@@ -75,17 +82,15 @@ _ESCAPES = re.compile(r"\\[ntr\"']")         # escape sequences inside string li
 
 def find_personal_data(text: str) -> list[str]:
     """Paths, e-mail addresses and machine names in one line of text (URL-encoded forms included)."""
-    plain = _ESCAPES.sub(" ", text)
-    variants = [plain]
-    decoded = unquote(plain)
-    if decoded != plain:
-        variants.append(decoded)
+    # the raw line, the line with string escapes blanked (an address after a \n), and the URL-decoded forms of both;
+    # the raw line keeps a home folder like ...\Users\tom, whose \t the blanking would eat
+    blanked = _ESCAPES.sub(" ", text)
+    variants = list(dict.fromkeys((text, blanked, unquote(text), unquote(blanked))))
     hits: list[str] = []
     for v in variants:
         hits.extend(find_personal_paths(v))
         for m in EMAIL.finditer(v):
-            before = v[max(0, m.start() - 4):m.start()]
-            if "://" in before or before.endswith("ssh "):     # git+ssh://git@..., ssh user@host
+            if "://" in v[max(0, m.start() - 4):m.start()]:     # git+ssh://git@..., https://user@host
                 continue
             if EMAIL_DOMAINS_OK.match(m.group(2)) or m.group(1).lower() in EMAIL_LOCAL_OK:
                 continue
@@ -121,15 +126,17 @@ def test_no_personal_paths_in_tracked_files():
             data = path.read_bytes()
         except OSError:                         # deleted in the working tree, a submodule, ...
             continue
+        in_data = rel.startswith(DATA_DIR)
         for lineno, line in enumerate(_lines_of(data), 1):
-            for hit in find_personal_data(line):
+            extra = [m.group(0) for m in DRIVE_PATH.finditer(line)] if in_data else []
+            for hit in find_personal_data(line) + extra:
                 found.append(f"{rel}:{lineno}: {hit}")
     assert not found, ("personal data in tracked files (a machine path, e-mail address or machine name; use <you>, "
                        "example.com or a placeholder):\n" + "\n".join(found))
 
 
 # Folders and files that hold one person's local state, at any depth. .gitignore lists them; this makes sure a
-# `git add -f` or an older ignore file never lets one through. Not the plugin folders `.claude-plugin/`, `.codex-plugin/`.
+# `git add -f` or an older ignore file never lets one through. Not the plugin folders (.claude-plugin/, .codex-plugin/).
 LOCAL_STATE = re.compile(r"(?:^|/)(?:\.claude|\.ccx|\.codex|\.ccx-worktrees|_site)/|\.ccx-backup-|-test-log\.txt$"
                          r"|\.local\.[^/]+$", re.IGNORECASE)
 
@@ -147,16 +154,35 @@ _N = "jdoe42"      # spelled through a variable so this file does not trip its o
     f"see /home/{_N}/.config", f"cd /Users/{_N}/code", f"[projects.'c:\\users\\{_N}\\x']", f"C:\\USERS\\{_N}",
     f"C--Users-{_N}-proj", f"c--users-{_N}", "~/AppData/Local/Temp/" + f"claude/D--Work-{_N}-proj/abc/scratchpad",
     f"\\\\?\\C:\\Users\\{_N}", f"C:\\\\Users\\\\{_N}\\\\x",
+    "~/.claude/" + f"projects/D--Work-{_N}-proj/memory", "c:/x/.claude/" + "projects/E--Code-shop/x.jsonl",
 ])
 def test_detects_home_folders(text):
     assert find_personal_paths(text)
+    assert find_personal_data(text)
+
+
+# names that start like a string escape (\t, \n, \r): the escape blanking must not hide them
+_U = "C:\\" + "Users\\"     # spelled in two parts so this file does not trip its own scan
+
+
+@pytest.mark.parametrize("text", [
+    _U + "tom\\proj", _U.replace("\\", "\\\\") + "tom", _U + "nancy\\x", _U + "rachel\\.codex",
+])
+def test_names_that_look_like_escapes_are_still_found(text):
+    assert find_personal_data(text)
+
+
+def test_drive_paths_in_scrubbed_data():
+    assert DRIVE_PATH.search('"cwd": "D:\\\\Work\\\\proj"') and DRIVE_PATH.search('"cwd": "D:/Work/proj"')
+    assert not DRIVE_PATH.search('"code):\\nfrom x import y"') and not DRIVE_PATH.search('"~/AppData/Local/Temp/x"')
 
 
 @pytest.mark.parametrize("text", [
     "C:\\Users\\<you>\\hub", "/home/<you>/.ccx-hub", "C:\\Users\\RUNNER~1\\AppData", "/home/runner/work",
     "//c/Users/a/.codex", "/Users/example/x", "C:\\Users\\...\\x", "D:/x/home/memories/MEMORY.md", "~/.ccx-hub",
     "$HOME/.agents", "%USERPROFILE%\\.codex", "C:\\Users\\All Users\\x", "c:\\users\\…\\x", "C--Users-you-proj",
-    "Temp/claude/<project>/x", "/tmp/claude/x/scratchpad",
+    "Temp/claude/<project>/x", "/tmp/claude/x/scratchpad", "~/.claude/projects/<project-slug>/x",
+    "/h/.claude/projects/C--someone-else/memory/", "/h/.claude/projects/-w-1-t-ccx/memory/",
 ])
 def test_allows_placeholders(text):
     assert not find_personal_paths(text)
@@ -171,16 +197,16 @@ _L = "LAPTOP" + "-9XK2Q7PZ"
     f"wrote to {_N}@{_D} yesterday", f"author: {_N}42@outlook.{_D.split('.')[1]}", f"<{_N}@my-company.co.uk>",
     f"machine {_M}", f"host: {_L}", f"{_M.lower()}\\{_N}", f"[user]\n\temail = {_N}@{_D}",
     f'"line one\\n{_N}@{_D}"', f"mailto:{_N}@{_D}", f"file:///c%3A/Users/{_N}/x", f"{_N}%40{_D}",
-    f"me@{_N}-home.net", f"ci@{_N}.dev",
+    f"me@{_N}-home.net", f"ci@{_N}.dev", f"ssh {_N}@corp-mail.com", f"me@{_N}.com",
 ])
 def test_detects_addresses_and_machine_names(text):
     assert find_personal_data(text)
 
 
 @pytest.mark.parametrize("text", [
-    "ci@example.com", "t@example.invalid", "me@user.com", "@user.setter", "@pytest.mark.parametrize",
-    "104068711+someone@users.noreply.github.com", "Claude <noreply@anthropic.com>", "a@b.test", "x@sub.example.org",
-    "git@github.com:owner/repo.git", "pip install git+ssh://git@github.com/o/r", "ssh admin@build-host.internal",
+    "ci@example.com", "t@example.invalid", "me@example.com", "@user.setter", "@pytest.mark.parametrize",
+    "12345678+someone@users.noreply.github.com", "Claude <noreply@anthropic.com>", "a@b.test", "x@sub.example.org",
+    "git@github.com:owner/repo.git", "pip install git+ssh://git@github.com/o/r", "ssh git@example.com",
     "DESKTOP-x (a word, not a name)", "see the desktop-first layout", "DESKTOP-ABC", "LAPTOP-FRIENDLY",
     "DESKTOP-CLOSED", "react@18.3.1", "actions/checkout@v4", '"a\\n@pytest.fixture"',
 ])
