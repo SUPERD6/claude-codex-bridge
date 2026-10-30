@@ -45,7 +45,7 @@
 
 - **M1**（`codex_memories`、`clean`）：A = `ccx2daily`，B = `ccx2daily_nomem`，C = `ccx2daily_clean`。留出集 10 题 × 3 轮 + r5 10 题 × 2 轮：每组 50 个配对单元，每组约 $5。
 - **M2**（`codex_lean_tools`）：D = `ccx2daily_leantools` 对同一个基线，题目相同。
-- **决策规则（现在就定好）：** 四条全满足才改默认：right_B ≥ right_A − 1；输掉的配对（A 对、B 错；McNemar）≤ 2；没有哪道题 B 每轮都错而 A 至少对过一轮；子智能体每个单元的 prompt token 中位数（`sub_usage.prompt` = ccx 工作运行的 input + cached）降 ≥15%，每个开关都用这同一个指标。有单侧缺失的配对或缺 token 数就判 Unknown，开关保持关。`r5.py summary` 在干净的配对单元上套用它（`b3_rules`）。
+- **决策规则（现在就定好）：** 四条全满足才改默认：right_B ≥ right_A（做对数不降：用户定的规则）；输掉的配对（A 对、B 错；McNemar）≤ 2；没有哪道题 B 每轮都错而 A 至少对过一轮；子智能体每个单元的 prompt token 中位数（`sub_usage.prompt` = ccx 工作运行的 input + cached）降 ≥15%，每个开关都用这同一个指标。有单侧缺失的配对或缺 token 数就判 Unknown，开关保持关。`r5.py summary` 在干净的配对单元上套用它（`b3_rules`）。
 - 统计功效有限：基线约 95% 时，50 对只能看出 ≥10 个百分点的下降。输掉 2–3 对的边界情况，只对该组再补 50 个单元（约 $5）。
 
 命令（没有运行）：

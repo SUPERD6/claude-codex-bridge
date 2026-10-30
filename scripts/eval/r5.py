@@ -2093,7 +2093,7 @@ B3_INPUT_DROP = 0.15          # the sub-agent's median prompt tokens per unit mu
 
 def b3_rule(rows: list[dict], arm: str, base: str = B3_BASE) -> dict | None:
     """The B3 decision rule fixed before any run (docs/research/2026-10-30-b3-lean-switches-plan.md), on the clean
-    units both arms share: a switch's default changes only if right_B >= right_A - 1, at most 2 lost pairs (A right,
+    units both arms share: a switch's default changes only if right_B >= right_A (right not lower), at most 2 lost pairs (A right,
     B wrong), no task B got wrong in every round while A got it right at least once, and the sub-agent's median
     prompt tokens per unit (sub_usage.prompt: input + cached of ccx's work runs) at least B3_INPUT_DROP lower. Any
     unclean pair lost on one side only (lost_pairs note), or a missing token count, makes it Unknown. Result pass /
@@ -2117,7 +2117,7 @@ def b3_rule(rows: list[dict], arm: str, base: str = B3_BASE) -> dict | None:
     have = None not in pa and None not in pb
     ma, mb = (_med(pa), _med(pb)) if have else (None, None)
     pf = lambda v: "pass" if v else "fail"  # noqa: E731
-    cond = {"right": {"rule": f"{arm} right >= {base} right - 1", "value": [b_ok, a_ok], "result": pf(b_ok >= a_ok - 1)},
+    cond = {"right": {"rule": f"{arm} right >= {base} right", "value": [b_ok, a_ok], "result": pf(b_ok >= a_ok)},
             "lost_pairs": {"rule": f"at most 2 pairs {base} right, {arm} wrong", "value": lost,
                            "result": pf(lost <= 2)},
             "always_lost": {"rule": f"no task {arm} got wrong in every round that {base} got right once",

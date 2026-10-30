@@ -81,7 +81,7 @@ arm lists what would be copied and the overlays.
 - **M1** (`codex_memories`, `clean`): A = `ccx2daily`, B = `ccx2daily_nomem`, C = `ccx2daily_clean`. Hold-out 10
   tasks × 3 rounds + r5 10 tasks × 2 rounds: 50 paired units per arm, about $5 per arm.
 - **M2** (`codex_lean_tools`): D = `ccx2daily_leantools` against the same baseline, same tasks.
-- **Decision rule, fixed now:** a switch's default changes only if all of: right_B ≥ right_A − 1; at most 2 pairs lost
+- **Decision rule, fixed now:** a switch's default changes only if all of: right_B ≥ right_A (right not lower: the person's rule); at most 2 pairs lost
   (A right, B wrong; McNemar); no task that B gets wrong in every round while A got it right at least once; the
   sub-agent's median prompt tokens per unit (`sub_usage.prompt` = input + cached of ccx's work runs) down by at least
   15 %, the same metric for every switch. A one-sided missing pair or a missing token count makes it Unknown, and the

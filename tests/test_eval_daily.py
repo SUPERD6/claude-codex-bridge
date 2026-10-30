@@ -254,9 +254,11 @@ def test_b3_rule_applies_the_fixed_rule():
     lost = [{**r, "ok": r["task"] != "a"} for r in good]                                # task a lost in every round
     br = r5.b3_rule(base + lost, "ccx2daily_nomem")
     assert br["result"] == "fail" and br["conditions"]["always_lost"]["value"] == ["a"]
-    assert br["conditions"]["right"]["result"] == "fail"                                # 6 vs 8: more than one fewer
-    one = [{**r, "ok": not (r["task"] == "a" and r["round"] == 1)} for r in good]      # one pair lost: allowed
-    assert r5.b3_rule(base + one, "ccx2daily_nomem")["result"] == "pass"
+    assert br["conditions"]["right"]["result"] == "fail"                                # 6 vs 8: lower
+    one = [{**r, "ok": not (r["task"] == "a" and r["round"] == 1)} for r in good]      # one fewer right: not allowed
+    assert r5.b3_rule(base + one, "ccx2daily_nomem")["conditions"]["right"]["result"] == "fail"
+    base2 = [{**r, "ok": not (r["task"] == "b" and r["round"] == 1)} for r in base]   # one lost, one won: not lower
+    assert r5.b3_rule(base2 + one, "ccx2daily_nomem")["result"] == "pass"
     unclean = good[:-1] + [{**good[-1], "env_clean": False}]                            # one-sided loss: Unknown
     assert r5.b3_rule(base + unclean, "ccx2daily_nomem")["result"] == "unknown"
     nocount = [{k: v for k, v in r.items() if k != "sub_usage"} for r in good]
