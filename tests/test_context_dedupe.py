@@ -73,6 +73,42 @@ def test_a_decision_the_lead_restated_after_a_reopened_question_stays(tmp_path):
     assert stats["deduped"] >= 1
 
 
+def test_dedupe_does_not_change_how_many_items_are_shown(tmp_path):
+    evs: list[dict] = []
+    t0 = time.time() - 500
+    for k in range(6):
+        cs._said(t0 + k, "person", f"Ask {k}: we decided rule {k} holds for module_{k}. " + "detail " * 40, evs)
+    cs._said(t0 + 50, "claude", "Done with the rules.", evs)
+    full = cs.summary(evs, "claude", "s", tmp_path, "t")
+    for limit in range(800, len(full) + 200, 150):
+        a = cs.summary(evs, "claude", "s", tmp_path, "t", limit)
+        b = cs.summary(evs, "claude", "s", tmp_path, "t", limit, dedupe=True)
+        assert a.split("Settled in")[0] == b.split("Settled in")[0], limit      # same asks, same everything else
+        assert a.count("\n- [") >= b.count("\n- [") >= a.count("\n- [") - 8   # only Settled lines go
+        assert ("(trimmed)" in b) <= ("(trimmed)" in a)          # a shorter block is cut less, never more
+
+
+def test_a_sentence_only_in_the_cut_off_part_of_an_ask_is_kept(tmp_path):
+    evs: list[dict] = []
+    t0 = time.time() - 100
+    long_ask = "We never raised errors here before. " + "x" * 470 + ". From now on we decided: never raise."
+    cs._said(t0, "person", long_ask, evs)
+    cs._said(t0 + 5, "person", "Please fix it.", evs)            # the long one is an older ask: cut at 500
+    stats: dict = {}
+    text = cs.summary(evs, "claude", "s", tmp_path, "t", dedupe=True, stats=stats)
+    assert "From now on we decided: never raise." in _settled(text)          # not shown above: kept
+
+
+def test_codex_lead_asks_and_their_decisions_share_a_time(tmp_path):
+    from test_context_share import codex_session
+    f = _w(tmp_path / "rollout.jsonl", codex_session(str(tmp_path)))
+    evs = cs.events_codex(f)
+    evs.append(dict(next(e for e in evs if e["kind"] == "ask"), kind="decision", text="Rename parse() to parse_rows()."))
+    stats: dict = {}
+    cs.summary(evs, "codex", "s", tmp_path, "t", dedupe=True, stats=stats)
+    assert stats["deduped"] == 1
+
+
 class TestRunRecord(AdapterEnv):
     LEAD = {"CLAUDECODE": "1", "CLAUDE_CODE_SESSION_ID": SID}
 

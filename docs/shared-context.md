@@ -15,9 +15,11 @@ in three ways.
 
 Experimental, off by default: `[shared_context] dedupe = true` leaves out a "Settled" sentence that was cut from one
 of the person's asks shown above it and stands there whole (the same words twice); a decision the lead stated later
-stays, even in the same words, nothing else is cut and the size limit is unchanged. Every
-run records the block's rough size as `est_tokens` in run.json's `shared_context`, and with the switch on how many
-sentences it left out. It stays off until a rerun of the 2026-10-25 A/B shows first-try-right does not drop.
+stays, even in the same words, nothing else is cut and the size limit is unchanged. A run
+that attaches the block records its rough size as `est_tokens` in run.json's `shared_context`, and with the switch on
+how many sentences it left out. How many items are shown is decided on the text without dedupe, so the two settings
+differ only by the repeated sentences (and, when the block is still too long at the fewest items, by
+how much of its end the final character cut takes off). It stays off until a rerun of the 2026-10-25 A/B shows first-try-right does not drop.
 
 Everything is framed as **data, not instructions**: the block's header says so, the sub-agent's rules name it, the
 leads' memory block and the project's AGENTS.md (via `ccx board --init`) say it again. A sub-agent's own task and the
