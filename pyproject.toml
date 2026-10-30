@@ -21,7 +21,7 @@ packages = ["ccx", "ccx.commands", "ccx.agents", "ccx._config", "ccx._skills", "
 package-dir = { "ccx" = "ccx", "ccx.commands" = "ccx/commands", "ccx.agents" = "ccx/agents", "ccx._config" = "config", "ccx._skills" = "skills", "ccx._hubseed" = "hub-seed" }
 
 [tool.setuptools.package-data]
-"ccx" = ["ui_static/*"]
+"ccx" = ["ui_static/*", "data/*.json"]
 "ccx._config" = ["*.toml", "*.json"]
 "ccx._skills" = ["**/*.md", "**/*.py", "**/*.toml", "**/*.json"]
 "ccx._hubseed" = ["**/*.md", "**/*.json"]

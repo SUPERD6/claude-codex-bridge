@@ -136,6 +136,7 @@
     let h = `<div class="brand"><b>ccx</b><span style="color:var(--muted)">${t("now")}</span>${D && D.demo ? `<span class="demo-tag">${t("demo_tag")}</span>` : ""}<span class="live">${state}</span></div>
       <input class="search" id="search" placeholder="${esc(t("search"))}" value="${esc(query)}" aria-label="${esc(t("search"))}">
       <nav class="nav" id="nav"><a href="#/" class="${route.length ? "" : "cur"}">${t("overview")}${all.length ? `<span class="badge">${all.length}</span>` : ""}</a>`;
+    h += `<a href="#/tokens" class="${route[0] === "tokens" ? "cur" : ""}">${t("tok_nav")}</a>`;
     const talks = (D && D.discussions) || [];
     if (talks.length) h += `<a href="#/discuss" class="${route[0] === "discuss" ? "cur" : ""}">${t("disc_nav")}<span class="mini-n">${talks.length}</span></a>`;
     for (const c of convs()) h += `<a href="${convHref(c.id)}" class="${route[0] === "conv" && route[1] === c.id ? "cur" : ""}">${t("conv_nav")} · ${esc(c.name)}${(c.todos || []).length ? `<span class="badge">${c.todos.length}</span>` : `<span class="mini-n">${c.threads}</span>`}</a>`;
@@ -619,6 +620,141 @@
     } catch (e) { Object.assign(s, {stage: "err", msg: e.message}); paintSay(); }
   }
 
+  /* ---------- B1: measured results and where tokens go (/api/tokens, /api/leadcost: read only, capped) ----------
+     Task titles, labels, run ids, model names and anything read from a conversation are data: esc() always. The
+     page asks /api/tokens when it is opened or a filter changes (not on every poll), and parses a lead conversation
+     only when its row is opened. */
+  let TOK = null, TOKKEY = "", TOKBUSY = false, TOKERR = "", TOKPERIOD = "7d", TOKPROJ = "";
+  const TOKOPEN = {}, LEADOPEN = {}, LEADC = {}, LEADBUSY = {};
+  function tokKey() { return TOKPERIOD + "|" + TOKPROJ + "|" + (TESTS ? 1 : 0); }
+  function wantTok(force) {
+    if (SNAP || TOKBUSY || (!force && TOKKEY === tokKey() && (TOK || TOKERR))) return;
+    TOKBUSY = true;
+    const key = tokKey();
+    const qs = "?period=" + encodeURIComponent(TOKPERIOD) + (TOKPROJ ? "&project=" + encodeURIComponent(TOKPROJ) : "") + (TESTS ? "&tests=1" : "");
+    api("/api/tokens" + qs).then(j => { TOK = j; TOKERR = ""; }).catch(e => { TOK = null; TOKERR = (e && e.message) || "?"; })
+      .then(() => { TOKKEY = key; TOKBUSY = false; if (route().r[0] === "tokens") drawTokens(); });
+  }
+  function pct(x) { return x == null ? "–" : Math.round(x * 100) + "%"; }
+  function inLang(o) { return o ? (o[LANG] || o.en || "") : ""; }
+  function measuredHTML(m) {
+    let h = `<h2>${t("tok_m_title")}</h2>`;
+    if (!m || !(m.tables || []).length) return h + `<p class="cost">${t("tok_m_src", {path: raw("<code>docs/measured.md</code>")})}</p>`;
+    const head = `<div class="twrap"><table class="ttab"><thead><tr><th>${t("tok_col_arm")}</th><th>${t("tok_col_right")}</th><th>${t("tok_col_usd")}</th><th>${t("tok_col_wall")}</th></tr></thead><tbody>`;
+    const rowsOf = rs => (rs || []).map(r => `<tr><td>${t("tok_arm_" + String(r.arm || "").replace(/[^a-z0-9]/g, ""))}${r.run ? ` <span class="cost">${esc(r.run)}</span>` : ""}</td>`
+      + `<td>${esc(r.right)}${r.note ? `<br><span class="cost">${esc(inLang(r.note))}</span>` : ""}</td><td>${r.usd_per_success ? "$" + esc(r.usd_per_success) : "–"}</td><td>${r.wall_median_s ? t("tok_secs", {s: r.wall_median_s}) : "–"}</td></tr>`).join("");
+    for (const tb of m.tables) {
+      h += `<h3 class="tok-h3">${esc(inLang(tb.title) || tb.id)} <span class="cost">${esc(tb.date || "")}</span></h3>` + head + rowsOf(tb.rows) + `</tbody></table></div>`;
+      if (tb.ext && (tb.ext.rows || []).length) h += `<h3 class="tok-h3">${esc(inLang(tb.ext.title))}</h3>` + head + rowsOf(tb.ext.rows) + `</tbody></table></div>`;
+      h += `<p class="cost">${t("tok_limit", {t: inLang(tb.limit)})}</p>`;
+    }
+    if (m.tests) h += `<p class="cost">${t("tok_tests", {d: m.tests.date || "", t: inLang(m.tests)})}</p>`;
+    return h + `<p class="cost">${t("tok_m_src", {path: raw("<code>docs/measured.md</code>")})}</p>`;
+  }
+  function mineRow(name, b) {
+    return `<tr><td>${name}</td><td>${+b.runs || 0}</td><td>${+b.ok || 0}</td><td>${pct(b.ok_rate)}</td><td>${b.usd_per_ok == null ? "–" : usd(+b.usd_per_ok)}</td></tr>`;
+  }
+  function mineHTML(x) {
+    let h = `<h2>${t("tok_mine_title")}</h2><p class="cost">${t("tok_mine_note")}</p>`;
+    if (!x || !x.runs) return h + `<p class="lead">${t("tok_mine_none")}</p>`;
+    h += `<div class="twrap"><table class="ttab"><thead><tr><th></th><th>${t("tok_col_runs")}</th><th>${t("tok_col_ok")}</th><th>${t("tok_col_okr")}</th><th>${t("tok_col_perok")}</th></tr></thead><tbody>`;
+    h += mineRow(`<b>${t("tok_all")}</b>`, x);
+    for (const [m, b] of Object.entries(x.by_mode || {})) h += mineRow(t("tok_mode", {m}), b);
+    for (const [a, b] of Object.entries(x.by_agent || {})) h += mineRow(esc(agentName(a)), b);
+    return h + `</tbody></table></div>`;
+  }
+  function tokCells(k) { k = k || {}; return `<td>${tok(k.fresh)}</td><td>${tok(k.cached)}</td><td>${tok(k.cache_write)}</td><td>${tok(k.output)}</td>`; }
+  function tokHead(first) {
+    return `<thead><tr><th>${first}</th><th>${t("tok_fresh")}</th><th>${t("tok_cached")}</th><th>${t("tok_cw")}</th><th>${t("tok_out")}</th><th>${t("tok_usd")}</th></tr></thead>`;
+  }
+  function money(x) { return x == null ? "–" : usd(+x); }
+  function runRows(r) {
+    const tag = r.review ? ` <span class="cost">${t("tok_review")}</span>` : "";
+    let h = `<tr><td><span class="mono">${esc(r.run_id)}</span>${tag}<br>${who(r.agent, r.model)} <span class="cost">${esc(r.status)}${r.ts ? " · " + clock(r.ts) : ""}</span>`
+      + (r.children_share != null ? `<br><span class="cost">${t("tok_kids", {n: (r.children || []).length + (r.children_more || 0), s: pct(r.children_share)})}</span>` : "")
+      + (r.children_share > 1 ? `<br><span class="warn">${t("tok_kids_over")}</span>` : "")
+      + `</td>${tokCells(r.tokens)}<td>${money(r.usd)}</td></tr>`;
+    for (const c of r.children || []) h += `<tr class="kid"><td>↳ <span class="mono">${esc(c.id)}</span> · ${esc(agentName(c.vendor))}</td>${tokCells(c.tokens)}<td>${money(c.usd)}</td></tr>`;
+    if (r.children_more) h += `<tr class="kid"><td colspan="6">${t("tok_kids_more", {n: r.children_more})}</td></tr>`;
+    return h;
+  }
+  function flowHTML(d) {
+    let h = `<h2>${t("tok_flow_title")}</h2><p class="lead">${t("tok_flow_lead")}</p>`;
+    const T = d.totals || {};
+    if (!T.runs) return h + `<p class="lead">${t("tok_empty", {cmd: raw("<code>ccx demo</code>")})}</p>`;
+    h += `<p class="stat">${t("tok_total", {n: T.runs, t: tok((T.tokens || {}).total), u: usd(T.usd || 0)})}</p>`;
+    h += `<div class="twrap"><table class="ttab">${tokHead(t("tok_col_agent"))}<tbody>`;
+    for (const [a, b] of Object.entries(T.by_agent || {})) h += `<tr><td>${who(a)} <span class="cost">${t("tok_task_runs", {n: +b.runs || 0})}</span></td>${tokCells(b.tokens)}<td>${money(b.usd)}</td></tr>`;
+    h += `</tbody></table></div><p class="cost">${t("tok_by_agent_note")}</p>`;
+    const kt = (d.children_shown || {}).total || 0;
+    h += `<p class="cost">${t("tok_kids_shown", {t: tok(kt)})} ${t("tok_kids_codex_note")}</p>`;
+    (d.tasks || []).forEach((g, i) => {
+      const open = TOKOPEN[g.key] !== undefined ? TOKOPEN[g.key] : i < 3;
+      h += `<details class="tflow" data-tok="${esc(g.key)}"${open ? " open" : ""}><summary><b>${esc(g.title)}</b>${g.kind === "task" && g.name !== g.title ? ` <span class="cost mono">${esc(g.name)}</span>` : ""}<span class="cost">${t("tok_task_runs", {n: +g.runs_total || 0})} · ${tok((g.tokens || {}).total)} · ${money(g.usd)} · ${ago(g.last)}</span></summary>`
+        + `<div class="twrap"><table class="ttab">${tokHead(t("tok_col_run"))}<tbody>${(g.runs || []).map(runRows).join("")}</tbody></table></div>`
+        + (g.runs_cut ? `<p class="cost">${t("tok_runs_cut", {n: g.runs_cut})}</p>` : "") + `</details>`;
+    });
+    const c = d.cut || {};
+    if (c.tasks) h += `<p class="cost">${t("tok_cut", {n: (d.tasks || []).length, t: c.tasks, r: c.runs, k: tok(c.tokens || 0), u: usd(+c.usd || 0)})}</p>`;
+    return h;
+  }
+  function wantLead(key) {
+    if (SNAP || LEADC[key] || LEADBUSY[key]) return;
+    LEADBUSY[key] = 1;
+    const i = key.indexOf("|"), agent = key.slice(0, i), session = key.slice(i + 1);
+    api("/api/leadcost?agent=" + encodeURIComponent(agent) + "&session=" + encodeURIComponent(session))
+      .then(j => { LEADC[key] = {ok: j}; }).catch(e => { LEADC[key] = {err: (e && e.message) || "?"}; })
+      .then(() => { delete LEADBUSY[key]; if (route().r[0] === "tokens") drawTokens(); });
+  }
+  function leadBody(key) {
+    const c = LEADC[key];
+    if (!c) { wantLead(key); return `<p class="cost">${t("tok_lead_loading")}</p>`; }
+    if (c.err) return `<p class="cost"><span class="warn">${t("tok_err", {e: c.err})}</span></p>`;
+    const j = c.ok;
+    if (!j.found) return `<p class="cost">${t("tok_lead_gone")}</p>`;
+    let h = `<p class="stat">${t("tok_lead_first", {t: tok(j.first_turn_tokens || 0), m: j.model || "?"})}</p>`;
+    h += `<div class="twrap"><table class="ttab"><thead><tr><th>${t("tok_col_part")}</th><th>${t("tok_col_tokens")}</th><th>${t("tok_col_share")}</th><th>${t("tok_col_per100")}</th></tr></thead><tbody>`
+      + (j.parts || []).map(x => `<tr><td>${esc(x.part)}</td><td>${tok(x.tokens)}</td><td>${pct(x.share)}</td><td>${money(x.usd_per_100_turns)}</td></tr>`).join("") + `</tbody></table></div>`;
+    if (j.parts_cut) h += `<p class="cost">${t("tok_parts_cut", {n: j.parts_cut})}</p>`;
+    if ((j.advice || []).length) h += `<p class="cost">${t("tok_lead_advice")}</p><ul>${j.advice.map(a => `<li>${esc(a)}</li>`).join("")}</ul>`;
+    if (!j.breaks_total) return h + `<p class="cost">${t("tok_breaks_none")}</p>`;
+    h += `<p class="stat">${t("tok_breaks", {n: j.breaks_total, u: money(j.extra_usd)})}</p>`
+      + `<div class="twrap"><table class="ttab"><thead><tr><th>${t("tok_col_why")}</th><th>${t("tok_col_when")}</th><th>${t("tok_col_rewritten")}</th><th>${t("tok_usd")}</th></tr></thead><tbody>`
+      + (j.breaks || []).map(b => `<tr><td>${esc((b.why || []).join("; "))}</td><td>${esc(b.ts)}</td><td>${tok(b.rewritten_tokens)}</td><td>${money(b.extra_usd)}</td></tr>`).join("") + `</tbody></table></div>`;
+    if (j.note) h += `<p class="cost">${esc(j.note)}</p>`;
+    return h;
+  }
+  function leadsCostHTML(d) {
+    let h = `<h2>${t("tok_leads_title")}</h2><p class="cost">${t("tok_leads_lead")}</p>`;
+    const list = d.leads || [];
+    if (!list.length) return h + `<p class="lead">${t("tok_leads_none")}</p>`;
+    for (const g of list) {
+      const key = g.agent + "|" + g.session;
+      h += `<details class="tflow" data-lead="${esc(key)}"${LEADOPEN[key] ? " open" : ""}><summary>${who(g.agent)} <span class="mono">${esc(cut(g.session, 18))}</span>`
+        + `<span class="cost">${t("tok_task_runs", {n: +g.runs || 0})} · ${money(g.usd)} · ${ago(g.last)}</span></summary>${LEADOPEN[key] ? leadBody(key) : ""}</details>`;
+    }
+    return h;
+  }
+  function renderTokens() {
+    let h = banner() + `<div class="crumbs"><a href="#/">${t("overview")}</a> › ${t("tok_nav")}</div><h1>${t("tok_title")}</h1><p class="lead">${t("tok_lead")}</p>`;
+    if (SNAP) return h + `<p class="lead">${t("tok_snap")}</p>`;
+    h += `<div class="filters tfilters">` + ["today", "7d", "all"].map(x => `<button data-tperiod="${x}" class="${TOKPERIOD === x ? "on" : ""}" aria-pressed="${TOKPERIOD === x}">${t("tok_p_" + x)}</button>`).join("");
+    const ps = (TOK && TOK.projects) || [];
+    // TOKPROJ "" sends no project (the server then shows the ui's own --project, if any); "all" asks for every
+    // project; what is selected follows what the server says it showed (TOK.project)
+    const shownProj = TOK ? (TOK.project || "all") : (TOKPROJ || "all");
+    if (ps.length > 1 || TOKPROJ || (TOK && TOK.project)) h += `<select id="tokproj" aria-label="${esc(t("tok_project"))}"><option value="all"${shownProj === "all" ? " selected" : ""}>${t("tok_project_all")}</option>${ps.map(p => `<option value="${esc(p.id)}"${p.id === shownProj ? " selected" : ""}>${esc(p.name)}</option>`).join("")}</select>`;
+    h += `<button data-do="tok-refresh">${t("tok_refresh")}</button></div>`;
+    if (TOKKEY !== tokKey() || (!TOK && !TOKERR)) { wantTok(); if (!TOK) return h + `<p class="lead">${t("tok_loading")}</p>`; }
+    if (TOKERR) return h + `<p class="lead"><span class="warn">${t("tok_err", {e: TOKERR})}</span></p>`;
+    return h + measuredHTML(TOK.measured) + mineHTML(TOK.mine) + flowHTML(TOK) + leadsCostHTML(TOK);
+  }
+  function drawTokens() {
+    const keep = window.scrollY;
+    $("main").innerHTML = renderTokens();
+    window.scrollTo(0, keep);
+  }
+
   /* ---------- U7: who leads this project, when the lead changed, and handing it to another lead ----------
      The buttons run `ccx handoff` through the same prepare -> exact command -> second click; the answer (the handoff
      file and the one line to give the other tool) stays on the panel. Names and paths are data: esc() always. */
@@ -945,6 +1081,7 @@
     const main = $("main");
     if (r[0] === "discuss") { main.innerHTML = discHTML(r[1]); return; }
     if (r[0] === "conv") { drawConv(r[1], r[2]); return; }
+    if (r[0] === "tokens") { drawTokens(); return; }
     const pr = r.length ? findProject(r[0]) : null;
     const tk = pr && r[1] ? findTask(pr, r[1]) : null;
     if (!pr) { main.innerHTML = renderOverview(); paintAct(); return; }
@@ -966,8 +1103,10 @@
 
   /* ---------- events (one listener; no inline handlers, the page's CSP forbids them) ---------- */
   document.addEventListener("click", (e) => {
-    const el = e.target.closest("[data-sel],[data-filt],[data-more],[data-btn],[data-tbtn],[data-rbtn],[data-lbtn],[data-reason],[data-do],[data-sug]");
+    const el = e.target.closest("[data-sel],[data-filt],[data-more],[data-btn],[data-tbtn],[data-rbtn],[data-lbtn],[data-reason],[data-do],[data-sug],[data-tperiod]");
     if (!el) return;
+    if (el.dataset.tperiod) { TOKPERIOD = el.dataset.tperiod; drawTokens(); return; }
+    if (el.dataset.do === "tok-refresh") { for (const k in LEADC) delete LEADC[k]; wantTok(true); return; }
     if (el.dataset.do === "say-prep") { prepSay(); return; }
     if (el.dataset.do === "say-run") { runSay(); return; }
     if (el.dataset.do === "say-cancel") { SAY = null; paintSay(); return; }
@@ -1042,7 +1181,13 @@
       if (SAY && SAY.key === key && SAY.stage !== "busy" && SAY.text !== e.target.value) { SAY = null; paintSay(); }
     }
   });
-  document.addEventListener("toggle", (e) => { if (e.target.dataset && e.target.dataset.hist) histOpen[e.target.dataset.hist] = e.target.open; }, true);
+  document.addEventListener("toggle", (e) => {
+    const ds = e.target.dataset || {};
+    if (ds.hist) histOpen[ds.hist] = e.target.open;
+    if (ds.tok !== undefined) TOKOPEN[ds.tok] = e.target.open;
+    if (ds.lead !== undefined && !!LEADOPEN[ds.lead] !== e.target.open) { LEADOPEN[ds.lead] = e.target.open; if (e.target.open) drawTokens(); }
+  }, true);
+  document.addEventListener("change", (e) => { if (e.target.id === "tokproj") { TOKPROJ = e.target.value; drawTokens(); } });
   addEventListener("hashchange", render);
 
   /* ---------- talking to ccx ui ---------- */
