@@ -4,7 +4,7 @@ English · [中文](README.zh.md) · back to [Measured](../measured.md)
 
 Every report keeps its limits and unfavourable results; read the report before quoting a number. Plans were written
 before their runs. Round 5 and everything after it use a development set (tasks also used while tuning ccx): signal,
-not proof. Scrubbed data is in [data/](data/).
+not proof; the exception is the hold-out run hc1 (2026-10-29), on tasks not used while building ccx. Scrubbed data is in [data/](data/).
 
 | Date | Question | Result in one line | Report |
 |---|---|---|---|
@@ -25,3 +25,4 @@ not proof. Scrubbed data is in [data/](data/).
 | 2026-10-27 | Batch / pipeline: several changes at once, scored on the merged tree | Plan only, nothing measured yet | [batch plan](2026-10-27-batch-plan.md) |
 | 2026-10-28 | Offline experiments C1–C6 on the round-5 records | namecheck 0 false alarms; most other candidates dropped or still need paid runs | [offline experiments](offline-experiments.md) |
 | 2026-10-28 | Did ccx keep its own obligations in round 5 (r5e–r5h)? | Right answers hid harness problems: 76/76 right ccx2 units failed at least one criterion | [harness audit](2026-10-28-harness-audit.md) |
+| 2026-10-29 | Hold-out confirmation hc1: on 10 tasks not used while building ccx, is ccx as right and cheaper? | Not seen less right (29/30, 29/30, 27/28); $0.063 per success, about 30 % below self and 39 % below the built-in sub-agent's default usage; about 3× self's wall time; external tasks only: 15 % / 42 % | [hc1 hold-out](2026-10-29-hc1-holdout.md) |
