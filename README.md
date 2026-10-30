@@ -111,10 +111,13 @@ there. The task timeline shows which lead worked when.
 | Claude Code | yes | yes |
 | Codex | yes | yes |
 | DeepSeek (`dsh`, or through Claude Code; as a sub-agent also through Codex) | yes | yes |
-| Gemini CLI; Kimi, GLM, Qwen, OpenRouter through Claude Code | no | adapted, not run for real |
+| Gemini CLI; Kimi, GLM, Qwen, OpenRouter through Claude Code | no | experimental: adapted, not run for real |
 
-All "yes" cells ran for real on one Windows machine; macOS and Linux run in CI only. Still work in progress (the
-release badge above says which version): what is verified and how is in [docs/STATUS.md](docs/STATUS.md).
+All "yes" cells ran for real on one Windows machine. **Experimental**, the main ones (not run for real; said so where
+each is described, and STATUS says how each is tested): Gemini CLI, a real quota stop, macOS and Linux (CI only, no real
+agent CLIs), installing the Codex plugin from a GitHub address, `ccx intake` against real GitHub; the full list is
+in STATUS. Still work in progress (the release badge above says which version): what is verified and how is in
+[docs/STATUS.md](docs/STATUS.md).
 
 ## More
 

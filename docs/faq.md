@@ -19,7 +19,7 @@ is what `ccx lead`, `ccx sum` and `ccx fresh` are for. `ccx report` shows the di
 `ccx trial` runs a week-long comparison.
 
 **I'm on a subscription, not the API.** Costs are shown at API prices so runs can be compared; the dashboard also
-shows how much of each tool's quota went where. When one tool runs out, the work moves to the other.
+shows how much of each tool's quota went where. When one tool runs out, the work moves to the other (experimental: tested with stand-ins only, no real quota stop yet).
 
 **Is it safe to let a sub-agent edit files?** Edits stay in the task's folder, every write run is snapshotted for
 `ccx undo`, and `--mode read` or `--worktree` keep your tree untouched. Details in [SECURITY.md](../SECURITY.md).
@@ -38,7 +38,7 @@ work to Claude); ccx tells it from the environment and records the lead's vendor
 model is recognised from its config or `CCX_LEAD=deepseek-codex`, not tested as a lead. Gemini CLI and the configured providers cannot lead. **Sub-agents:** Claude Code and Codex in both directions; DeepSeek through Claude Code
 (calibrated on real tasks), through Codex (one small read-only task) and as `dsh` (read, write and resume run for real;
 ccx also finds the `dsh` that ships in the DeepSeek Harness desktop app on Windows). Gemini CLI is adapted
-(community) but **untested**; Kimi, GLM, Qwen and OpenRouter are configured, untested. One adapter per CLI (`ccx/agents/`);
+(community) but **experimental, untested**; Kimi, GLM, Qwen and OpenRouter are configured, untested. One adapter per CLI (`ccx/agents/`);
 `ccx agents` lists what each can do; adding one is described in [CONTRIBUTING.md](../CONTRIBUTING.md) (start from
 `ccx/agents/_template.py` and `tests/fakes/fake_template.py`).
 

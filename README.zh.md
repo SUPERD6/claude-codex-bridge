@@ -95,10 +95,12 @@ ccx undo <run_id>            # 不想要：先显示会还原什么；加 --appl
 | Claude Code | 能 | 能 |
 | Codex | 能 | 能 |
 | DeepSeek（`dsh`，或经 Claude Code；接活也可经 Codex） | 能 | 能 |
-| Gemini CLI；经 Claude Code 的 Kimi、GLM、Qwen、OpenRouter | 不能 | 已适配，没真跑过 |
+| Gemini CLI；经 Claude Code 的 Kimi、GLM、Qwen、OpenRouter | 不能 | 实验性：已适配，没真跑过 |
 
-所有“能”都在一台 Windows 电脑上真跑过；macOS 和 Linux 只在 CI 里跑。仍在开发中（版本号看上面的 release 徽章）：
-哪些验证过、怎么验证的，见 [docs/STATUS.zh.md](docs/STATUS.zh.md)。
+所有“能”都在一台 Windows 电脑上真跑过。**实验性**的主要几项（没真跑过；各自的说明里都标了，怎么测的见 STATUS）：Gemini CLI、
+真实的额度用完、macOS 和 Linux（只在 CI 里跑，没有真的智能体命令行）、从 GitHub 地址装 Codex 插件、`ccx intake` 对真实
+GitHub；完整清单见 STATUS。
+仍在开发中（版本号看上面的 release 徽章）：哪些验证过、怎么验证的，见 [docs/STATUS.zh.md](docs/STATUS.zh.md)。
 
 ## 更多
 

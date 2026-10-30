@@ -9,6 +9,8 @@ Two ways to hand the lead (the coordinating session on your computer) a task whe
 | **Phone → the lead's session** | Claude Code's Remote Control: you type into the coordinating session itself from the Claude app | your computer awake, that session open | nothing new: it is the same session |
 | **An issue → the lead** | open an issue labelled `ccx-task` in a **private** repository of yours; the lead runs `ccx intake pull`, does it, and reports in the issue | `gh` signed in, `intake.github` set | one-off commands; nothing polls by itself |
 
+**Experimental:** the issue path has run only against a stand-in `gh` (the tests), never against real GitHub.
+
 ## 1. From your phone: Remote Control
 
 Checked against `claude remote-control --help` (Claude Code 2.1.309) and the official page
