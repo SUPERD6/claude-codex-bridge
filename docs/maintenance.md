@@ -16,15 +16,15 @@ Read these in this order, and stop when you know enough for the task at hand:
 | Where things stand | [docs/STATUS.md](STATUS.md) (one page) | now, the next three items, how sure we are; older pages in [STATUS-archive.md](STATUS-archive.md) |
 | What changed | [CHANGELOG.md](../CHANGELOG.md) and the notes in [changes/](../changes/) | `changes/*.md` are the PRs merged since the last release, not yet folded into the CHANGELOG |
 | Why it is the way it is | [docs/DECISIONS.md](DECISIONS.md) | one row per real decision, newest first, with the evidence |
-| What was measured | [docs/research/README.md](research/README.md) | one row per report: question, result, limits |
+| What was measured | [docs/research/README.md](research/README.md) | one row per report: question and result |
 | The previous session's notes | `.ccx/handoff.md` in your checkout, if it exists | local only, never in the repository |
 
 Then run the tests once (`python -m pytest -q tests`); they never call a real agent CLI.
 
 ## 2. Known issues and unverified paths
 
-Each of these is also marked where the feature is described. The full list is the "not verified" line in
-[STATUS](STATUS.md).
+The experimental ones are also marked where each feature is described. The full list is the "not verified" line
+in [STATUS](STATUS.md).
 
 | Issue | What is known | Where |
 |---|---|---|
@@ -36,32 +36,33 @@ Each of these is also marked where the feature is described. The full list is th
 | Experimental: macOS and Linux | CI only; every real run was on one Windows machine | [README](../README.md) |
 | Experimental: Codex plugin from a GitHub address | Follows Codex's plugin docs, tested with a stand-in only | [install](install.md) |
 | Experimental: `ccx intake` against real GitHub | Only against a stand-in `gh` | [intake](intake.md) |
-| Not run live | `ccx say --now` in the Codex desktop app's window, the Codex rule from `ccx doctor --codex-rule`, own sub-agent limits (F11), the `--review auto` trigger rate, a hook timeout in a real session, L2 auto-merge end to end | [STATUS](STATUS.md) |
+| Not run live | `ccx say --now` in the Codex desktop app's window, the Codex rule from `ccx doctor --codex-rule`, the dsh app's own later writes after a queued archive, own sub-agent limits (F11), the `--review auto` trigger rate, a hook timeout in a real session, L2 auto-merge end to end | [STATUS](STATUS.md) |
 
 ## 3. Experimental switches: what ships off, and why
 
-All live in [config/tiers.toml](../config/tiers.toml); a person overrides them in `<hub>/ccx/tiers.toml` or with
-`ccx config set <section>.<key> <value>`. The rule for every one of them: it changes only after a before / after
+The defaults live in [config/tiers.toml](../config/tiers.toml); a person overrides any of them in
+`<hub>/ccx/tiers.toml`. Only some keys can also be set with `ccx config set <section>.<key> <value>` (the last
+column); the others are file-only, by design for `[subagent]` (no per-run flag). The rule for every one of them: it changes only after a before / after
 measurement shows right answers do not drop, and the decision gets a row in [DECISIONS](DECISIONS.md).
 
-| Key | Default | What turning it on does | Why it is off |
-|---|---|---|---|
-| `defaults.focused_retry` | `false` | after a failed `--check`, the retry continues the same session with the failing command and its output | in r6a such retries took a median 389 s, slower than the first attempt; waits for a measured round |
-| `defaults.namecheck` | `"warn"` | `"fail"` makes an undefined name in changed code fail the run | `warn` had 0 false alarms offline; `fail` waits for the round-5 before / after (`ccx2nc` arm) |
-| `lanes.default` | `0` | `ccx batch` / `ccx q run` continue a few warm sessions instead of one per piece | about 40 % cheaper than a fresh session per piece, but slower and still dearer than one run ([warm lanes](research/2026-10-25-warm-lanes.md)) |
-| `memory.by_kind` | `false` | start-up brings only preferences and constraints; briefs bring matching pitfalls and facts | decided by the week-long `ccx trial` (ends 2026-11-01); the earlier trial was void |
-| `memory.start_scene` | `false` | start-up also brings the project's scene block | same trial as above |
-| `review.context` | `false` | the review brief also gets the code around the change | replay of round 5: about half the time and output, but caught the known bug 11 of 28 times instead of 19 |
-| `review.fix_rereview` | `"full"` | `"focus"` re-reviews a fix against the first review's problems | replay: a median 2.4 s saved, more missed `[must]` problems (24 vs 21 of 33) |
-| `review.cache_ttl` | `""` | sets a Claude reviewer's prompt-cache lifetime (`"5m"` / `"1h"`) | not A/B-tested |
-| `lead.model_by_task` | `false` | a new lead conversation picks its model by task difficulty | thresholds are provisional until `scripts/eval/r5.py --lead-model auto` is compared with fixed models |
-| `subagent.codex_memories` | `true` | `false` turns Codex memories off for sub-agents | B3: changes only after the before / after against the person's daily setup ([plan](research/2026-10-30-b3-lean-switches-plan.md)) |
-| `subagent.clean` | `false` | sub-agents start without the person's skills and user settings | same B3 measurement; may lose right answers that personal skills bring |
-| `subagent.codex_lean_tools` | `false` | write runs on Codex lose web search, image generation and goals | same B3 measurement |
-| `policy.picked` | `""` | pre-authorizes delegation by tier, without proposing first | a person's own choice, never a default |
+| Key | Default | What turning it on does | Why it is off | `config set` |
+|---|---|---|---|---|
+| `defaults.focused_retry` | `false` | after a failed `--check`, the retry continues the same session with the failing command and its output | "fix only what fails" narrows what the retry re-checks, so it cannot be argued that right answers never drop; waits for a measured round (the motive: in r6a the old-style retries took a median 389 s) | yes |
+| `defaults.namecheck` | `"warn"` | `"fail"` makes an undefined name in changed code fail the run | `warn` had 0 false alarms offline; `fail` waits for its before / after (r6a ran the `ccx2nc` arm; its result is not published yet) | no (`ccx run --namecheck` per run) |
+| `lanes.default` | `0` | `ccx batch` / `ccx q run` continue a few warm sessions instead of one per piece | about 40 % cheaper than a fresh session per piece, but slower and still dearer than one run ([warm lanes](research/2026-10-25-warm-lanes.md)); to be decided by a confirmation run | yes |
+| `memory.by_kind` | `false` | start-up brings only preferences and constraints; briefs bring matching pitfalls and facts | to be decided by a confirmation run; the H11 trial that was to decide it was voided on 2026-10-26 | yes |
+| `memory.start_scene` | `false` | start-up also brings the project's scene block | same as above | yes |
+| `review.context` | `false` | the review brief also gets the code around the change | replay of round 5: about half the time and output, but caught the known bug 11 of 28 times instead of 19 | no |
+| `review.fix_rereview` | `"full"` | `"focus"` re-reviews a fix against the first review's problems | timing decides it: a median 2.4 s saved against a 10 s bar (missed `[must]` 24 vs 21 of 33, one pass each, not told apart from noise) | no |
+| `review.cache_ttl` | `""` | sets a Claude reviewer's prompt-cache lifetime (`"5m"` / `"1h"`) | not A/B-tested | no |
+| `lead.model_by_task` | `false` | a new lead conversation picks its model by task difficulty | thresholds are provisional until `scripts/eval/r5.py --lead-model auto` is compared with fixed models | yes |
+| `subagent.codex_memories` | `true` | `false` turns Codex memories off for sub-agents | B3: changes only after the before / after against the person's daily setup ([plan](research/2026-10-30-b3-lean-switches-plan.md)) | no |
+| `subagent.clean` | `false` | sub-agents start without the person's skills and user settings | same B3 measurement; may lose right answers that personal skills bring | no |
+| `subagent.codex_lean_tools` | `false` | write runs on Codex lose web search, image generation and goals | same B3 measurement | no |
+| `policy.picked` | `""` | pre-authorizes delegation by tier, without proposing first | a person's own choice, never a default | yes |
 
-Off by design rather than experimental: `board.github` and `intake.github` (empty: nothing touches the network
-until you name a private repository of yours).
+Empty by design rather than experimental (set with `ccx config set`): `board.github` and `intake.github` (nothing
+touches the network until you name a private repository of yours), `report.publish_dir`, `projects.roots`.
 
 ## 4. How to run an evaluation
 
@@ -73,16 +74,17 @@ Evaluations spend real money and their numbers end up in the README, so the rule
 2. **Price it without running it.** `python scripts/eval/r5.py run ... --dry-run` prints the schedule and its cost.
 3. **Use the clean room.** `scripts/eval/r5.py` builds every unit from zero (fresh repo copy, hub, agent homes, a
    settings file with the person's hooks and memory off; see `scripts/eval/preflight.py`) and refuses to start
-   without it. Pin the commit you measure (`--pin-commit`).
+   without it (`--force-unclean` overrides that, and the rows say so). Pin the commit you measure (`--pin-commit`).
 4. **Keep the machine quiet.** While a timed run is going, don't run the full test suite or other heavy jobs on the
-   same machine; the run log ends with `exit=` when it is done.
+   same machine. Start it so that its log says when it ended, e.g. `python scripts/eval/r5.py run ... > run.log 2>&1;
+   echo exit=$? >> run.log`.
 5. **Summarize with the script, not by hand.** `python scripts/eval/r5.py summary --tag <tag>` counts clean rows
    only and pairs arms on shared units; `scripts/eval/r5_timeline.py` shows where the time went.
 6. **Publish what you found, including what went against ccx.** A report in `docs/research/` with its limits, a row
    in [research/README.md](research/README.md), scrubbed data via `r5.py export docs/research/data/<file>.json`
-   (check it for local paths: the hygiene test runs on every push).
+   (check it for local paths: `tests/test_repo_hygiene.py` flags any drive path in that folder).
 
-Examples (from the script's own help):
+Examples (adapted from the script's own help):
 
 ```bash
 python scripts/eval/r5.py run --taskset holdout --rounds 3 --arms ccx2 --tag ho4 --dry-run
@@ -90,8 +92,8 @@ python scripts/eval/r5.py run --rounds 2 --arms ccx2,builtin2 --tag r5d --budget
 python scripts/eval/r5.py summary --taskset holdout
 ```
 
-The hold-out tasks (`scripts/eval/tasks_holdout.py`) were kept apart for final claims. Once they are public they
-are no longer a hold-out set; a new claim needs new unseen tasks.
+The hold-out tasks (`scripts/eval/tasks_holdout.py`) were kept apart for final claims. The file is in the public
+repository, so they are no longer a hold-out set; a new claim needs new unseen tasks.
 
 ## 5. Releasing
 
