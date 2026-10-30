@@ -18,7 +18,7 @@ tests, pre-registered rules; 90 units counted, totals over the clean rows, true 
 | Lead tokens, median | 62k | 56k | 36k |
 | External repositories only (5 tasks) | 15/15, $0.036 | 14/14, $0.052 | 15/15, $0.030 |
 
-By the pre-registered rules ccx is not less right (29 ≥ 29 − 2; a pointwise rule, not a statistical non-inferiority
+By the pre-registered rules ccx was not seen to be less right (29 ≥ 29 − 2; a pointwise rule, not a statistical non-inferiority
 test: the per-task interval of a difference is about ±3/30) and cheaper: −$0.027 per success against self (95 % CI
 −0.054 to −0.004) and −$0.040 against the built-in default usage (−0.086 to −0.015), about 30 % and 39 % less. It
 took about 3× self's wall time. Limits that go with these numbers: the built-in arm is its default usage (told to run

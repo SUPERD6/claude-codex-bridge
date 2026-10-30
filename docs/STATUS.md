@@ -16,7 +16,7 @@ may leak answers (external tasks only: 15 % / 42 %), 10 tasks, one lead model. T
 
 | Result | Numbers | Source |
 |---|---|---|
-| Hold-out confirmation (hc1) | self 29/30 $0.090 21 s; built-in default usage 27/28 $0.103 123 s; ccx 29/30 $0.063 61 s; paired CIs exclude 0; a pointwise rule, not a statistical non-inferiority test | [hc1](research/2026-10-29-hc1-holdout.md) |
+| Hold-out confirmation (hc1) | self 29/30 $0.090 21 s; built-in default usage 27/28 $0.103 123 s; ccx 29/30 $0.063 61 s; ccx's two paired cost CIs exclude 0 (built-in − self does not); a pointwise rule, not a statistical non-inferiority test | [hc1](research/2026-10-29-hc1-holdout.md) |
 | Shared work context (`ccx run --context`) | right the first time 36/36 with it vs 7/36 without (McNemar p ≈ 4e-9), 0 vs 29 reworks, 63 % less spend in all; best case by design | [shared-context A/B](research/2026-10-25-shared-context-ab.md) |
 | Project memory reaches the sub-agent | hidden test 9/9 with the note vs 0/9 without (Holm p = 0.016) | [seven-cores A/B](research/2026-10-24-seven-cores-ab.md) §2.5 |
 | Review (round 2) | off 33/36, on 36/36 (p = 0.25), caught the real bug every time, +$0.004 a task | [round 2](research/2026-10-25-seven-cores-r2.md) 4-C |
