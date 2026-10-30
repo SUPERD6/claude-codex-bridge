@@ -257,6 +257,18 @@ parent's history on every request. Claude's Agent tool never passes the parent's
 unchanged. Such a run records `parallel_fork_turns` (`all` or `none`; `parallel_fork_turns_moved` when it
 went on to another agent). Off until measured (M3).
 
+### Experimental: `ccx batch --merge` (`[merge]`, off until measured)
+
+A sub-agent's input is mostly a prefix re-sent on every request, so five small pieces run separately pay that start
+five times. With `--merge` (or `[merge] default = true`), pieces of one batch that share folder, agent, model rung and
+mode, take at most `piece_minutes` (5; a piece without `minutes` counts as 5) and declare no common path (`paths`, a
+list; in a batch plan `files` stays the routing estimate) run as one run of up to `max_pieces` (5) pieces and
+`total_minutes` (15). The run never escalates and starts no sub-agents of its own. Afterwards ccx runs each piece's own
+`check`; failed pieces get one follow-up in the same session, and a piece that still fails becomes a run of its own on
+the usual ladder. `results` still has one entry per piece (with `merged_run` / `merged_with`), and
+`ccx undo <run> --piece <id>` puts back only the paths that piece declared. Costs: one review for the whole diff
+(the 50-line trigger counts every piece) and longer wall time. Not with `--lanes`.
+
 ## Safety
 
 - Sub-agents **may edit files** by default:
