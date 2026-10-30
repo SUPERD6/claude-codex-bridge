@@ -532,14 +532,59 @@ def score(repo: Path, task: dict, work: Path, job: PF.Job | None = None, python:
         if spec:
             env.update(ext_repo.run_env(spec))
         color = ["--color=no"] if spec else []         # humanize's addopts asks for colour: keep the row's text plain
-        out, _err, rc, _left = PF.run([py, "-m", "pytest", "-q", "-p", "no:cacheprovider", *color,
-                                       *pytest_args(task)], cwd=repo, env=env, timeout=900, job=job)
+        out, err, rc, _left = PF.run([py, "-m", "pytest", "-q", "-p", "no:cacheprovider", *color,
+                                      *pytest_args(task)], cwd=repo, env=env, timeout=900, job=job)
+        full = ANSI.sub("", (out or "") + (f"\n--- stderr ---\n{err}" if err else ""))
         if rc == -9:
-            return {"ok": False, "pytest": "timeout"}
+            return {"ok": False, "pytest": "timeout", "output": full, "failed": failed_ids(full)}
         tail = ANSI.sub("", (out.strip().splitlines() or [""])[-1])
-        return {"ok": rc == 0, "pytest": tail[:200]}
+        return {"ok": rc == 0, "pytest": tail[:200], "output": full, "failed": failed_ids(full)}
     finally:
         r2._rmtree(iso)
+
+
+FAILED_LINE = re.compile(r"^(?:FAILED|ERROR) (\S+)", re.M)
+
+
+def failed_ids(output: str, limit: int = 100) -> list[str]:
+    """The failing test ids of a pytest run, from its short summary (`FAILED path::test - ...`, `ERROR path`)."""
+    out = []
+    for m in FAILED_LINE.finditer(output or ""):
+        if m.group(1) not in out:
+            out.append(m.group(1))
+    return out[:limit]
+
+
+ARTIFACT_MAX = 5_000_000      # bytes kept of one artifact file
+
+
+def final_diff(repo: Path) -> str | None:
+    """Everything the unit changed since the start commit, committed or not, new files included (before scoring: the
+    hidden tests are not in it)."""
+    if not (Path(repo) / ".git").exists():
+        return None
+    start = (git(repo, "rev-list", "--max-parents=0", "HEAD").split() or [None])[0]
+    if not start:
+        return None
+    git(repo, "add", "-A", "-N")
+    return git(repo, "diff", "--binary", start)
+
+
+def keep_artifacts(dest: Path, row: dict, sc: dict | None, diff: str | None) -> None:
+    """A unit that was not right: its failing hidden test ids in the row (`hidden_failed`) and, under dest, the full
+    hidden pytest output and its final diff, written before the unit's folders are cleaned (`artifacts`: where)."""
+    dest = Path(dest)
+    dest.mkdir(parents=True, exist_ok=True)
+    kept = []
+    if sc is not None:
+        row["hidden_failed"] = sc.get("failed") or []
+        (dest / "hidden-pytest.txt").write_text((sc.get("output") or "")[:ARTIFACT_MAX], encoding="utf-8")
+        kept.append("hidden-pytest.txt")
+    if diff is not None:
+        (dest / "final.diff").write_text(diff[:ARTIFACT_MAX], encoding="utf-8")
+        kept.append("final.diff")
+    if kept:
+        row["artifacts"] = {"dir": dest.name, "files": kept}
 
 
 def changed(repo: Path) -> dict:
@@ -1347,6 +1392,7 @@ def run_unit(u: dict, a, work: Path) -> dict:
     stream.unlink(missing_ok=True)              # an earlier, unfinished try of this unit must not be audited
     row: dict = {**u}
     env = None
+    sc, diff, scored = None, None, False
     before, job = PF.snapshot(), PF.Job()
     try:
         r2._rmtree(hub)
@@ -1375,6 +1421,10 @@ def run_unit(u: dict, a, work: Path) -> dict:
         row.update(direct_unit(u, a, repo, hub, env, job) if not has_lead(u["arm"]) else
                    lead_unit(u, a, work, repo, hub, iso, env, job))
         row.update(changed(repo))
+        try:
+            diff = final_diff(repo)
+        except Exception:  # noqa: BLE001 — an artifact only
+            diff = None
         bookkeeping(row, u["arm"], hub, task)
         must_telemetry(row, hub, repo)
         try:                                      # what the [subagent] switches did, per ccx run (telemetry only)
@@ -1382,7 +1432,10 @@ def run_unit(u: dict, a, work: Path) -> dict:
         except Exception as e:  # noqa: BLE001
             row["switches_applied"] = {"error": f"{type(e).__name__}: {e}"[:300]}
         sc = score(repo, task, work, job, **({"python": ext_python(a), "source": xkw["source"]} if xkw else {}))
+        scored = True
         row.update({**u, "ok": sc["ok"], "pytest": sc["pytest"], "hub": hinfo})
+        if not sc["ok"]:
+            row["hidden_failed"] = sc.get("failed") or []
         for rid in row.get("ccx_run_ids") or []:
             ccx_verify(rid, bool(sc["ok"]), f"eval-r2 hidden acceptance: {sc['pytest']}", hub=hub, env=env)
         row["archived_sessions"] = archive_hub(hub, env=env)
@@ -1407,6 +1460,14 @@ def run_unit(u: dict, a, work: Path) -> dict:
                 row["audit"]["clean"] = False
                 row["audit"].setdefault("problems", []).append("daily login: " + row["daily"]["login"].get(
                     "note", "conflict"))
+        art = getattr(a, "artifacts_dir", None)
+        if art and not row.get("ok"):              # before the clean-up: what the unit left and how it failed
+            try:
+                if diff is None and not scored:    # it broke before scoring: the repo has no hidden tests in it yet
+                    diff = final_diff(repo)
+                keep_artifacts(Path(art) / f"{u.get('tag') or 'untagged'}-{iso.key}", row, sc, diff)
+            except Exception as e:  # noqa: BLE001
+                row["artifacts"] = {"error": f"{type(e).__name__}: {e}"[:200]}
         fresh = u.get("taskset", "r5") != "r5"     # hold-out: nothing of a finished unit stays in the work dir
         if fresh and stream.exists():
             keep = OUT / "streams" / str(u.get("tag") or "untagged")
@@ -1847,6 +1908,7 @@ def cmd_run(a) -> int:
     print(f"[preflight] {rep['result']}: commit {rep['commit'][:12]} cli {rep['cli']} codex {rep['codex']['mode']} "
           f"claude {rep['claude_isolation']} jobs {a.jobs} canary {rep['canary']}", flush=True)
     a.preflight = rep
+    a.artifacts_dir = out.parent / f"{out.stem}-artifacts"    # a unit that was not right keeps its evidence here
     if daily:                                      # one snapshot of the person's setup for the whole invocation
         try:
             snap = freeze_daily(a, work / DAILY_SNAPSHOT)

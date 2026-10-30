@@ -1008,3 +1008,71 @@ def test_postflight_attributes_new_real_ledger_rows(machine, tmp_path, monkeypat
                            {"type": "verdict", "run_id": "mine-7", "ts": 3, "unit_run": False, "eval_label": False}]
     assert "type=verdict run_id=mine-7 ts=3 unit_run=no" in out and "my own work" not in out
     assert r5.ledger_attribution(led, 10**6, set())["note"].startswith("the ledger is smaller")
+
+
+def test_a_unit_that_is_not_right_keeps_its_failing_tests_output_and_diff(machine, tmp_path, monkeypatch):
+    work = tmp_path / "w"
+    work.mkdir()
+
+    def make(task, dest):
+        dest.mkdir(parents=True, exist_ok=True)
+        (dest / "a.py").write_text("x = 1\n", encoding="utf-8")
+        r5.git(dest, "init", "-q")
+        r5.git(dest, "add", "-A")
+        r5.git(dest, "commit", "-q", "-m", "start")
+    monkeypatch.setattr(r5, "make_repo", make)
+    monkeypatch.setattr(r5.r3, "make_hub", lambda hub: (hub / "ccx").mkdir(parents=True) or {"warm": False})
+    monkeypatch.setattr(r5, "archive_hub", lambda hub, env=None: 0)
+    out = ("F.\n=== short test summary info ===\nFAILED tests/test_a.py::test_one - assert 1 == 2\n"
+           "ERROR tests/test_b.py - ImportError\n1 failed, 1 passed, 1 error in 0.1s\n")
+
+    def score(repo, task, work_, job=None):
+        (repo / "tests").mkdir(exist_ok=True)
+        (repo / "tests" / "test_hidden.py").write_text("HIDDEN\n", encoding="utf-8")   # not in the kept diff
+        return {"ok": False, "pytest": "1 failed", "output": out, "failed": r5.failed_ids(out)}
+    monkeypatch.setattr(r5, "score", score)
+
+    def lead(u, a, work_, repo, hub, iso, env, job):
+        (repo / "a.py").write_text("x = 2\n", encoding="utf-8")
+        (repo / "new.py").write_text("y = 3\n", encoding="utf-8")
+        return {"usd": 0.1, "wall_s": 1}
+    monkeypatch.setattr(r5, "lead_unit", lead)
+
+    class A:
+        claude_isolation, codex_home, dsh_home = "flags", str(machine["codex"]), "unit"
+        preflight = dict(REP)
+        artifacts_dir = tmp_path / "res-artifacts"
+    u = {"tag": "b3", "round": 1, "task": r5.IDS[0], "arm": "self", "label": f"eval-r5:b3:1:{r5.IDS[0]}:self"}
+    row = r5.run_unit(u, A, work)
+    assert row["ok"] is False and row["hidden_failed"] == ["tests/test_a.py::test_one", "tests/test_b.py"]
+    d = A.artifacts_dir / f"b3-1-{r5.IDS[0]}-self"
+    assert row["artifacts"] == {"dir": d.name, "files": ["hidden-pytest.txt", "final.diff"]}
+    assert (d / "hidden-pytest.txt").read_text(encoding="utf-8") == out
+    diff = (d / "final.diff").read_text(encoding="utf-8")
+    assert "+x = 2" in diff and "new.py" in diff and "HIDDEN" not in diff
+    assert row["switches_applied"]["runs"] == [] and "match" not in row["switches_applied"]
+
+    def broken(u_, a, work_, repo, hub, iso, env, job):
+        (repo / "a.py").write_text("x = 9\n", encoding="utf-8")
+        raise RuntimeError("lead crashed")
+    monkeypatch.setattr(r5, "lead_unit", broken)
+    row = r5.run_unit({**u, "round": 2}, A, work)
+    d2 = A.artifacts_dir / f"b3-2-{r5.IDS[0]}-self"
+    assert row["ok"] is False and row["artifacts"]["files"] == ["final.diff"] and "hidden_failed" not in row
+    assert "+x = 9" in (d2 / "final.diff").read_text(encoding="utf-8")
+
+    monkeypatch.setattr(r5, "lead_unit", lead)
+    monkeypatch.setattr(r5, "score", lambda repo, task, work_, job=None: {"ok": True, "pytest": "2 passed"})
+    row = r5.run_unit({**u, "round": 3}, A, work)
+    assert row["ok"] and "artifacts" not in row and not (A.artifacts_dir / f"b3-3-{r5.IDS[0]}-self").exists()
+
+
+def test_failed_ids_and_score_keep_the_full_output(tmp_path, monkeypatch):
+    assert r5.failed_ids("FAILED a.py::t - x\nFAILED a.py::t - x\nERROR b.py\nfailed nothing\n") == ["a.py::t", "b.py"]
+    monkeypatch.setattr(r5, "hidden", lambda task, work, source=None: {})
+    monkeypatch.setattr(r5.PF, "run", lambda *a, **k: ("FAILED tests/x.py::t - boom\n1 failed\n", "warn", 1, []))
+    repo = tmp_path / "repo"
+    (repo / "tests").mkdir(parents=True)
+    sc = r5.score(repo, {"id": "x", "tests": ["tests/x.py"]}, tmp_path)
+    assert sc["ok"] is False and sc["pytest"] == "1 failed" and sc["failed"] == ["tests/x.py::t"]
+    assert sc["output"].startswith("FAILED tests/x.py::t") and "--- stderr ---\nwarn" in sc["output"]
