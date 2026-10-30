@@ -54,7 +54,7 @@ The Claude Code install ran for real (from a temporary config). The Codex instal
 ```powershell
 git clone https://github.com/SUPERD6/relayline
 cd relayline
-.\install.ps1 -Hub <your hub path>      # Windows; macOS/Linux: ./install.sh <hub path>
+.\install.ps1 -Hub <your hub path>      # Windows; macOS/Linux (experimental, CI only): ./install.sh <hub path>
 ```
 
 **The install script:**

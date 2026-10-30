@@ -19,7 +19,7 @@ is what `ccx lead`, `ccx sum` and `ccx fresh` are for. `ccx report` shows the di
 `ccx trial` runs a week-long comparison.
 
 **I'm on a subscription, not the API.** Costs are shown at API prices so runs can be compared; the dashboard also
-shows how much of each tool's quota went where. When one tool runs out, the work moves to the other.
+shows how much of each tool's quota went where. When one tool runs out, the work moves to the other (experimental: tested with stand-ins only, no real quota stop yet).
 
 **Is it safe to let a sub-agent edit files?** Edits stay in the task's folder, every write run is snapshotted for
 `ccx undo`, and `--mode read` or `--worktree` keep your tree untouched. Details in [SECURITY.md](../SECURITY.md).
