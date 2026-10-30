@@ -522,8 +522,9 @@ def run(req: Request, p: Paths) -> dict:
         brief += "\n\n" + subagents.PARALLEL
         # [subagents] fork_turns = "none" (B3 item 7, off by default): a Codex sub-agent's own children start without
         # its history. Decided on the agent asked for (a fallback to another vendor keeps the brief as it was)
-        pv = provider_of(cfg, req.provider or req.to)
-        if subagents.fork_turns(cfg) == "none" and (pv.get("agent") if pv else req.to) == "codex":
+        # native Codex only: through a provider its own sub-agents are switched off (see the provider flags below)
+        if subagents.fork_turns(cfg) == "none" and req.to == "codex" and not req.provider \
+                and not provider_of(cfg, req.to):
             brief += subagents.FORK_NONE
             fork_none = True
     shared, shared_meta = "", None

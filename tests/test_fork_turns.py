@@ -43,6 +43,11 @@ class TestForkTurns(Env):
         assert "fork_turns" not in call["prompt"] and "parallel_fork_turns" not in rec
         call, rec = self.go("codex", "--parallel", "--subagents", "off")  # sub-agents off: nothing to fork
         assert "fork_turns" not in call["prompt"]
+        # Codex through a provider has its own sub-agents switched off: no sentence asking for them
+        r = self.ccx("run", "--from", "claude", "--provider", "deepseek-codex", "--parallel", "--new", BRIEF,
+                     env={"DEEPSEEK_API_KEY": "sk-test"})
+        assert r.returncode == 0, r.stdout + r.stderr
+        assert "fork_turns" not in self.calls()[-1]["prompt"]
 
 
 def test_setting_values():
