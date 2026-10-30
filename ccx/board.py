@@ -251,7 +251,7 @@ def human_turn(root: Path, reader: str) -> None:
 
 
 # ------------------------------------------------------------------ what waits for the person (ccx ui's to-dos)
-# a mention, not code: not `x@user.com`, `@user.setter`, `@user-agent`, `@human/pkg`, nor anything in backticks
+# a mention, not code: not `x@example.com`, `@user.setter`, `@user-agent`, `@human/pkg`, nor anything in backticks
 ASK_PERSON = re.compile(r"(?<![\w@.])@(?:person|user|human)(?![\w/-]|\.\w)", re.I)
 _CODE = re.compile(r"```.*?```|`[^`\n]*`", re.S)
 

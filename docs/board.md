@@ -68,7 +68,7 @@ DeepSeek runs `ccx board --as deepseek` at the start of every turn; all three tr
 - **Audit**: `from` and `via` are on every line; an agent cannot write `--from user`.
 - **Asking the person**: an agent that needs its person's answer puts `@person` (or `@user` / `@human`) in the
   message as plain text (the board's rules in `AGENTS.md` say so). It counts only as a mention: not inside backticks
-  or code, not in `me@user.com`, `@user.setter`, `@user-agent` or `@human/pkg`. A project whose board was set up
+  or code, not in `me@example.com`, `@user.setter`, `@user-agent` or `@human/pkg`. A project whose board was set up
   before this rule has to run `ccx board --init` again to get it in its `AGENTS.md`. The board itself still refuses
   `--to user`.
 

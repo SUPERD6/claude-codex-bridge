@@ -449,8 +449,8 @@
     "other_calls": 2
    },
    "bash": [
-    "cd \"~/AppData/Local/Temp/claude/D--AI-Workspace-Claude-Working-claude-codex-bridge--claude-worktrees-vendors-267d34/563c7201-bf17-4d61-a826-fb3871ae619b/scratchpad/r3/1-coupon-builtin\" && git ls-files && cat shop/*.py && ls tests 2>/dev/null",
-    "cd \"~/AppData/Local/Temp/claude/D--AI-Workspace-Claude-Working-claude-codex-bridge--claude-worktrees-vendors-267d34/563c7201-bf17-4d61-a826-fb3871ae619b/scratchpad/r3/1-coupon-builtin\" && git show --stat HEAD | head -20 && cat shop/coupons.py && python -m pytest -q 2>&1 | tail -3 && git status --short"
+    "cd \"<scratch>/r3/1-coupon-builtin\" && git ls-files && cat shop/*.py && ls tests 2>/dev/null",
+    "cd \"<scratch>/r3/1-coupon-builtin\" && git show --stat HEAD | head -20 && cat shop/coupons.py && python -m pytest -q 2>&1 | tail -3 && git status --short"
    ]
   },
   {
