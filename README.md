@@ -126,6 +126,7 @@ what is verified and how is in [docs/STATUS.md](docs/STATUS.md).
 | [Shared work context](docs/shared-context.md) · [The board](docs/board.md) | what open sessions share with each other, and how |
 | [Questions and similar projects](docs/faq.md) | cost, subscriptions, safety, which tools work; how ccx differs from similar projects |
 | [Design](docs/DESIGN.md) · [Decisions](docs/DECISIONS.md) · [Changes](CHANGELOG.md) | the inside |
+| [Maintenance](docs/maintenance.md) | picking ccx up again: known issues, experimental switches and why they are off, running an evaluation, releasing |
 
 **Not the similarly named projects:** relayline was called `claude-codex-bridge`, but it is not
 [CCB](https://github.com/SeemSeam/claude_codex_bridge) and not OpenAI's
