@@ -112,6 +112,7 @@ GitHub；完整清单见 STATUS。
 | [共享工作上下文](docs/shared-context.zh.md) · [留言板](docs/board.zh.md) | 开着的会话之间共享什么、怎么共享 |
 | [常见问题和同类项目](docs/faq.zh.md) | 花费、订阅、安全、哪些工具能用；和同类项目有什么不同 |
 | [设计](docs/DESIGN.zh.md) · [决策](docs/DECISIONS.md) · [变更](CHANGELOG.md) | 内部 |
+| [维护](docs/maintenance.zh.md) | 隔一段时间再接手：已知问题、实验性开关和为什么关着、怎么跑评测、怎么发版 |
 
 **和同名项目不是一个东西：** relayline 原名 `claude-codex-bridge`，但不是
 [CCB](https://github.com/SeemSeam/claude_codex_bridge)，也不是 OpenAI 官方的
