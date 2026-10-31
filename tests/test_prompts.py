@@ -45,3 +45,36 @@ def test_review_fix_round_asks_for_targeted_tests_not_the_whole_check():
     src = inspect.getsource(delegate)
     assert "run the checks again" not in src
     assert "re-run only the tests touching" in src and "not the whole check, ccx runs that itself" in src
+
+
+def test_read_task_prompt_says_read_the_files_and_where_the_answer_goes():
+    # Install walkthrough 2026-10-31: README's first run on T1 (luna/low) read nothing and answered "summarised in
+    # three lines" or NEEDS_WRITE. What the sub-agent receives, end to end through the fake CLI and the schema it gets.
+    import json
+    from test_ccx import Env
+
+    class T(Env):
+        def runTest(self):
+            pass
+    t = T()
+    t.setUp()
+    try:
+        r = t.ccx("run", "--to", "codex", "--mode", "read", "--no-fallback", "--no-escalate", "--review", "off",
+                  "Summarise README.md in three lines")
+        assert r.returncode == 0, r.stderr
+        exe = [c for c in t.calls() if c["agent"] == "codex" and c["argv"][:1] == ["exec"]]
+        assert exe, t.calls()
+        finish = exe[0]["prompt"].split("## Finish", 1)[1]
+        assert "you have not seen any file yet" in finish and "read the files it names" in finish
+        assert "put the answer itself in summary" in finish and "nothing has to be written to a file" in finish
+        assert "Summarise README.md in three lines" in exe[0]["prompt"].split("## Finish")[0]
+        from ccx.config import RESULT_SCHEMA
+        schema = json.loads(RESULT_SCHEMA.read_text(encoding="utf-8"))
+        assert "the answer itself" in schema["properties"]["summary"]["description"]
+    finally:
+        t.tearDown()
+
+
+def test_answer_line_leads_the_usual_finish_text_and_stays_short():
+    assert prompts.SELFCHECK.startswith(prompts.ANSWER)
+    assert len(prompts.ANSWER) < 360

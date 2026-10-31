@@ -40,7 +40,15 @@ Final message = the JSON result (schema enforced). summary <= 120 words, facts o
 CLEAN_LANG = " Write summary and open_questions in the language the task above is written in."
 
 
-SELFCHECK = ("Before you finish, check your own work: run the relevant tests or commands that exist (iterate with "
+# Install walkthrough (2026-10-31): README's first run ("Summarise README.md in three lines", --mode read) on
+# gpt-6-luna/low in a fresh install ran no command 4/4 + 2/2 times: once a summary that only said "README.md is
+# summarised in three lines", once blocked with NEEDS_WRITE (it thought the lines had to go into a file). The Finish
+# text below spoke only of changes ("say what changed"); nothing said where an answer goes.
+ANSWER = ("If the task asks for an answer rather than a change (summarise, explain, find, list): you have not seen "
+          "any file yet, so first read the files it names with your tools (an answer from memory or a guess is "
+          "wrong), then put the answer itself in summary: the content asked for, not a note that you gave it; "
+          "nothing has to be written to a file. ")
+SELFCHECK = (ANSWER + "Before you finish, check your own work: run the relevant tests or commands that exist (iterate with "
              "targeted runs: one file, -x, -k NAME; run the full set once at the end), and re-read your changes against the task. " + WIRING + "List what you ran in commands_run and the outcome in verification. In summary "
              "say what changed and why; put anything you are unsure of, or that the lead must decide, in open_questions.")
 
