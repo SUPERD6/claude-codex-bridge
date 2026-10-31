@@ -405,9 +405,17 @@ def unchanged(snap: dict | None, since: float | None = None) -> bool | None:
     return True
 
 
-def undo(p: Paths, run_id: str, apply: bool = False, wrong: bool = False) -> dict:
+def undo(p: Paths, run_id: str, apply: bool = False, wrong: bool = False, piece: str | None = None) -> dict:
     """Put back the files a write run changed. Dry run unless apply. New files are moved aside, not deleted.
-    Undoing is not a verdict by itself (people undo to try again, or to split the work); `wrong` says it was."""
+    Undoing is not a verdict by itself (people undo to try again, or to split the work); `wrong` says it was.
+    piece: a merged run (`ccx batch --merge`): only the files that piece declared; never a verdict (a verdict is
+    per run), and the run is not marked undone (its other pieces stand)."""
+    declared = None
+    if piece is not None:
+        if wrong:
+            raise ValueError("--wrong records a verdict on the whole run; with --piece only files are put back")
+        from .merge import piece_files
+        declared = piece_files(ledger.load_run(p, run_id), piece)
     f = p.runs / run_id / "undo.json"
     if not f.exists():
         raise FileNotFoundError(f"run {run_id} has no undo snapshot (read-only run, worktree run, or not a git repo)")
@@ -418,8 +426,13 @@ def undo(p: Paths, run_id: str, apply: bool = False, wrong: bool = False) -> dic
     git_failed = rc_d != 0 or rc_u != 0
     new_files = sorted(set(untracked.splitlines()) - set(snap["untracked"]))
     restore = [x for x in changed.splitlines() if x]
+    if declared is not None:
+        from .merge import restrict
+        restore, new_files = restrict(restore, declared), restrict(new_files, declared)
     out = {"run_id": run_id, "restore": restore, "move_aside": new_files, "applied": False,
            "warning": "also reverts any edits you made to these files after the run"}
+    if piece is not None:
+        out["piece"] = piece
     if snap.get("chain_from"):
         out["chain_from"] = snap["chain_from"]
         out["warning"] = (f"this run went on from run {snap['chain_from']}: undo puts back what the whole chain "
@@ -447,6 +460,10 @@ def undo(p: Paths, run_id: str, apply: bool = False, wrong: bool = False) -> dic
             dst.parent.mkdir(parents=True, exist_ok=True)
             os.replace(src, dst)
         out.update(applied=True, moved_to=str(trash) if new_files else None)
+        if piece is not None:            # one piece of a merged run: the run itself stands, no verdict
+            ledger.append_event(p, {"type": "undo", "run_id": run_id, "piece": piece, "reason": "undone",
+                                    "wrong": False, "ts": time.time()})
+            return out
         (p.runs / run_id / "undone.json").write_text(json.dumps({"ts": time.time(), "wrong": wrong}),
                                                      encoding="utf-8")
         ledger.append_event(p, {"type": "undo", "run_id": run_id, "reason": "undone", "wrong": wrong,
