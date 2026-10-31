@@ -144,13 +144,16 @@ def test_every_endpoint_returns_the_demo(server):
 
 def test_receipt_and_token_page_have_every_part(server):
     """P2-2: what the launch shows. One hand-off's receipt (what it cost, the check ccx ran, who reviewed, the change
-    from ccx's own snapshots) and the token page (the published table, per-request numbers, a review run grouped with
-    the run it reviewed, a Codex helper session under its run)."""
+    from ccx's own snapshots) and the token page (the published table, per-request numbers, a Codex helper session
+    under its run; the review runs, ephemeral as ccx records them, are not listed there)."""
     srv, base, p = server
     code, _, body = get(srv, "/api/run/demo-r-ok")
     r = json.loads(body)
     assert code == 200 and r["check"]["passed"] and (r["review"]["verdict"], r["review"]["by"]) == ("pass", "claude:haiku:low")
     assert r["agent"] == "codex" and r["ok"] and r["tokens"]
+    d = json.loads(get(srv, "/api/data")[2])
+    pc = next(pc for pr in d["projects"] for t in pr["tasks"] for pc in walk(t["pieces"]) if pc["run_id"] == "demo-r-ok")
+    assert pc["usd"] == 0.0051                                  # the receipt: the run ($0.0040) and its review ($0.0011)
     j = json.loads(get(srv, "/api/judge/demo-r-ok")[2])
     assert j["ran"]["cmd"] == "pytest -q" and j["ran"]["passed"]
     if HAS_GIT:                                   # the receipt's change comes from snapshots, not from what it said
@@ -160,7 +163,9 @@ def test_receipt_and_token_page_have_every_part(server):
     assert code == 200 and tok["measured"]["source"] == "docs/measured.md"
     runs = {r["run_id"]: (t, r) for t in tok["tasks"] for r in t["runs"]}
     assert runs["demo-r-ok"][1]["requests"] == 5
-    assert runs["demo-rv-r-ok"][0] is runs["demo-r-ok"][0]                   # the review sits with its run
+    assert not any(r.startswith("demo-rv-") for r in runs)                   # ephemeral, as real reviews are
+    rv = json.loads((p.runs / "demo-rv-r-ok" / "run.json").read_text(encoding="utf-8"))
+    assert rv["ephemeral"] and rv["caller"] == "ccx-review" and rv["label"] == "review:demo-r-ok"   # review.py's shape
     kids = runs["demo-q2"][1]["children"]
     assert len(kids) == 1 and kids[0]["vendor"] == "codex" and kids[0]["tokens"]["total"] > 0
 
@@ -183,13 +188,24 @@ def render(srv, route, tmp_path):
     """The page as a headless browser leaves it after its scripts ran (--dump-dom), in English, as text."""
     import re
     prof = tmp_path / f"profile-{abs(hash(route))}"
-    # Linux runners (Ubuntu 24.04) refuse Chrome's own sandbox to an unprivileged user; the page is ours, on 127.0.0.1
-    extra = ["--no-sandbox"] if sys.platform.startswith("linux") else []
-    r = subprocess.run([_browser(), "--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check",
-                        *extra, f"--user-data-dir={prof}", "--lang=en-US", "--virtual-time-budget=10000", "--dump-dom",
-                        f"http://127.0.0.1:{srv.port}/#k={srv.token}&{route}"],
-                       capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
+    # Linux runners (Ubuntu 24.04) refuse Chrome's own sandbox to an unprivileged user (the page is ours, on
+    # 127.0.0.1) and have no keyring; macOS would ask the keychain for a new profile
+    extra = (["--no-sandbox", "--password-store=basic"] if sys.platform.startswith("linux") else
+             ["--use-mock-keychain"] if sys.platform == "darwin" else [])
+    named = bool(os.environ.get("CCX_TEST_BROWSER"))      # a browser named for the test must work: no skip
+    try:
+        r = subprocess.run([_browser(), "--headless=new", "--disable-gpu", "--no-first-run",
+                            "--no-default-browser-check", *extra, f"--user-data-dir={prof}", "--lang=en-US",
+                            "--virtual-time-budget=10000", "--dump-dom",
+                            f"http://127.0.0.1:{srv.port}/#k={srv.token}&{route}"],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90)
+    except subprocess.TimeoutExpired:
+        if named:
+            raise
+        pytest.skip("headless browser did not finish in 90 s")
     if r.returncode != 0 and "<main" not in r.stdout:      # the browser itself did not start: not the page's fault
+        if named:
+            pytest.fail(f"CCX_TEST_BROWSER did not start: {r.stderr[-300:]}")
         pytest.skip(f"headless browser did not start: {r.stderr[-300:]}")
     main = r.stdout[r.stdout.find("<main"):]
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", main)).replace("&amp;", "&")
@@ -202,15 +218,17 @@ def test_headless_browser_renders_the_demo(server, tmp_path):
     import re
     srv, base, p = server
     en = json.loads((REPO / "ccx" / "ui_static" / "strings.json").read_text(encoding="utf-8"))["en"]
+    hc1 = next(t for t in json.loads((REPO / "ccx" / "data" / "measured.json").read_text(encoding="utf-8"))["tables"]
+               if t["id"] == "hc1")["rows"]                  # the published table, whatever its numbers are
     d = json.loads(get(srv, "/api/data")[2])
     shop = project(d, demo.SHOP)
     t = next(t for t in shop["tasks"] if any(pc["run_id"] == "demo-r-ok" for pc in walk(t["pieces"])))
     pc = next(pc for pc in walk(t["pieces"]) if pc["run_id"] == "demo-r-ok")
     pages = {
         "/": [en["demo_banner"][:40], "Discount codes for the shop API", "docs-site"],
-        "/tokens": ["29/30", "$0.063", "27/28", "019a0d3m"],
+        "/tokens": [*(f"${r['usd_per_success']}" for r in hc1), *(r["right"] for r in hc1), "019a0d3m"],
         f"/{shop['id']}/{t['id']}?sel={pc['id']}": ["Add a /health endpoint", "pytest -q", "6 passed in 0.41s",
-                                                   "health.py", "haiku"],
+                                                   "health.py", "haiku", "$0.0051"],
     }
     for route, want in pages.items():
         text = render(srv, route, tmp_path)

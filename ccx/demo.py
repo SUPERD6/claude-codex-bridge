@@ -4,12 +4,13 @@ build() writes a throwaway hub under the system's temporary folder, seeded from 
 (deterministic: the same records every time, only the times follow the clock): two projects; runs in each state (done
 and accepted with its receipt — cost, the check ccx ran, who reviewed, the change from ccx's own snapshots; review
 issues with real before/after snapshots so the decision card shows both columns and a file mismatch; running; failed
-on its environment); the independent reviews as ccx records them (runs of their own, labelled review:<run>); a
+on its environment); the independent reviews as ccx records them (ephemeral runs of their own, review:<run>); a
 three-piece work queue with one piece whose worktree is not merged yet; a board thread stopped by the
 machine-message cap and one message that asks the person; a ledger with a month of costs, so the overview shows the
 spend (only the spend: a saving is shown once `ccx trial` has measured one); per-request numbers and one Codex helper
-session, so the token page has every part; a handoff between leads, so the switch-lead panel has a history. Then `ccx ui` serves it: the same server and page, which only shows a "demo data" mark (the hub carries the
-marker file DEMO_MARK).
+session, so the token page has every part; a handoff between leads, so the switch-lead panel has a history. Then
+`ccx ui` serves it: the same server and page, which only shows a "demo data" mark (the hub carries the marker file
+DEMO_MARK).
 
 Nothing outside that folder is written: the hub, the tool homes (an empty Codex home and a Claude home holding one
 fake lead conversation) and the project folders are all inside it, and env() points CCX_HUB, CLAUDE_CONFIG_DIR,
@@ -102,11 +103,15 @@ def _run(p: Paths, run_id: str, cwd: Path, brief: str, ts: float, *, to: str = "
     return rec
 
 
-def _review(p: Paths, of: str, cwd: Path, ts: float, model: str, effort: str, usd: float) -> dict:
-    """The independent review of run `of`, as ccx records one: a run of its own labelled review:<run>, by the other
-    vendor (Claude here), hidden from the board but counted on the token page and in the month's spend."""
+def _review(p: Paths, of: str, cwd: Path, ts: float, model: str, effort: str, usd: float, tin: int,
+            tout: int) -> dict:
+    """The independent review of run `of`, as ccx/review.py records one: a read run of its own by the other vendor
+    (Claude here), caller ccx-review, labelled review:<run>, ephemeral (so, as with a real review, it is not on the
+    board, the token page or a handoff's recent runs); the run it reviewed carries the verdict and its cost."""
     return _run(p, f"demo-rv-{of[len('demo-'):]}", cwd, f"Review the change of run {of}", ts, to="claude", model=model,
-                effort=effort, caller="ccx", lead=None, secs=40.0, usd=usd, label=f"review:{of}", mode="read",
+                effort=effort, caller="ccx-review", lead=None, secs=40.0, usd=usd, tin=tin, tout=tout,
+                label=f"review:{of}", mode="read",
+                ephemeral=True,
                 result={"status": "done", "summary": "review", "files_changed": [], "verification": ""})
 
 
@@ -132,7 +137,8 @@ def _shop(p: Paths, root: Path, now: float) -> dict:
                              "files_changed": ["health.py", "tests/test_health.py"],
                              "verification": "pytest -q tests/test_health.py: 2 passed"},
                      check={"cmd": "pytest -q", "exit": 0, "passed": True, "tail": "6 passed in 0.41s"},
-                     review={"verdict": "pass", "issues": [], "by": "claude:haiku:low"}, verdict={"ok": True})
+                     review={"verdict": "pass", "issues": [], "by": "claude:haiku:low", "usd": 0.0011,
+                             "run_id": "demo-rv-r-ok"}, verdict={"ok": True})
     # the receipt's change, from ccx's own snapshots (as a real write run leaves them), then committed: the work
     # that follows starts from a clean tree
     if has_git:
@@ -148,7 +154,7 @@ def _shop(p: Paths, root: Path, now: float) -> dict:
             workspace.mark_run_end(run_dir, root)
             workspace.write_end_tree(run_dir, root)
             _git(root, "add", "-A") and _git(root, "commit", "-qm", "GET /health (ccx run demo-r-ok)")
-    _review(p, "demo-r-ok", root, now - 26 * 3600 + 150, "haiku", "low", 0.0011)
+    _review(p, "demo-r-ok", root, now - 26 * 3600 + 150, "haiku", "low", 0.0011, 600, 120)
     _verdict(p, "demo-r-ok", True, now - 25 * 3600)
 
     # review issues, with ccx's own snapshots: the card shows what it says beside what ccx ran, and a mismatch
@@ -160,10 +166,10 @@ def _shop(p: Paths, root: Path, now: float) -> dict:
                       "verification": "ran pytest -q: 7 passed; tried code SAVE10 by hand"},
               check={"cmd": "pytest -q", "exit": 0, "passed": True,
                      "tail": "tests/test_orders.py ..\ntests/test_discounts.py ...\n7 passed in 0.52s"},
-              review={"verdict": "issues", "by": "claude:sonnet:medium",
+              review={"verdict": "issues", "by": "claude:sonnet:medium", "usd": 0.0094, "run_id": "demo-rv-r-review",
                       "issues": ["[must] an expired code is still applied for the last hour (local time used in "
                                  "is_expired)", "[should] a 100% code makes the total negative with shipping"]})
-    _review(p, rid, root, now - 3 * 3600 + 160, "sonnet", "medium", 0.0094)
+    _review(p, rid, root, now - 3 * 3600 + 160, "sonnet", "medium", 0.0094, 1500, 300)
     out["review"] = rv
 
     out["running"] = _run(p, "demo-r-running", root, "Write the OpenAPI description for the orders endpoints",
