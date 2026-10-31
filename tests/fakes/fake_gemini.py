@@ -11,7 +11,7 @@ argv = sys.argv[1:]
 stdin = sys.stdin.read() if "-p" in argv else ""
 log = os.environ.get("FAKE_LOG")
 if log:
-    with open(log, "a", encoding="utf-8") as f:
+    with locked_append(log) as f:
         f.write(json.dumps({"agent": "gemini", "argv": argv, "prompt": stdin, "depth": os.environ.get("CCX_DEPTH")}) + "\n")
 if argv[:1] in (["--version"], ["-v"]):
     print("0.65.0"); sys.exit(0)
@@ -31,6 +31,7 @@ status = "blocked" if mode == "blocked" or (mode == "blocked_then_done" and not 
 res = {"status": status, "summary": f"fake gemini {status}", "files_changed": [], "commands_run": [],
        "verification": "not-run", "open_questions": [], "next_step": ""}
 from fake_discuss import answer as _discuss  # noqa: E402
+from fake_log import locked_append  # noqa: E402  (several fakes may append at once)
 res = _discuss(stdin, "gemini", log) or res
 text = "```json\n" + json.dumps(res) + "\n```"
 for i in range(0, len(text), 40):

@@ -8,12 +8,13 @@ import os
 import sys
 import time
 import uuid
+from fake_log import locked_append  # noqa: E402  (several fakes may append at once)
 
 argv = sys.argv[1:]
 prompt = sys.stdin.read() if "-p" in argv else ""
 log = os.environ.get("FAKE_LOG")
 if log:
-    with open(log, "a", encoding="utf-8") as f:
+    with locked_append(log) as f:
         f.write(json.dumps({"agent": "claude", "argv": argv, "prompt": prompt,
                             "env_claudecode": os.environ.get("CLAUDECODE"),
                             "depth": os.environ.get("CCX_DEPTH"),

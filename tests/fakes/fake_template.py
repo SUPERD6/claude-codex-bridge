@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import uuid
+from fake_log import locked_append  # noqa: E402  (several fakes may append at once)
 
 argv = sys.argv[1:]
 if argv[:1] == ["--version"]:
@@ -12,7 +13,7 @@ if argv[:1] == ["--version"]:
 stdin = sys.stdin.read()
 log = os.environ.get("FAKE_LOG")
 if log:
-    with open(log, "a", encoding="utf-8") as f:
+    with locked_append(log) as f:
         f.write(json.dumps({"agent": "example", "argv": argv, "prompt": stdin}) + "\n")
 sid = argv[argv.index("--resume") + 1] if "--resume" in argv else str(uuid.uuid4())
 ev = lambda **k: print(json.dumps(k), flush=True)  # noqa: E731
