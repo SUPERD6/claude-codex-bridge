@@ -143,6 +143,7 @@ in STATUS. Still work in progress (the release badge above says which version): 
 | [What it does, and how](https://github.com/SUPERD6/relayline/blob/main/docs/features.md) | the seven things in detail, `ccx ui`, one example end to end, where shared things live, tiers, safety |
 | [Install and commands](https://github.com/SUPERD6/relayline/blob/main/docs/install.md) | install from a clone, plugging in your own setup, every command |
 | [Measured](https://github.com/SUPERD6/relayline/blob/main/docs/measured.md) | all measurements with their limits (the hold-out run, the round-5 comparison, the best-case feature A/Bs), how a saving is estimated, external facts checked |
+| [Public benchmark](https://github.com/SUPERD6/relayline/blob/main/bench/README.md) | the hold-out and dev tasks, hidden tests and our result rows: re-run the comparison yourself |
 | [Shared work context](https://github.com/SUPERD6/relayline/blob/main/docs/shared-context.md) · [The board](https://github.com/SUPERD6/relayline/blob/main/docs/board.md) | what open sessions share with each other, and how |
 | [Questions and similar projects](https://github.com/SUPERD6/relayline/blob/main/docs/faq.md) | cost, subscriptions, safety, which tools work; how ccx differs from similar projects |
 | [Design](https://github.com/SUPERD6/relayline/blob/main/docs/DESIGN.md) · [Decisions](https://github.com/SUPERD6/relayline/blob/main/docs/DECISIONS.md) · [Changes](https://github.com/SUPERD6/relayline/blob/main/CHANGELOG.md) | the inside |

@@ -1,0 +1,585 @@
+{
+ "arms": {
+  "self": {
+   "ok": 29,
+   "n": 30,
+   "usd": 2.6218,
+   "cps": 0.0904,
+   "lead_usd": 2.6218,
+   "ccx_usd": 0,
+   "lead_cps": 0.0904,
+   "ccx_cps": 0.0,
+   "lead_only_usd": 2.6218,
+   "sub_usd": 0,
+   "lead_only_cps": 0.0904,
+   "sub_cps": 0.0,
+   "lead_only_usd_med": 0.077617,
+   "lead_tokens_med": 62582,
+   "lead_requests_med": 5,
+   "wall_med": 23.2,
+   "wall_mean": 32.5,
+   "wall_p75": 45.7,
+   "wilson": [
+    0.833,
+    0.994
+   ],
+   "ok_rate_ci_tasks": [
+    0.9,
+    1.0
+   ],
+   "ok_by_round": {
+    "1": 10,
+    "2": 10,
+    "3": 9
+   },
+   "wilson_note": "30 rows from 10 tasks: Wilson takes them as independent (too narrow); see ok_rate_ci_tasks",
+   "namecheck": {
+    "modes": {
+     "warn": 30
+    },
+    "runs": 0,
+    "runs_with_hits": 0,
+    "runs_failed_by_it": 0,
+    "climbs_by_it": 0
+   }
+  },
+  "builtin": {
+   "ok": 27,
+   "n": 28,
+   "usd": 2.7916,
+   "cps": 0.1034,
+   "lead_usd": 2.7916,
+   "ccx_usd": 0,
+   "lead_cps": 0.1034,
+   "ccx_cps": 0.0,
+   "lead_only_usd": 1.6918,
+   "sub_usd": 1.0998,
+   "lead_only_cps": 0.0627,
+   "sub_cps": 0.0407,
+   "lead_only_usd_med": 0.064307,
+   "lead_tokens_med": 55840,
+   "lead_requests_med": 5,
+   "wall_med": 132.9,
+   "wall_mean": 164.5,
+   "wall_p75": 251.8,
+   "wilson": [
+    0.823,
+    0.994
+   ],
+   "ok_rate_ci_tasks": [
+    0.8889,
+    1.0
+   ],
+   "ok_by_round": {
+    "1": 9,
+    "2": 9,
+    "3": 9
+   },
+   "wilson_note": "28 rows from 10 tasks: Wilson takes them as independent (too narrow); see ok_rate_ci_tasks",
+   "excluded": {
+    "unclean": 2,
+    "env_unknown": 0,
+    "of": 30
+   },
+   "namecheck": {
+    "modes": {
+     "warn": 28
+    },
+    "runs": 0,
+    "runs_with_hits": 0,
+    "runs_failed_by_it": 0,
+    "climbs_by_it": 0
+   }
+  },
+  "ccx2": {
+   "ok": 29,
+   "n": 30,
+   "usd": 1.8263,
+   "cps": 0.063,
+   "lead_usd": 1.3582,
+   "ccx_usd": 0.4681,
+   "lead_cps": 0.0468,
+   "ccx_cps": 0.0161,
+   "lead_only_usd": 1.3582,
+   "sub_usd": 0.4681,
+   "lead_only_cps": 0.0468,
+   "sub_cps": 0.0161,
+   "lead_only_usd_med": 0.044306,
+   "lead_tokens_med": 44249,
+   "lead_requests_med": 4,
+   "wall_med": 69.5,
+   "wall_mean": 93.7,
+   "wall_p75": 151.5,
+   "wilson": [
+    0.833,
+    0.994
+   ],
+   "ok_rate_ci_tasks": [
+    0.9,
+    1.0
+   ],
+   "ok_by_round": {
+    "1": 10,
+    "2": 10,
+    "3": 9
+   },
+   "wilson_note": "30 rows from 10 tasks: Wilson takes them as independent (too narrow); see ok_rate_ci_tasks",
+   "phases": {
+    "sub_s": {
+     "med": 36.8,
+     "p75": 54.8,
+     "n": 30
+    },
+    "check_s": {
+     "med": 1.2,
+     "p75": 6.0,
+     "n": 30
+    },
+    "review_s": {
+     "med": 16.7,
+     "p75": 34.6,
+     "n": 30
+    },
+    "fix_s": {
+     "med": 0.0,
+     "p75": 0.0,
+     "n": 30
+    },
+    "overlap_s": {
+     "med": 1.2,
+     "p75": 8.5,
+     "n": 30
+    },
+    "lead_wait_s": {
+     "med": 53.5,
+     "p75": 130.9,
+     "n": 30
+    },
+    "lead_active_s": {
+     "med": 15.7,
+     "p75": 21.0,
+     "n": 30
+    }
+   },
+   "namecheck": {
+    "modes": {
+     "warn": 30
+    },
+    "runs": 38,
+    "runs_with_hits": 0,
+    "runs_failed_by_it": 0,
+    "climbs_by_it": 0
+   }
+  }
+ },
+ "by_tag": {
+  "hc1": {
+   "self": {
+    "n": 30,
+    "ok": 29,
+    "usd": 2.6218,
+    "cps": 0.0904,
+    "wall_med": 23.2,
+    "wall_mean": 32.5,
+    "wall_p75": 45.7,
+    "rounds": {
+     "1": {
+      "n": 10,
+      "ok": 10,
+      "usd": 0.7657,
+      "cps": 0.0766,
+      "wall_med": 29.3,
+      "wall_mean": 26.7,
+      "wall_p75": 40.5
+     },
+     "2": {
+      "n": 10,
+      "ok": 10,
+      "usd": 0.8227,
+      "cps": 0.0823,
+      "wall_med": 23.2,
+      "wall_mean": 28.4,
+      "wall_p75": 44.5
+     },
+     "3": {
+      "n": 10,
+      "ok": 9,
+      "usd": 1.0334,
+      "cps": 0.1148,
+      "wall_med": 30.5,
+      "wall_mean": 42.5,
+      "wall_p75": 52.2
+     }
+    }
+   },
+   "builtin": {
+    "n": 28,
+    "ok": 27,
+    "usd": 2.7916,
+    "cps": 0.1034,
+    "wall_med": 132.9,
+    "wall_mean": 164.5,
+    "wall_p75": 251.8,
+    "rounds": {
+     "1": {
+      "n": 9,
+      "ok": 9,
+      "usd": 0.9893,
+      "cps": 0.1099,
+      "wall_med": 196.7,
+      "wall_mean": 172.1,
+      "wall_p75": 239.7
+     },
+     "2": {
+      "n": 9,
+      "ok": 9,
+      "usd": 0.765,
+      "cps": 0.085,
+      "wall_med": 67.1,
+      "wall_mean": 134.0,
+      "wall_p75": 199.1
+     },
+     "3": {
+      "n": 10,
+      "ok": 9,
+      "usd": 1.0373,
+      "cps": 0.1153,
+      "wall_med": 208.6,
+      "wall_mean": 185.2,
+      "wall_p75": 306.9
+     }
+    }
+   },
+   "ccx2": {
+    "n": 30,
+    "ok": 29,
+    "usd": 1.8263,
+    "cps": 0.063,
+    "wall_med": 69.5,
+    "wall_mean": 93.7,
+    "wall_p75": 151.5,
+    "rounds": {
+     "1": {
+      "n": 10,
+      "ok": 10,
+      "usd": 0.5909,
+      "cps": 0.0591,
+      "wall_med": 100.5,
+      "wall_mean": 95.9,
+      "wall_p75": 153.0
+     },
+     "2": {
+      "n": 10,
+      "ok": 10,
+      "usd": 0.5743,
+      "cps": 0.0574,
+      "wall_med": 77.8,
+      "wall_mean": 81.5,
+      "wall_p75": 100.8
+     },
+     "3": {
+      "n": 10,
+      "ok": 9,
+      "usd": 0.6611,
+      "cps": 0.0735,
+      "wall_med": 69.5,
+      "wall_mean": 103.6,
+      "wall_p75": 183.4
+     }
+    }
+   }
+  }
+ },
+ "unclean_rows": 2,
+ "env_unknown_rows": 0,
+ "tags": [
+  "hc1"
+ ],
+ "counted": "env_clean rows only",
+ "excluded_rows": {
+  "unclean": 2,
+  "env_unknown": 0
+ },
+ "long_style": {
+  "self->ccx": {
+   "usd": {
+    "median": null,
+    "ci": null,
+    "sign_p": null
+   },
+   "lead_tokens": {
+    "median": null,
+    "ci": null,
+    "sign_p": null
+   },
+   "wall_s": {
+    "median": null,
+    "ci": null,
+    "sign_p": null
+   }
+  },
+  "builtin->ccx": {
+   "usd": {
+    "median": null,
+    "ci": null,
+    "sign_p": null
+   },
+   "lead_tokens": {
+    "median": null,
+    "ci": null,
+    "sign_p": null
+   },
+   "wall_s": {
+    "median": null,
+    "ci": null,
+    "sign_p": null
+   }
+  },
+  "self->builtin": {
+   "usd": {
+    "median": 0.01655,
+    "ci": [
+     -0.002511666666666676,
+     0.028748
+    ],
+    "sign_p": 0.34375
+   },
+   "lead_tokens": {
+    "median": 10805.83333,
+    "ci": [
+     -129718.49999999999,
+     18586.333333333336
+    ],
+    "sign_p": 0.75390625
+   },
+   "wall_s": {
+    "median": 173.6,
+    "ci": [
+     43.06666666666666,
+     215.575
+    ],
+    "sign_p": 0.001953125
+   }
+  }
+ },
+ "paired": {
+  "self vs builtin": {
+   "arms": [
+    "self",
+    "builtin"
+   ],
+   "units": 28,
+   "tasks": 10,
+   "ok": {
+    "self": 27,
+    "builtin": 27
+   },
+   "discordant": {
+    "only_self": 1,
+    "only_builtin": 1
+   },
+   "mcnemar_p": 1.0,
+   "task_sign": {
+    "more_self": 1,
+    "more_builtin": 1
+   },
+   "task_sign_p": 1.0,
+   "diff_is": "builtin - self",
+   "cps": {
+    "self": 0.09264,
+    "builtin": 0.10339
+   },
+   "cps_diff": 0.01075,
+   "cps_diff_ci": [
+    -0.0123,
+    0.0404
+   ],
+   "cps_diff_ci_dropped": 0,
+   "wall_med_diff": 103.6,
+   "wall_med_diff_ci": [
+    39.3,
+    207.3
+   ],
+   "mcnemar_note": "28 units from 10 tasks: McNemar takes a task's rounds as independent pairs (anti-conservative); task_sign_p does not",
+   "lost_pairs": {
+    "lost": 2,
+    "of": 30,
+    "unclean_side": {
+     "self": 0,
+     "builtin": 2
+    },
+    "note": "one-sided loss: 0 of self's and 2 of builtin's rows on shared units were not env_clean; the comparison counts only the pairs left and may be biased"
+   },
+   "lost_pairs_note": "one-sided loss: 0 of self's and 2 of builtin's rows on shared units were not env_clean; the comparison counts only the pairs left and may be biased",
+   "mcnemar_p_holm": 1.0,
+   "task_sign_p_holm": 1.0
+  },
+  "self vs ccx2": {
+   "arms": [
+    "self",
+    "ccx2"
+   ],
+   "units": 30,
+   "tasks": 10,
+   "ok": {
+    "self": 29,
+    "ccx2": 29
+   },
+   "discordant": {
+    "only_self": 1,
+    "only_ccx2": 1
+   },
+   "mcnemar_p": 1.0,
+   "task_sign": {
+    "more_self": 1,
+    "more_ccx2": 1
+   },
+   "task_sign_p": 1.0,
+   "diff_is": "ccx2 - self",
+   "cps": {
+    "self": 0.09041,
+    "ccx2": 0.06298
+   },
+   "cps_diff": -0.02743,
+   "cps_diff_ci": [
+    -0.0544,
+    -0.0039
+   ],
+   "cps_diff_ci_dropped": 0,
+   "wall_med_diff": 46.3,
+   "wall_med_diff_ci": [
+    23.5,
+    119.5
+   ],
+   "mcnemar_note": "30 units from 10 tasks: McNemar takes a task's rounds as independent pairs (anti-conservative); task_sign_p does not",
+   "lost_pairs": {
+    "lost": 0,
+    "of": 30,
+    "unclean_side": {
+     "self": 0,
+     "ccx2": 0
+    }
+   },
+   "mcnemar_p_holm": 1.0,
+   "task_sign_p_holm": 1.0
+  },
+  "builtin vs ccx2": {
+   "arms": [
+    "builtin",
+    "ccx2"
+   ],
+   "units": 28,
+   "tasks": 10,
+   "ok": {
+    "builtin": 27,
+    "ccx2": 27
+   },
+   "discordant": {
+    "only_builtin": 1,
+    "only_ccx2": 1
+   },
+   "mcnemar_p": 1.0,
+   "task_sign": {
+    "more_builtin": 1,
+    "more_ccx2": 1
+   },
+   "task_sign_p": 1.0,
+   "diff_is": "ccx2 - builtin",
+   "cps": {
+    "builtin": 0.10339,
+    "ccx2": 0.0635
+   },
+   "cps_diff": -0.03989,
+   "cps_diff_ci": [
+    -0.0855,
+    -0.0145
+   ],
+   "cps_diff_ci_dropped": 0,
+   "wall_med_diff": -63.4,
+   "wall_med_diff_ci": [
+    -161.9,
+    -7.7
+   ],
+   "mcnemar_note": "28 units from 10 tasks: McNemar takes a task's rounds as independent pairs (anti-conservative); task_sign_p does not",
+   "lost_pairs": {
+    "lost": 2,
+    "of": 30,
+    "unclean_side": {
+     "builtin": 2,
+     "ccx2": 0
+    },
+    "note": "one-sided loss: 2 of builtin's and 0 of ccx2's rows on shared units were not env_clean; the comparison counts only the pairs left and may be biased"
+   },
+   "lost_pairs_note": "one-sided loss: 2 of builtin's and 0 of ccx2's rows on shared units were not env_clean; the comparison counts only the pairs left and may be biased",
+   "mcnemar_p_holm": 1.0,
+   "task_sign_p_holm": 1.0
+  }
+ },
+ "excluded_by_arm": {
+  "builtin": {
+   "unclean": 2,
+   "env_unknown": 0,
+   "of": 30
+  }
+ },
+ "excluded_by_tag": {
+  "hc1": {
+   "builtin": {
+    "unclean": 2,
+    "env_unknown": 0,
+    "of": 30
+   }
+  }
+ },
+ "by_repo": {
+  "humanize": {
+   "self": {
+    "ok": 12,
+    "n": 12
+   },
+   "ccx2": {
+    "ok": 12,
+    "n": 12
+   },
+   "builtin": {
+    "ok": 12,
+    "n": 12
+   }
+  },
+  "this repository": {
+   "ccx2": {
+    "ok": 14,
+    "n": 15
+   },
+   "self": {
+    "ok": 14,
+    "n": 15
+   },
+   "builtin": {
+    "ok": 13,
+    "n": 14
+   }
+  },
+  "itsdangerous": {
+   "ccx2": {
+    "ok": 3,
+    "n": 3
+   },
+   "self": {
+    "ok": 3,
+    "n": 3
+   },
+   "builtin": {
+    "ok": 2,
+    "n": 2
+   }
+  }
+ },
+ "ext_dates": {
+  "hz-intword-carry": "2026-09-16",
+  "hz-naturaldate-tz": "2026-02-22",
+  "hz-naturaldelta-nonfinite": "2026-08-29",
+  "its-timed-fallback-signers": "2018-10-26",
+  "hz-natural-list-iterables": "2026-09-16"
+ }
+}

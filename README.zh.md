@@ -123,6 +123,7 @@ GitHub；完整清单见 STATUS。
 | [做什么、怎么做](docs/features.zh.md) | 七件事的细节、`ccx ui`、一个从头到尾的例子、共享的东西放在哪、分级、安全边界 |
 | [安装和命令](docs/install.zh.md) | 从源码安装、接入你已有的配置、全部命令 |
 | [实测](docs/measured.zh.md) | 全部测量和局限（留出集运行、第 5 轮对比、单个功能的最好情况 A/B）、省了多少怎么估、核对过的外部事实 |
+| [公开基准](bench/README.zh.md) | 留出集和开发集的题、隐藏测试和我们的结果行：自己重跑这组对比 |
 | [共享工作上下文](docs/shared-context.zh.md) · [留言板](docs/board.zh.md) | 开着的会话之间共享什么、怎么共享 |
 | [常见问题和同类项目](docs/faq.zh.md) | 花费、订阅、安全、哪些工具能用；和同类项目有什么不同 |
 | [设计](docs/DESIGN.zh.md) · [决策](docs/DECISIONS.md) · [变更](CHANGELOG.md) | 内部 |

@@ -8,7 +8,8 @@ English · [中文](measured.zh.md) · back to the [README](../README.md) · all
 
 The README's hold-out row, from the [hold-out report](research/2026-10-29-hc1-holdout.md): 10 tasks not used while
 building ccx (5 from this repository, 5 from two external repositories) × 3 rounds, a Sonnet medium lead, hidden
-tests, pre-registered rules; 90 units counted, totals over the clean rows, true medians.
+tests, pre-registered rules; 90 units counted, totals over the clean rows, true medians. Tasks, rows and a script to
+re-run it: [bench/](../bench/README.md) (published there, the set is no longer a hold-out set).
 
 | | Lead does it itself | Claude Code built-in sub-agent (default usage) | ccx → Codex (luna low) |
 |---|---|---|---|
