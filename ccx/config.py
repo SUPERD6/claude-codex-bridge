@@ -278,6 +278,12 @@ SETTINGS = {   # key -> (type, help). Only these can be set with `ccx config set
     "policy.picked": (str, "save | balanced | fast | cheapest | none: the tier YOU pick for all work in this hub. It "
                            "pre-authorises what that tier delegates (`ccx propose` says authorized: true; project "
                            "autonomy L0/L1 still asks before edits). none (shipped) = offer first, as before"),
+    "routing.small_self": (_bool, "true | false: `ccx route` / `ccx propose` advise doing a small task yourself (at "
+                                  "most routing.small_self_files source files by your --files) instead of delegating "
+                                  "it; `ccx run` still delegates (default false until a measured round backs it)"),
+    "routing.small_self_files": (int, "routing.small_self: the most source files a task may touch to count as small"),
+    "routing.small_self_quota": (float, "routing.small_self: from this share of your own quota used (0..1), small "
+                                        "tasks are delegated as before"),
     "defaults.ab_self_rate": (float, "share of routed tasks the lead does itself to measure savings (0 = off)"),
     "defaults.max_escalations": (int, "stronger rungs to try after a verified failure"),
     "defaults.focused_retry": (_bool, "true | false: when ccx's --check fails after the sub-agent said done, the next "
