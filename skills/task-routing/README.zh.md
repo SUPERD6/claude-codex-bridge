@@ -46,6 +46,11 @@ python scripts/task_routing.py record --rung codex:gpt-6.1-sol:medium --b 4 --ok
 用同一个 id 再跑，或跑得比提议小，都会被拒绝。
 默认档仍是 `save`，等确认实验再定。
 
+**小活自己做**（`routing.small_self`，默认关，用户自己打开）：没选档位时，`ccx route` / `ccx propose` 对你用 `--files` 估计
+只改 `small_self_files`（1）个源文件的活（没给 `--files` 就看简报点名的文件；`--minutes` 不挡）建议 `do-it-yourself`。用户选了档位、`--needs` 要只有 ccx 给得了的东西、你的上下文到了 `lead_ctx_large`、你的额度到了
+`small_self_quota`（0.9）时不生效，`small_self.why` 写明原因。rung、升级梯和档位计划照常显示，`ccx run` 不变。依据：r5 和留出集上
+单文件的活主导自己做、其余交 `ccx2`，一题不少、墙钟变短，成本多几个百分点（暂定，等一轮实测）。
+
 **按任务选主导模型**（用户执行 `ccx config set lead.model_by_task on` 才开，默认关）：正在跑的对话不换模型（换了缓存作废）。用同一个难度 b，`ccx route` / `ccx propose` 多给 `new_lead`（新对话用的模型：b 不超过 `easy_max_b` 用 `[lead_by_task]` 的便宜模型，否则用你的：按你平时的模型开）；`choice` 没推荐自带子智能体时，再给 `builtin_model`（你自带子智能体的备用模型，只在简单档给）；`ccx fresh` / `ccx handoff` 带 `--minutes` 时照它选。
 
 ## 自动校准

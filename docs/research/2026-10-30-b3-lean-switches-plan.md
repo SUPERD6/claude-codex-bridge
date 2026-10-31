@@ -98,6 +98,12 @@ arm lists what would be copied and the overlays.
   switch stays off. `r5.py summary` applies it on clean paired units (`b3_rules`).
 - Power is limited: near a 95 % baseline, 50 pairs only show a drop of 10 points or more. On the edge (2–3 pairs lost),
   that arm alone gets 50 more units (about $5).
+  *Amendment 2026-10-31, after the run (the text above is left as registered):* "2–3 pairs lost" is not a second
+  threshold: the rule passes 2 lost pairs and fails 3. The sentence above did require 50 more units for such an arm;
+  they were not run, which departs from the plan. It changes no verdict here: `clean` lost 3 pairs (a fail that more
+  units cannot undo) and no other arm lost 2 or 3. How to read the edge (a check of a close pass, or optional) is left
+  to the next registered measurement, not decided here. `r5.py summary` now also prints, for a B3 rule on fewer pairs
+  than the 50 registered, "registered 50 pairs, counted N".
 
 Commands (not run):
 
@@ -149,6 +155,8 @@ runs, `scripts/eval/r5.py` gives more evidence without changing the registered r
 - **Evidence of failed units:** a unit that is not right records `hidden_failed` (the failing hidden test ids) and
   keeps the full hidden pytest output and its final diff (taken before the hidden tests go in) under
   `<results stem>-artifacts/<tag>-<unit>/`; the diff keeps git's exact bytes (CRLF lines included), so it applies.
+  Since 2026-10-31 each run has a folder of its own, `<results stem>-artifacts/<UTC start>Z/<tag>-<unit>/`, named in
+  the row as `artifacts.run`; rows without it are in the flat layout.
 - **Postflight attribution:** when the person's real hub ledger grew during the run, the report lists each new row's
   type, run_id and ts and whether the run_id is one of the units' `ccx_run_ids` (an eval leak) or not (most likely a
   real session running at the same time); `preflight.json` keeps it as `postflight_ledger`.

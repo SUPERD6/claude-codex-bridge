@@ -80,6 +80,15 @@ large = "direct"
 uncertain = "direct"
 hard = "direct"
 
+# 小活自己做（P0-6，默认关，等留出集一轮实测再开）：开了以后 ccx route / ccx propose 对主导 --files 估计 <= small_self_files
+# 个源文件的活（只看文件数，--minutes 不挡）建议 do it yourself，不再提议派；ccx run 照派、rung 照算。
+# 选了档位（policy.picked）、--needs 要 ccx 才有的东西、主导上下文 >= policy.bands.lead_ctx_large、主导额度 >= small_self_quota
+# 时不生效。依据：r5 / hc1 上 self 与 ccx2 按改动文件数分流（文件 <= 1 自己做：留出集对数不变、墙钟 -14%、成本 +5%）。
+[routing]
+small_self = false        # ccx config set routing.small_self on
+small_self_files = 1
+small_self_quota = 0.9
+
 [lead]                    # 主导平时用的模型：估算“如果自己做要花多少”；lead.model_by_task 开时也是“强档”的名字（强档不传 --model，工具照常用自己的模型）
 claude = "opus"
 codex = "gpt-6.1-sol"
@@ -172,13 +181,16 @@ skills = true            # false = 不加载技能列表（--disable-slash-comma
 # 实验性开关（B3，docs/features.zh.md「实验性：子智能体精简开关」）：子智能体启动时加载什么。默认都是今天的做法，
 # 等前后对比（scripts/eval/r5.py 的 ccx2daily* 组）证明正确率不降再改默认。只管 ccx 派出去的子智能体，不碰主导。
 # 和 [subagents]（子智能体自己再开子智能体的花费上限）不是一回事。每次运行用了哪些记在 run.json 的 subagent_switches。
-codex_memories = true     # false = 每一档 Codex 都加评测隔离用的那三项 -c（features.memories / memories.use_memories /
+# experimental（实验性）：2026-10-31 实测后三个都保持下面的默认值，精简的一侧都不开，见
+# docs/research/2026-10-31-b3-lean-switches.zh.md：codex_memories = false 结论 Unknown；clean = true 结论 Fail
+# （留出集输 3 对）；codex_lean_tools = true 按登记规则 Fail（做对 29 对 30），事后解读为未定。
+codex_memories = true     # experimental（false 一侧实测 Unknown）。false = 每一档 Codex 都加评测隔离用的那三项 -c（features.memories / memories.use_memories /
 # memories.generate_memories = false），只关 memories；不加 --ignore-user-config（那会连 provider、sandbox 设置一起丢）
-clean = false             # true = "干净"子智能体：Codex/dsh 的 HOME 换成 hub 里每次运行一个的空目录（只少了 ~/.agents/skills；
+clean = false             # experimental（true 一侧实测 Fail）。true = "干净"子智能体：Codex/dsh 的 HOME 换成 hub 里每次运行一个的空目录（只少了 ~/.agents/skills；
 # CODEX_HOME 不变，所以 ~/.codex 的 AGENTS.md、skills、memories 照常加载；登录、git 配置、rustup/cargo 等位置固定在原处）；
 # Claude 加 --disable-slash-commands 和 --setting-sources project,local（不加载用户 settings 和技能；MCP 仍按 --mcp / mcp 设置）；
 # 提示里加一句"结果用任务描述的语言写"；Claude 的 Agent 工具只在 --parallel 时才给；--fork 运行不受影响。可能丢掉个人技能带来的正确率
-codex_lean_tools = false  # true = 写入任务（不含只读/调研）的 Codex 关掉用不上的工具：-c web_search="disabled"、
+codex_lean_tools = false  # experimental（true 一侧按规则 Fail、事后未定）。true = 写入任务（不含只读/调研）的 Codex 关掉用不上的工具：-c web_search="disabled"、
 # --disable image_generation、--disable goals，直连 OpenAI 时再加 --disable apps/plugins（codex-cli 0.164.0 核对过）。
 # 只读任务保留网页搜索；要查最新文档的写入任务会受影响
 
