@@ -42,7 +42,10 @@ BRIEF = """{mark} of run {run_id}] Review a change another agent made. Do not ed
 ## Answer
 You cannot run commands; judge from the diff and the files. Do not report that tests were not run.
 First go through the task above requirement by requirement (each return value, case, rule and error it names) and
-check the code meets it; the acceptance tests may cover only some of them.
+check the code meets it; the acceptance tests may cover only some of them. For each requirement, see whether a test
+the acceptance command runs (under Checks) really exercises it: a passed check proves only what its tests assert, and
+tests the agent wrote or changed in this change are its own yardstick, not evidence the task is met. Read the code
+hardest where no test covers a requirement; a missing test by itself is a [note], not a [must].
 `[must] file:line — "task words" — what is wrong` is only for: (a) a requirement stated in the task that the change
 does not meet or gets wrong, quoting the task sentence it rests on; (b) a bug that breaks existing behaviour or
 existing tests, or crashes on inputs the task itself names (say which); (c) a way the task's stated behaviour
@@ -534,18 +537,58 @@ def reviewers(cfg: dict, worker: str, installed, p=None, cheapest: bool = False)
     return out
 
 
+def _covers_line(covers: dict | None) -> str:
+    """P1-10: under Checks, which test files the acceptance command runs and which of them the agent wrote or
+    changed, so the reviewer judges coverage against the task, not against the agent's own tests."""
+    if not covers:
+        return ""
+    if covers.get("unknown"):
+        return "\nWhich tests that command runs is not known (it is not pytest / unittest)."
+    files = covers.get("files") or []
+    n = covers.get("n_files", len(files))
+    if not files:
+        return "\nThat command names no test file ccx could find."
+    out = f"\nThe test files it runs: {', '.join(files[:8])}" + (f" (+{n - 8} more)" if n > 8 else "") + "."
+    if covers.get("filtered"):
+        out += f" Only part of them: {', '.join(covers['filtered'][:3])}."
+    if covers.get("own_tests_only"):
+        out += " Every one of them was written by the agent in this change."
+    elif covers.get("written"):
+        out += f" Written by the agent in this change: {', '.join(covers['written'][:8])}."
+    if covers.get("added_to"):
+        out += f" Tests added by the agent to: {', '.join(covers['added_to'][:8])}."
+    if covers.get("edited"):
+        out += f" Changed by the agent: {', '.join(covers['edited'][:8])}."
+    return out
+
+
+def _covers(check: dict | None, cwd: Path, snap: dict | None, edited: list[str], diff: str) -> dict | None:
+    """coverage.summarize for the review brief (None without a command or on any error: the brief goes without)."""
+    if not (check or {}).get("cmd") or check.get("reason") == "namecheck":
+        return None
+    try:
+        from . import coverage
+        return coverage.summarize(check["cmd"], cwd, Path((snap or {}).get("repo") or cwd), edited,
+                                  coverage.new_tests(diff), coverage.added_to_tests(diff))
+    except Exception:  # noqa: BLE001 — weak evidence; never stops the review
+        return None
+
+
 def brief(run_id: str, task: str, summary: str, diff: str, max_chars: int, check: dict | None = None,
           edited: list[str] | None = None, static: str = "", cwd: Path | None = None,
-          focus: dict | None = None) -> str:
+          focus: dict | None = None, covers: dict | None = None) -> str:
     """The reviewer's brief. `edited` (default: found in `diff`) names pre-existing test files the change edited;
     `static`: what ccx's own static checks found (namecheck), as weak evidence under Checks.
+    `covers` (coverage.summarize of the acceptance command): which test files it runs, which the agent wrote.
     `cwd` (the reviewed tree): add the code around the change, in what is left of `max_chars` after the diff.
     `focus` ({issues, delta}: [review] fix_rereview = "focus", a fix round's review): see FOCUS_HEAD."""
     if focus:
-        return _focus_brief(run_id, task, summary, diff, max_chars, check, edited, static, focus)
+        return _focus_brief(run_id, task, summary, diff, max_chars, check, edited, static, focus, covers)
     edited = edited_tests(diff) if edited is None else edited
     ed = (f"\nExisting tests edited: {', '.join(edited[:8])} — check the task requires it; an existing assertion "
-          f"changed to fit the new code without the task asking for it is a [must] (b)." if edited else "")
+          f"changed to fit the new code without the task asking for it is a [must] (b). Name each of these files in "
+          f"your answer (a [must] as above, or a [note] saying why the edit is what the task asked)." if edited else "")
+    ed += _covers_line(covers)
     cut = f"; cut to {max_chars} characters, open the files for the rest" if len(diff) > max_chars else ""
     ran = (f"ccx ran the acceptance command `{check['cmd']}` after the change: "
            f"{'passed' if check.get('passed') else 'FAILED (exit %s)' % check.get('exit')}." if check
@@ -568,13 +611,13 @@ def brief(run_id: str, task: str, summary: str, diff: str, max_chars: int, check
 
 
 def _focus_brief(run_id: str, task: str, summary: str, diff: str, max_chars: int, check: dict | None,
-                 edited: list[str] | None, static: str, focus: dict) -> str:
+                 edited: list[str] | None, static: str, focus: dict, covers: dict | None = None) -> str:
     """brief() for a fix round's review with [review] fix_rereview = "focus": the whole change (or, past max_chars,
     a note that only the fix is shown), then the first review's problems and the fix alone, and FOCUS_ANSWER."""
     edited = edited_tests(diff) if edited is None else edited
     too_big = len(diff) > max_chars
     full = brief(run_id, task, summary, FOCUS_TOO_BIG.format(n=max_chars) if too_big else diff, max_chars, check,
-                 edited, static)
+                 edited, static, covers=covers)
     delta = focus.get("delta") or ""
     dmax = max_chars if too_big else max(4000, max_chars - len(diff))
     dcut = f"; cut to {dmax} characters, open the files for the rest" if len(delta) > dmax else ""
@@ -714,7 +757,8 @@ def review_run(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path, run_d
             focus = {"issues": list(req.prior_issues), "delta": delta}
     text = rv.brief(record["run_id"], task_for_review(p, req), res.get("summary", ""), diff,
                     int(rc.get("max_diff_chars", 12000)), record.get("check"), edited, nck.brief_note(nc),
-                    cwd=cwd if rc.get("context", False) else None, **({"focus": focus} if focus else {}))
+                    cwd=cwd if rc.get("context", False) else None, **({"focus": focus} if focus else {}),
+                    covers=_covers(record.get("check"), cwd, snap, edited, diff))
     usd, tried = 0.0, []
     for agent, model, effort in cands[:2]:
         if cancel is not None and cancel.is_set():
