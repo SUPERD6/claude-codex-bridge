@@ -6,7 +6,7 @@
 <title>relayline (ccx)</title>
 <meta name="description" content="Claude Code, Codex and DeepSeek hand work to each other; every hand-off comes with a receipt: what it cost, whether the check ran, who reviewed it.">
 <meta property="og:title" content="relayline: hand-offs between coding agents, with a receipt">
-<meta property="og:description" content="Claude Code, Codex and DeepSeek as each other's lead or sub-agent; shared memory, checks, reviews and a ledger. Command: ccx.">
+<meta property="og:description" content="Claude Code, Codex and DeepSeek hand work to each other; every hand-off comes with a receipt: cost, check, review. Measured in the open. Command: ccx.">
 <meta property="og:image" content="assets/social-preview.png">
 <link rel="alternate" hreflang="zh" href="zh/">
 <link rel="stylesheet" href="style.css">
@@ -51,11 +51,11 @@
     <h2>Measured on a hold-out set</h2>
     <p class="note">10 tasks not used while building ccx (5 from this repository, 5 from two external ones) &times; 3 rounds, a Claude Code (Sonnet) lead, hidden tests, rules fixed before the run (hc1, 2026-10-29).</p>
     <div class="tablewrap"><table class="hc1">
-      <thead><tr><th></th><th>Right</th><th>Cost per success</th><th>Wall time, median</th></tr></thead>
+      <thead><tr><td></td><th>Right</th><th>Cost per success</th><th>Wall time, median</th></tr></thead>
       <tbody>
-        <tr><td>Lead does it itself</td><td>29/30</td><td>$0.090</td><td>21 s</td></tr>
-        <tr><td>Claude Code built-in sub-agent (default usage)</td><td>27/28 <span class="mutedtext">(2 unclean rows dropped)</span></td><td>$0.103</td><td>123 s</td></tr>
-        <tr><td>ccx &rarr; Codex (gpt-6-luna low)</td><td>29/30</td><td><b>$0.063</b></td><td>61 s</td></tr>
+        <tr><th scope="row">Lead does it itself</th><td>29/30</td><td>$0.090</td><td>21 s</td></tr>
+        <tr><th scope="row">Claude Code built-in sub-agent (default usage)</th><td>27/28 <span class="mutedtext">(2 unclean rows dropped)</span></td><td>$0.103</td><td>123 s</td></tr>
+        <tr><th scope="row">ccx &rarr; Codex (gpt-6-luna low)</th><td>29/30</td><td><b>$0.063</b></td><td>61 s</td></tr>
       </tbody>
     </table></div>
     <ul class="limits">
@@ -63,6 +63,7 @@
       <li><b>About 30&nbsp;% cheaper per success than doing it yourself</b> (95&nbsp;% CI of the difference &minus;$0.054 to &minus;$0.004); about 15&nbsp;% on the 5 external-repository tasks, the clean half (this repository's own tasks may have their answers in ccx's code).</li>
       <li><b>About 3&times;&nbsp;slower</b> than doing it yourself. Not faster.</li>
       <li>The built-in arm is its default usage; a leaner built-in recipe was cheaper than ccx on the dev set. 10 tasks, one lead model, API-equivalent prices; real runs on one Windows machine (macOS and Linux: CI only).</li>
+      <li><b>The receipt itself is not always right:</b> 8 of 209 said &ldquo;right&rdquo; while the hidden tests failed (3.8&nbsp;%, above our 2&nbsp;% bar; being fixed, <a href="https://github.com/SUPERD6/relayline/blob/main/docs/research/2026-10-31-verdict-audit.md">audit</a>). Real use outside our own tests: almost none so far. Work in progress: <a href="https://github.com/SUPERD6/relayline/blob/main/docs/STATUS.md">STATUS</a>.</li>
     </ul>
     <p class="note">Every number and how it was measured: <a href="https://github.com/SUPERD6/relayline/blob/main/docs/measured.md">Measured</a>; all eight limits: <a href="https://github.com/SUPERD6/relayline/blob/main/docs/research/2026-10-29-hc1-holdout.md">hold-out report</a>.</p>
   </section>

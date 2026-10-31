@@ -90,7 +90,7 @@ td:first-child{font-weight:600;min-width:11em}td:last-child{color:var(--muted);m
 .hero.solo{grid-template-columns:minmax(0,1fr);padding-bottom:28px}.hero.solo h1{max-width:22em}
 .loop{border:1px solid var(--line);margin:0 0 52px}.loop img{display:block;width:100%}
 .how.three{grid-template-columns:repeat(3,minmax(0,1fr))}.how code{font-size:12.5px;overflow-wrap:anywhere;color:var(--ink)}
-.hc1 td:last-child{color:var(--ink)}.mutedtext{color:var(--muted);font-weight:400;font-size:13px}
+.hc1 td:last-child{color:var(--ink)}.hc1 tbody th{font-weight:600;color:var(--ink);font-size:14.5px}.mutedtext{color:var(--muted);font-weight:400;font-size:13px}
 .limits{margin:-36px 0 12px;padding-left:20px;color:var(--muted);font-size:14.5px;max-width:52em}.limits li{margin:4px 0}.limits b{color:var(--ink)}
 #ui{margin-bottom:52px}
 

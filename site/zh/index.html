@@ -6,7 +6,7 @@
 <title>relayline（ccx）</title>
 <meta name="description" content="Claude Code、Codex、DeepSeek 互相派活，每次派活都有收据：花了多少、验收跑没跑、谁审的。">
 <meta property="og:title" content="relayline：编码智能体互相派活，带收据">
-<meta property="og:description" content="Claude Code、Codex、DeepSeek 互为主导和子智能体；共享记忆、验收、审查、记账。命令 ccx。">
+<meta property="og:description" content="Claude Code、Codex、DeepSeek 互相派活，每次派活都有收据：花费、验收、审查。测量公开。命令 ccx。">
 <meta property="og:image" content="../assets/social-preview.png">
 <link rel="alternate" hreflang="en" href="../">
 <link rel="stylesheet" href="../style.css">
@@ -51,11 +51,11 @@
     <h2>留出集实测</h2>
     <p class="note">10 个做 ccx 时没用过的任务（5 个本仓库、5 个来自两个外部仓库）× 3 轮，Claude Code（Sonnet）主导，隐藏测试，规则在跑之前定好（hc1，2026-10-29）。</p>
     <div class="tablewrap"><table class="hc1">
-      <thead><tr><th></th><th>做对</th><th>每次成功的花费</th><th>用时中位数</th></tr></thead>
+      <thead><tr><td></td><th>做对</th><th>每次成功的花费</th><th>用时中位数</th></tr></thead>
       <tbody>
-        <tr><td>主导自己做</td><td>29/30</td><td>$0.090</td><td>21 秒</td></tr>
-        <tr><td>Claude Code 内置子智能体（默认用法）</td><td>27/28 <span class="mutedtext">（剔除 2 行不干净的）</span></td><td>$0.103</td><td>123 秒</td></tr>
-        <tr><td>ccx → Codex（gpt-6-luna low）</td><td>29/30</td><td><b>$0.063</b></td><td>61 秒</td></tr>
+        <tr><th scope="row">主导自己做</th><td>29/30</td><td>$0.090</td><td>21 秒</td></tr>
+        <tr><th scope="row">Claude Code 内置子智能体（默认用法）</th><td>27/28 <span class="mutedtext">（剔除 2 行不干净的）</span></td><td>$0.103</td><td>123 秒</td></tr>
+        <tr><th scope="row">ccx → Codex（gpt-6-luna low）</th><td>29/30</td><td><b>$0.063</b></td><td>61 秒</td></tr>
       </tbody>
     </table></div>
     <ul class="limits">
@@ -63,6 +63,7 @@
       <li><b>每次成功比自己做便宜约 30%</b>（差值的 95% 区间 −$0.054 到 −$0.004）；只看 5 个外部仓库任务（干净的那一半：本仓库的任务答案可能就在 ccx 的代码里）约便宜 15%。</li>
       <li><b>用时约是自己做的 3 倍。</b>不是更快。</li>
       <li>内置子智能体是默认用法；精简用法的内置子智能体在开发集上比 ccx 便宜。只有 10 个任务、一种主导模型，金额是 API 等价价；只在一台 Windows 电脑上真跑（macOS、Linux 只在 CI 里跑）。</li>
+      <li><b>收据本身也会错：</b>209 次里有 8 次收据说对、隐藏测试却没过（3.8%，超过我们定的 2% 门槛，正在修，<a href="https://github.com/SUPERD6/relayline/blob/main/docs/research/2026-10-31-verdict-audit.zh.md">审计</a>）。ccx 自测之外的真实使用目前几乎没有。仍在开发中：<a href="https://github.com/SUPERD6/relayline/blob/main/docs/STATUS.zh.md">STATUS</a>。</li>
     </ul>
     <p class="note">全部数字和怎么测的：<a href="https://github.com/SUPERD6/relayline/blob/main/docs/measured.zh.md">实测</a>；全部 8 条局限：<a href="https://github.com/SUPERD6/relayline/blob/main/docs/research/2026-10-29-hc1-holdout.zh.md">留出集报告</a>。</p>
   </section>
