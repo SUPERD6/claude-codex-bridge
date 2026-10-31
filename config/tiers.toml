@@ -295,6 +295,9 @@ fix_rounds = 1        # 0 或 1（更大按 1 算）：第 5 轮评测里多轮�
 # 中位只省 2.4 s，[must] 漏得比 full 多（24 vs 21/33），见 docs/DECISIONS.md。focus 不附 [review] context 的“改动附近的代码”，
 # 已修好的首轮问题不单独写一行（不是逐条写“已解决/未解决”）。
 fix_rereview = "full"
+# P1-10：审查员按任务原文看测试覆盖——逐条要求看验收命令跑的测试有没有真测到它，子智能体自己写或改的测试不算证据，
+# 只是缺测试仍算 [note]；brief 里列出验收命令跑了哪些测试文件、哪些是子智能体新写/追加/改过的。false = 回到旧的那句话（A/B 用）。
+coverage_rubric = true
 # P1-10（实验性，默认关）：ccx 的 check 已通过时，审查的 [must] 必须在条目里写 `repro: <命令 / 输入和错误结果 / 失败的测试>`。
 # "downgrade" = 没写的降为 [should]，不判 review_failed、不开修复轮；"confirm" = 全部 [must] 都没写时，先让 also 列表里一位更强的审查员
 # 确认一次（多花一次审查钱），之后仍没写的同样降级。false = 关。离线估算（verdict-audit 记录里找得到的 27 个"check 过 +
