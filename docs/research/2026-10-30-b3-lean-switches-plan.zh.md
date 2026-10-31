@@ -86,21 +86,21 @@ B3 的第二批开关（M4 `ccx batch --merge`、M3 `[subagents] fork_turns`、M
 
 开关有没有生效，看 ccx 记下来的东西：m4 看 batch 输出的 `merged`；m3 看 run.json 的 `parallel_fork_turns`，以及发给子智能体的 prompt.md 里有没有 fork_turns 那句（换了家的运行 `parallel_fork_turns_moved` 剔除）；m5 看 run.json `shared_context` 有没有 `deduped`，并且确实附上了共享上下文。没生效的单元记 `switch_ok: false`，不进规则。
 
-每个单元记：做对（块数或隐藏测试）、ccx 运行数（账本所有行：子智能体运行、审查、修复轮、拆出去的块）、审查次数和费用、请求数、`first_input` 之和（m3 再加每个子会话的首请求输入，从 rollout 读）、总 prompt token（每次运行的 fresh + cache 写 + cache 读；m3 加子会话的）、$、墙钟；m4 另记每块状态、修复轮、拆出数；m5 记 `est_tokens`、`deduped_chars`。
+每个单元记：做对（块数或隐藏测试）、ccx 运行数（账本所有行：子智能体运行、审查、修复轮、拆出去的块）、审查次数和费用、请求数、`first_input` 之和（m3 再加每个子会话的首请求输入，从 rollout 读）、总 prompt token（每次运行的 fresh + cache 写 + cache 读；m3 的账本 usage 已含子会话，不再另加）、$、墙钟；m4 另记每块状态、修复轮、拆出数；m5 记 `est_tokens`、`deduped_chars`。
 
 **判定规则（先登记）**，每个实验只在两组都跑完且开关都生效的配对上算：
 
 1. 开关组做对数不低于基线（m4：全部块和陷阱块分别都不低于）；
 2. 开关组的 ccx 运行数或 `first_input` 之和更低；
-3. 开关组的总 prompt token 不更高；
+3. 开关组的总 prompt token 不更高（m5 改按每次请求的平均：去重每次请求只省几十 token，多一次请求就多约 2 万前缀，总量会被它决定）；
 4. 只对 m3：不能有"开关组错、基线对、开关组的运行开过子会话"的配对（子会话缺上下文、父会话没兜住）。
 
-全部满足 = 通过；任何一条不满足 = 不通过。完成的配对不到计划的 80%，或有单元开关没生效 = Unknown。墙钟只报告，不判（M4 合并后预期更慢）。拆出去的块会从低档重新升档，比基线多一次机会，报告时注明。通过只说明可以考虑默认开，开不开另行决定。
+全部满足 = 通过；任何一条不满足 = 不通过。完成的配对不到计划的 80%（计划对数由 `run` 写进每行），或有单元开关没生效 = Unknown。单元运行失败（行里有 error）算缺失，不算开关没生效，再跑一次 `run` 会重跑它；预算只在一对开始前检查，不会停在一对中间。墙钟只报告，不判（M4 合并后预期更慢）。拆出去的块会从低档重新升档，比基线多一次机会，报告时注明。通过只说明可以考虑默认开，开不开另行决定。
 
-**三条正式命令**（预估费用见下；`--dry-run` 先看排程）：
+**三条正式命令**（`--dry-run` 先看排程）。预估：m4 16 单元约 $3.8、m3 12 单元约 $2.8、m5 32 单元约 $0.6，合计约 $7.2。依据：2026-10-31 预跑 1 单元（m4 mp1 合并组，标签 b3pre，不计入正式结果）5/5 做对、2 次运行（合并 + 1 次审查）、$0.10、129 s、开关生效、无残留；其余是按 round 2 的估计。`--arms` 只用于预跑，要用单独的标签。
 
 ```bash
-python scripts/eval/b3_arms.py run --exp m4 --tag b3m4 --codex-home <评测 codex home> --budget 6
+python scripts/eval/b3_arms.py run --exp m4 --tag b3m4 --codex-home <评测 codex home> --budget 5
 python scripts/eval/b3_arms.py run --exp m3 --tag b3m3 --codex-home <评测 codex home> --budget 4
 python scripts/eval/b3_arms.py run --exp m5 --tag b3m5 --codex-home <评测 codex home> --budget 1.5
 python scripts/eval/b3_arms.py summary --tag b3m4   # 每个标签各看一次

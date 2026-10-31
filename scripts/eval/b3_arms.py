@@ -27,16 +27,18 @@ arms: the children's rollouts are read afterwards), then archived with `ccx arch
 
 Per unit: right (pieces / the task's hidden test), ccx runs (all ledger rows: sub-agent runs, reviews, fix rounds,
 spun-off pieces), reviews and their $, requests, `first_input` summed over the runs (m3: plus each child's first
-request), total prompt tokens (fresh + cache writes + cache reads of every run; m3: plus the children's), $, wall.
+request), total prompt tokens (fresh + cache writes + cache reads of every run; for m3 the ledger's usage already holds
+the children's), $, wall.
 
 The rule (registered before any unit ran, the plan doc's "Fewer runs" section), per experiment on the units both arms
 finished with the switch recorded: Pass when (1) the arm's right count is not below the baseline's (m4: over all
 pieces and over the trap pieces alone), (2) its ccx runs or its first_input sum is lower, (3) its total prompt
-tokens are not higher; m3 also fails when a pair has the arm wrong, the baseline right and the arm's run spawned
+tokens are not higher (m5: per request, since one more request would outweigh what dedupe saves); m3 also fails when a pair has the arm wrong, the baseline right and the arm's run spawned
 children (a child that lacked the context it was not given, not caught by its parent). Fewer than 80% of the
-planned pairs, or any unit whose switch did not take: Unknown.
+planned pairs (as the run recorded them in its rows), or any unit whose switch did not take: Unknown. A unit that
+failed (an error in its row) is missing, not a switch that did not take, and `run` again retries it.
 
-  python scripts/eval/b3_arms.py run --exp m4 --tag b3m4 --codex-home <eval codex home> --budget 6 [--dry-run]
+  python scripts/eval/b3_arms.py run --exp m4 --tag b3m4 --codex-home <eval codex home> --budget 5 [--dry-run]
   python scripts/eval/b3_arms.py run --exp m3 --tag b3m3 --codex-home <eval codex home> --budget 4
   python scripts/eval/b3_arms.py run --exp m5 --tag b3m5 --codex-home <eval codex home> --budget 1.5
   python scripts/eval/b3_arms.py summary [--exp m4] [--tag b3m4]
@@ -48,6 +50,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -72,9 +75,9 @@ EXPS = {"m4": ("batch", "merge"), "m3": ("all", "none"), "m5": ("keep", "dedupe"
 MODEL = {"m4": ("gpt-6.1-sol", "medium"), "m3": ("gpt-6.1-sol", "medium"), "m5": ("gpt-6-luna", "low")}
 REPS = {"m4": 2, "m3": 1, "m5": 2}
 ACCEPT = "python -m pytest -q"
-# what one unit costs, for --dry-run and the budget line only (not a measurement): the 2026-10-31 pre-run and the
-# 2026-10-25 A/B's luna low runs
-EST_USD = {("m4", "batch"): 0.40, ("m4", "merge"): 0.25, ("m3", "all"): 0.25, ("m3", "none"): 0.22,
+# what one unit costs, for --dry-run and the budget line only (not a measurement): the 2026-10-31 pre-run (m4 mp1
+# merge: $0.10, 2 runs) and the 2026-10-25 A/B's luna low runs; the others are guesses from round 2
+EST_USD = {("m4", "batch"): 0.35, ("m4", "merge"): 0.12, ("m3", "all"): 0.25, ("m3", "none"): 0.22,
            ("m5", "keep"): 0.02, ("m5", "dedupe"): 0.02}
 MIN_COVER = 0.8                   # below this share of the planned pairs the rule says Unknown
 
@@ -99,7 +102,7 @@ M3_TASKS = {**{t["id"]: t for t in COMPOUND if t["id"] in ("bank", "board", "fle
             "pg-b": _pieces_task("pg-b", ["m05", "m06", "m07", "m08"])}
 
 # m5: the 2026-10-25 tasks plus one where the person reopened the settled question and the lead settled it again in
-# the same words: dedupe drops the person's sentence (it is in "The person asked") and must keep the lead's
+# other words: dedupe drops the person's sentence (it is in "The person asked") and must keep the lead's
 T8 = {**SC.T("t8-reopened", {"net.py": "def fetch_with_retries(fetch):\n    return fetch()\n"},
              "In net.py, add a module constant MAX_RETRIES set to the value we settled on, and make "
              "fetch_with_retries(fetch) call fetch() again on an exception, at most MAX_RETRIES retries, re-raising "
@@ -143,7 +146,7 @@ def m5_transcript(task: dict, now: float) -> list[dict]:
     after = task.get("after") or []
     if not after:
         return evs
-    out = list(evs[:-2])                 # ... the settled sentence at now - 60, then the lead's ack at now
+    out = list(evs[:-2])                 # up to the settled sentence (now - 60); the last two: ack, tool calls
     for k, (who, text) in enumerate(after):
         ts = SC._iso(now - 60 + 10 * (k + 1))
         out.append({"type": "user", "timestamp": ts, "message": {"content": text}} if who == "person" else
@@ -208,26 +211,54 @@ def run_stats(hub: Path) -> dict:
             "agents": sorted({str(r.get("provider") or r.get("to")) for r in rows})}
 
 
-def rollout_inputs(codex_home: Path | None, sid: str) -> list[int]:
-    """Every request's input of one Codex session, from its rollout (live or archived), in order."""
+def rollout_lines(codex_home: Path | None, sid: str) -> list[dict]:
+    """The events of one Codex session's rollout (live or archived)."""
     if not codex_home or not sid:
         return []
-    out: list[tuple[str, int]] = []
     for sub in ("sessions", "archived_sessions"):
         for f in (codex_home / sub).rglob(f"rollout-*{sid}.jsonl") if (codex_home / sub).is_dir() else []:
+            out = []
             for line in f.read_text(encoding="utf-8", errors="replace").splitlines():
-                if '"token_usage_record"' not in line:
-                    continue
                 try:
-                    e = json.loads(line)
+                    out.append(json.loads(line))
                 except ValueError:
                     continue
-                u = (e.get("payload") or {}).get("usage") or {}
-                if e.get("type") == "token_usage_record" and u:
-                    out.append((str(e.get("timestamp") or ""), int(u.get("input_tokens", 0) or 0)))
-        if out:
-            break
-    return [n for _, n in sorted(out)]
+            return out
+    return []
+
+
+def rollout_inputs(codex_home: Path | None, sid: str) -> list[int]:
+    """Every request's input of one Codex session, in order: its own token_usage_records only. A forked session's
+    file starts with copies of older history (ccx/usage.py), which are older than its session_meta and dropped."""
+    from ccx.usage import _ts
+    evs = rollout_lines(codex_home, sid)
+    meta = next((e for e in evs if e.get("type") == "session_meta"), {})
+    since = _ts((meta.get("payload") or {}).get("timestamp") or meta.get("timestamp"))
+    out: list[tuple[float, int]] = []
+    for e in evs:
+        u = (e.get("payload") or {}).get("usage") or {}
+        t = _ts(e.get("timestamp"))
+        if e.get("type") == "token_usage_record" and u and t is not None and (since is None or t >= since):
+            out.append((t, int(u.get("input_tokens", 0) or 0)))
+    return [n for _, n in sorted(out, key=lambda x: x[0])]
+
+
+FORK_NONE_ARG = re.compile(r"fork_turns\W{0,4}none")
+
+
+def spawn_calls(codex_home: Path | None, sid: str) -> dict:
+    """The parent's spawn_agent calls in its rollout (a direct call, or code mode's `spawn_agent(` in an exec
+    call) and how many of them passed fork_turns "none": whether the children really started without history."""
+    n = none = 0
+    for e in rollout_lines(codex_home, sid):
+        pl = e.get("payload") or {}
+        if pl.get("type") not in ("function_call", "custom_tool_call"):
+            continue
+        body = str(pl.get("arguments") or "") + str(pl.get("input") or "")
+        k = 1 if pl.get("name") == "spawn_agent" else body.count("spawn_agent(")
+        n += k
+        none += min(k, len(FORK_NONE_ARG.findall(body)))
+    return {"spawn_calls": n, "fork_none_calls": none}
 
 
 def children_stats(hub: Path, run_ids: list[str], codex_home: Path | None) -> dict:
@@ -274,6 +305,8 @@ def m4_unit(u: dict, a, iso: PF.Unit, env: dict, job: PF.Job) -> dict:
     out, err, rc, _left = PF.run(argv, cwd=iso.repo, env=env, timeout=a.timeout, job=job)
     wall = round(time.time() - t0, 1)
     res = r2.S._last_json(out)
+    if rc not in (0, 2) or not res.get("results"):
+        raise RuntimeError(f"ccx batch did not finish (rc {rc}): {err[-300:]}")
     by_label = {}
     for r in res.get("results") or []:
         lbl = r.get("label") or r2.record(iso.hub, r.get("run_id")).get("label")
@@ -293,7 +326,7 @@ def m4_unit(u: dict, a, iso: PF.Unit, env: dict, job: PF.Job) -> dict:
             "right": sum(x["ok"] for x in per), "right_trap": sum(x["ok"] for x in per if x["kind"] == "trap"),
             "n_pieces": len(per), "merged": merged, "follow_ups": sum(bool(m.get("follow_up")) for m in merged),
             "spun_off": sum(len(m.get("spun_off") or []) for m in merged),
-            "switch_seen": bool(merged), "switch_ok": bool(merged) == (u["arm"] == "merge") and rc in (0, 2),
+            "switch_seen": bool(merged), "switch_ok": bool(merged) == (u["arm"] == "merge"),
             **st}
 
 
@@ -314,17 +347,20 @@ def m3_unit(u: dict, a, iso: PF.Unit, env: dict, job: PF.Job) -> dict:
     from ccx import subagents
     sent = iso.hub / "ccx" / "runs" / str(res.get("run_id")) / "prompt.md"     # what the sub-agent was sent
     told = subagents.FORK_NONE.strip() in (sent.read_text(encoding="utf-8") if sent.exists() else "")
+    if not res.get("run_id") or not sent.exists():
+        raise RuntimeError(f"the run did not start (rc {rc}): {err[-300:]}")
     kids = children_stats(iso.hub, st["run_ids"], iso.codex_home)
+    kids.update(spawn_calls(iso.codex_home, rec.get("session_id")))
     seen = rec.get("parallel_fork_turns")
     return {"rc": rc, "wall_s": wall, "stderr": err[-400:] if rc else "", "ok": ok, "pytest": tail,
             "right": int(ok), "ccx_ok": res.get("ok"), "status": res.get("status"), "run_id": res.get("run_id"),
             "children": kids, "fork_none_in_prompt": told if sent.exists() else None,
             "switch_seen": seen, "moved": bool(rec.get("parallel_fork_turns_moved")),
             "switch_ok": seen == u["arm"] and not rec.get("parallel_fork_turns_moved")
-            and sent.exists() and told == (u["arm"] == "none"),
-            **st, "first_input_runs": st["first_input"], "prompt_tokens_runs": st["prompt_tokens"],
-            "first_input": st["first_input"] + kids["first_input"],
-            "prompt_tokens": st["prompt_tokens"] + kids["prompt_tokens"]}
+            and told == (u["arm"] == "none"),
+            # the ledger's usage already holds the children's tokens (agents/codex.py adds them to each attempt):
+            # prompt_tokens is the ledger's; first_input adds each child's first request, which the ledger has not
+            **st, "first_input_runs": st["first_input"], "first_input": st["first_input"] + kids["first_input"]}
 
 
 def m5_unit(u: dict, a, iso: PF.Unit, env: dict, job: PF.Job) -> dict:
@@ -348,6 +384,8 @@ def m5_unit(u: dict, a, iso: PF.Unit, env: dict, job: PF.Job) -> dict:
     ctx = rec.get("shared_context") or {}
     keep = {k: ctx.get(k) for k in ("chars", "est_tokens", "items", "deduped", "deduped_chars") if k in ctx}
     attached = bool(ctx.get("source")) and bool(ctx.get("chars"))
+    if not res.get("run_id") or not attached:
+        raise RuntimeError(f"no run or no shared context attached (rc {rc}, {ctx.get('why')}): {err[-200:]}")
     return {"rc": rc, "wall_s": wall, "stderr": err[-400:] if rc else "", "ok": sc["ok"], "pytest": sc["pytest"],
             "right": int(sc["ok"]), "ccx_ok": res.get("ok"), "status": res.get("status"), "run_id": res.get("run_id"),
             "shared_context": keep, "context_attached": attached, "switch_seen": "deduped" in ctx,
@@ -362,7 +400,9 @@ def unit_key(u: dict) -> str:
 
 
 def iso_of(u: dict, a, work: Path) -> PF.Unit:
-    key = unit_key(u)
+    # the folders are named without the arm: the cwd is in the sub-agent's prompt, so both arms see the same one
+    # (the two units of a pair run one after another and each removes its folders)
+    key = f"{u['exp']}-{u['rep']}-{u['task']}"
     # m5's fake lead session lives in the unit's own Claude home (no Claude process runs in m5); m4 may start a
     # Claude reviewer, which keeps the person's login under the flags isolation, as round 5's default
     return PF.Unit(key=key, work=work, repo=work / key, hub=work / f"h-{key}", label=u["label"],
@@ -399,6 +439,7 @@ def run_unit(u: dict, a, work: Path) -> dict:
         for d in (iso.repo, iso.hub, iso.worktrees):
             r2._rmtree(d)
         (work / f"{iso.key}.plan.json").unlink(missing_ok=True)
+        r2._rmtree(iso.x)
     row["ts"] = datetime.now(timezone.utc).isoformat()
     return row
 
@@ -463,8 +504,11 @@ def cmd_run(a) -> int:
     res = Path(a.out) if a.out else RESULTS
     rows = read_jsonl(res)
     have = {done_key(r) for r in rows if not r.get("error")}
-    todo = [{**u, "tag": a.tag, "label": f"eval-b3arms:{a.tag}:{unit_key(u)}"} for u in schedule(exps, reps, tasks)]
-    todo = [u for u in todo if done_key(u) not in have][: a.limit or None]
+    planned = {x: len(tasks[x]) * reps[x] for x in exps}           # pairs the rule expects, per experiment
+    todo = [{**u, "tag": a.tag, "label": f"eval-b3arms:{a.tag}:{unit_key(u)}", "planned_pairs": planned[u["exp"]]}
+            for u in schedule(exps, reps, tasks)]
+    arms = {x for x in a.arms.split(",") if x} if a.arms else None
+    todo = [u for u in todo if done_key(u) not in have and (not arms or u["arm"] in arms)][: a.limit or None]
     est = estimate(todo)
     print(f"{len(todo)} unit(s) to run, estimated ${est} (budget ${a.budget}, tag {a.tag} spent "
           f"${spent(rows, a.tag)}); models " + ", ".join(f"{x} {'/'.join(MODEL[x])}" for x in exps), flush=True)
@@ -484,7 +528,10 @@ def cmd_run(a) -> int:
     fp = {"commit": commit(), "versions": PF.cli_versions(("codex", "claude")), "preflight": probs or "pass",
           "canary": not a.no_canary}
     for u in todo:
-        if spent(read_jsonl(res), a.tag) + a.extra_spent >= a.budget:
+        done = {done_key(r) for r in read_jsonl(res) if not r.get("error")}
+        partner = (u["tag"], u["exp"], u["task"], u["rep"], next(x for x in EXPS[u["exp"]] if x != u["arm"]))
+        # the budget is checked before a pair starts, never between its two units
+        if partner not in done and spent(read_jsonl(res), a.tag) + a.extra_spent >= a.budget:
             print(f"budget reached (${a.budget}): stopping before {unit_key(u)}", flush=True)
             break
         row = run_unit(u, a, work)
@@ -525,7 +572,12 @@ def _sum(rs: list[dict], k: str) -> float:
 def rule(rows: list[dict], exp: str, planned: int | None = None) -> dict:
     base, arm = EXPS[exp]
     pairs, left_out, cells = _pairs(rows, exp)
-    planned = planned or cells
+    if not planned:              # what each tag's run planned (recorded in its rows), else what the rows show
+        by_tag: dict = {}
+        for r in rows:
+            if r.get("exp") == exp and r.get("planned_pairs"):
+                by_tag[r.get("tag")] = max(by_tag.get(r.get("tag"), 0), int(r["planned_pairs"]))
+        planned = max(sum(by_tag.values()), cells)
     A, B = [p[0] for p in pairs], [p[1] for p in pairs]
     side = {}
     for name, rs in ((base, A), (arm, B)):
@@ -543,8 +595,15 @@ def rule(rows: list[dict], exp: str, planned: int | None = None) -> dict:
                               deduped_chars=sum((r.get("shared_context") or {}).get("deduped_chars") or 0 for r in rs))
     a, b = side[base], side[arm]
     checks = {"right_not_lower": b["right"] >= a["right"],
-              "runs_or_first_input_lower": b["runs"] < a["runs"] or b["first_input"] < a["first_input"],
-              "prompt_not_higher": b["prompt_tokens"] <= a["prompt_tokens"]}
+              "runs_or_first_input_lower": b["runs"] < a["runs"] or b["first_input"] < a["first_input"]}
+    if exp == "m5":
+        # m5 saves tens of tokens a request: one more request (a ~20k prefix) would decide a total, so its prompt
+        # condition is per request (registered so before any m5 unit ran)
+        per = {n: round(x["prompt_tokens"] / x["requests"], 1) if x["requests"] else None for n, x in ((base, a), (arm, b))}
+        a["prompt_per_request"], b["prompt_per_request"] = per[base], per[arm]
+        checks["prompt_per_request_not_higher"] = per[base] is not None and per[arm] is not None and per[arm] <= per[base]
+    else:
+        checks["prompt_not_higher"] = b["prompt_tokens"] <= a["prompt_tokens"]
     if exp == "m4":
         checks["trap_right_not_lower"] = b["right_trap"] >= a["right_trap"]
     if exp == "m3":
@@ -561,8 +620,15 @@ def rule(rows: list[dict], exp: str, planned: int | None = None) -> dict:
            "verdict": verdict, "checks": checks, base: a, arm: b, "left_out": left_out}
     if why:
         out["unknown_because"] = why
+    if exp == "m4":
+        out["note"] = ("a piece spun off from a merged run climbs again from the low rung: one more chance than the "
+                       "baseline's piece had")
     if exp == "m3":
         out["child_context_losses"] = lost
+        out["pairs_without_children"] = sum(not (p[0].get("children") or {}).get("n")
+                                            and not (p[1].get("children") or {}).get("n") for p in pairs)
+        out["arm_fork_none_of_spawns"] = [sum((p[1].get("children") or {}).get("fork_none_calls") or 0 for p in pairs),
+                                          sum((p[1].get("children") or {}).get("spawn_calls") or 0 for p in pairs)]
     return out
 
 
@@ -584,6 +650,7 @@ def parser() -> argparse.ArgumentParser:
     r.add_argument("--reps", type=int, default=0, help=f"repeats of every task x arm (default {REPS})")
     r.add_argument("--tasks", default="", help="comma-separated task / plan ids (default: all of the experiment)")
     r.add_argument("--limit", type=int, default=0, help="run at most this many units (0: all)")
+    r.add_argument("--arms", default="", help="only these arms (a pre-run, under a tag of its own: the rule needs both arms of a pair run back to back)")
     r.add_argument("--budget", type=float, default=5.0, help="stop before a new unit once this tag's rows reach $")
     r.add_argument("--extra-spent", type=float, default=0.0)
     r.add_argument("--codex-home", default="", help="the dedicated eval CODEX_HOME (required to run)")

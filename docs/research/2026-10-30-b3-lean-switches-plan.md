@@ -189,26 +189,32 @@ unit whose switch did not take is `switch_ok: false` and stays out of the rule.
 
 Per unit: right (pieces or the hidden test), ccx runs (every ledger row: sub-agent runs, reviews, fix rounds, spun-off
 pieces), reviews and their $, requests, the `first_input` sum (m3: plus each child's first request input, from its
-rollout), total prompt tokens (fresh + cache writes + cache reads of every run; m3: plus the children's), $, wall; m4
+rollout), total prompt tokens (fresh + cache writes + cache reads of every run; for m3 the ledger's usage already holds the
+children's), $, wall; m4
 also each piece's state, follow-ups and spun-off pieces; m5 `est_tokens` and `deduped_chars`.
 
 **The rule (registered first)**, per experiment on the pairs both arms finished with the switch recorded:
 
 1. the switch arm's right count is not below the baseline's (m4: over all pieces and over the trap pieces alone);
 2. its ccx runs or its `first_input` sum is lower;
-3. its total prompt tokens are not higher;
+3. its total prompt tokens are not higher (m5: per request: dedupe saves tens of tokens a request, and one more
+   request, a ~20k prefix, would decide a total);
 4. m3 only: no pair where the switch arm is wrong, the baseline right and the switch arm's run spawned children (a
    child that lacked the context it was not given, not caught by its parent).
 
-All hold = Pass; any fails = Fail. Fewer than 80% of the planned pairs finished, or a unit whose switch did not take =
-Unknown. Wall time is reported, not judged (M4 is expected to be slower). A spun-off piece climbs again from the low
+All hold = Pass; any fails = Fail. Fewer than 80% of the planned pairs finished (`run` writes the planned count into each
+row), or a unit whose switch did not take = Unknown. A unit that failed (an error in its row) is missing, not a switch
+that did not take, and `run` again retries it; the budget is checked before a pair starts, never between its units. Wall time is reported, not judged (M4 is expected to be slower). A spun-off piece climbs again from the low
 rung, one more chance than the baseline had; the report says so. A pass only makes a default-on change a candidate;
 whether to turn it on is decided separately.
 
-**The three runs** (estimated cost below; `--dry-run` shows the schedule first):
+**The three runs** (`--dry-run` shows the schedule first). Estimate: m4 16 units about $3.8, m3 12 units about
+$2.8, m5 32 units about $0.6, about $7.2 in all. From the 2026-10-31 pre-run of one unit (m4 mp1, merge arm, tag
+b3pre, not part of the results): 5/5 right, 2 runs (the merged run and one review), $0.10, 129 s, the switch took,
+nothing left behind; the rest are round-2 guesses. `--arms` is for a pre-run only, under a tag of its own.
 
 ```bash
-python scripts/eval/b3_arms.py run --exp m4 --tag b3m4 --codex-home <eval codex home> --budget 6
+python scripts/eval/b3_arms.py run --exp m4 --tag b3m4 --codex-home <eval codex home> --budget 5
 python scripts/eval/b3_arms.py run --exp m3 --tag b3m3 --codex-home <eval codex home> --budget 4
 python scripts/eval/b3_arms.py run --exp m5 --tag b3m5 --codex-home <eval codex home> --budget 1.5
 python scripts/eval/b3_arms.py summary --tag b3m4   # once per tag

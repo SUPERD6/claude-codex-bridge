@@ -83,11 +83,27 @@ def test_m5_dedupe_drops_the_persons_repeat_and_keeps_the_leads_restatement(tmp_
 def test_rollout_inputs_reads_token_usage_records_live_or_archived(tmp_path):
     d = tmp_path / "archived_sessions"
     d.mkdir()
-    recs = [{"type": "token_usage_record", "timestamp": f"2026-10-31T00:00:0{i}Z",
-             "payload": {"usage": {"input_tokens": n}}} for i, n in ((2, 900), (1, 700))]
+    # a forked child's file starts with a copy of its parent's older history: only its own records count
+    recs = [{"type": "token_usage_record", "timestamp": "2026-10-31T00:00:00Z", "payload": {"usage": {"input_tokens": 5}}},
+            {"type": "session_meta", "timestamp": "2026-10-31T00:00:01Z", "payload": {"id": "abc"}}]
+    recs += [{"type": "token_usage_record", "timestamp": f"2026-10-31T00:00:0{i}Z",
+              "payload": {"usage": {"input_tokens": n}}} for i, n in ((3, 900), (2, 700))]
     (d / "rollout-2026-abc.jsonl").write_text("\n".join(json.dumps(r) for r in recs) + "\nnot json\n", encoding="utf-8")
     assert B.rollout_inputs(tmp_path, "abc") == [700, 900]
     assert B.rollout_inputs(tmp_path, "zzz") == [] and B.rollout_inputs(None, "abc") == []
+
+
+def test_spawn_calls_counts_the_parents_spawns_and_those_without_history(tmp_path):
+    d = tmp_path / "sessions" / "2026"
+    d.mkdir(parents=True)
+    evs = [{"payload": {"type": "function_call", "name": "spawn_agent", "arguments": '{"fork_turns": "none"}'}},
+           {"payload": {"type": "function_call", "name": "spawn_agent", "arguments": '{"message": "x"}'}},
+           {"payload": {"type": "custom_tool_call", "name": "exec",
+                        "input": 'tools.spawn_agent(message="a", fork_turns="none")'}},
+           {"payload": {"type": "function_call", "name": "shell", "arguments": "spawn_agent docs"}}]
+    (d / "rollout-p1.jsonl").write_text("\n".join(json.dumps(e) for e in evs), encoding="utf-8")
+    assert B.spawn_calls(tmp_path, "p1") == {"spawn_calls": 3, "fork_none_calls": 2}
+    assert B.spawn_calls(tmp_path, None) == {"spawn_calls": 0, "fork_none_calls": 0}
 
 
 def _row(exp, task, rep, arm, **kw):
@@ -107,8 +123,13 @@ def test_rule_pass_fail_and_unknown():
     assert B.rule(dearer, "m4")["verdict"] == "Fail"
     # the switch did not take in one unit: Unknown, whatever the numbers say
     assert B.rule([rows[0], {**rows[1], "switch_ok": False}], "m4")["verdict"] == "Unknown"
-    # too few of the planned pairs
+    # too few of the planned pairs: given, or recorded in the rows by the run that planned them (a budget stop)
     assert B.rule(rows, "m4", planned=4)["verdict"] == "Unknown"
+    stopped = [{**r, "planned_pairs": 8} for r in rows]
+    assert B.rule(stopped, "m4")["planned_pairs"] == 8 and B.rule(stopped, "m4")["verdict"] == "Unknown"
+    # a unit that failed is missing, not a switch that did not take
+    failed = B.rule([rows[0], {**rows[1], "error": "RuntimeError: x", "switch_ok": False}], "m4")
+    assert failed["left_out"][0]["why"].startswith("RuntimeError") and failed["pairs"] == 0
     # m3: the arm wrong where the baseline was right, with children spawned: a context loss, Fail
     m3 = [_row("m3", "bank", 1, "all", children={"n": 2, "first_inputs": [30000, 31000]}),
           _row("m3", "bank", 1, "none", right=0, first_input=500, prompt_tokens=100,
@@ -122,6 +143,9 @@ def test_rule_pass_fail_and_unknown():
                shared_context={"est_tokens": 290, "deduped": 1, "deduped_chars": 27})]
     r5 = B.rule(m5, "m5")
     assert r5["verdict"] == "Pass" and r5["dedupe"]["deduped_chars"] == 27 and r5["keep"]["est_tokens"] == 300
+    # m5's prompt condition is per request: one more request is not a loss by itself
+    more = B.rule([m5[0], {**m5[1], "requests": 6, "prompt_tokens": 5988}], "m5")
+    assert more["checks"]["prompt_per_request_not_higher"] and "prompt_not_higher" not in more["checks"]
 
 
 def test_dry_run_prints_the_schedule_and_cost_and_runs_nothing(tmp_path, capsys):
@@ -188,7 +212,8 @@ def test_m3_unit_records_fork_turns_and_the_line_in_the_prompt(tmp_path, monkeyp
     assert ("fork_turns=\"none\"" in prompt) == (arm == "none")
 
 
-def test_m4_merge_unit_runs_one_merged_run_and_scores_each_piece(tmp_path, monkeypatch):
+@pytest.mark.parametrize("arm", ["merge", "batch"])
+def test_m4_unit_scores_each_piece_where_its_run_left_it(tmp_path, monkeypatch, arm):
     mat, pieces = B.m4_material("mp1")
     trap = B._TRAP["dupparse"]
     writes = [f"{B._PIECE[p['id']]['file']}={B._PIECE[p['id']]['solution']}" for p in pieces if p["kind"] == "piece"]
@@ -196,9 +221,13 @@ def test_m4_merge_unit_runs_one_merged_run_and_scores_each_piece(tmp_path, monke
     writes += [f"{f}={c}" for f, c in trap["solution"].items()]
     summary = "\n".join(f"[eval-{p['id']}] done: implemented" for p in pieces)
     _fake(monkeypatch, tmp_path, {"FAKE_WRITE": ";".join(writes), "FAKE_SUMMARY": summary})
-    row = B.run_unit(_unit("m4", "mp1", "merge"), _A, tmp_path)
+    row = B.run_unit(_unit("m4", "mp1", arm), _A, tmp_path)
     assert not row.get("error"), row.get("error")
-    assert row["switch_seen"] and row["switch_ok"] and len(row["merged"]) == 1
-    assert row["n_pieces"] == 5 and row["right"] == 5 and row["right_trap"] == 1
-    assert all(x["merged_run"] for x in row["pieces"]) and all(x["worktree"] for x in row["pieces"])
-    assert row["runs"] >= 1 and row["follow_ups"] == 0 and row["spun_off"] == 0
+    assert row["switch_ok"] and row["n_pieces"] == 5 and row["right"] == 5 and row["right_trap"] == 1
+    if arm == "merge":
+        assert row["switch_seen"] and len(row["merged"]) == 1 and all(x["merged_run"] for x in row["pieces"])
+        assert row["follow_ups"] == 0 and row["spun_off"] == 0
+    else:                       # five runs, each piece found by its run's label and scored in its own worktree
+        assert not row["switch_seen"] and not any(x["merged_run"] for x in row["pieces"])
+        assert len({x["run_id"] for x in row["pieces"]}) == 5 and all(x["worktree"] for x in row["pieces"])
+        assert row["runs"] >= 5
