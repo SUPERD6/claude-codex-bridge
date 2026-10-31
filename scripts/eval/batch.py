@@ -878,6 +878,8 @@ def cmd_run(a) -> int:
                                         tasks_file=Path(TB.__file__)))
     for p in rep["problems"]:
         print(f"[preflight] {p}", flush=True)
+    for w in rep.get("warnings") or []:          # not a problem, but the person must see it
+        print(f"[preflight] *** {w} ***", flush=True)
     if not rep["ok"] and not a.force_unclean:
         print("preflight failed: not starting (fix the above, or --force-unclean to run anyway; it is recorded)",
               flush=True)
@@ -1038,7 +1040,9 @@ def summarize(rows: list[dict]) -> dict:
                                               for arm in arm_order(arm_of(r) for r in rs)}
     out = {"cells": cells, "paired": paired(rows), "error_rows": len(errors),
            "unclean_rows": sum(r.get("env_clean") is False for r in rows)}
-    mix = PF.sandbox_mix(rows)            # the Codex Windows sandbox each row actually ran under
+    # the Codex Windows sandbox each row actually ran under: the rows without an error (as r5.py), whose arm's
+    # preflight arm (FLAGS_ARM) starts Codex
+    mix = PF.sandbox_mix(rows, lambda r: FLAGS_ARM.get(r.get("arm"), r.get("arm")) in PF.CODEX_ARMS)
     if mix:
         out["codex_windows_sandbox"] = mix
     return out
@@ -1079,7 +1083,9 @@ def parser() -> argparse.ArgumentParser:
     r.add_argument("--workdir", default="")
     r.add_argument("--timeout", type=int, default=5400)
     r.add_argument("--dry-run", action="store_true")
-    r.add_argument("--no-canary", action="store_true")
+    r.add_argument("--no-canary", action="store_true",
+                   help="skip the canaries: one tiny real lead and, when an arm starts Codex, one real Codex "
+                        "T1 request that must run a shell command")
     r.add_argument("--ext-cache", default="")
     r.add_argument("--ext-python", default="")
     PF.add_options(r)

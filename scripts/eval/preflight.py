@@ -37,7 +37,11 @@ What it guarantees, by mechanism (command-line flags, environment, settings file
                             (codex_invocation, T1 model, write permission, the eval home, CCX_CODEX_ISOLATE=1) that
                             must run one shell command and show its output: a Windows sandbox that cannot start
                             (UAC cancelled, error 1223) stops the run before any unit, and the home is checked again
-                            after it. Rows record the home's Windows sandbox (codex_windows_sandbox).
+                            after it. Rows record the home's Windows sandbox (codex_windows_sandbox). On Windows the
+                            eval home must use [windows] sandbox = "unelevated" (a new home's config.toml is written
+                            with it; elevated or unset is a problem before any canary): the elevated sandbox's
+                            machine-wide accounts are shared with the person's own ~/.codex, and a setup from either
+                            home rotates them and breaks the other one.
   E2 no leftovers           every process a unit starts runs in a Windows Job Object (started suspended, so nothing
                             escapes before it is in the job; POSIX: its own session, plus a marker variable
                             CCX_EVAL_UNIT); after the unit the job's survivors (killed by closing the job, never by a
@@ -96,6 +100,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import ROOT  # noqa: E402  (puts ROOT on sys.path)
+import daily_home as DH  # noqa: E402  (no import of this module: no cycle)
 
 from ccx.agents.codex import CODEX_KEEP, codex_invocation  # noqa: E402
 from ccx.delegate import ENV_MARKERS  # noqa: E402
@@ -1250,6 +1255,33 @@ def codex_kept_toml(real_home: Path) -> str:
     return "".join(out)
 
 
+def eval_home_kept_toml(real_home: Path, platform: str | None = None) -> str:
+    """The kept settings a new eval CODEX_HOME's config.toml is written with. A design decision (docs/DECISIONS.md
+    2026-10-31): on win32 [windows] sandbox is always "unelevated" (daily_home.WINDOWS_SANDBOX), whatever the
+    person's own config.toml says, because the elevated sandbox's machine-wide accounts are shared with their
+    ~/.codex and a setup from either home rotates the password the other one keeps (round pg1). Elsewhere the
+    person's kept settings as before (codex_kept_toml)."""
+    kept = codex_kept_toml(real_home)
+    if (platform or sys.platform) == "win32":
+        return DH.with_windows_sandbox(kept, DH.WINDOWS_SANDBOX)
+    return kept
+
+
+def sandbox_secrets_meta(home: Path | None) -> dict:
+    """Whether a CODEX_HOME's .sandbox-secrets (the elevated sandbox's account passwords) exists, and the newest
+    mtime of it and its direct entries. Metadata only: nothing in it is opened or read."""
+    p = Path(home) / ".sandbox-secrets" if home else None
+    if not p or not (p.exists() or p.is_symlink()):
+        return {"exists": False, "mtime": None}
+    try:
+        times = [p.lstat().st_mtime]
+        if p.is_dir() and not p.is_symlink():
+            times += [c.lstat().st_mtime for c in p.iterdir()]
+    except OSError:
+        return {"exists": True, "mtime": None}
+    return {"exists": True, "mtime": max(times)}
+
+
 def models_sha(f: Path) -> str | None:
     """The eval Codex home's model list, without the fields Codex rewrites on every refresh (fetched_at, etag)."""
     try:
@@ -1266,9 +1298,12 @@ def codex_skills(d: Path) -> list[str]:
     return sorted(p.name for p in s.iterdir() if not p.name.startswith(".")) if s.is_dir() else []
 
 
-def check_codex_home(d: Path | None, need: bool, real: dict, write: bool = False) -> tuple[list[str], dict]:
+def check_codex_home(d: Path | None, need: bool, real: dict, write: bool = False,
+                     platform: str | None = None) -> tuple[list[str], dict]:
     """The dedicated eval CODEX_HOME. `write`: the run is starting, so a missing config.toml is written (only the
-    keys ccx carries over on a lean start); checking alone writes nothing."""
+    keys ccx carries over on a lean start, and on win32 [windows] sandbox = "unelevated": eval_home_kept_toml);
+    checking alone writes nothing. On win32 (or `platform`) a home whose sandbox is elevated or unset is a problem,
+    before any canary starts Codex in it."""
     if not need:
         return [], {"mode": "not-used"}
     if not d:
@@ -1308,7 +1343,7 @@ def check_codex_home(d: Path | None, need: bool, real: dict, write: bool = False
     cfg = d / "config.toml"
     if not cfg.exists() and write:
         cfg.write_text("# eval CODEX_HOME (scripts/eval/preflight.py): only what ccx carries over on a lean start\n"
-                       + codex_kept_toml(real["codex_home"]) + codex_features_toml(), encoding="utf-8")
+                       + eval_home_kept_toml(real["codex_home"], platform) + codex_features_toml(), encoding="utf-8")
     try:
         data = tomllib.loads(cfg.read_text(encoding="utf-8")) if cfg.exists() else {}
     except (OSError, tomllib.TOMLDecodeError) as e:
@@ -1328,11 +1363,20 @@ def check_codex_home(d: Path | None, need: bool, real: dict, write: bool = False
             probs.append(f"eval CODEX_HOME config.toml has [{t}]")
     if (data.get("features") or {}).get("memories") or any((data.get("memories") or {}).values()):
         probs.append("eval CODEX_HOME config.toml turns Codex memories on")
-    names = sorted(p.name for p in d.iterdir() if p.name not in ("sessions", "archived_sessions", "log", "tmp"))
+    sandbox = codex_windows_sandbox(d, platform)
+    # checking alone with no config.toml yet: a starting run writes it with the unelevated sandbox
+    if sandbox not in ("n/a", DH.WINDOWS_SANDBOX) and (cfg.exists() or write):
+        probs.append(f"eval CODEX_HOME's Windows sandbox is {sandbox}, not {DH.WINDOWS_SANDBOX}: the elevated sandbox "
+                     "(Codex's default when unset) runs commands as machine-wide accounts shared with your own "
+                     "~/.codex, each home keeping its own copy of their password; a sandbox setup from this home "
+                     "(which a Codex start, the canary included, may launch behind a UAC prompt) rotates them and "
+                     "breaks your ~/.codex, and one from yours breaks this home (round pg1: 13 units lost to error "
+                     f"1223). Add [windows] sandbox = \"{DH.WINDOWS_SANDBOX}\" to {cfg}")
+    names =sorted(p.name for p in d.iterdir() if p.name not in ("sessions", "archived_sessions", "log", "tmp"))
     info = {"mode": "eval", "files_sha256": hashlib.sha256("\n".join(names).encode()).hexdigest()[:16],
             "models_cache_sha256": models_sha(d / "models_cache.json") if (d / "models_cache.json").exists() else None,
             "features_off": [f for f in CODEX_FEATURES_OFF if feats.get(f) is False],
-            "remote_cache": codex_remote_cache_sig(d), "windows_sandbox": codex_windows_sandbox(d)}
+            "remote_cache": codex_remote_cache_sig(d), "windows_sandbox": sandbox}
     if removed:
         info["removed"] = removed
     return probs, info
@@ -1355,26 +1399,37 @@ def codex_windows_sandbox(d: Path | None, platform: str | None = None) -> str:
     return value if isinstance(value, str) and value else "unset"
 
 
+SANDBOX_UNKNOWN = "unknown"
+
+
 def row_windows_sandbox(row: dict) -> str | None:
     """The Codex Windows sandbox a result row actually ran under: a daily arm's own home first (daily.windows_sandbox,
-    also in the fingerprint's models and isolation), else the eval home's (fingerprint.codex_windows_sandbox); None
-    for a row from before the field."""
+    also in the fingerprint's models and isolation), else the eval home's (fingerprint.codex_windows_sandbox).
+    SANDBOX_UNKNOWN for a row from before the field (the sandbox was not recorded). Meant for a row whose arm
+    starts Codex (sandbox_mix picks those)."""
     fp = row.get("fingerprint") or {}
     for v in ((row.get("daily") or {}).get("windows_sandbox"),
               (((fp.get("models") or {}).get("daily")) or {}).get("windows_sandbox"),
               (fp.get("isolation") or {}).get("daily_windows_sandbox"), fp.get("codex_windows_sandbox")):
         if v:
             return v
-    return None
+    return SANDBOX_UNKNOWN
 
 
-def sandbox_mix(rows: list[dict]) -> dict | None:
-    """How many rows (per tag) ran under each Codex Windows sandbox; `note` when there is more than one (r5.py and
-    batch.py summaries print it). None when no row records one."""
+def runs_codex(row: dict) -> bool:
+    """A result row whose arm starts Codex (CODEX_ARMS; self, builtin and the like do not)."""
+    return row.get("arm") in CODEX_ARMS
+
+
+def sandbox_mix(rows: list[dict], codex_row=runs_codex) -> dict | None:
+    """How many rows (per tag) ran under each Codex Windows sandbox; `note` when there is more than one value,
+    SANDBOX_UNKNOWN counting as one (r5.py and batch.py summaries print it). The rows counted, the same for both
+    summaries: every row without an `error` (clean or not: an unclean row still ran Codex under that sandbox) whose
+    arm starts Codex (`codex_row`: batch.py maps its own arm names first). None when there is no such row."""
     counts: dict = {}
     by_tag: dict = {}
     for r in rows:
-        v = row_windows_sandbox(r)
+        v = row_windows_sandbox(r) if "error" not in r and codex_row(r) else None
         if v:
             counts[v] = counts.get(v, 0) + 1
             t = by_tag.setdefault(str(r.get("tag")), {})
@@ -1385,7 +1440,9 @@ def sandbox_mix(rows: list[dict]) -> dict | None:
     if len(counts) > 1:
         tags = "; ".join(f"{t}: " + ", ".join(f"{v} {n}" for v, n in sorted(c.items())) for t, c in sorted(by_tag.items()))
         out["note"] = (f"WARNING: these rows ran under different Codex Windows sandboxes ({tags}): their Codex numbers "
-                       "are not directly comparable (an elevated sandbox can fail on UAC where an unelevated one runs)")
+                       "are not directly comparable (an elevated sandbox can fail on UAC where an unelevated one runs)"
+                       + (f"; {SANDBOX_UNKNOWN}: rows from before this was recorded, the sandbox they ran under is "
+                          "not known: check it by hand" if SANDBOX_UNKNOWN in counts else ""))
     return out
 
 
@@ -1621,7 +1678,11 @@ def skill_canary(work: Path, u_kw: dict, timeout: int = 300) -> dict:
 # The Codex canary's one shell command: plain on PowerShell 5.1 and POSIX shells alike (no inner quotes), python is
 # first on the unit's PATH (prepare), and the expected output is not written in the prompt, so it must really run.
 CODEX_CANARY_CMD, CODEX_CANARY_OUT = 'python -c "print(760761*2)"', "1521522"
-CODEX_SANDBOX_FAIL = re.compile(r"\b1223\b|setup helper", re.I)     # UAC cancelled: Windows' ERROR_CANCELLED
+# UAC cancelled (Windows' ERROR_CANCELLED, 1223) on the sandbox's setup helper: "setup helper" anywhere, or 1223 on
+# a line that also names the launch (launch_canceled, ShellExecuteExW, "os error"), so a source line (exec.rs:1223),
+# a pid or a port of 1223 is not taken for one
+CODEX_SANDBOX_FAIL = re.compile(r"setup helper|(?=.*\b1223\b)(?=.*(?:launch_canceled|shellexecuteexw|os error))",
+                                re.I)
 
 
 class _environ:
@@ -1648,7 +1709,8 @@ class _environ:
 
 def codex_sandbox_failure(*texts: str | None) -> str | None:
     """The first line showing that Codex could not run a shell command because of the machine (its Windows sandbox
-    helper: error 1223, "setup helper", or one of ccx's ENV_MARKERS), else None."""
+    helper: "setup helper", error 1223 with the launch named on the same line, or one of ccx's ENV_MARKERS), else
+    None. A run that succeeded but mentions the setup helper is reported too."""
     for text in texts:
         for line in (text or "").splitlines():
             if CODEX_SANDBOX_FAIL.search(line) or any(m in line.lower() for m in ENV_MARKERS):
@@ -1696,6 +1758,8 @@ def codex_canary(work: Path, u_kw: dict, timeout: int = 240) -> dict:
         item = ev.get("item") or {}
         if t == "item.completed" and item.get("type") == "command_execution":
             outputs.append(str(item.get("aggregated_output") or ""))
+        elif t == "item.completed" and item.get("type") == "error":
+            errors.append(str(item.get("message") or json.dumps(item)))
         elif t in ("error", "turn.failed"):
             errors.append(str(ev.get("message") or (ev.get("error") or {}).get("message") or json.dumps(ev)))
     probs = []
@@ -1793,16 +1857,29 @@ def run_checks(o: Options) -> dict:
                 rmtree(cw)
         probs += scan["problems"]
     ccan = None
+    warnings: list[str] = []
     if o.canary and not probs and need_codex:
         # one real `codex exec` as a unit runs it: a sandbox that cannot run commands (pg1: UAC cancelled, 1223)
         # is seen here, before any paid unit
         cw = o.work if o.start else Path(tempfile.mkdtemp(prefix="ccx-canary-"))
+        homes = {"eval CODEX_HOME": o.codex_home, "your own CODEX_HOME": real["codex_home"]}
+        secrets_before = {k: sandbox_secrets_meta(h) for k, h in homes.items()}      # metadata only, never read
         try:
             ccan = codex_canary(cw, {"claude": o.claude, "codex_home": o.codex_home, "dsh": o.dsh})
+        except Exception as e:            # tiers.toml unreadable, the CLI could not start, ...: a problem, no traceback
+            rmtree(cw / "canary")
+            ccan = {"ok": False, "problems": [f"codex canary could not run: {type(e).__name__}: {e}"], "info": {}}
         finally:
             if not o.start:
                 rmtree(cw)
         probs += ccan["problems"]
+        secrets_after = {k: sandbox_secrets_meta(h) for k, h in homes.items()}
+        changed = [k for k in homes if secrets_after[k] != secrets_before[k]]
+        ccan.setdefault("info", {})["sandbox_secrets_changed"] = changed
+        if changed:
+            warnings.append(f"the Codex canary changed .sandbox-secrets in {', '.join(changed)}: the shared Windows "
+                            "sandbox accounts may just have been set up again (their password rotated); your own "
+                            "~/.codex may need its Windows sandbox set up again before your next Codex session there")
     if (can is not None or scan is not None or ccan is not None) and need_codex and codex.get("mode") == "eval" \
             and o.codex_home:
         # the Codex canary started Codex in the eval home: what a start brings in (synced plugins, features turned
@@ -1825,6 +1902,8 @@ def run_checks(o: Options) -> dict:
     if ccan is not None:
         rep["codex_canary"] = "pass" if ccan["ok"] else "fail"
         rep["codex_canary_info"] = ccan.get("info")
+    if warnings:                         # not problems: printed loudly (r5.py, batch.py, this script's main)
+        rep["warnings"] = warnings
     rep["result"] = "pass" if rep["ok"] else ("forced" if o.force_unclean else "fail")
     return rep
 
@@ -1944,7 +2023,9 @@ def parser() -> argparse.ArgumentParser:
     ap.add_argument("--arms", default="self,builtin,ccx,direct")
     ap.add_argument("--workdir", required=True)
     ap.add_argument("--jobs", type=int, default=2)
-    ap.add_argument("--canary", action="store_true", help="also run one tiny real lead (one cheap request)")
+    ap.add_argument("--canary", action="store_true",
+                    help="also run one tiny real lead (one cheap request) and, when an arm starts Codex, one real "
+                         "Codex T1 request (codex exec) that must run a shell command")
     return ap
 
 
@@ -1974,6 +2055,8 @@ def main(argv=None) -> int:
     a = parser().parse_args(argv)
     rep = run_checks(options_from(a, a.arms.split(","), Path(a.workdir), a.canary))
     print(json.dumps(rep, ensure_ascii=False, indent=1))
+    for w in rep.get("warnings") or []:
+        print(f"*** {w} ***", file=sys.stderr)
     return 0 if rep["ok"] else 1
 
 

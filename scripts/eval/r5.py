@@ -2162,6 +2162,8 @@ def cmd_run(a) -> int:
         rep["wait_quiet"] = waited                 # in preflight.json: this run waited for a quiet machine
     for p in rep["problems"]:
         print(f"[preflight] {p}", flush=True)
+    for w in rep.get("warnings") or []:          # not a problem, but the person must see it
+        print(f"[preflight] *** {w} ***", flush=True)
     if not rep["ok"] and not a.force_unclean:
         print("preflight failed: not starting (fix the above, or --force-unclean to run anyway; it is recorded)",
               flush=True)
@@ -2956,7 +2958,9 @@ def summarize(rows: list[dict], include_unclean: bool = False) -> dict:
     if ex_arm:
         res["excluded_by_arm"] = ex_arm
         res["excluded_by_tag"] = ex_tag
-    mix = PF.sandbox_mix(every)          # the Codex Windows sandbox each row actually ran under
+    # the Codex Windows sandbox each row actually ran under: the rows without an error, clean or not (as batch.py),
+    # whose arm starts Codex
+    mix = PF.sandbox_mix(every)
     if mix:
         res["codex_windows_sandbox"] = mix
     b3 = b3_rules(every)
@@ -3097,7 +3101,9 @@ def parser() -> argparse.ArgumentParser:
     r.add_argument("--dry-run", action="store_true")
     r.add_argument("--pin-commit", default="", help="refuse to run unless this checkout is at this commit (a tag "
                    "is also refused at a commit other than its earlier rows')")
-    r.add_argument("--no-canary", action="store_true", help="skip the one tiny real lead that checks the isolation")
+    r.add_argument("--no-canary", action="store_true",
+                   help="skip the canaries: the one tiny real lead that checks the isolation and, when an arm starts "
+                        "Codex, the one real Codex T1 request that must run a shell command")
     r.add_argument("--wait-quiet", type=_minutes, default=0, metavar="MINUTES", help="wait up to this long for "
                    "other heavy work on this machine (another eval, pytest, ccx run, claude -p, codex exec) to finish: "
                    "before the checks (still busy then, the preflight refuses as usual), and between units when that "
