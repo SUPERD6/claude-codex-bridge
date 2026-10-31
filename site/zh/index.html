@@ -74,9 +74,9 @@
   <section id="how">
     <h2>怎么连起来的</h2>
     <div class="figure">
-      <img class="for-light" src="../assets/architecture-light.svg" width="1200" height="660"
-           alt="Claude Code、Codex、Gemini CLI 都连到 ccx；谁当主都可以把简报交给另一家在后台跑、交回 JSON；ccx 选模型、重跑验收、请另一家审查、记对错和花费；下面是个人层 hub、项目层 .ccx 和本机只读页面 ccx ui">
-      <img class="for-dark" src="../assets/architecture-dark.svg" width="1200" height="660" alt="">
+      <img class="for-light" src="../assets/architecture-light.svg" width="1200" height="670"
+           alt="架构图：Claude Code、Codex、DeepSeek 都连到 ccx，谁都能当主导或接活；主导把简报交给另一家在后台跑、交回 JSON；ccx 选模型、重跑验收、请另一家审查，每次派活写一张收据（花费、验收、审查、结论、撤回）进账本，并从各工具自己的会话文件读出共享工作上下文；下面是个人层（hub：共享记忆、技能、MCP、账本）、项目层（.ccx：context.md、日志、对话板、交接、断点、撤回快照、队列）和本机页面 ccx ui（收据、token 去向）。Gemini CLI 只有子智能体适配器，没真跑过">
+      <img class="for-dark" src="../assets/architecture-dark.svg" width="1200" height="670" alt="">
     </div>
     <ol class="how">
       <li><b>打分</b>改几个文件、跨几个模块、目标清不清楚、风险、要不要新设计 → 难度 0–10。</li>

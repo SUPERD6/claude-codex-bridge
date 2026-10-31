@@ -48,6 +48,8 @@ def _slim(record: dict) -> dict:
     slim = {k: record.get(k) for k in ("run_id", "label", "to", "caller", "caller_vendor", "tier", "start_tier",
                                        "mode", "ok", "ts", "kind", "task", "step", "cwd", "session_id",
                                        "lead_session", "continue_depth", "ephemeral", "mode_source")}
+    if record.get("merge_of"):        # a follow-up / spun-off run of a `ccx batch --merge` run: count it with that plan
+        slim["merge_of"] = record["merge_of"]
     slim["rungs"] = [a.get("rung") for a in record["attempts"]]
     slim["sessions"] = sorted({a["session_id"] for a in record["attempts"] if a.get("session_id")})
     slim["b"] = (record.get("route") or {}).get("b")
@@ -105,6 +107,12 @@ def _slim(record: dict) -> dict:
                          "passed": bool(c.get("passed"))}
         if c.get("unchanged_tree"):                 # the run changed nothing: the check ran on the tree it found
             slim["check"]["unchanged_tree"] = True
+        cov = c.get("covers") or {}
+        if cov:                                     # P1-10: how many test files it ran; did the run change them
+            slim["check"]["covers_n"] = None if cov.get("unknown") else cov.get("n_files")
+            for k in ("basis_changed", "own_tests_only", "filtered", "added_to"):
+                if cov.get(k):
+                    slim["check"][k] = True
     return slim
 
 

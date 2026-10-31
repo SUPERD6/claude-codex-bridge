@@ -254,7 +254,7 @@ def _tree_fields(rec: dict) -> tuple[dict, str | None]:
 def restored(old_run: str, rec: dict) -> str:
     """How an interrupted piece came back (OpenRig's taxonomy): resumed | fresh | decide | failed."""
     if rec.get("kind") in ("quota", "auth", "needs_write", "over_budget", "user_stopped", "interrupted",
-                               "check_broken", "no_changes"):
+                               "check_broken", "no_changes", "no_answer"):
         return "decide"                 # something only the user or the lead can settle
     if not rec.get("ok") or rec.get("kind") in ("check_failed", "timeout", "error"):
         return "failed"
@@ -311,7 +311,7 @@ def _one(it: dict, root: Path, caller: str, p, cfg, warm: str | None = None, got
         if rec.get("kind") == "needs_write":
             fields["status"] = "needs_write"
         elif rec.get("kind") in ("check_failed", "check_broken", "review_failed", "review_issues",
-                                 "no_changes") or not rec["ok"] or status in ("failed",):
+                                 "no_changes", "no_answer") or not rec["ok"] or status in ("failed",):
             fields["status"] = "failed"
         elif status == "blocked":
             fields["status"] = "blocked"
@@ -643,7 +643,8 @@ def _locked_run(a, root: Path) -> tuple[dict, int]:
                 spent = sum(_cost(r) for r in runs)                      # never reached the item: run() didn't return
                 cost = round(float(it.get("cost_usd") or 0) + spent, 6)
                 last = runs[-1] if runs else {}
-                if last.get("ok") and last.get("state") == "finished" and (last.get("result") or {}).get("status") == "done":
+                if (last.get("ok") and last.get("kind") in (None, "ok") and last.get("state") == "finished"
+                        and (last.get("result") or {}).get("status") == "done"):
                     # it finished; only writing it back to the queue was cut off. In a worktree: commit it there
                     # and keep its branch, so what waits on it still waits for the lead's merge (as in _one)
                     where, sha = _tree_fields(last)

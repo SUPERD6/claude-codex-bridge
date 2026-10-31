@@ -16,7 +16,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/architecture-dark.svg">
-  <img alt="架构图：Claude Code、Codex、Gemini CLI 都连到 ccx，谁当主都可以把简报交给另一家在后台跑、交回 JSON；ccx 选模型、重跑验收、请另一家审查、记对错和花费；下面是个人层（hub：记忆、技能、MCP、账本）、项目层（.ccx：背景、日志、交接、断点、撤回快照）和本机只读页面 ccx ui" src="assets/architecture-light.svg" width="100%">
+  <img alt="架构图：Claude Code、Codex、DeepSeek 都连到 ccx，谁都能当主导或接活；主导把简报交给另一家在后台跑、交回 JSON；ccx 选模型、重跑验收、请另一家审查，每次派活写一张收据（花费、验收、审查、结论、撤回）进账本，并从各工具自己的会话文件读出共享工作上下文；下面是个人层（hub：共享记忆、技能、MCP、账本）、项目层（.ccx：context.md、日志、对话板、交接、断点、撤回快照、队列）和本机页面 ccx ui（收据、token 去向）。Gemini CLI 只有子智能体适配器，没真跑过" src="assets/architecture-light.svg" width="100%">
 </picture>
 
 ## 命令：日常的在前，一个不删
@@ -60,7 +60,7 @@
 1. Claude（主）按 5 项给任务打分（改 2 个文件、单模块、目标清楚、风险低、有现成写法），写一段不到 200 字的简报，只写目标、要看的文件、怎样算完成。
 2. 执行 `ccx run --from claude --files 2 --coupling one --clarity goal "…"`。ccx 调用 task-routing 技能，算出每个“智能体:模型:强度”的成功率和每次成功的花费，挑出 `codex:gpt-6.1-sol:medium`。如果算下来自己做更划算、或者应该先拆开，就直接告诉主导，不派。
 3. ccx 在后台调用 `codex exec -m gpt-6.1-sol -c model_reasoning_effort="medium" …`。会话 ID 一出现就存盘。Codex 自己读文件、改代码、跑测试，这部分 token 花的是 Codex 账号的额度。
-4. Codex 必须按 JSON schema 回报：`status / summary / files_changed / verification / …`。Claude 只读这一小段，再自己看一眼 `git diff`，确认测试真的跑过，然后 `ccx verify <run_id> --ok 1`。
+4. Codex 必须按 JSON schema 回报：`status / summary / files_changed / verification / …`。Claude 只读这一小段，再自己看一眼 `git diff`，确认测试真的跑过，然后 `ccx verify <run_id> --ok 1`。check 通过时会写明它是在什么上通过的：`check passed (covers: tests/test_x.py)` 列出 pytest / unittest 命令点到的测试文件（目录会展开；别的命令写"not known"），用了过滤或节点 id 只跑其中一部分时加 `(only -k …)`；子智能体改过其中某个文件或它们上层的 `conftest.py` 时标 `basis changed`（检查依据被改动），只往里加了测试时写"tests added by the sub-agent in …"，新写的测试文件写"written by the sub-agent"或"only tests the sub-agent wrote"。结果、recap 那一行、`ccx show` 和账本里都有；判定规则不变。只读运行如果什么都没答（summary 为空），不算 ok：kind 记 `no_answer`，并提示换更强的档位再问一次。
 5. 如果 Codex 回报 `blocked`，ccx 会在**同一个 Codex 会话**里升一档（high）继续，不用重新喂背景。Codex 说做完了、但 ccx 自己重跑的 `--check` 没过，也会升一档（同一家时在同一会话里）；`ccx config set defaults.focused_retry true` 之后，这一次会拿到失败的命令和输出的最后约 2000 字，只修失败处（默认关，等实测确认再开）。如果 Codex 额度用完，自动换 Claude 做（实验性：只有替身测试，还没遇到过真实的额度用完）；超时或崩溃，`ccx resume <run_id>` 接着做（有检查点的长任务用 `ccx task resume`），沿用原来的标签、验收命令和 review 设置（`ccx resume` 可以用 `--check` / `--review` 改；`ccx task resume` 总是沿用）。想让它停：`ccx stop <run_id>` 结束子智能体和它开的所有进程，之后 `ccx resume` 能接上。
 6. 每次运行都写进账本，结果自动记回 task-routing / task-split，下次选得更准。`ccx report` 生成看板网页：谁花了多少 token、什么类型的 token、额度用了多少，给出花费；`ccx trial` 实测之前不显示省了多少。
 
@@ -135,6 +135,22 @@ Fail（做对 29 对 30），事后解读为未定。按配对看，三个都没
 设成 `"none"` 后，`ccx run --parallel` 的 Codex 运行（原生的，不经 provider）会多收到一句：用 `fork_turns="none"` 开自己的子会话（codex-cli 0.164.0 的 `spawn_agent` 参数），
 并把它需要的文件、目标、约束和检查方法写进给它的消息，这样子会话每次请求不再重读父会话的历史。Claude 的 Agent 工具本来就不带父对话，
 所以 Claude 运行不变。这类运行在记录里写 `parallel_fork_turns`（`all` 或 `none`；换到别的智能体上跑了再加 `parallel_fork_turns_moved`）。实测（M3）前不开。
+
+### 实验性：`ccx batch --merge`（`[merge]`，实测前不开）
+
+子智能体的输入大半是每次请求都重发的前缀，五个小块分开跑就要付五次启动。加 `--merge`（或设 `[merge] default = true`；`--no-merge`
+单次关掉）后，同一批里同一目录、同一家、同一模型档、同一 worktree 和 namecheck 设置、写了估计且不超过 `piece_minutes`（5 分钟；没写
+`minutes` 的块不合并）、声明的路径（`paths`，列表；批处理计划里的 `files` 仍是选模型用的文件数估计）不重叠的写入块，合成一次运行，
+最多 `max_pieces`（5）块、合计 `total_minutes`（15 分钟）。这次运行不升档、不开自己的子智能体。之后逐块判定：有 `check` 的看 check
+（不管整次运行的状态），没有的看它在 summary 里自己那行 `[id] done|partial|failed`；两样都没有的标 `unconfirmed`（不算做完，也不重做，
+请看 diff）。没做完的块在同一会话里修一次；check 还不过、或者仍报 failed/partial 的块，单独跑一次（照常升档）。如果运行是因为重试也过不去的
+原因停下的（额度、登录、`ccx stop`、超时、机器问题、预算），就不再起任何运行，这些块标 `not_run`，用 `ccx resume` 续那次停下的运行。如果审查（修复轮之后）或 ccx 否决了整个合并改动（`review_issues`、
+`review_failed`、`no_changes`、`check_broken`），哪一块都不算做完，不管它自己的 check 怎样。修复轮或拆出去的运行跑过之后，之前通过的 check
+会再跑一次，以最后一次为准。`results` 仍然每块
+一项（多了 `merged_run`、`merged_with`、`piece_state`），`ccx undo <运行> --piece <id>` 只还原这一块声明的路径（不记对错；只适用于在项目目录里跑的合并运行：干净仓库里并行写入会各开 worktree，worktree 运行没有 undo 快照）。修复和拆出去的
+运行在 run.json 和账本里带 `merge_of`，账本另有一条 `merge` 事件列出每块的结果。代价：审查按整个改动判（50 行门槛按所有块合计；修复和拆出去
+的运行可能再审一次）、墙钟变长；只要有合并的块没做完，退出码就是 2（单独跑的块仍按 `ccx run` 原来的退出码）。命令行上的 `--merge` 优先于
+`[lanes] default`，命令行上的 `--lanes` 优先于 `[merge] default`；两个都写在命令行上会报错。
 
 ## 安全边界
 

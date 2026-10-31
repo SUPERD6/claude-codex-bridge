@@ -54,7 +54,7 @@ def cmd_archive(a) -> int:
 
 
 def cmd_undo(a) -> int:
-    _out(undo(paths(), a.run_id, a.apply, wrong=a.wrong))
+    _out(undo(paths(), a.run_id, a.apply, wrong=a.wrong, piece=getattr(a, "piece", None)))
     return 0
 
 
@@ -466,6 +466,8 @@ def register(sub) -> None:
                     help="really restore the files; without it, only shows what would change")
     ud.add_argument("--wrong", action="store_true", help="with --apply: also record the run as wrong (teaches "
                     "routing). Without it undoing records no verdict")
+    ud.add_argument("--piece", metavar="ID", help="a `ccx batch --merge` run: put back only the paths this piece "
+                    "declared (its `paths` in the plan); no verdict is recorded for a piece")
     ud.set_defaults(fn=cmd_undo)
     sh = sub.add_parser("show", help="show a run (compact by default); --wait blocks until it is finished; "
                                      "several ids with --any: every one that has finished")

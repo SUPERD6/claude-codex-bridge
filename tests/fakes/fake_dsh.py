@@ -7,6 +7,7 @@ import json
 import os
 import sys
 import uuid
+from fake_log import locked_append  # noqa: E402  (several fakes may append at once)
 
 argv = sys.argv[1:]
 if argv[:1] in (["--version"], ["-V"]):
@@ -15,7 +16,7 @@ task = sys.stdin.read() if argv[-1:] == ["-"] else ""
 patch = argv[argv.index("--patch") + 1] if "--patch" in argv else None
 log = os.environ.get("FAKE_LOG")
 if log:
-    with open(log, "a", encoding="utf-8") as f:
+    with locked_append(log) as f:
         f.write(json.dumps({"agent": "dsh", "argv": argv, "prompt": task, "depth": os.environ.get("CCX_DEPTH"),
                             "patch": json.loads(open(patch, encoding="utf-8").read()) if patch else None,
                             "permission": os.environ.get("DSH_PERMISSION_MODE"),

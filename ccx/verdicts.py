@@ -64,7 +64,7 @@ def soft_verdicts(p: Paths, min_age_h: float = SOFT_AFTER_H, now: float | None =
         if (p.runs / r["run_id"] / "undone.json").exists():       # undone: right or wrong is the person's call
             continue
         if record.get("kind") in ("check_failed", "check_broken", "review_issues", "review_failed", "needs_write",
-                                 "split", "no_changes"):
+                                 "split", "no_changes", "no_answer"):
             continue
         if (record.get("namecheck") or {}).get("hits"):  # a possible NameError (warn mode): the lead looks first
             continue
@@ -81,6 +81,9 @@ def soft_verdicts(p: Paths, min_age_h: float = SOFT_AFTER_H, now: float | None =
             if (trust.get(ledger.check_key(check.get("cmd", ""), record.get("cwd"))[0]) or {}).get("weak"):
                 continue
         why = "ccx check passed" if check else "self-checked"
+        if check and check.get("covers"):
+            from .coverage import text
+            why += f" ({text(check['covers'])})"
         if rev == "pass":
             why += ", review passed"
         _soft_verdict(p, record, True, "", f"auto after {min_age_h:g} h: {why}, not undone or reworked")

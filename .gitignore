@@ -24,3 +24,6 @@ CLAUDE.local.md
 
 # local run logs (may hold personal paths)
 *-test-log.txt
+
+# bench/run.py results (bench/README.md): local rows keep paths and run ids
+bench/runs/

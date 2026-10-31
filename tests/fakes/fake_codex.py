@@ -8,6 +8,7 @@ import os
 import sys
 import time
 import uuid
+from fake_log import locked_append  # noqa: E402  (several fakes may append at once)
 
 argv = sys.argv[1:]
 prompt = sys.stdin.read()
@@ -15,7 +16,7 @@ if argv[:1] == ["--version"]:
     print(os.environ.get("FAKE_CODEX_VERSION", "codex-cli 0.163.0 (fake)")); sys.exit(0)
 log = os.environ.get("FAKE_LOG")
 if log:
-    with open(log, "a", encoding="utf-8") as f:
+    with locked_append(log) as f:
         f.write(json.dumps({"agent": "codex", "argv": argv, "prompt": prompt,
                             "depth": os.environ.get("CCX_DEPTH"),
                             "deepseek_key": os.environ.get("DEEPSEEK_API_KEY"),
@@ -77,7 +78,7 @@ if mode == "hang":
         if live:
             n += 1
             os.makedirs(os.path.dirname(live), exist_ok=True)
-            with open(live, "a", encoding="utf-8") as fh:
+            with locked_append(live) as fh:
                 if n == 1:              # a headless run's session file, as codex exec writes it
                     fh.write(json.dumps({"type": "session_meta", "payload": {"id": tid, "originator": "codex_exec"}}) + "\n")
                 if os.environ.get("FAKE_RECORDS"):
