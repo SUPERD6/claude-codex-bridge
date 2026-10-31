@@ -26,8 +26,8 @@ who works on what (one column per agent, new agents get their own), and how the 
 block for the reason, the evidence and its buttons (a run stopped by the machine itself, `kind: env`, shows its fix
 hint and `ccx doctor` instead of "Try again"; an empty hub says what to run first). It is also the manager's board: every project in the `ccx projects`
 catalog (a work queue there shows even without a recent run; quiet projects are one line; a project's approval rules
-are quoted on its page), and what this month's sub-agents spent and, below that, a model estimate of the saving (not
-measured; measured totals so far about even, docs/measured.md; the same rule as `ccx report`). A button that changes something — stop a run, record right or wrong, one more fix round,
+are quoted on its page), and what this month's sub-agents spent; how much was saved appears only once `ccx trial` has
+measured it (measured totals so far about even, docs/measured.md; the same rule as `ccx report`). A button that changes something — stop a run, record right or wrong, one more fix round,
 continue, let it edit, change a queue's budget — first shows the exact `ccx` command it will run and runs it only
 on a second click; one that starts a sub-agent says it costs money and runs in the background. The page sends only
 which button, never a command; the server runs only a fixed list of ccx commands, as an argument list, from this page
@@ -80,7 +80,7 @@ leftover from "waits for you" without counting it right or wrong, and routing ne
 
 <details><summary>Chinese interface, light</summary>
 
-<img alt="ccx ui as the manager's board: what waits for you across projects, this month's spend and model estimate, the catalog's quiet projects (demo data)" src="assets/ui/k6-month-zh.png" width="100%">
+<img alt="ccx ui as the manager's board: what waits for you across projects, this month's spend, the catalog's quiet projects (demo data; taken before the saving estimate was removed)" src="assets/ui/k6-month-zh.png" width="100%">
 
 <img alt="A button's second click: the exact command, and whether it costs money (demo data)" src="assets/ui/k6-confirm-zh.png" width="100%">
 
@@ -119,7 +119,7 @@ In Claude Code you say: "make `loader.py` accept a custom delimiter and add test
      change them; `ccx task resume` always keeps them).
    - You want it to stop: `ccx stop <run_id>` ends the sub-agent and everything it started; `ccx resume` goes on.
 6. **Learn and report.** Every run goes into a ledger and back into task-routing / task-split, so the next pick is
-   better. `ccx report` builds a dashboard: who spent how many tokens of which kind, quota use, spend first and then a labelled saving estimate.
+   better. `ccx report` builds a dashboard: who spent how many tokens of which kind, quota use and spend; a saving only once `ccx trial` has measured one.
 
 The other way round, run the same command inside Codex with `--to claude`: Codex leads, Claude Code is the sub-agent.
 Codex's sandbox decides whether that works: ccx writes its run records into the hub and the sub-agent needs the
