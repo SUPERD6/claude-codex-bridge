@@ -48,6 +48,11 @@ def cmd_ab(a) -> int:
 
 # ---------------------------------------------------------------- commands
 # a write run without --check: one line on stderr (PM review 2026-10-29); what ccx does is unchanged
+# 2026-10-31 new-machine walkthrough: `--effort medium` without --model left the route's codex:gpt-6-luna:low as it
+# was, and nothing said so. stderr only: the JSON a lead reads stays as it was.
+EFFORT_ALONE_NOTE = ("ccx: --effort is used only together with --model (or --provider); without one the route picks the "
+                     "model and its effort. To set the effort, name the model too (--model <m> --effort <e>), or pick "
+                     "a tier (--tier T0..T4)")
 NO_CHECK_NUDGE = ("ccx: tip: this run may edit files and has no --check; add --check \"<test command>\" so ccx re-runs "
                   "it and the result is checked, not only reported")
 
@@ -282,6 +287,8 @@ def cmd_run(a) -> int:
         raise ValueError("--bg needs the task as text or --brief-file (stdin is not passed on)")
     if a.wait is not None and not a.bg:
         raise ValueError("--wait N goes with --bg (a foreground run already waits until it is done)")
+    if a.effort and not a.model and not a.provider:
+        print(EFFORT_ALONE_NOTE, file=sys.stderr, flush=True)
     if a.bg and not auto:
         if a.proposal:
             # refuse a used-up, smaller or lapsed pre-authorisation here, before detaching: the detached child's
@@ -1099,7 +1106,8 @@ def register(sub) -> None:
                    "L0/L1 stop; never a spending cap, approval rules or a merge into a protected branch)")
     _routing_args(r, into=adv)
     r.add_argument("--model", help="explicit model (skips routing), e.g. gpt-6.1-sol or sonnet")
-    r.add_argument("--effort", help="explicit reasoning effort: low|medium|high|xhigh|max")
+    r.add_argument("--effort", help="explicit reasoning effort with --model or --provider (alone it is "
+                   "ignored: the route picks the effort): low|medium|high|xhigh|max")
     adv.add_argument("--minutes", type=float, help="how long a skilled engineer would need, in minutes: the standard "
                    "difficulty unit (b = log2 minutes, blended 60/40 with the rubric); task-split learns from it too")
     adv.add_argument("--task", help="task-checkpoint task id: the session id is saved into it at once")

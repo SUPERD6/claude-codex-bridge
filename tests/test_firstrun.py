@@ -58,6 +58,18 @@ class TestFirstDelegation(FirstEnv):
         self.assertFalse(person_named_to("claude", "codex"))
         self.assertFalse(person_named_to("user", "codex", force=True))     # --force already delegates
 
+    def test_effort_without_a_model_says_it_is_not_used(self):
+        # 2026-10-31 walkthrough: --effort medium alone kept the route's luna/low, silently
+        r = self.ccx("run", "--to", "codex", "--mode", "read", "--effort", "high", setup.FIRST_TASK)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("--effort is used only together with --model", r.stderr)
+        self.assertNotEqual(json.loads(r.stdout)["route"]["source"], "explicit")    # the route picked, as it says
+        r = self.ccx("run", "--to", "codex", "--mode", "read", "--model", "gpt-6.1-sol", "--effort", "high",
+                     setup.FIRST_TASK)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotIn("--effort is used only", r.stderr)
+        self.assertEqual(json.loads(r.stdout)["model"], "gpt-6.1-sol/high")
+
     def test_readme_install_and_setup_suggest_the_same_command_and_it_is_delegated(self):
         cmd = setup.first_command("codex")
         for doc in ("README.md", "README.zh.md", "docs/install.md", "docs/install.zh.md"):
