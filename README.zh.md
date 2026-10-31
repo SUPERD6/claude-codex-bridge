@@ -54,6 +54,11 @@ sonnet 当主导，隐藏测试，子智能体是 Codex gpt-6-luna low。内置�
 **不用账号先看看：** `ccx demo` 用临时目录里编好的项目、运行和花费打开 `ccx ui`（离线可用，不用登录 Claude
 或 Codex，不动你自己的设置）。
 
+<table><tr>
+<td width="50%"><img alt="ccx ui 一次派活的收据：Codex gpt-6-luna low 做的，花了 $0.0040，ccx 自己重跑的验收通过，Claude haiku 审查通过，实际改动的文件来自 ccx 自己的快照（ccx demo 演示数据）" src="docs/assets/ui/task-zh.png"></td>
+<td width="50%"><img alt="ccx ui 总管看板：正在跑的、现在的主导、各项目进度、这个月只显示实际花费（ccx demo 演示数据）" src="docs/assets/ui/k6-month-zh.png"></td>
+</tr><tr><td align="center">每次派活的收据</td><td align="center">项目与花费</td></tr></table>
+
 ## 快速开始
 
 ```bash
