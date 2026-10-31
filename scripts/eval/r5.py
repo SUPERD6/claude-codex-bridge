@@ -133,6 +133,16 @@ the repository's tests need and not the library itself, and must not sit next to
 results go to their own file, and every finished unit's repository, hub and lead stream leave the
 work dir after scoring (the stream is kept under .ccx/eval/r5/streams/<tag>/), so a later round's agents cannot find
 an earlier round's finished answer next to them. r5 keeps its old behaviour.
+
+Polyglot (--taskset polyglot, scripts/eval/tasks_polyglot.py, P0-5): 30 Python exercises of aider's polyglot
+benchmark (Exercism, MIT; chosen in polyglot_selection.json without looking at any solution), an outside benchmark
+with a difficulty spread. It reuses the external path above (one clone before the canary, read into memory, removed;
+copies and web denied; the audit flags the exercises' public homes), but a unit is an exercise, not a commit
+(ext_repo.exercise_material): its repository holds only the solution stubs, the brief is the exercise's instructions
+plus aider's kind of addendum, and the hidden test is the exercise's test files, run in a fresh folder that gets only
+the solution files the agent left (score_exercise). Its default arms are self, ccx2 and direct (tasks_polyglot.ARMS):
+
+  python scripts/eval/r5.py run --taskset polyglot --rounds 1 --tag pg1 --budget 12 --dry-run
 """
 from __future__ import annotations
 
@@ -167,11 +177,14 @@ import r5_timeline as TL  # noqa: E402
 import harness_audit as HA  # noqa: E402
 import daily_home as DH  # noqa: E402
 import tasks_holdout  # noqa: E402
+import tasks_polyglot  # noqa: E402
 import tasks_r5  # noqa: E402
 
 # r5: the 10 tasks the loop was tuned on; holdout (scripts/eval/tasks_holdout.py): 10 others never used for tuning,
 # for the final claims (backlog C1). r5 stays the default everywhere.
-TASKSETS = {"r5": tasks_r5, "holdout": tasks_holdout}
+TASKSETS = {"r5": tasks_r5, "holdout": tasks_holdout, "polyglot": tasks_polyglot}
+# a task set's default arms when --arms is not given (r5 and holdout: ARMS)
+DEFAULT_ARMS = {"polyglot": tasks_polyglot.ARMS}
 IDS = tasks_r5.IDS
 
 OUT = ROOT / ".ccx" / "eval" / "r5"
@@ -182,7 +195,10 @@ def by_id(task_id: str) -> dict:
     """A task of any task set (ids are unique across sets)."""
     for mod in TASKSETS.values():
         if task_id in mod.IDS:
-            return mod.by_id(task_id)
+            t = mod.by_id(task_id)
+            if is_exercise(t) and _ext_key(t) in _EXT:       # an exercise's brief: its instructions, read at the start
+                t = {**t, "brief": _EXT[_ext_key(t)]["brief"]}
+            return t
     raise KeyError(f"unknown task: {task_id}")
 
 
@@ -220,6 +236,17 @@ asked:
 {how}
 
 When the work is done and the relevant tests pass, end with one line: DONE: <what changed>."""
+# A polyglot exercise (tasks_polyglot): a folder with the solution stubs only; the brief is the exercise's own
+# instructions (they say where the solution goes and that the tests are hidden).
+LEAD_PROMPT_EXERCISE = """You are the lead agent on this repository: {name}. It is a folder with the files to
+complete and nothing else. Nothing can be installed (pip has no package index here); `python -m pytest` works.
+The person asked:
+
+{brief}
+
+{how}
+
+When the work is done, end with one line: DONE: <what changed>."""
 HOW_CCX = ("Do not edit files yourself: hand the implementation to a sub-agent through ccx. Run\n"
            "  {ccx} run --tradeoff save --review on --context auto --mode write --new --no-ab --label {label} "
            "--check \"<a pytest command for the relevant test files>\" \"<a brief that contains everything it needs>\"\n"
@@ -383,8 +410,16 @@ def no_lead_flags(arm: str) -> list[str]:
 
 
 def ext_spec(task: dict) -> dict | None:
-    """The other repository a task belongs to (tasks_holdout.REPOS), or None for a task of this one."""
-    return tasks_holdout.REPOS[task["repo"]] if task.get("repo") else None
+    """The other repository a task belongs to (tasks_holdout.REPOS, tasks_polyglot.REPOS), or None for a task of
+    this one."""
+    if not task.get("repo"):
+        return None
+    return tasks_holdout.REPOS.get(task["repo"]) or tasks_polyglot.REPOS[task["repo"]]
+
+
+def is_exercise(task: dict) -> bool:
+    """A polyglot exercise (tasks_polyglot): a folder at a pinned commit, not a commit's change."""
+    return task.get("kind") == "exercise"
 
 
 def ext_cache(work: Path) -> Path:
@@ -408,7 +443,7 @@ def ext_clone(task: dict, work: Path, source: str | Path | None = None, cache: P
 
 
 def _ext_key(task: dict) -> tuple:
-    return (task["repo"], task["commit"], tuple(task["tests"]))
+    return (task["repo"], task["commit"], tuple(task["tests"]), task.get("dir") or "")
 
 
 def ext_material(task: dict, work: Path | None = None, source: str | Path | None = None,
@@ -416,6 +451,17 @@ def ext_material(task: dict, work: Path | None = None, source: str | Path | None
     """The task's material (ext_repo.material), read from its clone on first use: the clone in `cache`, else in the
     work dir's ext-cache (holdout_check; a run has always filled it before, from outside the work dir)."""
     key = _ext_key(task)
+    if key not in _EXT and is_exercise(task):
+        if cache is None:
+            raise RuntimeError(f"{task['id']}: an exercise's material is read before the run (prepare_external), "
+                               "never cloned into the work dir")
+        with _FETCH:
+            repo = ext_repo.fetch(task["repo"], ext_spec(task), Path(cache) if cache else ext_cache(work),
+                                  Path(source) if source else None)
+        m = ext_repo.exercise_material(repo, task["commit"], task["dir"], task["solution"], task["tests"])
+        m["brief"] = tasks_polyglot.brief(task, m["docs"])
+        with _FETCH:
+            _EXT.setdefault(key, m)
     if key not in _EXT:
         repo = ext_clone(task, work, source, cache)
         m = ext_repo.material(repo, task["commit"], task["tests"])
@@ -473,7 +519,7 @@ def ext_guard(task: dict, a, work: Path) -> dict:
     spec = ext_spec(task)
     if not spec:
         return {}
-    hidden, flags = [ext_cache(work)], list(EXT_FLAGS)
+    hidden, flags = [ext_cache(work)], list(EXT_FLAGS) + list(spec.get("flags") or ())
     url = re.sub(r"^\w+://|\.git$", "", spec["url"]).lower()
     flags.append(re.escape(url))
     src = getattr(a, "ext_cache", "") or ""
@@ -514,6 +560,8 @@ def score(repo: Path, task: dict, work: Path, job: PF.Job | None = None, python:
     """The commit's own test files (overwriting whatever the agent left in them), in throwaway homes. Another
     repository's: its test folder and test configuration put back from the parent first (ext_repo.
     restore_test_setup), no conftest of ours, its install-time stubs put back if gone, PYTHONPATH=src, `python`."""
+    if is_exercise(task):
+        return score_exercise(repo, task, work, job, python, source)
     spec = ext_spec(task)
     if spec:
         m = ext_material(task, work, source)
@@ -539,6 +587,57 @@ def score(repo: Path, task: dict, work: Path, job: PF.Job | None = None, python:
             return {"ok": False, "pytest": "timeout", "output": full, "failed": failed_ids(full)}
         tail = ANSI.sub("", (out.strip().splitlines() or [""])[-1])
         return {"ok": rc == 0, "pytest": tail[:200], "output": full, "failed": failed_ids(full)}
+    finally:
+        r2._rmtree(iso)
+
+
+EXERCISE_TIMEOUT = 300     # s for an exercise's hidden tests (a search that never ends must not hold the run)
+SUMMARY_COUNT = re.compile(r"(\d+) (passed|failed|errors?|skipped|xfailed|xpassed|deselected)\b")
+
+
+def exercise_passed(rc: int, tail: str, n_tests: int | None) -> bool:
+    """Right only when pytest's summary line shows every hidden test passed and nothing else: rc 0 alone is not
+    enough (a solution that raises unittest.SkipTest or exits 0 at import would pass with no test run). With the
+    exercise's test count known (the selection's `tests`), exactly that many must pass."""
+    counts: dict[str, int] = {}
+    for n, kind in SUMMARY_COUNT.findall(tail or ""):
+        counts[kind.rstrip("s") if kind.startswith("error") else kind] = int(n)
+    passed = counts.pop("passed", 0)
+    return rc == 0 and passed > 0 and not any(counts.values()) and (n_tests is None or passed == n_tests)
+
+
+def score_exercise(repo: Path, task: dict, work: Path, job: PF.Job | None = None, python: str | None = None,
+                   source: str | Path | None = None) -> dict:
+    """A polyglot exercise's hidden tests: a fresh folder gets the solution files the agent left (only those: its own
+    tests, conftest.py or pytest settings never apply), the exercise's test files and a pytest.ini of its own (so
+    pytest looks for no configuration above it), and pytest runs there in throwaway homes. A missing solution file
+    is a failure, not an error."""
+    py = python or sys.executable
+    iso = Path(tempfile.mkdtemp(prefix="r5iso-", dir=work))
+    try:
+        dest = iso / "score"
+        dest.mkdir()
+        missing = [f for f in task["solution"] if not (repo / f).is_file()]
+        for f in task["solution"]:
+            if (repo / f).is_file():
+                (dest / f).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(repo / f, dest / f)
+        for t, body in hidden(task, work, source).items():
+            (dest / t).parent.mkdir(parents=True, exist_ok=True)
+            (dest / t).write_bytes(body)
+        (dest / "pytest.ini").write_text("[pytest]\n", encoding="utf-8")
+        if missing:
+            return {"ok": False, "pytest": f"missing solution file(s): {', '.join(missing)}", "output": "",
+                    "failed": []}
+        env = {**iso_env(iso, py), **ext_repo.run_env(ext_spec(task)), "PYTHONNOUSERSITE": "1"}
+        out, err, rc, _left = PF.run([py, "-s", "-m", "pytest", "-q", "-p", "no:cacheprovider", "--color=no",
+                                      *task["tests"]], cwd=dest, env=env, timeout=EXERCISE_TIMEOUT, job=job)
+        full = ANSI.sub("", (out or "") + (f"\n--- stderr ---\n{err}" if err else ""))
+        if rc == -9:
+            return {"ok": False, "pytest": "timeout", "output": full, "failed": failed_ids(full)}
+        tail = ANSI.sub("", (out.strip().splitlines() or [""])[-1])
+        return {"ok": exercise_passed(rc, tail, task.get("n_tests")), "pytest": tail[:200], "output": full,
+                "failed": failed_ids(full)}
     finally:
         r2._rmtree(iso)
 
@@ -573,8 +672,9 @@ def final_diff(repo: Path) -> str | None:
 
 
 def keep_artifacts(dest: Path, row: dict, sc: dict | None, diff: str | None) -> None:
-    """A unit that was not right: its failing hidden test ids in the row (`hidden_failed`) and, under dest, the full
-    hidden pytest output and its final diff, written before the unit's folders are cleaned (`artifacts`: where)."""
+    """A unit that was not right (and every polyglot exercise unit): its failing hidden test ids in the row
+    (`hidden_failed`, empty for a right one) and, under dest, the full hidden pytest output and its final diff, written
+    before the unit's folders are cleaned (`artifacts`: where)."""
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
     kept = []
@@ -711,6 +811,17 @@ def unit_key(u: dict) -> str:
     return f"{u['round']}-{u['task']}-{u['arm']}{_arm_suffix(u)}"
 
 
+def unit_how(u: dict, task: dict) -> str:
+    """lead_how for one unit. A polyglot exercise has no test files for a delegating lead's --check to name, so its
+    sub-agent writes one of its own (tasks_polyglot.CHECK_EXERCISE), and the long instructions go by --brief-file."""
+    how = lead_how(u["arm"], u["label"], lead_of(u))
+    if is_exercise(task):
+        how = how.replace(tasks_polyglot.CHECK_PLACEHOLDER, tasks_polyglot.CHECK_EXERCISE)
+        if "--check" in how:
+            how += " " + tasks_polyglot.BRIEF_FILE
+    return how
+
+
 def lead_unit(u: dict, a, work: Path, repo: Path, hub: Path, iso: PF.Unit | None = None, env: dict | None = None,
               job: PF.Job | None = None) -> dict:
     task = by_id(u["task"])
@@ -718,9 +829,10 @@ def lead_unit(u: dict, a, work: Path, repo: Path, hub: Path, iso: PF.Unit | None
            "BASH_DEFAULT_TIMEOUT_MS": "900000", "BASH_MAX_TIMEOUT_MS": "1200000"}
     is_ccx, is_builtin = u["arm"] in CCX_ARMS, u["arm"] in BUILTIN_ARMS
     env = task_env(task, env, ext_python(a))
-    how = lead_how(u["arm"], u["label"], lead_of(u))
+    how = unit_how(u, task)
     spec = ext_spec(task)
-    prompt = (LEAD_PROMPT_EXT.format(name=spec["name"], note=ext_note(spec), brief=task["brief"], how=how)
+    prompt = (LEAD_PROMPT_EXERCISE.format(name=spec["name"], brief=task["brief"], how=how) if is_exercise(task)
+              else LEAD_PROMPT_EXT.format(name=spec["name"], note=ext_note(spec), brief=task["brief"], how=how)
               if spec else LEAD_PROMPT.format(brief=task["brief"], how=how))
     t0 = time.time()
     # ccx2 / builtin2 need the same lead flags as ccx / builtin (a session file; the Agent tool and worker); the
@@ -1465,7 +1577,9 @@ def run_unit(u: dict, a, work: Path) -> dict:
                 row["audit"].setdefault("problems", []).append("daily login: " + row["daily"]["login"].get(
                     "note", "conflict"))
         art = getattr(a, "artifacts_dir", None)
-        if art and not row.get("ok"):              # before the clean-up: what the unit left and how it failed
+        # before the clean-up: what the unit left and how it failed; an exercise keeps it even when right (one
+        # small file: a solution that games the scoring process is then visible afterwards)
+        if art and (not row.get("ok") or is_exercise(task)):
             try:
                 if diff is None and not scored:    # it broke before scoring: the repo has no hidden tests in it yet
                     diff = final_diff(repo)
@@ -1660,6 +1774,11 @@ def prepare_external(todo: list[dict], a, work: Path) -> list[str]:
     if there:
         probs.append(f"{py} has {', '.join(there)} installed: its released code has the fix; use a Python without it")
     src = getattr(a, "ext_cache", "") or ""
+    if src and any(is_exercise(t) for t in ext) and PF._inside(Path(work).resolve(),
+                                                               Path(src).expanduser().resolve().parent):
+        probs.append(f"the work dir {work} is in the folder that holds the --ext-cache copies ({Path(src).parent}): "
+                     "a copy of the exercises (with their example solutions) would sit next to the units; keep "
+                     "the copies elsewhere, or leave --ext-cache out (the run clones into a temporary folder)")
     if src and PF._inside(Path(py).parent, Path(src).expanduser().resolve().parent):
         probs.append(f"{py} is in the folder that holds the --ext-cache copies ({Path(src).parent}): an agent finds "
                      f"that folder on PATH; keep the Python somewhere else")
@@ -1863,7 +1982,7 @@ def cmd_run(a) -> int:
     if bad_t:
         raise SystemExit(f"unknown task(s) in task set {a.taskset}: {', '.join(bad_t)} (known: {', '.join(ids)})")
     work = Path(a.workdir or (Path(tempfile.gettempdir()) / a.tag))
-    tokens = a.arms.split(",") if a.arms else list(ARMS)
+    tokens = a.arms.split(",") if a.arms else list(DEFAULT_ARMS.get(a.taskset, ARMS))
     arms = arm_tokens(tokens, a.lead_model or "")      # the arms themselves (an `<arm>@auto` token: its arm)
     skill = [x for x in arms if x in SKILL_ARMS]
     if skill and a.claude_isolation != "ccx-home" and not a.dry_run:
@@ -2817,7 +2936,8 @@ def parser() -> argparse.ArgumentParser:
     r.add_argument("--seed", type=int, default=53)
     r.add_argument("--rounds", type=int, default=2)
     r.add_argument("--taskset", choices=sorted(TASKSETS), default="r5",
-                   help="r5 (default: the tasks the loop was tuned on) or holdout (unseen, for final claims)")
+                   help="r5 (default: the tasks the loop was tuned on), holdout (unseen, for final claims) or "
+                        "polyglot (30 Exercism exercises of aider's polyglot benchmark; default arms self,ccx2,direct)")
     r.add_argument("--tasks", default="", help="comma-separated ids from the task set (default: all of it)")
     r.add_argument("--arms", default="")
     r.add_argument("--arm-order", choices=ARM_ORDERS, default="shuffle", help="shuffle (default, every earlier "

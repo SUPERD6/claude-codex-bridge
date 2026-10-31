@@ -1,0 +1,563 @@
+{
+ "about": "The polyglot task set (scripts/eval/tasks_polyglot.py): 30 Python exercises of aider's polyglot benchmark, chosen without looking at any solution (.meta/example.py and .approaches/ were never read; only .meta/config.json, the test files' test counts, the instructions' length and Exercism's difficulty rating).",
+ "source": {
+  "repo": "https://github.com/Aider-AI/polyglot-benchmark",
+  "commit": "7e0611e77b54e2dea774cdc0aa00cf9f7ed6144f",
+  "commit_date": "2024-12-22",
+  "checked": "2026-10-30",
+  "license": "no LICENSE file in the repository (GitHub reports none); its README says all exercises are copyright Exercism and used under Exercism's open-source licenses; the Python track (github.com/exercism/python) is MIT (checked 2026-10-30, its main at 6105f6d, 2026-09-30). Nothing of the exercises is copied into this repository: they are fetched at run time.",
+  "difficulty_from": "exercism/python config.json `difficulty` (1-10), main at 6105f6d (2026-09-30)",
+  "how_aider_chose_them": "aider's blog (2024-12-21): of 697 Exercism exercises in six languages, the 225 solved by 3 or fewer of 7 then-current models; 34 of them are Python"
+ },
+ "rule": "All 34 Python exercises, minus the 4 lowest by (Exercism difficulty, number of tests). Python only: Go and Node.js are not installed on the machine that runs the eval, so a JS or Go slice could not be pre-run (left for later).",
+ "gradient_note": "aider publishes pass rates per model, not per exercise, so no exercise's pass rate for today's cheap models is known. The target (cheap model about half, strong models most) is a hypothesis: the direct arm of the first run (Codex gpt-6-luna low, no lead) measures the cheap model's rate. If direct gets 27/30 or more, this slice is at the ceiling too and is reported as such. Unlike aider (two tries, the second with the test errors), the tests stay hidden: closer to aider's first-try rate.",
+ "tasks": [
+  {
+   "id": "pg-affine-cipher",
+   "slug": "affine-cipher",
+   "language": "python",
+   "exercism_difficulty": 6,
+   "tests": 16,
+   "instruction_chars": 4010,
+   "solution": [
+    "affine_cipher.py"
+   ],
+   "test": [
+    "affine_cipher_test.py"
+   ],
+   "kind": "modular arithmetic with error cases",
+   "why": "in aider's 225 (solved by at most 3 of 7 models in 2024); Exercism difficulty 6, 16 hidden tests; modular arithmetic with error cases"
+  },
+  {
+   "id": "pg-beer-song",
+   "slug": "beer-song",
+   "language": "python",
+   "exercism_difficulty": 3,
+   "tests": 8,
+   "instruction_chars": 12055,
+   "solution": [
+    "beer_song.py"
+   ],
+   "test": [
+    "beer_song_test.py"
+   ],
+   "kind": "exact multi-verse text output",
+   "why": "in aider's 225 (solved by at most 3 of 7 models in 2024); Exercism difficulty 3, 8 hidden tests; exact multi-verse text output"
+  },
+  {
+   "id": "pg-book-store",
+   "slug": "book-store",
+   "language": "python",
+   "exercism_difficulty": 7,
+   "tests": 20,
+   "instruction_chars": 1733,
+   "solution": [
+    "book_store.py"
+   ],
+   "test": [
+    "book_store_test.py"
+   ],
+   "kind": "optimisation (grouping discounts); greedy is wrong",
+   "why": "in aider's 225 (solved by at most 3 of 7 models in 2024); Exercism difficulty 7, 20 hidden tests; optimisation (grouping discounts); greedy is wrong"
+  },
+  {
+   "id": "pg-bottle-song",
+   "slug": "bottle-song",
+   "language": "python",
+   "exercism_difficulty": 3,
+   "tests": 7,
+   "instruction_chars": 1973,
+   "solution": [
+    "bottle_song.py"
+   ],
+   "test": [
+    "bottle_song_test.py"
+   ],
+   "kind": "exact multi-verse text output",
+   "why": "in aider's 225 (solved by at most 3 of 7 models in 2024); Exercism difficulty 3, 7 hidden tests; exact multi-verse text output"
+  },
+  {
+   "id": "pg-bowling",
+   "slug": "bowling",
+   "language": "python",
+   "exercism_difficulty": 5,
+   "tests": 31,
+   "instruction_chars": 3385,
+   "solution": [
+    "bowling.py"
+   ],
+   "test": [
+    "bowling_test.py"
+   ],
+   "kind": "stateful scoring with many error rules",
+   "why": "in aider's 225 (solved by at most 3 of 7 models in 2024); Exercism difficulty 5, 31 hidden tests; stateful scoring with many error rules"
+  },
+  {
+   "id": "pg-connect",
+   "slug": "connect",
+   "language": "python",
+   "exercism_difficulty": 3,
+   "tests": 10,
+   "instruction_chars": 1164,
+   "solution": [
+    "connect.py"
+   ],
+   "test": [
+    "connect_test.py"
+   ],
+   "kind": "board search (Hex winner)",
+   "why": "in aider's 225 (solved by at most 3 of 7 models in 2024); Exercism difficulty 3, 10 hidden tests; board search (Hex winner)"
+  },
+  {
+   "id": "pg-dominoes",
+   "slug": "dominoes",
+   "language": "python",
+   "exercism_difficulty": 7,
+   "tests": 13,
+   "instruction_chars": 819,
+   "solution": [
+    "dominoes.py"
+   ],
+   "test": [
+    "dominoes_test.py"
+   ],
+   "kind": "search (chain / backtracking)",
+   "why": "in aider's 225 (solved by at most 3 of 7 models in 2024); Exercism difficulty 7, 13 hidden tests; search (chain / backtracking)"
+  },
+  {
+   "id": "pg-dot-dsl",
+   "slug": "dot-dsl",
+   "language": "python",
+   "exercism_difficulty": 5,
+   "tests": 12,
+   "instruction_chars": 3124,
+   "solution": [
+    "dot_dsl.py"
+   ],
+   "test": [
+    "dot_dsl_test.py"
+   ],
+   "kind": "small DSL classes and validation errors",
+   "why": "in aider's 225 (solved by at most 3 of 7 models in 2024); Exercism difficulty 5, 12 hidden tests; small DSL classes and validation errors"
+  },
+  {
+   "id": "pg-food-chain",
+   "slug": "food-chain",
+   "language": "python",
+   "exercism_difficulty": 4,
+   "tests": 10,
+   "instruction_chars": 2542,
+   "solution": [
+    "food_chain.py"
+   ],
+   "test": [
+    "food_chain_test.py"
+   ],
+   "kind": "exact cumulative text output",
+   "why": "in aider's 225 (solved by at most 3 of 7 models in 2024); Exercism difficulty 4, 10 hidden tests; exact cumulative text output"
+  },
+  {
+   "id": "pg-forth",
+   "slug": "forth",
+   "language": "python",
+   "exercism_difficulty": 5,
+   "tests": 54,
+   "instruction_chars": 3150,
+   "solution": [
+    "forth.py"
+   ],
+   "test": [
+    "forth_test.py"
+   ],
+   "kind": "interpreter with user-defined words and errors",
+   "why": "in aider's 225 (solved by at most 3 of 7 models in 2024); Exercism difficulty 5, 54 hidden tests; interpreter with user-defined words and errors"
+  },
+  {
+   "id": "pg-go-counting",
+   "slug": "go-counting",
+   "language": "python",
+   "exercism_difficulty": 4,
+   "tests": 11,
+   "instruction_chars": 2309,
+   "solution": [
+    "go_counting.py"
+   ],
+   "test": [
+    "go_counting_test.py"
+   ],
+   "kind": "board flood fill with territory owners",
+   "why": "in aider's 225 (solved by at most 3 of 7 models in 2024); Exercism difficulty 4, 11 hidden tests; board flood fill with territory owners"
+  },
+  {
+   "id": "pg-grade-school",
+   "slug": "grade-school",
+   "language": "python",
+   "exercism_difficulty": 3,
+   "tests": 20,
+   "instruction_chars": 1357,
+   "solution": [
+    "grade_school.py"
+   ],
+   "test": [
+    "grade_school_test.py"
+   ],
+   "kind": "stateful roster with ordering rules",
+   "why": "in aider's 225 (solved by at most 3 of 7 models in 2024); Exercism difficulty 3, 20 hidden tests; stateful roster with ordering rules"
+  },
+  {
+   "id": "pg-grep",
+   "slug": "grep",
+   "language": "python",
+   "exercism_difficulty": 4,
+   "tests": 25,
+   "instruction_chars": 1299,
+   "solution": [
+    "grep.py"
+   ],
+   "test": [
+    "grep_test.py"
+   ],
+   "kind": "flags and file reading (files created by the tests)",
+   "why": "in aider's 225 (solved by at most 3 of 7 models in 2024); Exercism difficulty 4, 25 hidden tests; flags and file reading (files created by the tests)"
+  },
+  {
+   "id": "pg-hangman",
+   "slug": "hangman",
+   "language": "python",
+   "exercism_difficulty": 4,
+   "tests": 7,
+   "instruction_chars": 2082,
+   "solution": [
+    "hangman.py"
+   ],
+   "test": [
+    "hangman_test.py"
+   ],
+   "kind": "game state machine",
+   "why": "in aider's 225 (solved by at most 3 of 7 models in 2024); Exercism difficulty 4, 7 hidden tests; game state machine"
+  },
+  {
+   "id": "pg-paasio",
+   "slug": "paasio",
+   "language": "python",
+   "exercism_difficulty": 7,
+   "tests": 25,
+   "instruction_chars": 412,
+   "solution": [
+    "paasio.py"
+   ],
+   "test": [
+    "paasio_test.py",
+    "test_utils.py"
+   ],
+   "kind": "wrapping files and sockets, counted through mocks",
+   "why": "in aider's 225 (solved by at most 3 of 7 models in 2024); Exercism difficulty 7, 25 hidden tests; wrapping files and sockets, counted through mocks"
+  },
+  {
+   "id": "pg-phone-number",
+   "slug": "phone-number",
+   "language": "python",
+   "exercism_difficulty": 2,
+   "tests": 21,
+   "instruction_chars": 3506,
+   "solution": [
+    "phone_number.py"
+   ],
+   "test": [
+    "phone_number_test.py"
+   ],
+   "kind": "parsing with many specific error messages",
+   "why": "in aider's 225 (solved by at most 3 of 7 models in 2024); Exercism difficulty 2, 21 hidden tests; parsing with many specific error messages"
+  },
+  {
+   "id": "pg-pig-latin",
+   "slug": "pig-latin",
+   "language": "python",
+   "exercism_difficulty": 2,
+   "tests": 22,
+   "instruction_chars": 2313,
+   "solution": [
+    "pig_latin.py"
+   ],
+   "test": [
+    "pig_latin_test.py"
+   ],
+   "kind": "string rules with edge cases",
+   "why": "in aider's 225 (solved by at most 3 of 7 models in 2024); Exercism difficulty 2, 22 hidden tests; string rules with edge cases"
+  },
+  {
+   "id": "pg-poker",
+   "slug": "poker",
+   "language": "python",
+   "exercism_difficulty": 3,
+   "tests": 37,
+   "instruction_chars": 194,
+   "solution": [
+    "poker.py"
+   ],
+   "test": [
+    "poker_test.py"
+   ],
+   "kind": "hand ranking with ties",
+   "why": "in aider's 225 (solved by at most 3 of 7 models in 2024); Exercism difficulty 3, 37 hidden tests; hand ranking with ties"
+  },
+  {
+   "id": "pg-pov",
+   "slug": "pov",
+   "language": "python",
+   "exercism_difficulty": 9,
+   "tests": 15,
+   "instruction_chars": 2575,
+   "solution": [
+    "pov.py"
+   ],
+   "test": [
+    "pov_test.py"
+   ],
+   "kind": "tree re-rooting and paths, with errors",
+   "why": "in aider's 225 (solved by at most 3 of 7 models in 2024); Exercism difficulty 9, 15 hidden tests; tree re-rooting and paths, with errors"
+  },
+  {
+   "id": "pg-react",
+   "slug": "react",
+   "language": "python",
+   "exercism_difficulty": 6,
+   "tests": 14,
+   "instruction_chars": 732,
+   "solution": [
+    "react.py"
+   ],
+   "test": [
+    "react_test.py"
+   ],
+   "kind": "reactive cells with callbacks",
+   "why": "in aider's 225 (solved by at most 3 of 7 models in 2024); Exercism difficulty 6, 14 hidden tests; reactive cells with callbacks"
+  },
+  {
+   "id": "pg-rest-api",
+   "slug": "rest-api",
+   "language": "python",
+   "exercism_difficulty": 8,
+   "tests": 9,
+   "instruction_chars": 2338,
+   "solution": [
+    "rest_api.py"
+   ],
+   "test": [
+    "rest_api_test.py"
+   ],
+   "kind": "JSON request handling over an in-memory store",
+   "why": "in aider's 225 (solved by at most 3 of 7 models in 2024); Exercism difficulty 8, 9 hidden tests; JSON request handling over an in-memory store"
+  },
+  {
+   "id": "pg-scale-generator",
+   "slug": "scale-generator",
+   "language": "python",
+   "exercism_difficulty": 4,
+   "tests": 17,
+   "instruction_chars": 3818,
+   "solution": [
+    "scale_generator.py"
+   ],
+   "test": [
+    "scale_generator_test.py"
+   ],
+   "kind": "music theory rules (sharps / flats)",
+   "why": "in aider's 225 (solved by at most 3 of 7 models in 2024); Exercism difficulty 4, 17 hidden tests; music theory rules (sharps / flats)"
+  },
+  {
+   "id": "pg-sgf-parsing",
+   "slug": "sgf-parsing",
+   "language": "python",
+   "exercism_difficulty": 7,
+   "tests": 23,
+   "instruction_chars": 4882,
+   "solution": [
+    "sgf_parsing.py"
+   ],
+   "test": [
+    "sgf_parsing_test.py"
+   ],
+   "kind": "recursive parser with escapes and errors",
+   "why": "in aider's 225 (solved by at most 3 of 7 models in 2024); Exercism difficulty 7, 23 hidden tests; recursive parser with escapes and errors"
+  },
+  {
+   "id": "pg-simple-linked-list",
+   "slug": "simple-linked-list",
+   "language": "python",
+   "exercism_difficulty": 3,
+   "tests": 20,
+   "instruction_chars": 8444,
+   "solution": [
+    "simple_linked_list.py"
+   ],
+   "test": [
+    "simple_linked_list_test.py"
+   ],
+   "kind": "linked list class with iteration and errors",
+   "why": "in aider's 225 (solved by at most 3 of 7 models in 2024); Exercism difficulty 3, 20 hidden tests; linked list class with iteration and errors"
+  },
+  {
+   "id": "pg-tree-building",
+   "slug": "tree-building",
+   "language": "python",
+   "exercism_difficulty": 3,
+   "tests": 13,
+   "instruction_chars": 1957,
+   "solution": [
+    "tree_building.py"
+   ],
+   "test": [
+    "tree_building_test.py"
+   ],
+   "kind": "refactor given code, keep its errors",
+   "why": "in aider's 225 (solved by at most 3 of 7 models in 2024); Exercism difficulty 3, 13 hidden tests; refactor given code, keep its errors"
+  },
+  {
+   "id": "pg-two-bucket",
+   "slug": "two-bucket",
+   "language": "python",
+   "exercism_difficulty": 6,
+   "tests": 9,
+   "instruction_chars": 3411,
+   "solution": [
+    "two_bucket.py"
+   ],
+   "test": [
+    "two_bucket_test.py"
+   ],
+   "kind": "state-space search with errors",
+   "why": "in aider's 225 (solved by at most 3 of 7 models in 2024); Exercism difficulty 6, 9 hidden tests; state-space search with errors"
+  },
+  {
+   "id": "pg-variable-length-quantity",
+   "slug": "variable-length-quantity",
+   "language": "python",
+   "exercism_difficulty": 4,
+   "tests": 26,
+   "instruction_chars": 2508,
+   "solution": [
+    "variable_length_quantity.py"
+   ],
+   "test": [
+    "variable_length_quantity_test.py"
+   ],
+   "kind": "bit-level encode / decode with errors",
+   "why": "in aider's 225 (solved by at most 3 of 7 models in 2024); Exercism difficulty 4, 26 hidden tests; bit-level encode / decode with errors"
+  },
+  {
+   "id": "pg-wordy",
+   "slug": "wordy",
+   "language": "python",
+   "exercism_difficulty": 3,
+   "tests": 25,
+   "instruction_chars": 3620,
+   "solution": [
+    "wordy.py"
+   ],
+   "test": [
+    "wordy_test.py"
+   ],
+   "kind": "word-problem parser with errors",
+   "why": "in aider's 225 (solved by at most 3 of 7 models in 2024); Exercism difficulty 3, 25 hidden tests; word-problem parser with errors"
+  },
+  {
+   "id": "pg-zebra-puzzle",
+   "slug": "zebra-puzzle",
+   "language": "python",
+   "exercism_difficulty": 5,
+   "tests": 2,
+   "instruction_chars": 2117,
+   "solution": [
+    "zebra_puzzle.py"
+   ],
+   "test": [
+    "zebra_puzzle_test.py"
+   ],
+   "kind": "constraint search",
+   "why": "in aider's 225 (solved by at most 3 of 7 models in 2024); Exercism difficulty 5, 2 hidden tests; constraint search"
+  },
+  {
+   "id": "pg-zipper",
+   "slug": "zipper",
+   "language": "python",
+   "exercism_difficulty": 6,
+   "tests": 14,
+   "instruction_chars": 1392,
+   "solution": [
+    "zipper.py"
+   ],
+   "test": [
+    "zipper_test.py"
+   ],
+   "kind": "immutable tree navigation",
+   "why": "in aider's 225 (solved by at most 3 of 7 models in 2024); Exercism difficulty 6, 14 hidden tests; immutable tree navigation"
+  }
+ ],
+ "dropped": [
+  {
+   "id": "pg-list-ops",
+   "slug": "list-ops",
+   "language": "python",
+   "exercism_difficulty": 1,
+   "tests": 24,
+   "instruction_chars": 1359,
+   "solution": [
+    "list_ops.py"
+   ],
+   "test": [
+    "list_ops_test.py"
+   ],
+   "kind": "basic list functions",
+   "why": "dropped: among the 4 lowest by Exercism difficulty, then fewest tests (difficulty 1, 24 tests): the likeliest to be at the cheap model's ceiling"
+  },
+  {
+   "id": "pg-robot-name",
+   "slug": "robot-name",
+   "language": "python",
+   "exercism_difficulty": 2,
+   "tests": 4,
+   "instruction_chars": 633,
+   "solution": [
+    "robot_name.py"
+   ],
+   "test": [
+    "robot_name_test.py"
+   ],
+   "kind": "random unique names",
+   "why": "dropped: among the 4 lowest by Exercism difficulty, then fewest tests (difficulty 2, 4 tests): the likeliest to be at the cheap model's ceiling"
+  },
+  {
+   "id": "pg-proverb",
+   "slug": "proverb",
+   "language": "python",
+   "exercism_difficulty": 2,
+   "tests": 8,
+   "instruction_chars": 1411,
+   "solution": [
+    "proverb.py"
+   ],
+   "test": [
+    "proverb_test.py"
+   ],
+   "kind": "short text output",
+   "why": "dropped: among the 4 lowest by Exercism difficulty, then fewest tests (difficulty 2, 8 tests): the likeliest to be at the cheap model's ceiling"
+  },
+  {
+   "id": "pg-transpose",
+   "slug": "transpose",
+   "language": "python",
+   "exercism_difficulty": 2,
+   "tests": 12,
+   "instruction_chars": 851,
+   "solution": [
+    "transpose.py"
+   ],
+   "test": [
+    "transpose_test.py"
+   ],
+   "kind": "string transposition with padding",
+   "why": "dropped: among the 4 lowest by Exercism difficulty, then fewest tests (difficulty 2, 12 tests): the likeliest to be at the cheap model's ceiling"
+  }
+ ]
+}
