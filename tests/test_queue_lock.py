@@ -11,6 +11,7 @@ import tempfile
 import threading
 import time
 import unittest
+from contextlib import ExitStack
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
@@ -234,60 +235,101 @@ class TestLockRetries(unittest.TestCase):
         self.assertEqual(len(lines), n * procs)
         self.assertFalse(self.lock.exists())
 
-    def _busy_elsewhere(self, seconds, every=0.02):
-        """Other writers (as other processes would) on a fake clock: ccx.queue's time moves only when the lock sleeps,
-        so how slow the runner is changes nothing. The lock file is there, a new holder every `every` seconds of that
-        clock, never absent; removed `seconds` after the waiter first looks. Real threads racing a 2 * timeout window
-        on the wall clock failed on loaded CI runners (windows 3.12, #207): the churn thread fell behind, or its
-        os.replace was denied while the waiter read the file, and the waiter saw no change of hands in time.
-        -> (clock, patches to apply)."""
+    def test_holder_changes_with_a_new_writer_not_with_a_touch(self):
+        d = wq.qdir(self.root)
+        d.mkdir(parents=True)
+        self.assertIsNone(wq._holder(self.lock))                       # none there
+        self.lock.write_bytes(b"writer 1")
+        first = wq._holder(self.lock)
+        later = time.time() + 5
+        os.utime(self.lock, (later, later))
+        self.assertEqual(wq._holder(self.lock), first)                 # touched by its holder: the same one
+        os.link(self.lock, d / "held")                                 # keep the old file alive: a new id
+        self.lock.unlink()
+        self.lock.write_bytes(b"writer 2")
+        second = wq._holder(self.lock)
+        self.assertNotEqual(second, first)                             # a new file: another writer
+        self.lock.write_bytes(b"writer 3")                             # same id, another token (an inode reused at once)
+        self.assertNotEqual(wq._holder(self.lock), second)
+
+    def _busy_elsewhere(self, stack, seconds, every=0.02):
+        """Other writers (as other processes would) on a fake clock: ccx.queue's time moves only when it sleeps or
+        waits, so how slow the runner is changes nothing. The lock file is there and is replaced by a new holder (a new
+        file, its own token) every `every` seconds of that clock, never absent; removed `seconds` after the waiter
+        first sleeps. All on the waiter's own thread, so nothing races it. A real thread doing this raced the waiter on
+        the wall clock: on PR #207's CI (windows 3.12) its last unlink met the waiter's read of the file (WinError 32),
+        the thread died, the lock file stayed and stopped changing hands, and the waiter gave up after 2 * timeout.
+        -> the clock (now, first, calls)."""
         d = wq.qdir(self.root)
         d.mkdir(parents=True, exist_ok=True)
-        self.lock.write_bytes(b"another process")
-        clock = SimpleNamespace(now=1000.0, first=None)
+        self.lock.write_bytes(b"another 0")
+        clock = SimpleNamespace(now=1000.0, first=None, calls=0, writers=0)
 
-        def holder(lock):
-            if not lock.exists():
-                return None
-            if clock.first is None:
-                clock.first = clock.now
-            return int((clock.now - clock.first) / every)     # which writer holds it now
+        def now():
+            clock.calls += 1                           # a retry loop that never sleeps would never reach a deadline
+            self.assertLess(clock.calls, 10 ** 5, "the lock kept retrying without sleeping")
+            return clock.now
 
         def sleep(s):
+            if clock.first is None:
+                clock.first = clock.now
             clock.now += s
-            if clock.first is not None and clock.now - clock.first >= seconds and self.lock.exists():
-                self.lock.unlink()                             # the others are done
-        fake_time = SimpleNamespace(time=lambda: clock.now, monotonic=lambda: clock.now, sleep=sleep)
-        return clock, [mock.patch.object(wq, "time", fake_time), mock.patch.object(wq, "_holder", holder),
-                       mock.patch("ccx.queue._stale", return_value=False)]
+            if not self.lock.read_bytes().startswith(b"another"):
+                return                                 # ours (a sleep in the release): leave it
+            if clock.now - clock.first >= seconds:
+                self.lock.unlink()                     # the others are done
+                return
+            n = int((clock.now - clock.first) / every)
+            if n > clock.writers:                      # the next writer took it
+                clock.writers = n
+                tmp = d / "next"
+                tmp.write_bytes(f"another {n}".encode())
+                os.replace(tmp, self.lock)
+        stack.enter_context(mock.patch.object(wq, "time", SimpleNamespace(time=now, monotonic=now, sleep=sleep)))
+        stack.enter_context(mock.patch("ccx.queue._stale", return_value=False))   # not a takeover test
+        return clock
 
     def test_busy_lock_that_keeps_changing_hands_is_waited_for(self):
         # CI windows 3.12: a writer gave up after 2 * timeout in all while the others kept writing. The deadline
-        # counts from the last time the lock changed hands, so only a lock that stays the same one fails. Never
-        # stale here: this is not a takeover test
-        busy = 2.5                                     # 5 * timeout: well past the old 2 * timeout limit
-        clock, patches = self._busy_elsewhere(busy)
-        with patches[0], patches[1], patches[2]:
-            t = clock.now
+        # counts from the last time the lock changed hands, so only a lock that stays the same one fails
+        with ExitStack() as stack:
+            clock = self._busy_elsewhere(stack, 2.5)  # 5 * timeout: well past the old 2 * timeout limit
             with wq._lock(self.root, timeout=0.5):
                 self.assertFalse(self.lock.read_bytes().startswith(b"another"))     # ours, after the others
-        self.assertGreaterEqual(clock.now - t, busy)
+        self.assertGreater(clock.writers, 100)        # it saw them come and go
+
+    def test_lock_file_that_stops_changing_hands_fails_after_2x_timeout(self):
+        with ExitStack() as stack:
+            clock = self._busy_elsewhere(stack, 10 ** 6, every=10 ** 6)           # one writer, never done
+            with self.assertRaises(RuntimeError):
+                with wq._lock(self.root, timeout=0.5):
+                    pass
+        self.assertGreaterEqual(clock.now - clock.first, 1.0)
+        self.assertLess(clock.now - clock.first, 1.2)
 
     def test_long_wait_in_process_does_not_eat_the_file_deadline(self):
         # a thread that queued behind its siblings for more than 2 * timeout, then met another process's lock file,
         # failed on its first poll: the file deadline counted from before the in-process wait
-        timeout, queued, busy = 0.5, 1.5, 2.5
-        clock, patches = self._busy_elsewhere(busy)
-        real_wait = wq._wait_turn
+        timeout, queued = 0.5, 1.5
+        with ExitStack() as stack:
+            clock = self._busy_elsewhere(stack, 2.5)
+            turns = wq._Turns()
 
-        def behind_siblings(turns, lock, timeout, t0):    # the in-process turn changed hands for `queued` seconds
-            clock.now += queued
-            real_wait(turns, lock, timeout, t0)
-        with patches[0], patches[1], patches[2], mock.patch.object(wq, "_wait_turn", behind_siblings):
-            t = clock.now
+            class Siblings:                            # the in-process turn changes hands every 0.05 s for `queued` s
+                start = clock.now
+
+                def acquire(self, timeout=-1):
+                    clock.now += timeout
+                    turns.n += max(1, int(timeout / 0.05))
+                    return clock.now - self.start >= queued
+
+                def release(self):
+                    pass
+            turns.lock = Siblings()
+            stack.enter_context(mock.patch.object(wq, "_local_lock", return_value=turns))
             with wq._lock(self.root, timeout=timeout):
-                pass
-        self.assertGreaterEqual(clock.now - t, queued + busy)
+                self.assertFalse(self.lock.read_bytes().startswith(b"another"))
+        self.assertGreater(clock.writers, 100)
 
     def test_thread_hung_holding_the_lock_fails_the_others_after_2x_timeout(self):
         turns = wq._local_lock(self.lock)
