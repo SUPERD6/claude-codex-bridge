@@ -127,6 +127,58 @@ class TestEnvFailure(FirstEnv):
         self.assertIn("escalated", out)
         self.assertNotEqual(out.get("kind"), "env")
 
+    def test_codex_0164_sandbox_prompt_cancelled_runs_once_and_says_so(self):
+        # 2026-10-31 eval pg1 (codex-cli 0.164.0): the launcher's 1223 comes wrapped in Rejected(...) on stderr, and
+        # ccx took it for a policy line: it climbed T2 -> T3 in the same session and the lead resumed it, 13 units
+        # at 800-1650 s each. Now: one attempt, no climb, no resume, env_error kept, the receipt names the cause
+        out = self.j("run", "--from", "claude", "--to", "codex", "--tier", "T1", "--mode", "write", "make two_bucket",
+                     "--check", "python -c \"raise SystemExit(1)\"", env={"FAKE_STATUS": "env_uac"})
+        calls = self.calls()
+        self.assertEqual(len(calls), 1, calls)                              # no retry, no climb
+        self.assertNotEqual(calls[0]["argv"][:2], ["exec", "resume"])       # and nothing resumed
+        self.assertEqual(out["kind"], "env")
+        self.assertIs(out["ok"], False)
+        self.assertNotIn("escalated", out)
+        self.assertNotIn("policy_blocked", out)                             # not taken for the sandbox's policy
+        self.assertIn("sandbox authorization was cancelled (Windows error 1223)", out["hint"])
+        self.assertTrue(out["needs_lead"].startswith("env: sub-agent environment problem"), out["needs_lead"])
+        self.assertIn("needs_lead=env", out["recap"])
+        rec = self.rec(out["run_id"])
+        self.assertIn("orchestrator_helper_launch_canceled", rec["env_error"])
+        self.assertEqual([a["kind"] for a in rec["attempts"]], ["env"])
+        self.assertIsNone(rec.get("learned"))
+        shown = self.j("show", out["run_id"])                               # the receipt says the same
+        self.assertEqual(shown["kind"], "env")
+        self.assertIn("sandbox authorization was cancelled", shown["hint"])
+        self.assertEqual(len(self.calls()), 1)
+        from ccx import ui
+        act = ui._act(rec | {"verdict": None}, None, 0.0, None)            # the page: its own words, both languages
+        self.assertEqual(act["why"][0], "w_env_codex_uac")
+        strings = json.loads((ROOT / "ccx" / "ui_static" / "strings.json").read_text(encoding="utf-8"))
+        self.assertIn("子智能体环境问题：沙箱授权被取消", strings["zh"]["w_env_codex_uac"])
+        self.assertIn("Sub-agent environment problem: sandbox authorization was cancelled", strings["en"]["w_env_codex_uac"])
+
+    def test_the_models_own_command_mentioning_1223_still_climbs(self):
+        # 1223 in a command's output (stdout events) and in the summary, and a program the router could not find:
+        # the task's problem, so the ladder goes on as before
+        out = self.j("run", "--from", "claude", "--to", "codex", "--tier", "T1", "run the installer",
+                     env={"FAKE_STATUS": "cmd_1223_then_done",
+                          "FAKE_SUMMARY": "installer.exe failed with Windows error 1223 (ShellExecuteExW)"})
+        self.assertIn("escalated", out)
+        self.assertNotEqual(out.get("kind"), "env")
+        self.assertNotIn("needs_lead", out)
+        self.assertEqual(len(self.calls()), 2)
+
+    def test_the_real_wrapped_line_counts_and_a_policy_line_still_does_not(self):
+        real = ('2026-10-31T14:45:29.121877Z ERROR codex_core::tools::router: error=exec_command failed: CreateProcess '
+                '{ message: "Rejected(\\"Failed to create unified exec process: orchestrator_helper_launch_canceled: '
+                'ShellExecuteExW failed to launch setup helper: 1223\\")" }')
+        self.assertIn("1223", env_failure("blocked", True, "ok", real))
+        self.assertIsNone(env_failure("done", True, "ok", real))
+        policy = ('ERROR codex_core::tools::router: error=exec_command failed: CreateProcess { message: "Rejected('
+                  '\\"`powershell.exe -Command \'Get-Content README.md\'` rejected: blocked by policy\\")" }')
+        self.assertIsNone(env_failure("blocked", True, "ok", policy))
+
     def test_blocked_is_not_ok_but_the_exit_code_is_unchanged(self):
         rec = {"run_id": "r1", "to": "codex", "tier": "T1", "ok": True, "kind": "ok", "cwd": "",
                "attempts": [{"model": "m", "effort": "low", "ae_usd": 0.01}],

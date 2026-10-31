@@ -1093,21 +1093,45 @@ def env_failure(status: str | None, ok: bool, kind: str | None, *texts: str | No
             low = line.lower()
             # "exec_command failed: CreateProcess { ... rejected: blocked by policy }" is the sandbox's policy saying
             # no (a policy retry below), not a process that could not start
-            if "rejected" in low or "blocked by policy" in low:
+            # (2026-10-31 eval pg1, codex-cli 0.164.0: the launcher's own failure comes wrapped the same way,
+            # 'CreateProcess { message: "Rejected(\"Failed to create unified exec process:
+            # orchestrator_helper_launch_canceled: ShellExecuteExW failed to launch setup helper: 1223\")" }', so
+            # "Rejected" alone is no policy refusal: skipping it let 13 units climb and resume 800-1650 s each)
+            if "blocked by policy" in low:
                 continue
-            if any(m in low for m in ENV_MARKERS):
-                return line.strip()[:240]
+            hits = [low.find(m) for m in ENV_MARKERS if m in low]
+            if hits:
+                # a long router line (timestamp, CreateProcess wrapper) would lose its error code at 240 characters:
+                # keep from just before the launcher's own words, so "... setup helper: 1223" survives
+                lead = len(line) - len(line.lstrip())
+                line = line.strip()
+                start = max(0, min(hits) - lead - 60) if len(line) > 240 else 0
+                return line[start:start + 240]
     return None
+
+
+UAC_CANCELLED = ("1223", "launch_canceled")
+
+
+def env_cause(err: str | None) -> str:
+    """The receipt's name for a known environment failure ("" when ccx knows no name for it): 1223 is Windows'
+    "the operation was cancelled by the user", i.e. the sandbox helper's elevation (UAC) prompt was cancelled."""
+    low = (err or "").lower()
+    if any(m in low for m in UAC_CANCELLED):
+        return "sub-agent environment problem: sandbox authorization was cancelled (Windows error 1223)"
+    return ""
 
 
 def env_hint(record: dict) -> str:
     agent, rid = record.get("to") or "the agent", record["run_id"]
     why = record.get("env_error") or "a process could not be started"
+    cause = env_cause(record.get("env_error"))
     fix = (f"run `{agent}` once yourself in this folder and let it finish setting up its Windows sandbox (error "
            "1223 means its permission prompt was cancelled; 267, a working folder it cannot use), and keep "
            "CODEX_HOME outside a temp folder" if agent == "codex" else
            f"check that `{agent}` can run shell commands in this folder on its own")
-    return (f"{agent} could not start a process on this machine ({why}): an environment problem, not the task, so "
+    return ((cause[0].upper() + cause[1:] + ". " if cause else "") +
+            f"{agent} could not start a process on this machine ({why}): an environment problem, not the task, so "
             f"ccx did not move up to a pricier model or retry. Fix: {fix}; then `ccx resume {rid}`")
 
 
@@ -1265,6 +1289,10 @@ def compact(record: dict) -> dict:
                            f"run it again with --mode write")
         if record["kind"] == "env":
             out["hint"] = env_hint(record)
+            # the lead's cue to stop (2026-10-31 eval pg1: the lead resumed "the shell failure may be transient"
+            # twice, each meeting the same wall): the person fixes the machine first
+            out["needs_lead"] = ("env: " + (env_cause(record.get("env_error")) or "the sub-agent could not start a "
+                                 "process here") + "; tell the person, resume only after they fixed it")
         if record["kind"] in ("quota", "timeout", "user_stopped", "interrupted"):
             why = "ccx stop" if record["kind"] == "user_stopped" else record["kind"]
             out["hint"] = f"stopped by {why}; continue later with `ccx resume {record['run_id']}`"
