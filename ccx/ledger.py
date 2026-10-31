@@ -108,7 +108,7 @@ def _slim(record: dict) -> dict:
         cov = c.get("covers") or {}
         if cov:                                     # P1-10: how many test files it ran; did the run change them
             slim["check"]["covers_n"] = None if cov.get("unknown") else cov.get("n_files")
-            for k in ("basis_changed", "own_tests_only"):
+            for k in ("basis_changed", "own_tests_only", "filtered", "added_to"):
                 if cov.get(k):
                     slim["check"][k] = True
     return slim

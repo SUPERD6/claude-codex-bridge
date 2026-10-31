@@ -994,16 +994,20 @@ def run(req: Request, p: Paths) -> dict:
             # changed pre-existing tests are flagged for every write run, not only when a review step ran
             # (review off, an ephemeral run): the lead looks at those first. P1-10: the check's record says which
             # test files it ran and which of them this run changed or wrote (display only)
+            diff, ed = None, record.get("edited_tests") or []
             try:
                 from .review import changes, edited_tests
                 diff = changes(cwd, snap)[1]
-                ed = record.get("edited_tests") or edited_tests(diff)
-                if want_cov:
+                ed = ed or edited_tests(diff)
+            except Exception:  # noqa: BLE001 — weak evidence only
+                pass
+            if want_cov and diff is not None:
+                try:
                     from . import coverage
                     chk["covers"] = coverage.summarize(chk["cmd"], cwd, Path(snap.get("repo") or cwd), ed,
-                                                       coverage.new_tests(diff))
-            except Exception:  # noqa: BLE001 — weak evidence only
-                ed = record.get("edited_tests") or []
+                                                       coverage.new_tests(diff), coverage.added_to_tests(diff))
+                except Exception:  # noqa: BLE001 — display only; the run's result stands without it
+                    pass
             if ed:
                 record["edited_tests"] = ed
     beat.set()
@@ -1258,6 +1262,8 @@ def compact(record: dict) -> dict:
         if c.get("covers"):                         # P1-10: what it ran, and whether the run changed its yardstick
             from .coverage import text
             out["check"]["covers"] = text(c["covers"])
+            if c["covers"].get("unknown"):
+                out["check"]["covers_unknown"] = True
             if c["covers"].get("basis_changed"):
                 out["check"]["basis_changed"] = c["covers"]["edited"]
         if c.get("unchanged_tree") and c.get("passed"):
@@ -1286,8 +1292,8 @@ def recap(record: dict, res: dict) -> str:
     check = "none" if not c else (NO_CHANGES_NOTE.replace(" ", "-") if c.get("status") == NO_CHANGES_NOTE else
                                   "passed" if c.get("passed") else
                                   f"{'broken' if record.get('kind') == 'check_broken' else 'failed'} (exit {c.get('exit')})")
-    if c and c.get("passed") and c.get("covers"):
-        check += f" ({c['covers']})"                # P1-10: "check passed (covers: ...)"
+    if c and c.get("passed") and c.get("covers") and not c.get("covers_unknown"):
+        check += f" ({c['covers']})"                # P1-10: "check passed (covers: ...)"; unknown: the record has it
     review = (res.get("review") or {}).get("verdict") or "none"
     usd = sum(a.get("ae_usd") or 0 for a in record.get("attempts") or []) + ((res.get("review") or {}).get("usd") or 0)
     cc = record.get("cost_chain") or {}

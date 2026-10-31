@@ -38,7 +38,7 @@ class TestSummarize(unittest.TestCase):
         import tempfile
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
-        for f in ("tests/test_a.py", "tests/test_b.py", "tests/helpers.py", "src/m.py", "tests/sub/test_c.py"):
+        for f in ("tests/test_a.py", "tests/test_b.py", "tests/helpers.py", "src/m.py", "src/latest.py", "tests/conftest.py", "tests/sub/test_c.py"):
             (self.root / f).parent.mkdir(parents=True, exist_ok=True)
             (self.root / f).write_text("", encoding="utf-8")
 
@@ -67,8 +67,9 @@ class TestSummarize(unittest.TestCase):
         self.assertEqual(c["written"], ["tests/sub/test_c.py"])
         self.assertNotIn("own_tests_only", c)
         t = cv.text(c)
-        self.assertIn("covers: tests/test_a.py, tests/test_b.py, tests/sub/test_c.py;", t)
-        self.assertEqual(cv.text(c, limit=2)[:31], "covers: tests/ (3 test files); ")
+        self.assertIn("covers: tests/test_a.py, tests/test_b.py, tests/sub/test_c.py ·", t)
+        self.assertNotIn(";", t)                        # the recap line uses ';' as its own separator
+        self.assertEqual(cv.text(c, limit=2)[:32], "covers: tests/ (3 test files) · ")
         self.assertIn("basis changed: tests/test_a.py edited by the sub-agent", t)
         self.assertIn("written by the sub-agent: tests/sub/test_c.py", t)
 
@@ -82,6 +83,38 @@ class TestSummarize(unittest.TestCase):
         c = cv.summarize("pytest tests/test_b.py", self.root, self.root, ["tests/test_a.py"], ["tests/x/test_n.py"])
         self.assertEqual(set(c), {"files", "n_files"})
         self.assertEqual(cv.text(c), "covers: tests/test_b.py")
+
+    def test_review_findings(self):
+        # a filter runs only part of the file: shown (the audit's one C1 case was `-k doctor`)
+        c = cv.summarize("pytest tests/test_a.py -k doctor", self.root, self.root, [], [])
+        self.assertEqual(c["filtered"], ["-k doctor"])
+        self.assertEqual(cv.text(c), "covers: tests/test_a.py (only -k doctor)")
+        self.assertEqual(cv.summarize("pytest tests/test_a.py::test_x", self.root, self.root, [], [])["filtered"],
+                         ["tests/test_a.py::test_x"])
+        # redirections and option values are not paths; a folder walk keeps to pytest's file names
+        for cmd in ("pytest -q 2>&1", "pytest -q > out.txt", "pytest --reruns 3 -q", "pytest --color yes"):
+            c = cv.summarize(cmd, self.root, self.root, [], [])
+            self.assertEqual(c["dirs"], ["."], cmd)
+            self.assertNotIn("src/latest.py", c["files"])
+            self.assertNotIn("tests/conftest.py", c["files"])
+        # `unittest discover .` stays in the folder (it once became '/', the whole drive)
+        c = cv.summarize("python -m unittest discover . -p 'test_a*.py'", self.root, self.root, [], [])
+        self.assertEqual((c["files"], c["dirs"]), (["tests/test_a.py"], ["."]))
+        # `cd sub && pytest ...`
+        c = cv.summarize("cd tests && python -m pytest test_b.py", self.root, self.root, ["tests/test_b.py"], [])
+        self.assertEqual((c["files"], c["basis_changed"]), (["tests/test_b.py"], True))
+        # tests only added to an existing file, and a changed conftest above what ran
+        c = cv.summarize("pytest tests/test_a.py", self.root, self.root, ["tests/conftest.py"], [], ["tests/test_a.py"])
+        self.assertEqual((c["added_to"], c["edited"]), (["tests/test_a.py"], ["tests/conftest.py"]))
+        self.assertIn("tests added by the sub-agent in tests/test_a.py", cv.text(c))
+        self.assertNotIn("basis_changed", cv.summarize("pytest src", self.root, self.root, ["tests/conftest.py"], []))
+        # a bare pytest does not count edited non-Python files
+        self.assertNotIn("edited", cv.summarize("pytest", self.root, self.root, ["web/foo.test.js"], []))
+
+    def test_added_to_tests(self):
+        diff = ("--- a/tests/test_a.py\n+++ b/tests/test_a.py\n@@ -3,0 +4,2 @@\n+def test_new():\n+    pass\n"
+                "--- a/tests/test_b.py\n+++ b/tests/test_b.py\n@@ -1 +1 @@\n-    assert x\n+    assert y\n")
+        self.assertEqual(cv.added_to_tests(diff), ["tests/test_a.py"])
 
     def test_new_tests_from_a_diff(self):
         diff = ("--- a/tests/test_a.py\n+++ b/tests/test_a.py\n@@\n-x\n+y\n"
@@ -121,9 +154,9 @@ class TestReceipt(Env):
                          f'"{py}" -m pytest -q -p no:cacheprovider test_a.py')
         self.assertTrue(out["check"]["passed"], out)
         self.assertEqual(out["check"]["basis_changed"], ["test_a.py"])
-        self.assertIn("covers: test_a.py; basis changed: test_a.py edited by the sub-agent", out["check"]["covers"])
+        self.assertIn("covers: test_a.py · basis changed: test_a.py edited by the sub-agent", out["check"]["covers"])
         self.assertTrue(out["ok"])                                  # the verdict itself is unchanged
-        self.assertIn("check=passed (covers: test_a.py; basis changed", r.stdout + r.stderr)
+        self.assertIn("check=passed (covers: test_a.py · basis changed", r.stdout + r.stderr)
         lc = self.ledger_check()
         self.assertEqual((lc["covers_n"], lc.get("basis_changed")), (1, True))
 
