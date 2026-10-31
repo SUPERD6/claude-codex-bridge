@@ -1119,3 +1119,127 @@ def test_failed_ids_and_score_keep_the_full_output(tmp_path, monkeypatch):
     sc = r5.score(repo, {"id": "x", "tests": ["tests/x.py"]}, tmp_path)
     assert sc["ok"] is False and sc["pytest"] == "1 failed" and sc["failed"] == ["tests/x.py::t"]
     assert sc["output"].startswith("FAILED tests/x.py::t") and "--- stderr ---\nwarn" in sc["output"]
+
+
+# ------------------------------------------------------------------ the Codex canary and the Windows sandbox (pg1)
+
+def _pass_fake_switches(monkeypatch):
+    """The unit's environment is an allow-list: let the fake's FAKE_* switches through (tests only)."""
+    keep = PF.base_env
+    monkeypatch.setattr(PF, "base_env", lambda src=None: {**keep(src), **{k: v for k, v in os.environ.items()
+                                                                          if k.startswith("FAKE_")}})
+
+
+def _codex_canary_home(machine, sandbox="unelevated"):
+    d = machine["codex"]
+    (d / "auth.json").write_text("{}", encoding="utf-8")           # stands for a login; never read
+    (d / "config.toml").write_text(f'[windows]\nsandbox = "{sandbox}"\n' + PF.codex_features_toml(), encoding="utf-8")
+    return {"claude": "flags", "codex_home": d, "dsh": "unit"}
+
+
+def test_codex_canary_runs_a_real_units_command_line_and_needs_the_output(machine, monkeypatch, tmp_path):
+    _pass_fake_switches(monkeypatch)
+    import tomllib
+    log = tmp_path / "codex.log"
+    monkeypatch.setenv("CCX_CODEX_BIN", str(FAKES / "fake_codex.py"))
+    monkeypatch.setenv("FAKE_LOG", str(log))
+    monkeypatch.setenv("FAKE_COMMAND_OUTPUT", PF.CODEX_CANARY_OUT + "\n")
+    monkeypatch.delenv("CCX_CODEX_ISOLATE", raising=False)
+    kw = _codex_canary_home(machine)
+    res = PF.codex_canary(machine["work"], kw)
+    assert res["ok"], res["problems"]
+    assert res["info"]["windows_sandbox"] == ("unelevated" if sys.platform == "win32" else "n/a")
+    assert res["info"]["commands"] == 1 and not (machine["work"] / "canary").exists()
+    # codex_invocation read CODEX_HOME / CCX_CODEX_ISOLATE from os.environ: nothing of that is left behind
+    assert "CCX_CODEX_ISOLATE" not in os.environ and "CODEX_HOME" not in os.environ
+    call = [json.loads(x) for x in log.read_text(encoding="utf-8").splitlines()][-1]
+    argv, tiers = call["argv"], tomllib.loads(PF.TIERS_FILE.read_text(encoding="utf-8"))
+    t1 = tiers["tiers"]["T1"]["codex"]
+    assert argv[:2] == ["exec", "--json"] and argv[argv.index("-m") + 1] == t1["model"]
+    assert f'model_reasoning_effort="{t1["effort"]}"' in argv
+    for flag in ("--skip-git-repo-check", "--output-schema", "-o", "--ignore-user-config", "--ignore-rules",
+                 'windows.sandbox="unelevated"', "features.plugins=false", *tiers["permissions"]["codex"]["write"]):
+        assert flag in argv, flag
+    assert PF.CODEX_CANARY_CMD in call["prompt"] and PF.CODEX_CANARY_OUT not in call["prompt"]
+
+
+def test_codex_canary_fails_on_the_sandbox_helper_and_on_no_output(machine, monkeypatch):
+    _pass_fake_switches(monkeypatch)
+    monkeypatch.setenv("CCX_CODEX_BIN", str(FAKES / "fake_codex.py"))
+    kw = _codex_canary_home(machine)
+    monkeypatch.setenv("FAKE_COMMAND_OUTPUT", PF.CODEX_CANARY_OUT)
+    monkeypatch.setenv("FAKE_STATUS", "env")            # stderr: "... failed to launch setup helper: 1223", rc 0
+    bad = PF.codex_canary(machine["work"], kw)
+    assert not bad["ok"] and any("1223" in p and "sandbox" in p for p in bad["problems"]), bad["problems"]
+    monkeypatch.setenv("FAKE_STATUS", "done")
+    monkeypatch.delenv("FAKE_COMMAND_OUTPUT")           # the command never ran
+    none = PF.codex_canary(machine["work"], kw)
+    assert not none["ok"] and any("no command output" in p for p in none["problems"])
+    monkeypatch.setenv("FAKE_COMMAND_OUTPUT", "Error 1223: the operation was canceled by the user")
+    out = PF.codex_canary(machine["work"], kw)
+    assert not out["ok"] and any("1223" in p for p in out["problems"])
+    assert PF.codex_sandbox_failure("thread 0f1223ab started", PF.CODEX_CANARY_OUT) is None   # 1223 inside a word
+    assert PF.codex_sandbox_failure("x\nERROR: orchestrator_helper_launch_canceled") is not None   # ENV_MARKERS
+
+
+def test_run_checks_runs_the_codex_canary_only_for_codex_arms(machine, tmp_path, monkeypatch):
+    _stub_machine(monkeypatch)
+    monkeypatch.setattr(PF, "cli_versions", lambda agents=None: {"claude": "2.1.309 (fake)",
+                                                                  "codex": "codex-cli 0.164.0", "dsh": None})
+    kw = _codex_canary_home(machine)
+    ran = []
+    monkeypatch.setattr(PF, "canary", lambda w, kw: {"ok": True, "problems": [], "init": {}})
+    result = {"ok": True, "problems": [], "info": {"windows_sandbox": "unelevated"}}
+    monkeypatch.setattr(PF, "codex_canary", lambda w, kw: ran.append(kw) or result)
+    rep = PF.run_checks(PF.Options(work=tmp_path / "a", arms=["self"], canary=True))
+    assert ran == [] and "codex_canary" not in rep and rep["ok"], rep["problems"]
+    rep = PF.run_checks(PF.Options(work=tmp_path / "b", arms=["ccx2"], codex_home=kw["codex_home"]))  # no --canary
+    assert ran == [] and "codex_canary" not in rep and rep["ok"], rep["problems"]
+    rep = PF.run_checks(PF.Options(work=tmp_path / "d", arms=["ccx2"], codex_home=kw["codex_home"], canary=True))
+    assert len(ran) == 1 and rep["codex_canary"] == "pass" and rep["ok"], rep["problems"]
+    assert rep["codex_canary_info"]["windows_sandbox"] == "unelevated"
+    assert PF.fingerprint(rep, None, None)["codex_canary"] == "pass"
+    result.update(ok=False, problems=["codex canary: no command output 1521522 came back (0 command(s) ran)"])
+    rep = PF.run_checks(PF.Options(work=tmp_path / "e", arms=["ccx2"], codex_home=kw["codex_home"], canary=True))
+    assert not rep["ok"] and rep["codex_canary"] == "fail" and "no command output" in rep["problems"][0]
+
+
+@pytest.mark.parametrize("platform", ["win32", "linux"])
+def test_the_codex_windows_sandbox_is_recorded_in_the_report_and_the_rows(machine, platform):
+    d = machine["codex"]
+    win = platform == "win32"
+    assert PF.codex_windows_sandbox(d, platform) == ("unset" if win else "n/a")          # no config.toml yet
+    for value in ("elevated", "unelevated"):
+        _codex_canary_home(machine, value)
+        assert PF.codex_windows_sandbox(d, platform) == (value if win else "n/a")
+    _probs, info = PF.check_codex_home(d, True, PF.real_paths())
+    assert info["windows_sandbox"] == PF.codex_windows_sandbox(d)
+    rep = {**REP, "codex": {**REP["codex"], "windows_sandbox": "unelevated"}}
+    assert PF.fingerprint(rep, None, None)["codex_windows_sandbox"] == "unelevated"
+    assert PF.fingerprint(REP, None, None)["codex_windows_sandbox"] is None       # a report from before the field
+
+
+def test_summaries_say_when_rows_ran_under_different_sandboxes(capsys, tmp_path):
+    import batch
+
+    def row(tag, sandbox, daily=None, **kw):
+        r = {"tag": tag, "task": "t1", "arm": "ccx2", "round": 1, "ok": True, "usd": 0.1, "env_clean": True,
+             "fingerprint": {"codex_windows_sandbox": sandbox}, **kw}
+        if daily:
+            r["daily"] = {"windows_sandbox": daily}
+        return r
+    same = [row("pg1", "unelevated"), row("pg1", "elevated", daily="unelevated")]   # the daily home's value wins
+    assert PF.sandbox_mix(same) == {"counts": {"unelevated": 2}, "by_tag": {"pg1": {"unelevated": 2}}}
+    assert PF.sandbox_mix([{"tag": "old", "fingerprint": {}}]) is None
+    mixed = [row("pg0", "elevated"), row("pg1", "unelevated")]
+    mix = PF.sandbox_mix(mixed)
+    assert mix["counts"] == {"elevated": 1, "unelevated": 1} and "pg0: elevated 1" in mix["note"]
+    assert r5.summarize(mixed)["codex_windows_sandbox"]["note"] == mix["note"]
+    assert "note" not in r5.summarize(same)["codex_windows_sandbox"]
+    out = tmp_path / "r.jsonl"
+    out.write_text("".join(json.dumps(r) + "\n" for r in mixed), encoding="utf-8")
+    assert r5.main(["summary", "--results", str(out)]) == 0
+    assert "*** WARNING: these rows ran under different Codex Windows sandboxes" in capsys.readouterr().err
+    assert batch.summarize(mixed)["codex_windows_sandbox"]["note"] == mix["note"]
+    assert batch.main(["summary", "--out", str(out)]) == 0
+    assert "different Codex Windows sandboxes" in capsys.readouterr().err

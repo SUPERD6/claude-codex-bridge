@@ -32,8 +32,12 @@ What it guarantees, by mechanism (command-line flags, environment, settings file
                             Codex commands that read it), a starting run removes the plugin cache Codex synced into
                             it (plugins/, nothing else), and after every unit the home is checked
                             again (no plugins, rules, memories, AGENTS.md, skills; the features still off; the
-                            connector and plugin catalog caches untouched): a change stops the run. The canary starts
-                            no Codex, so the first unit is the first point where a start's re-sync can show.
+                            connector and plugin catalog caches untouched): a change stops the run. With --canary and
+                            an arm that needs Codex, a Codex canary runs one real `codex exec` the way a unit does
+                            (codex_invocation, T1 model, write permission, the eval home, CCX_CODEX_ISOLATE=1) that
+                            must run one shell command and show its output: a Windows sandbox that cannot start
+                            (UAC cancelled, error 1223) stops the run before any unit, and the home is checked again
+                            after it. Rows record the home's Windows sandbox (codex_windows_sandbox).
   E2 no leftovers           every process a unit starts runs in a Windows Job Object (started suspended, so nothing
                             escapes before it is in the job; POSIX: its own session, plus a marker variable
                             CCX_EVAL_UNIT); after the unit the job's survivors (killed by closing the job, never by a
@@ -69,6 +73,7 @@ it still writes ~/.claude.json project entries (a tool's own config file: not ed
 
   python scripts/eval/preflight.py --arms ccx,ccx2 --workdir <dir> --codex-home <dir>     # check only, no changes
   python scripts/eval/preflight.py ... --canary                                          # + one tiny real lead
+                                                                                        #   (+ one codex exec)
 """
 from __future__ import annotations
 
@@ -92,7 +97,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import ROOT  # noqa: E402  (puts ROOT on sys.path)
 
-from ccx.agents.codex import CODEX_KEEP  # noqa: E402
+from ccx.agents.codex import CODEX_KEEP, codex_invocation  # noqa: E402
+from ccx.delegate import ENV_MARKERS  # noqa: E402
 from ccx.runners import find_bin  # noqa: E402
 
 TASKS_FILE = Path(__file__).resolve().parent / "tasks_r5.py"
@@ -1326,10 +1332,61 @@ def check_codex_home(d: Path | None, need: bool, real: dict, write: bool = False
     info = {"mode": "eval", "files_sha256": hashlib.sha256("\n".join(names).encode()).hexdigest()[:16],
             "models_cache_sha256": models_sha(d / "models_cache.json") if (d / "models_cache.json").exists() else None,
             "features_off": [f for f in CODEX_FEATURES_OFF if feats.get(f) is False],
-            "remote_cache": codex_remote_cache_sig(d)}
+            "remote_cache": codex_remote_cache_sig(d), "windows_sandbox": codex_windows_sandbox(d)}
     if removed:
         info["removed"] = removed
     return probs, info
+
+
+def codex_windows_sandbox(d: Path | None, platform: str | None = None) -> str:
+    """The Windows sandbox the eval home's Codex runs commands in: off Windows "n/a"; on Windows the [windows]
+    sandbox its config.toml sets ("elevated" / "unelevated", carried onto a lean start by CODEX_KEEP), else "unset"
+    (Codex's own default then). The elevated sandbox runs commands as machine-wide accounts whose password each
+    CODEX_HOME keeps; a setup from another home rotates it, and every command then waits for a UAC prompt nobody
+    answers (error 1223; scripts/eval/daily_home.py). Rows under different sandboxes are not directly comparable."""
+    if (platform or sys.platform) != "win32":
+        return "n/a"
+    try:
+        data = tomllib.loads((Path(d) / "config.toml").read_text(encoding="utf-8")) if d else {}
+    except (OSError, tomllib.TOMLDecodeError):
+        return "unset"
+    win = data.get("windows") if isinstance(data.get("windows"), dict) else {}
+    value = win.get("sandbox")
+    return value if isinstance(value, str) and value else "unset"
+
+
+def row_windows_sandbox(row: dict) -> str | None:
+    """The Codex Windows sandbox a result row actually ran under: a daily arm's own home first (daily.windows_sandbox,
+    also in the fingerprint's models and isolation), else the eval home's (fingerprint.codex_windows_sandbox); None
+    for a row from before the field."""
+    fp = row.get("fingerprint") or {}
+    for v in ((row.get("daily") or {}).get("windows_sandbox"),
+              (((fp.get("models") or {}).get("daily")) or {}).get("windows_sandbox"),
+              (fp.get("isolation") or {}).get("daily_windows_sandbox"), fp.get("codex_windows_sandbox")):
+        if v:
+            return v
+    return None
+
+
+def sandbox_mix(rows: list[dict]) -> dict | None:
+    """How many rows (per tag) ran under each Codex Windows sandbox; `note` when there is more than one (r5.py and
+    batch.py summaries print it). None when no row records one."""
+    counts: dict = {}
+    by_tag: dict = {}
+    for r in rows:
+        v = row_windows_sandbox(r)
+        if v:
+            counts[v] = counts.get(v, 0) + 1
+            t = by_tag.setdefault(str(r.get("tag")), {})
+            t[v] = t.get(v, 0) + 1
+    if not counts:
+        return None
+    out = {"counts": counts, "by_tag": by_tag}
+    if len(counts) > 1:
+        tags = "; ".join(f"{t}: " + ", ".join(f"{v} {n}" for v, n in sorted(c.items())) for t, c in sorted(by_tag.items()))
+        out["note"] = (f"WARNING: these rows ran under different Codex Windows sandboxes ({tags}): their Codex numbers "
+                       "are not directly comparable (an elevated sandbox can fail on UAC where an unelevated one runs)")
+    return out
 
 
 def _is_junction(p: Path) -> bool:
@@ -1373,8 +1430,9 @@ def codex_remote_cache_sig(d: Path) -> str | None:
 
 def codex_home_drift(d: Path, starting: bool = True) -> list[str]:
     """What must still hold of the eval CODEX_HOME while the run goes on, checked after every unit (and after the
-    canary, which starts no Codex today: the first unit is the first point where a start's re-sync can be seen, and
-    that unit's row is then not clean and the run stops): nothing of CODEX_FORBIDDEN (plugins/ above all: codex-cli
+    canaries: the Codex canary starts one real `codex exec` in the eval home, so with --canary and a Codex arm a
+    start's re-sync is seen before the first unit; without it the first unit is the first point, and that unit's
+    row is then not clean and the run stops): nothing of CODEX_FORBIDDEN (plugins/ above all: codex-cli
     0.164 syncs the account's remote plugins into it on a start with the plugin features on), no skills of its own,
     and config.toml still turning CODEX_FEATURES_OFF off. `starting` False (a check-only preflight): a config.toml
     with no [features] table is not a problem, as in check_codex_home, since a starting run writes the table."""
@@ -1560,6 +1618,105 @@ def skill_canary(work: Path, u_kw: dict, timeout: int = 300) -> dict:
                                           for p in probs], "init": info}
 
 
+# The Codex canary's one shell command: plain on PowerShell 5.1 and POSIX shells alike (no inner quotes), python is
+# first on the unit's PATH (prepare), and the expected output is not written in the prompt, so it must really run.
+CODEX_CANARY_CMD, CODEX_CANARY_OUT = 'python -c "print(760761*2)"', "1521522"
+CODEX_SANDBOX_FAIL = re.compile(r"\b1223\b|setup helper", re.I)     # UAC cancelled: Windows' ERROR_CANCELLED
+
+
+class _environ:
+    """Set some os.environ keys for a block and put back exactly what was there (codex_invocation reads
+    CODEX_HOME and CCX_CODEX_ISOLATE from the process environment)."""
+
+    def __init__(self, values: dict):
+        self.values, self.saved = values, {}
+
+    def __enter__(self):
+        for k, v in self.values.items():
+            self.saved[k] = os.environ.get(k)
+            os.environ[k] = v
+        return self
+
+    def __exit__(self, *exc):
+        for k, v in self.saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        return False
+
+
+def codex_sandbox_failure(*texts: str | None) -> str | None:
+    """The first line showing that Codex could not run a shell command because of the machine (its Windows sandbox
+    helper: error 1223, "setup helper", or one of ccx's ENV_MARKERS), else None."""
+    for text in texts:
+        for line in (text or "").splitlines():
+            if CODEX_SANDBOX_FAIL.search(line) or any(m in line.lower() for m in ENV_MARKERS):
+                return line.strip()[:240]
+    return None
+
+
+def codex_canary(work: Path, u_kw: dict, timeout: int = 240) -> dict:
+    """One tiny real `codex exec` with the unit isolation and a real unit's command line (codex_invocation: the T1
+    Codex model and effort of config/tiers.toml, [permissions.codex] write, the eval CODEX_HOME, CCX_CODEX_ISOLATE=1:
+    --ignore-user-config with the home's windows.sandbox, --ignore-rules, ISOLATE_SETTINGS). It must run one shell
+    command and its output must come back in a command_execution item; a non-zero exit, a sandbox failure (error
+    1223, "setup helper", ENV_MARKERS) in stderr, an error event or the command's output, or no output fail it.
+    Round pg1: the eval home's elevated-sandbox password had gone stale and every Codex command waited for a UAC
+    prompt that was cancelled (13 units for nothing). Costs one cheap request."""
+    d = work / "canary"
+    rmtree(d)
+    repo = d / "repo"
+    repo.mkdir(parents=True)
+    (repo / "AGENTS.md").write_text("A canary project.\n", encoding="utf-8")
+    u = Unit(key="canary", work=d, repo=repo, hub=d / "hub", **u_kw)
+    (u.hub / "ccx").mkdir(parents=True)
+    env = prepare(u)
+    tiers = tomllib.loads(TIERS_FILE.read_text(encoding="utf-8"))
+    t1 = tiers["tiers"]["T1"]["codex"]
+    perm = list(tiers["permissions"]["codex"]["write"])
+    run_dir = u.x / "codex-canary"
+    run_dir.mkdir(parents=True, exist_ok=True)
+    prompt = (f"Run this one shell command exactly once, as written: {CODEX_CANARY_CMD}\n"
+              "Do not change any file. Then finish: status done, the command's output as the summary.")
+    sandbox = codex_windows_sandbox(u.codex_home)
+    with _environ({"CODEX_HOME": env["CODEX_HOME"], "CCX_CODEX_ISOLATE": "1"}):
+        try:
+            inv = codex_invocation(model=t1["model"], effort=t1["effort"], perm=perm, cwd=repo, prompt=prompt,
+                                   run_dir=run_dir)
+        except FileNotFoundError as e:
+            rmtree(d)
+            return {"ok": False, "problems": [f"codex canary: {e}"], "info": {"windows_sandbox": sandbox}}
+    before = snapshot()
+    job = Job()
+    out, err, rc, _left = run(inv.argv, cwd=repo, env=env, timeout=timeout, input=inv.stdin, job=job)
+    outputs, errors = [], []
+    for ev in _events(out):
+        t = ev.get("type")
+        item = ev.get("item") or {}
+        if t == "item.completed" and item.get("type") == "command_execution":
+            outputs.append(str(item.get("aggregated_output") or ""))
+        elif t in ("error", "turn.failed"):
+            errors.append(str(ev.get("message") or (ev.get("error") or {}).get("message") or json.dumps(ev)))
+    probs = []
+    if rc == -9:
+        probs.append(f"codex canary timed out after {timeout} s")
+    elif rc:
+        probs.append(f"codex canary failed rc={rc}: {(errors[-1] if errors else err)[-160:]!r}")
+    hit = codex_sandbox_failure(err, *errors, *outputs)
+    if hit:
+        probs.append(f"codex canary: Codex's sandbox could not run a command ({hit!r}); windows sandbox {sandbox}. "
+                     "Units would block on every command: fix the eval CODEX_HOME's sandbox first (e.g. [windows] "
+                     "sandbox = \"unelevated\" in its config.toml)")
+    if not any(CODEX_CANARY_OUT in o for o in outputs):
+        probs.append(f"codex canary: no command output {CODEX_CANARY_OUT} came back ({len(outputs)} command(s) ran)")
+    after_unit(u, before, job, [], keep_repo=False)
+    rmtree(d)
+    return {"ok": not probs, "problems": probs,
+            "info": {"windows_sandbox": sandbox, "model": t1["model"], "effort": t1["effort"],
+                     "commands": len(outputs), "rc": rc}}
+
+
 @dataclass
 class Options:
     work: Path
@@ -1635,10 +1792,25 @@ def run_checks(o: Options) -> dict:
             if not o.start:
                 rmtree(cw)
         probs += scan["problems"]
-    if (can is not None or scan is not None) and need_codex and codex.get("mode") == "eval" and o.codex_home:
-        # the canaries start no Codex today, so this sees nothing a Codex start brings in (the check after the first
-        # unit does); kept so a canary that does start Codex is covered
+    ccan = None
+    if o.canary and not probs and need_codex:
+        # one real `codex exec` as a unit runs it: a sandbox that cannot run commands (pg1: UAC cancelled, 1223)
+        # is seen here, before any paid unit
+        cw = o.work if o.start else Path(tempfile.mkdtemp(prefix="ccx-canary-"))
+        try:
+            ccan = codex_canary(cw, {"claude": o.claude, "codex_home": o.codex_home, "dsh": o.dsh})
+        finally:
+            if not o.start:
+                rmtree(cw)
+        probs += ccan["problems"]
+    if (can is not None or scan is not None or ccan is not None) and need_codex and codex.get("mode") == "eval" \
+            and o.codex_home:
+        # the Codex canary started Codex in the eval home: what a start brings in (synced plugins, features turned
+        # back on, a refetched connector or plugin catalog) shows here, before the first unit
         probs += [f"after the canary: {p}" for p in codex_home_drift(o.codex_home, starting=o.start)]
+        if ccan is not None and "remote_cache" in codex and codex_remote_cache_sig(o.codex_home) != codex["remote_cache"]:
+            probs.append("after the canary: eval CODEX_HOME fetched apps (connectors) or the remote plugin catalog "
+                         "again: a Codex run had those features on")
     rep = {"ok": not probs, "problems": probs, "commit": cs["commit"], "dirty": bool(cs["dirty"]),
            "tasks_file": Path(o.tasks_file).name,
            "tasks_sha256": (sha256_file(o.tasks_file) or "")[:16], "tiers_sha256": (sha256_file(TIERS_FILE) or "")[:16],
@@ -1650,6 +1822,9 @@ def run_checks(o: Options) -> dict:
     if scan is not None:
         rep["skill_canary"] = "pass" if scan["ok"] else "fail"
         rep["skill_canary_init"] = scan.get("init")
+    if ccan is not None:
+        rep["codex_canary"] = "pass" if ccan["ok"] else "fail"
+        rep["codex_canary_info"] = ccan.get("info")
     rep["result"] = "pass" if rep["ok"] else ("forced" if o.force_unclean else "fail")
     return rep
 
@@ -1663,7 +1838,11 @@ def fingerprint(rep: dict, u: Unit | None, env: dict | None, models: dict | None
           "python": rep.get("python"), "pytest": rep.get("pytest"), "os": rep.get("os"), "models": models or {},
           "codex_home_files": rep["codex"].get("files_sha256"), "models_cache": rep["codex"].get("models_cache_sha256"),
           "env_keys_sha256": env_keys_sha(env) if env else None,
-          "codex_cli": (rep.get("cli") or {}).get("codex")}       # also in cli; named so comparisons see it
+          "codex_cli": (rep.get("cli") or {}).get("codex"),       # also in cli; named so comparisons see it
+          # the eval home's Codex Windows sandbox (elevated / unelevated / unset / n/a; None: no Codex in the run)
+          "codex_windows_sandbox": rep["codex"].get("windows_sandbox")}
+    if rep.get("codex_canary"):          # the one real codex exec before the run
+        fp["codex_canary"] = rep["codex_canary"]
     if rep["codex"].get("mode") == "eval":
         fp["codex_features_off"] = rep["codex"].get("features_off")
     if rep.get("lead"):                  # the run's lead model / effort (r5 --lead-model / --lead-effort)

@@ -1036,13 +1036,21 @@ def summarize(rows: list[dict]) -> dict:
             rs = [r for r in rows if str(r.get("tag")) == tag and r.get("batch") == bid]
             cells.setdefault(tag, {})[bid] = {arm: cell([r for r in rs if arm_of(r) == arm])
                                               for arm in arm_order(arm_of(r) for r in rs)}
-    return {"cells": cells, "paired": paired(rows), "error_rows": len(errors),
-            "unclean_rows": sum(r.get("env_clean") is False for r in rows)}
+    out = {"cells": cells, "paired": paired(rows), "error_rows": len(errors),
+           "unclean_rows": sum(r.get("env_clean") is False for r in rows)}
+    mix = PF.sandbox_mix(rows)            # the Codex Windows sandbox each row actually ran under
+    if mix:
+        out["codex_windows_sandbox"] = mix
+    return out
 
 
 def cmd_summary(a) -> int:
     rows = [r for r in read_jsonl(Path(a.out) if a.out else RESULTS) if not a.tag or r.get("tag") == a.tag]
-    print(json.dumps(summarize(rows), ensure_ascii=False, indent=1))
+    res = summarize(rows)
+    print(json.dumps(res, ensure_ascii=False, indent=1))
+    note = (res.get("codex_windows_sandbox") or {}).get("note")
+    if note:                                                  # batches under different sandboxes: say so loudly
+        print(f"*** {note} ***", file=sys.stderr)
     return 0
 
 

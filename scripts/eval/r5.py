@@ -2177,7 +2177,10 @@ def cmd_run(a) -> int:
     work.mkdir(parents=True, exist_ok=True)
     (work / "preflight.json").write_text(json.dumps(rep, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"[preflight] {rep['result']}: commit {rep['commit'][:12]} cli {rep['cli']} codex {rep['codex']['mode']} "
-          f"claude {rep['claude_isolation']} jobs {a.jobs} canary {rep['canary']}", flush=True)
+          f"claude {rep['claude_isolation']} jobs {a.jobs} canary {rep['canary']}"
+          + (f" codex canary {rep['codex_canary']}" if rep.get("codex_canary") else "")
+          + (f" codex windows sandbox {rep['codex']['windows_sandbox']}" if rep["codex"].get("windows_sandbox") else ""),
+          flush=True)
     a.preflight = rep
     # a unit that was not right keeps its evidence here, in a folder of this invocation's own (an aborted run's
     # folders stay apart; row["artifacts"]["run"] names it)
@@ -2953,6 +2956,9 @@ def summarize(rows: list[dict], include_unclean: bool = False) -> dict:
     if ex_arm:
         res["excluded_by_arm"] = ex_arm
         res["excluded_by_tag"] = ex_tag
+    mix = PF.sandbox_mix(every)          # the Codex Windows sandbox each row actually ran under
+    if mix:
+        res["codex_windows_sandbox"] = mix
     b3 = b3_rules(every)
     if b3:
         res["b3_rules"] = b3
@@ -3020,6 +3026,9 @@ def cmd_summary(a) -> int:
     line = excluded_line(res)
     if line:
         print(line, file=sys.stderr)
+    note = (res.get("codex_windows_sandbox") or {}).get("note")
+    if note:                                                  # rounds under different sandboxes: say so loudly
+        print(f"*** {note} ***", file=sys.stderr)
     for name, tr in (res.get("tier_rules") or {}).items():   # stdout stays one JSON object
         for line in tier_rule_lines(tr):
             print(line if name == "balanced vs save" else line.replace("tier rule", f"tier rule {name}", 1),
