@@ -126,6 +126,7 @@ in STATUS. Still work in progress (the release badge above says which version): 
 | [What it does, and how](docs/features.md) | the seven things in detail, `ccx ui`, one example end to end, where shared things live, tiers, safety |
 | [Install and commands](docs/install.md) | install from a clone, plugging in your own setup, every command |
 | [Measured](docs/measured.md) | all measurements with their limits (the hold-out run, the round-5 comparison, the best-case feature A/Bs), how a saving is estimated, external facts checked |
+| [Public benchmark](bench/README.md) | the hold-out and dev tasks, hidden tests and our result rows: re-run the comparison yourself |
 | [Shared work context](docs/shared-context.md) · [The board](docs/board.md) | what open sessions share with each other, and how |
 | [Questions and similar projects](docs/faq.md) | cost, subscriptions, safety, which tools work; how ccx differs from similar projects |
 | [Design](docs/DESIGN.md) · [Decisions](docs/DECISIONS.md) · [Changes](CHANGELOG.md) | the inside |

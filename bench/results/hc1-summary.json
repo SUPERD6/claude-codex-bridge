@@ -44,41 +44,46 @@
    }
   },
   "builtin": {
-   "ok": 28,
-   "n": 30,
-   "usd": 2.9334,
-   "cps": 0.1048,
-   "lead_usd": 2.9334,
+   "ok": 27,
+   "n": 28,
+   "usd": 2.7916,
+   "cps": 0.1034,
+   "lead_usd": 2.7916,
    "ccx_usd": 0,
-   "lead_cps": 0.1048,
+   "lead_cps": 0.1034,
    "ccx_cps": 0.0,
-   "lead_only_usd": 1.7852,
-   "sub_usd": 1.1482,
-   "lead_only_cps": 0.0638,
-   "sub_cps": 0.041,
-   "lead_only_usd_med": 0.062686,
-   "lead_tokens_med": 55679,
-   "lead_requests_med": 4,
+   "lead_only_usd": 1.6918,
+   "sub_usd": 1.0998,
+   "lead_only_cps": 0.0627,
+   "sub_cps": 0.0407,
+   "lead_only_usd_med": 0.064307,
+   "lead_tokens_med": 55840,
+   "lead_requests_med": 5,
    "wall_med": 132.9,
-   "wall_mean": 162.8,
+   "wall_mean": 164.5,
    "wall_p75": 251.8,
    "wilson": [
-    0.787,
-    0.982
+    0.823,
+    0.994
    ],
    "ok_rate_ci_tasks": [
-    0.8333,
+    0.8889,
     1.0
    ],
    "ok_by_round": {
-    "1": 10,
+    "1": 9,
     "2": 9,
     "3": 9
    },
-   "wilson_note": "30 rows from 10 tasks: Wilson takes them as independent (too narrow); see ok_rate_ci_tasks",
+   "wilson_note": "28 rows from 10 tasks: Wilson takes them as independent (too narrow); see ok_rate_ci_tasks",
+   "excluded": {
+    "unclean": 2,
+    "env_unknown": 0,
+    "of": 30
+   },
    "namecheck": {
     "modes": {
-     "warn": 30
+     "warn": 28
     },
     "runs": 0,
     "runs_with_hits": 0,
@@ -208,31 +213,31 @@
     }
    },
    "builtin": {
-    "n": 30,
-    "ok": 28,
-    "usd": 2.9334,
-    "cps": 0.1048,
+    "n": 28,
+    "ok": 27,
+    "usd": 2.7916,
+    "cps": 0.1034,
     "wall_med": 132.9,
-    "wall_mean": 162.8,
+    "wall_mean": 164.5,
     "wall_p75": 251.8,
     "rounds": {
      "1": {
-      "n": 10,
-      "ok": 10,
-      "usd": 1.0281,
-      "cps": 0.1028,
+      "n": 9,
+      "ok": 9,
+      "usd": 0.9893,
+      "cps": 0.1099,
       "wall_med": 196.7,
-      "wall_mean": 159.1,
+      "wall_mean": 172.1,
       "wall_p75": 239.7
      },
      "2": {
-      "n": 10,
+      "n": 9,
       "ok": 9,
-      "usd": 0.868,
-      "cps": 0.0964,
-      "wall_med": 132.9,
-      "wall_mean": 144.3,
-      "wall_p75": 236.8
+      "usd": 0.765,
+      "cps": 0.085,
+      "wall_med": 67.1,
+      "wall_mean": 134.0,
+      "wall_p75": 199.1
      },
      "3": {
       "n": 10,
@@ -290,9 +295,9 @@
  "tags": [
   "hc1"
  ],
- "counted": "all rows (--include-unclean)",
+ "counted": "env_clean rows only",
  "excluded_rows": {
-  "unclean": 0,
+  "unclean": 2,
   "env_unknown": 0
  },
  "long_style": {
@@ -332,26 +337,26 @@
   },
   "self->builtin": {
    "usd": {
-    "median": 0.01586,
+    "median": 0.01655,
     "ci": [
      -0.002511666666666676,
-     0.024069
+     0.028748
     ],
     "sign_p": 0.34375
    },
    "lead_tokens": {
-    "median": 3693.66667,
+    "median": 10805.83333,
     "ci": [
      -129718.49999999999,
-     18201.999999999996
+     18586.333333333336
     ],
-    "sign_p": 1.0
+    "sign_p": 0.75390625
    },
    "wall_s": {
     "median": 173.6,
     "ci": [
-     37.7,
-     218.5
+     43.06666666666666,
+     215.575
     ],
     "sign_p": 0.001953125
    }
@@ -363,39 +368,49 @@
     "self",
     "builtin"
    ],
-   "units": 30,
+   "units": 28,
    "tasks": 10,
    "ok": {
-    "self": 29,
-    "builtin": 28
+    "self": 27,
+    "builtin": 27
    },
    "discordant": {
-    "only_self": 2,
+    "only_self": 1,
     "only_builtin": 1
    },
    "mcnemar_p": 1.0,
    "task_sign": {
-    "more_self": 2,
+    "more_self": 1,
     "more_builtin": 1
    },
    "task_sign_p": 1.0,
    "diff_is": "builtin - self",
    "cps": {
-    "self": 0.09041,
-    "builtin": 0.10476
+    "self": 0.09264,
+    "builtin": 0.10339
    },
-   "cps_diff": 0.01435,
+   "cps_diff": 0.01075,
    "cps_diff_ci": [
-    -0.0102,
-    0.047
+    -0.0123,
+    0.0404
    ],
    "cps_diff_ci_dropped": 0,
-   "wall_med_diff": 109.7,
+   "wall_med_diff": 103.6,
    "wall_med_diff_ci": [
-    40.6,
+    39.3,
     207.3
    ],
-   "mcnemar_note": "30 units from 10 tasks: McNemar takes a task's rounds as independent pairs (anti-conservative); task_sign_p does not",
+   "mcnemar_note": "28 units from 10 tasks: McNemar takes a task's rounds as independent pairs (anti-conservative); task_sign_p does not",
+   "lost_pairs": {
+    "lost": 2,
+    "of": 30,
+    "unclean_side": {
+     "self": 0,
+     "builtin": 2
+    },
+    "note": "one-sided loss: 0 of self's and 2 of builtin's rows on shared units were not env_clean; the comparison counts only the pairs left and may be biased"
+   },
+   "lost_pairs_note": "one-sided loss: 0 of self's and 2 of builtin's rows on shared units were not env_clean; the comparison counts only the pairs left and may be biased",
    "mcnemar_p_holm": 1.0,
    "task_sign_p_holm": 1.0
   },
@@ -437,6 +452,14 @@
     119.5
    ],
    "mcnemar_note": "30 units from 10 tasks: McNemar takes a task's rounds as independent pairs (anti-conservative); task_sign_p does not",
+   "lost_pairs": {
+    "lost": 0,
+    "of": 30,
+    "unclean_side": {
+     "self": 0,
+     "ccx2": 0
+    }
+   },
    "mcnemar_p_holm": 1.0,
    "task_sign_p_holm": 1.0
   },
@@ -445,41 +468,67 @@
     "builtin",
     "ccx2"
    ],
-   "units": 30,
+   "units": 28,
    "tasks": 10,
    "ok": {
-    "builtin": 28,
-    "ccx2": 29
+    "builtin": 27,
+    "ccx2": 27
    },
    "discordant": {
     "only_builtin": 1,
-    "only_ccx2": 2
+    "only_ccx2": 1
    },
    "mcnemar_p": 1.0,
    "task_sign": {
     "more_builtin": 1,
-    "more_ccx2": 2
+    "more_ccx2": 1
    },
    "task_sign_p": 1.0,
    "diff_is": "ccx2 - builtin",
    "cps": {
-    "builtin": 0.10476,
-    "ccx2": 0.06298
+    "builtin": 0.10339,
+    "ccx2": 0.0635
    },
-   "cps_diff": -0.04178,
+   "cps_diff": -0.03989,
    "cps_diff_ci": [
-    -0.0871,
-    -0.0185
+    -0.0855,
+    -0.0145
    ],
    "cps_diff_ci_dropped": 0,
    "wall_med_diff": -63.4,
    "wall_med_diff_ci": [
     -161.9,
-    -10.6
+    -7.7
    ],
-   "mcnemar_note": "30 units from 10 tasks: McNemar takes a task's rounds as independent pairs (anti-conservative); task_sign_p does not",
+   "mcnemar_note": "28 units from 10 tasks: McNemar takes a task's rounds as independent pairs (anti-conservative); task_sign_p does not",
+   "lost_pairs": {
+    "lost": 2,
+    "of": 30,
+    "unclean_side": {
+     "builtin": 2,
+     "ccx2": 0
+    },
+    "note": "one-sided loss: 2 of builtin's and 0 of ccx2's rows on shared units were not env_clean; the comparison counts only the pairs left and may be biased"
+   },
+   "lost_pairs_note": "one-sided loss: 2 of builtin's and 0 of ccx2's rows on shared units were not env_clean; the comparison counts only the pairs left and may be biased",
    "mcnemar_p_holm": 1.0,
    "task_sign_p_holm": 1.0
+  }
+ },
+ "excluded_by_arm": {
+  "builtin": {
+   "unclean": 2,
+   "env_unknown": 0,
+   "of": 30
+  }
+ },
+ "excluded_by_tag": {
+  "hc1": {
+   "builtin": {
+    "unclean": 2,
+    "env_unknown": 0,
+    "of": 30
+   }
   }
  },
  "by_repo": {
@@ -508,14 +557,10 @@
    },
    "builtin": {
     "ok": 13,
-    "n": 15
+    "n": 14
    }
   },
   "itsdangerous": {
-   "builtin": {
-    "ok": 3,
-    "n": 3
-   },
    "ccx2": {
     "ok": 3,
     "n": 3
@@ -523,6 +568,10 @@
    "self": {
     "ok": 3,
     "n": 3
+   },
+   "builtin": {
+    "ok": 2,
+    "n": 2
    }
   }
  },

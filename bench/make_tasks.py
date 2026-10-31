@@ -29,10 +29,10 @@ INTRO = {
 }
 
 
-def pytest_cmd(t: dict, ext: bool) -> str:
+def pytest_cmd(t: dict, repo: dict | None) -> str:
     args = " ".join([*t["tests"], *(f"--deselect {n}" for n in t.get("deselect") or ())])
-    env = "PYTHONPATH=src " if ext else ""
-    color = " --color=no" if ext else ""
+    env = f"PYTHONPATH={repo['pythonpath']} " if repo else ""
+    color = " --color=no" if repo else ""
     return f"{env}python -m pytest -q -p no:cacheprovider{color} {args}"
 
 
@@ -46,8 +46,9 @@ def render(set_name: str, t: dict) -> str:
         lines += [f"| Repository | {url} ({repo['license']}; not copied here) |",
                   f"| Commit (the reference change) | `{t['commit']}` |",
                   f"| Starting point | its parent, `{t['commit']}^`, as a fresh one-commit repository |",
-                  f"| Python for the tests | 3.11+ with {', '.join(repo['needs'])}, without `{repo['module']}` "
-                  "installed |"]
+                  f"| Python for the tests | 3.11+ with {', '.join(repo['needs'])}"
+                  + (f" (pytest {repo['pytest_min']} or newer)" if repo.get("pytest_min") else "")
+                  + f", without `{repo['module']}` installed |"]
     else:
         lines += [f"| Repository | this one ({url}) |",
                   f"| Commit (the reference change) | `{t['commit']}` |",
@@ -61,17 +62,20 @@ def render(set_name: str, t: dict) -> str:
     if ext:
         links = ", ".join(f"[`{p}`]({url}/blob/{t['commit']}/{p})" for p in t["tests"])
         lines += [f"The commit's own test file(s): {links}. Before scoring, the repository's test folder and test "
-                  "settings are put back as they were at the parent and these files are written over them; then, "
-                  "from the repository root:"]
+                  "settings are put back as they were at the parent and these files are written over them"
+                  + (f"; the files its install would generate are stubbed ({', '.join(f'`{x}`' for x in repo['stubs'])})"
+                     if repo["stubs"] else "")
+                  + "; then, from the repository root:"]
     else:
         shows = "; ".join(f"`git show {t['commit']}:{p}`" for p in t["tests"])
         lines += [f"The commit's own test file(s), read from this repository's history: {shows}. They are written "
                   "over whatever the agent left in them, with today's `tests/conftest.py`; then, in throwaway "
                   "HOME / CCX_HUB / CODEX_HOME / CLAUDE_CONFIG_DIR folders:"]
-    lines += ["", "```bash", pytest_cmd(t, ext), "```", "",
+    lines += ["", "```bash", pytest_cmd(t, repo), "```", "",
               "Right = that command exits 0. The tests are public (they always were, in the commit's history), so "
-              "an agent that looks the commit up can find the answer; the evaluation denies web access and the "
-              "copies of other repositories to its agents, but a model may still remember an older commit."]
+              "an agent that looks the commit up can find the answer. For external tasks the evaluation takes "
+              "Claude's web tools and the copies of the repository away from its agents; a download from a shell "
+              "is not blocked, only flagged by the audit; and a model may remember an older commit."]
     if t.get("deselect"):
         lines += ["", "Deselected: unrelated tests of the same file that fail at random under load; they are left out "
                   "for every arm."]

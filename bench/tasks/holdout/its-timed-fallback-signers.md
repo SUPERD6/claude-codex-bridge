@@ -32,4 +32,4 @@ The commit's own test file(s): [`tests/test_itsdangerous/test_timed.py`](https:/
 PYTHONPATH=src python -m pytest -q -p no:cacheprovider --color=no tests/test_itsdangerous/test_timed.py
 ```
 
-Right = that command exits 0. The tests are public (they always were, in the commit's history), so an agent that looks the commit up can find the answer; the evaluation denies web access and the copies of other repositories to its agents, but a model may still remember an older commit.
+Right = that command exits 0. The tests are public (they always were, in the commit's history), so an agent that looks the commit up can find the answer. For external tasks the evaluation takes Claude's web tools and the copies of the repository away from its agents; a download from a shell is not blocked, only flagged by the audit; and a model may remember an older commit.
