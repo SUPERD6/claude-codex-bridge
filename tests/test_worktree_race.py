@@ -94,8 +94,8 @@ class TestWorktreeRace(unittest.TestCase):
 
     def test_the_race_is_known_by_its_path_in_any_language(self):
         for err in ("fatal: failed to read .git/worktrees/20261031-020710-648a/commondir: No error",
-                    "致命错误：无法读取 C:/Users/Jo Doe/repo/.git/worktrees/20261031-1/gitdir",
-                    "fatal: failed to read C:\\Users\\Jo Doe\\repo\\.git\\worktrees\\r-2\\commondir"):
+                    "致命错误：无法读取 D:/My Projects/repo/.git/worktrees/20261031-1/gitdir",
+                    "fatal: failed to read D:\\My Projects\\repo\\.git\\worktrees\\r-2\\commondir"):
             self.assertTrue(workspace._WT_RACE.search(err), err)
         self.assertFalse(workspace._WT_RACE.search("fatal: a branch named 'ccx/x' already exists"))
 
