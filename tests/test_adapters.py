@@ -565,7 +565,8 @@ class TestBuiltinVerdict(AdapterEnv):
         d = self.home_claude / "projects" / "-work" / "sess-1" / "subagents"
         d.mkdir(parents=True)
         (d / "agent-abc.jsonl").write_text(json.dumps({
-            "type": "assistant", "isSidechain": True, "sessionId": "sess-1", "timestamp": "2026-10-24T01:00:00Z",
+            "type": "assistant", "isSidechain": True, "sessionId": "sess-1",
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(time.time() - 3600)),   # inside the 7-day window
             "message": {"id": "m1", "model": "claude-haiku-5-5", "usage": {
                 "input_tokens": 4, "cache_creation_input_tokens": 58000, "cache_read_input_tokens": 0,
                 "output_tokens": 160}}}) + "\n", encoding="utf-8")
