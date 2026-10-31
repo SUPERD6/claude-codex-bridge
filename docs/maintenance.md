@@ -98,34 +98,41 @@ repository, so they are no longer a hold-out set; a new claim needs new unseen t
 
 ### Known structural limit: evaluation and development share one machine and one account
 
-Every evaluation so far ran on the machine the development sessions use, under the same login and quota. That is
-not a bug a flag can fix: it is how the work is set up. On 2026-10-30 it cost four starts of one evaluation round:
+The evaluations of late October 2026 ran on the machine the development sessions use, under the same login and
+quota. That is not a bug a flag can fix: it is how the work is set up. On 2026-10-30 one evaluation round (B3, its r5
+half) failed to start four times, and the fifth start ran to the end (80 units, $10.01) but could not count:
 
-- **The checkout moved.** The evaluation ran from a `git worktree` of the main repository. When the desktop app made
-  a worktree for a new session, it switched the main checkout and removed worktrees it did not know, so the run
-  stopped after its first unit. An evaluation checkout is now a separate `git clone`.
-- **The script was gone.** The start script lived in a session's notes folder; archiving that session deleted the
-  folder. Scripts a run needs now live in the project.
-- **Another session dirtied the round.** Another session's test run tripped the clean-room check and the run
-  stopped. Started again with `--force-unclean`, the round finished with every row unclean (the B3 r5 half,
-  [B3 report](research/2026-10-31-b3-lean-switches.md)), so it could not count towards its decision rule.
-- **The quota ran out.** Development sessions and the evaluation drew on one usage limit. When it ran out, the
-  remaining units failed in a second at $0 and were thrown away. When the session that started the run ended, the
-  run died with it.
+1. **The checkout moved.** The run used a `git worktree` of the main repository. When the desktop app made a
+   worktree for a new session, it switched the main checkout and removed the evaluation's worktree, so the run
+   stopped after its first unit. Evaluation checkouts are now separate `git clone`s.
+2. **The script was gone.** The start script lived in a session's notes folder. Archiving its parent session also
+   archived that session and deleted the folder. Scripts a run needs now live in the project.
+3. **The machine was busy.** Another project's test run, seen between units, stopped the run (the clean-room check).
+4. **The quota ran out.** Started again with `--force-unclean`, the run shared one usage limit with the development
+   sessions. Once the limit was reached, every unit failed in a second at $0 and was thrown away, and when the
+   session that had started the run ended, the run died with it.
+5. **The whole round was unclean.** At the fifth start another session was running tests. `--force-unclean` let the
+   start check pass, so all 80 rows were marked not clean and the round was left out of its decision rule (see the
+   [B3 report](research/2026-10-31-b3-lean-switches.md)).
 
 What helps on one machine:
 
-- an evaluation checkout that is its own clone;
-- scripts kept in the repository;
-- a log that ends with `exit=` (step 4);
-- `--wait-quiet <minutes>`, which waits until no other test or agent run is going before each start. It comes with
-  the evaluation-script fixes; if your `r5.py` does not have it yet, check by hand that the machine is idle.
+- the evaluation checkout is its own clone;
+- scripts are kept in the repository;
+- the log ends with `exit=` (step 4);
+- before starting, wait until no other test or agent run is going, and don't start with `--force-unclean`: it only
+  turns a busy start into a round that does not count.
 
 None of these makes the numbers safe from other work on the same machine.
 
-**The move:** run evaluations on a second machine, or in a cloud session, with a login of its own (its own quota),
-started from a pinned commit (`--pin-commit`), with development not touching it while it runs. Until then, treat a
-round started next to other sessions as supplementary, as the B3 report does.
+**The move:**
+
+1. Run evaluations on a second machine or in a cloud session, with a login of its own, so their quota is separate.
+2. Use a fresh clone at a pinned commit (`--pin-commit`), with nothing else running there.
+3. Start the run from that machine's own shell, not from a development session.
+4. Copy back only the results file, the log and the summary when it ends.
+
+Until then, treat a round started next to other sessions as supplementary, as the B3 report does.
 
 ## 5. Releasing
 
