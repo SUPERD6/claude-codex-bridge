@@ -210,7 +210,9 @@ def merge(p: Paths, run_id: str, info: dict, cfg: dict | None = None, rules: lis
     elif c.get("weak"):
         no.append(f"the check is weak here ({c['weak']})")
     rv = (rec.get("review") or {}).get("verdict")
-    if rv != "pass":
+    if rv == "pass" and (rec.get("review") or {}).get("downgraded"):
+        no.append("the review's [must] items were only downgraded for lack of a repro (must_needs_repro)")
+    elif rv != "pass":
         no.append(f"the independent review did not pass ({rv or 'none ran'}): use --review on")
     if rec.get("risk") in ("visible", "critical"):
         no.append(f"risk is {rec['risk']}")

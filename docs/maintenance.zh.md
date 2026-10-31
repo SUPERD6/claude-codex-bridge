@@ -50,6 +50,7 @@
 | `memory.by_kind` | `false` | 开局只推偏好和约束；简报带相关的坑和事实 | 由确认实验决定；原本要决定它的 H11 试用已于 2026-10-26 作废 | 能 |
 | `memory.start_scene` | `false` | 开局再带当前项目的场景块 | 同上 | 能 |
 | `review.context` | `false` | 审查简报再附改动附近的代码 | 回放第 5 轮：用时和输出约减半，但已知 bug 28 次只抓到 11 次（不附时 19 次） | 不能 |
+| `review.must_needs_repro` | `false` | ccx 的 check 已通过时，审查的 `[must]` 没写 `repro:` 就降为 `[should]`（`"downgrade"`），或先让更强的审查员确认（`"confirm"`） | r5 10 题 × 1 轮（关 / downgrade / confirm），加上回放记录里的 27 个 review_failed 单元和人工植入的真 bug | 不能 |
 | `review.fix_rereview` | `"full"` | `"focus"` 让修复轮的复审对着首轮问题看 | 由用时决定：中位只省 2.4 秒，门槛是 10 秒（漏掉的 `[must]` 24 对 21，共 33，各跑 1 遍，分不出是不是噪声） | 不能 |
 | `review.cache_ttl` | `""` | 设 Claude 审查者的提示缓存时长（`"5m"` / `"1h"`） | 没做 A/B | 不能 |
 | `routing.small_self` | `false` | `ccx route` / `ccx propose` 对最多改 `routing.small_self_files`（1）个源文件的活建议自己做、不派（`ccx run` 不变） | 用 r5 + 留出集已有数据按参考改动的文件数复算：一题不少、墙钟 -14%、成本 +5%；主导自己的估计要等留出集一轮（self / ccx2 / ccx2+small_self） | 能 |

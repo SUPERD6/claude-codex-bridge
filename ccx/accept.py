@@ -62,7 +62,7 @@ def evidence(rec: dict) -> str | None:
         from .coverage import text
         cov = text(c.get("covers"))
         return f"check passed{f' ({cov})' if cov else ''}: {c.get('cmd')}"
-    if (rec.get("review") or {}).get("verdict") == "pass":
+    if (rec.get("review") or {}).get("verdict") == "pass" and not (rec.get("review") or {}).get("downgraded"):
         return "review passed"
     return None
 
