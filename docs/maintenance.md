@@ -96,6 +96,37 @@ python scripts/eval/r5.py summary --taskset holdout
 The hold-out tasks (`scripts/eval/tasks_holdout.py`) were kept apart for final claims. The file is in the public
 repository, so they are no longer a hold-out set; a new claim needs new unseen tasks.
 
+### Known structural limit: evaluation and development share one machine and one account
+
+Every evaluation so far ran on the machine the development sessions use, under the same login and quota. That is
+not a bug a flag can fix: it is how the work is set up. On 2026-10-30 it cost four starts of one evaluation round:
+
+- **The checkout moved.** The evaluation ran from a `git worktree` of the main repository. When the desktop app made
+  a worktree for a new session, it switched the main checkout and removed worktrees it did not know, so the run
+  stopped after its first unit. An evaluation checkout is now a separate `git clone`.
+- **The script was gone.** The start script lived in a session's notes folder; archiving that session deleted the
+  folder. Scripts a run needs now live in the project.
+- **Another session dirtied the round.** Another session's test run tripped the clean-room check and the run
+  stopped. Started again with `--force-unclean`, the round finished with every row unclean (the B3 r5 half,
+  [B3 report](research/2026-10-31-b3-lean-switches.md)), so it could not count towards its decision rule.
+- **The quota ran out.** Development sessions and the evaluation drew on one usage limit. When it ran out, the
+  remaining units failed in a second at $0 and were thrown away. When the session that started the run ended, the
+  run died with it.
+
+What helps on one machine:
+
+- an evaluation checkout that is its own clone;
+- scripts kept in the repository;
+- a log that ends with `exit=` (step 4);
+- `--wait-quiet <minutes>`, which waits until no other test or agent run is going before each start. It comes with
+  the evaluation-script fixes; if your `r5.py` does not have it yet, check by hand that the machine is idle.
+
+None of these makes the numbers safe from other work on the same machine.
+
+**The move:** run evaluations on a second machine, or in a cloud session, with a login of its own (its own quota),
+started from a pinned commit (`--pin-commit`), with development not touching it while it runs. Until then, treat a
+round started next to other sessions as supplementary, as the B3 report does.
+
 ## 5. Releasing
 
 1. `python scripts/collect_changes.py` previews the CHANGELOG entry from `changes/*.md`; with `--version X.Y.Z
