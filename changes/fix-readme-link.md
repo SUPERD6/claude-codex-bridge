@@ -1,0 +1,1 @@
+- README: the commands link added in #206 is absolute again, so the PyPI page renders it (tests/test_packaging.py).
