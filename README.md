@@ -55,9 +55,9 @@ after the round-5 fixes (the first run, before them, was 17/20 at $0.248).
   above the 2 % bar and listed as a must-fix before release; being fixed. Those 8 receipts said right while the hidden
   tests failed, because the check passed without testing what the hidden test asked for. The other way round, 47 of
   51 receipts that said wrong were in fact right, most of them a failed review
-  ([verdict audit](docs/research/2026-10-31-verdict-audit.md)).
+  ([verdict audit](https://github.com/SUPERD6/relayline/blob/main/docs/research/2026-10-31-verdict-audit.md)).
 - **Real use so far:** almost none. In one week the real hub had 283 runs, but only 5 (3–5 tasks) were work outside
-  ccx's own tests ([dogfood](docs/research/2026-10-31-dogfood.md), real use, not a controlled experiment).
+  ccx's own tests ([dogfood](https://github.com/SUPERD6/relayline/blob/main/docs/research/2026-10-31-dogfood.md), real use, not a controlled experiment).
 - **One ledger across vendors:** every sub-agent run and its own child sessions, Claude and Codex in one book (verified live on 2026-10-30 with codex-cli 0.164.0: a Codex sub-agent asked via `--parallel` started 3 child sessions with `spawn_agent`, and the ledger's run total equalled parent + 3 children exactly, field by field). Claude Code itself has `/context` and `/cost` for its own session; what ccx adds is one book across both vendors plus a per-part breakdown of what the lead re-reads each turn (read from the lead's own session file, not from the ledger) (`ccx lead --breakdown`, and the `ccx ui` page "Measured & where tokens go").
 - **Limits:** the hold-out run had 10 tasks and only a sonnet lead, its prices are API-equivalent, and "not seen to
   be less right" is not a statistical non-inferiority test. The dev-set tasks were also used while fixing ccx, the
@@ -68,8 +68,8 @@ after the round-5 fixes (the first run, before them, was 17/20 at $0.248).
 folder (offline, no Claude or Codex login; your own setup is not touched).
 
 <table><tr>
-<td width="50%"><img alt="ccx ui, one hand-off's receipt: Codex gpt-6-luna low did it, cost $0.0051 with its review, the check ccx ran again passed, Claude haiku's review passed, the files actually changed from ccx's own snapshots (ccx demo data)" src="docs/assets/ui/task-en.png"></td>
-<td width="50%"><img alt="ccx ui, where tokens go: one ledger across Claude, Codex and DeepSeek, requests per run, a Codex helper session under its run (ccx demo data)" src="docs/assets/ui/tokens-en.png"></td>
+<td width="50%"><img alt="ccx ui, one hand-off's receipt: Codex gpt-6-luna low did it, cost $0.0051 with its review, the check ccx ran again passed, Claude haiku's review passed, the files actually changed from ccx's own snapshots (ccx demo data)" src="https://raw.githubusercontent.com/SUPERD6/relayline/main/docs/assets/ui/task-en.png"></td>
+<td width="50%"><img alt="ccx ui, where tokens go: one ledger across Claude, Codex and DeepSeek, requests per run, a Codex helper session under its run (ccx demo data)" src="https://raw.githubusercontent.com/SUPERD6/relayline/main/docs/assets/ui/tokens-en.png"></td>
 </tr><tr><td align="center">Every hand-off's receipt</td><td align="center">Where the tokens went</td></tr></table>
 
 ## Quick start
@@ -98,7 +98,7 @@ read the diff; the JSON result carries the run id, the check, the review and the
 has no `--check` gets a one-line reminder on stderr.
 
 You need Python 3.11+ and the `claude` and `codex` CLIs, logged in; DeepSeek (`dsh`, or a key in
-`DEEPSEEK_API_KEY`) is optional. `ccx -h` lists the everyday commands (run, resume, show, verify, q, undo, ui, mem, ...); `ccx advanced` (same as `ccx -h --all`) lists every group: the ones agents call to each other (board, say, reply, peek), the advanced ones (hub, several projects, install), maintenance, and the developer ones (trial, ab, bench) last, which also run as `ccx dev <command>`. Nothing was removed: old command lines work as before ([commands](docs/features.md#commands-everyday-first-nothing-removed)).
+`DEEPSEEK_API_KEY`) is optional. `ccx -h` lists the everyday commands (run, resume, show, verify, q, undo, ui, mem, ...); `ccx advanced` (same as `ccx -h --all`) lists every group: the ones agents call to each other (board, say, reply, peek), the advanced ones (hub, several projects, install), maintenance, and the developer ones (trial, ab, bench) last, which also run as `ccx dev <command>`. Nothing was removed: old command lines work as before ([commands](https://github.com/SUPERD6/relayline/blob/main/docs/features.md#commands-everyday-first-nothing-removed)).
 
 ## What else it does
 
