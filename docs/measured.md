@@ -46,9 +46,9 @@ sub-agent there, ratio 1.02), lower in round 5 (above).
 
 ## Lean sub-agent switches (B3, 2026-10-31)
 
-The three `[subagent]` switches, measured against the person's daily setup, stay off and experimental: Codex
-memories off Unknown, clean sub-agent Fail, fewer Codex tools Unknown. Numbers, method and 11 limits in the
-[B3 report](research/2026-10-31-b3-lean-switches.md).
+The three `[subagent]` switches, measured against the person's daily setup, keep their defaults and stay
+experimental: Codex memories off Unknown, clean sub-agent Fail, fewer Codex tools Fail under the registered rule
+(undecided post hoc). Numbers, method and limits in the [B3 report](research/2026-10-31-b3-lean-switches.md).
 
 ## Best-case numbers of single features (formerly the README's four pillars)
 

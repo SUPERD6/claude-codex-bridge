@@ -215,9 +215,10 @@ its start. Each ships at today's behaviour and stays there until a before / afte
 not drop ([plan and arms](research/2026-10-30-b3-lean-switches-plan.md)). There is no per-run flag. Every run records
 the switches it ran with in run.json (`subagent_switches`); a ledger row names the ones away from the default.
 
-**Measured 2026-10-31, all three stay off and experimental** ([report](research/2026-10-31-b3-lean-switches.md)):
-`codex_memories = false` Unknown, `clean = true` Fail (3 pairs lost on the hold-out half), `codex_lean_tools = true`
-Unknown under the registered rule. None showed a token saving in the paired comparison.
+**Measured 2026-10-31: all three keep their defaults and stay experimental**
+([report](research/2026-10-31-b3-lean-switches.md)). `codex_memories = false` Unknown; `clean = true` Fail (3
+hold-out pairs lost); `codex_lean_tools = true` Fail under the registered rule (right 29 vs 30), undecided in a
+post-hoc reading. No switch showed a reliable token saving in the paired comparison.
 
 | Key (default) | When changed | Risk |
 |---|---|---|

@@ -42,8 +42,8 @@ README 里开发集的几行，出自[第 5 轮报告](research/2026-10-26-r5.zh
 
 ## 子智能体精简开关（B3，2026-10-31）
 
-`[subagent]` 的三个开关对着用户日常配置测过，都保持关、仍是实验性：关 Codex memories 结论 Unknown，干净子智能体 Fail，
-少给 Codex 工具 Unknown。数字、方法和 11 条限制见 [B3 报告](research/2026-10-31-b3-lean-switches.zh.md)。
+`[subagent]` 的三个开关对着用户日常配置测过，都保持默认值、仍是实验性：关 Codex memories 结论 Unknown，干净子智能体
+Fail，少给 Codex 工具按登记规则 Fail（事后解读为未定）。数字、方法和限制见 [B3 报告](research/2026-10-31-b3-lean-switches.zh.md)。
 
 ## 单个功能的最好情况（原 README 的四根柱子）
 
