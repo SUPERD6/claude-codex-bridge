@@ -19,6 +19,8 @@
 这次运行花了多少记进账本，想撤回只要一条命令。反过来也行（Codex 或 DeepSeek 当主导、Claude Code 接活），大家共享记忆和
 工作上下文。命令是 `ccx`，只用 Python 标准库。
 
+<p align="center"><img alt="15 秒演示动画：ccx route 选出 Codex gpt-6-luna low；ccx run 把活从 Claude Code 交给 Codex，一次做完；收据写着 ccx 自己重跑的验收（通过）、另一家的审查（通过）和花费；ccx ui 在页面上显示同一张收据（替身 CLI，花费是编的）" src="docs/assets/demo.svg" width="100%"></p>
+
 ## 和自己做、和 Claude Code 自带的子智能体比
 
 **留出集（hc1，2026-10-29）：** 在做 ccx 时没用过的 10 个任务上（× 3 轮，sonnet 当主导，隐藏测试），ccx 未见正确率更差
@@ -42,6 +44,10 @@ sonnet 当主导，隐藏测试，子智能体是 Codex gpt-6-luna low。内置�
   更含糊的小包任务（主导是新开的短对话）约 4.5 倍（63 秒对 14 秒）：合起来 2.5–4.5 倍。小一些的任务上，总花费和自己做相比第 1、4 轮基本持平，第 3 轮更贵（每次成功 $0.071 对 $0.045）。
 - **ccx 比内置子智能体多给的：** 活跑在另一家的模型和额度上；ccx 自己重跑你的 `--check`，不只信报告；另一家审查改动；
   每次运行的花费进账本；`ccx undo` 撤回一次运行。
+- **收据多常错：** 收据误报 8/209（3.8%，#158 后，截至 3a15b8b 的评测）；超过 2% 的门槛，已列为发布前必修，正在修。这 8 次
+  收据说对，隐藏测试却没过，原因是 check 过了，但没测到隐藏测试要的那条。反过来，收据说错的 51 次里有 47 次其实是对的，多数是审查没过（[收据误报审计](docs/research/2026-10-31-verdict-audit.zh.md)）。
+- **目前的真实使用：** 几乎没有。一周里真实 hub 记了 283 次运行，只有 5 次（3 到 5 个任务）是 ccx 自测之外的活
+  （[dogfood](docs/research/2026-10-31-dogfood.zh.md)，真实使用，不是对照实验）。
 - **跨厂商一本账：** 每次子智能体运行以及它自己开的子会话，Claude 和 Codex 记在同一本账上（2026-10-30 用 codex-cli 0.164.0 实测：通过 `--parallel` 要求的 Codex 子智能体用 `spawn_agent` 开了 3 个子会话，账本里这次运行的总数逐项恰好等于父会话加 3 个子会话）。Claude Code 自己有 `/context` 和 `/cost` 看它自己这个会话；ccx 多给的是两家共用的一本账，加上主导每轮重读内容的分部分明细（从主导自己的会话文件读，不在账本里；`ccx lead --breakdown`，以及 `ccx ui` 的“实测与 token 去向”页面）。
 - **局限：** 留出集只有 10 个任务、只测了 sonnet 主导，金额是 API 等价价，“未见更差”不是统计意义上的非劣检验。开发集的
   任务也在修 ccx 时用过；主导自己做只跑了第一轮；第 5 轮早于干净环境检查。全部数字（包括不利的，
@@ -49,6 +55,11 @@ sonnet 当主导，隐藏测试，子智能体是 Codex gpt-6-luna low。内置�
 
 **不用账号先看看：** `ccx demo` 用临时目录里编好的项目、运行和花费打开 `ccx ui`（离线可用，不用登录 Claude
 或 Codex，不动你自己的设置）。
+
+<table><tr>
+<td width="50%"><img alt="ccx ui 一次派活的收据：Codex gpt-6-luna low 做的，花了 $0.0051（含审查），ccx 自己重跑的验收通过，Claude haiku 审查通过，实际改动的文件来自 ccx 自己的快照（ccx demo 演示数据）" src="docs/assets/ui/task-zh.png"></td>
+<td width="50%"><img alt="ccx ui 总管看板：正在跑的、现在的主导、各项目进度、这个月子智能体的花费（按 API 价格折算；实测之前不显示省了多少）（ccx demo 演示数据）" src="docs/assets/ui/k6-month-zh.png"></td>
+</tr><tr><td align="center">每次派活的收据</td><td align="center">项目与花费</td></tr></table>
 
 ## 快速开始
 
@@ -73,7 +84,7 @@ ccx undo <run_id>            # 不想要：先显示会还原什么；加 --appl
 验收、审查和花费。可能改文件、却没给 `--check` 的运行，会在 stderr 提醒一行。
 
 需要 Python 3.11+，以及登录好的 `claude` 和 `codex` 命令行；DeepSeek（`dsh`，或 `DEEPSEEK_API_KEY` 里的密钥）可选。
-`ccx -h` 列出你自己会敲的命令（run、resume、show、q、undo、ui 等）；`ccx -h --all` 还列出智能体之间互相调用的（board、say、reply、peek）、进阶和维护用的，开发者用的（trial、ab、bench 等）放在最后。
+`ccx -h` 只列日常命令（run、resume、show、verify、q、undo、ui、mem 等）；`ccx advanced`（等于 `ccx -h --all`）列出所有分组：智能体之间互相调用的（board、say、reply、peek）、进阶（hub、多个项目、安装）、维护，开发者用的（trial、ab、bench 等）放在最后，也可以写成 `ccx dev <命令>`。一个命令都没删，旧写法照常能用（[命令](docs/features.zh.md#命令日常的在前一个不删)）。
 
 ## 其他能做的
 
@@ -86,9 +97,12 @@ ccx undo <run_id>            # 不想要：先显示会还原什么；加 --appl
 “交给 Claude 继续”，再点一次确认，就会为这个项目运行 `ccx handoff`：把做完了什么、定了什么、下一步写进项目（当前主导的
 对话文件在的话就从它整理），并给你一行话，在那个工具里打开这个项目时贴给它。任务时间线会显示每段时间由谁主导。
 
-<p align="center"><img alt="演示动画：ccx route 选出 codex:gpt-6.1-sol:medium，ccx run 一次完成并由 ccx 重跑验收命令，ccx verify 记下结论" src="docs/assets/demo.svg" width="100%"></p>
-
 ## 谁和谁配合
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture-dark.svg">
+  <img alt="架构图：Claude Code、Codex、DeepSeek 都连到 ccx，谁都能当主导或接活；主导把简报交给另一家在后台跑、交回 JSON；ccx 选模型、重跑验收、请另一家审查，每次派活写一张收据（花费、验收、审查、结论、撤回）进账本，并从各工具自己的会话文件读出共享工作上下文；下面是个人层（hub：共享记忆、技能、MCP、账本）、项目层（.ccx：context.md、日志、对话板、交接、断点、撤回快照、队列）和本机页面 ccx ui（收据、token 去向）。Gemini CLI 只有子智能体适配器，没真跑过" src="docs/assets/architecture-light.svg" width="100%">
+</picture>
 
 | | 当主导 | 接活 |
 |---|---|---|
@@ -109,6 +123,7 @@ GitHub；完整清单见 STATUS。
 | [做什么、怎么做](docs/features.zh.md) | 七件事的细节、`ccx ui`、一个从头到尾的例子、共享的东西放在哪、分级、安全边界 |
 | [安装和命令](docs/install.zh.md) | 从源码安装、接入你已有的配置、全部命令 |
 | [实测](docs/measured.zh.md) | 全部测量和局限（留出集运行、第 5 轮对比、单个功能的最好情况 A/B）、省了多少怎么估、核对过的外部事实 |
+| [公开基准](bench/README.zh.md) | 留出集和开发集的题、隐藏测试和我们的结果行：自己重跑这组对比 |
 | [共享工作上下文](docs/shared-context.zh.md) · [留言板](docs/board.zh.md) | 开着的会话之间共享什么、怎么共享 |
 | [常见问题和同类项目](docs/faq.zh.md) | 花费、订阅、安全、哪些工具能用；和同类项目有什么不同 |
 | [设计](docs/DESIGN.zh.md) · [决策](docs/DECISIONS.md) · [变更](CHANGELOG.md) | 内部 |

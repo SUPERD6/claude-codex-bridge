@@ -88,6 +88,48 @@ def _expand_globs(cmd: str, cwd: Path) -> str:
     return "".join(t if t.isspace() else one(t) for t in _shell_words(cmd))
 
 
+_BOOL_WORDS = ("or", "and", "not")
+_CMD_SEP = ("&&", "||", "|", ";", "&")
+
+
+def quote_k_expr(cmd: str) -> str:
+    """A pytest `-k` / `-m` expression written without quotes (`-k undo or verify or verdict`) reached pytest as
+    `-k undo` plus the paths `or`, `verify`, ... (exit 4: two units of the P1-10 audit judged "not ok" for that).
+    Such an expression is put in double quotes, which both cmd.exe and a POSIX shell read as one argument; anything
+    already quoted, and every other character of the command, is kept as it is."""
+    if "pytest" not in cmd or not any(f" {w} " in f" {cmd} " for w in _BOOL_WORDS):
+        return cmd
+    words = _shell_words(cmd)
+    idx = [i for i, t in enumerate(words) if not t.isspace()]
+    out = list(words)
+    k = 0
+    while k < len(idx):
+        if words[idx[k]] in ("-k", "-m") and k + 1 < len(idx):
+            j = k + 1
+            expr = []
+            want_operand = True
+            while j < len(idx):
+                t = words[idx[j]]
+                if t in _CMD_SEP or t.startswith(("-", '"', "'")) or any(c in t for c in "<>"):
+                    break
+                if want_operand:
+                    expr.append(t)
+                    want_operand = t == "not"            # `not x`: still an operand to come
+                elif t in _BOOL_WORDS:
+                    expr.append(t)
+                    want_operand = True
+                else:
+                    break
+                j += 1
+            if len(expr) > 1 and not want_operand:
+                first, last = idx[k + 1], idx[k + len(expr)]
+                out[first:last + 1] = ['"' + " ".join(expr) + '"'] + [""] * (last - first)
+            k = k + len(expr) + 1
+            continue
+        k += 1
+    return "".join(out)
+
+
 def _shell_words(cmd: str) -> list[str]:
     """cmd split into words and the whitespace runs between them (joined back, it is cmd again), tracking quote
     state the way the MSVC argv rules do: a `"` toggles it unless an odd number of backslashes comes right before
@@ -155,7 +197,8 @@ def run_check(cmd: str, cwd: Path, timeout: int = 900, tail_chars: int = 800) ->
     `broken` (status check_broken) = the command could not test anything, which is not a verdict on the work.
     `tail_chars`: how much of the end of its output is kept (a focused retry hands the sub-agent ~2000)."""
     t0 = time.time()
-    ran = _expand_globs(cmd, cwd) if os.name == "nt" else cmd
+    ran = quote_k_expr(cmd)
+    ran = _expand_globs(ran, cwd) if os.name == "nt" else ran
     try:
         r = subprocess.run(ran, shell=True, cwd=cwd, capture_output=True, text=True, timeout=timeout,
                            stdin=subprocess.DEVNULL, encoding="utf-8", errors="replace")
@@ -405,9 +448,17 @@ def unchanged(snap: dict | None, since: float | None = None) -> bool | None:
     return True
 
 
-def undo(p: Paths, run_id: str, apply: bool = False, wrong: bool = False) -> dict:
+def undo(p: Paths, run_id: str, apply: bool = False, wrong: bool = False, piece: str | None = None) -> dict:
     """Put back the files a write run changed. Dry run unless apply. New files are moved aside, not deleted.
-    Undoing is not a verdict by itself (people undo to try again, or to split the work); `wrong` says it was."""
+    Undoing is not a verdict by itself (people undo to try again, or to split the work); `wrong` says it was.
+    piece: a merged run (`ccx batch --merge`): only the files that piece declared; never a verdict (a verdict is
+    per run), and the run is not marked undone (its other pieces stand)."""
+    declared = None
+    if piece is not None:
+        if wrong:
+            raise ValueError("--wrong records a verdict on the whole run; with --piece only files are put back")
+        from .merge import piece_files
+        declared = piece_files(ledger.load_run(p, run_id), piece)
     f = p.runs / run_id / "undo.json"
     if not f.exists():
         raise FileNotFoundError(f"run {run_id} has no undo snapshot (read-only run, worktree run, or not a git repo)")
@@ -418,8 +469,13 @@ def undo(p: Paths, run_id: str, apply: bool = False, wrong: bool = False) -> dic
     git_failed = rc_d != 0 or rc_u != 0
     new_files = sorted(set(untracked.splitlines()) - set(snap["untracked"]))
     restore = [x for x in changed.splitlines() if x]
+    if declared is not None:
+        from .merge import restrict
+        restore, new_files = restrict(restore, declared), restrict(new_files, declared)
     out = {"run_id": run_id, "restore": restore, "move_aside": new_files, "applied": False,
            "warning": "also reverts any edits you made to these files after the run"}
+    if piece is not None:
+        out["piece"] = piece
     if snap.get("chain_from"):
         out["chain_from"] = snap["chain_from"]
         out["warning"] = (f"this run went on from run {snap['chain_from']}: undo puts back what the whole chain "
@@ -447,6 +503,10 @@ def undo(p: Paths, run_id: str, apply: bool = False, wrong: bool = False) -> dic
             dst.parent.mkdir(parents=True, exist_ok=True)
             os.replace(src, dst)
         out.update(applied=True, moved_to=str(trash) if new_files else None)
+        if piece is not None:            # one piece of a merged run: the run itself stands, no verdict
+            ledger.append_event(p, {"type": "undo", "run_id": run_id, "piece": piece, "reason": "undone",
+                                    "wrong": False, "ts": time.time()})
+            return out
         (p.runs / run_id / "undone.json").write_text(json.dumps({"ts": time.time(), "wrong": wrong}),
                                                      encoding="utf-8")
         ledger.append_event(p, {"type": "undo", "run_id": run_id, "reason": "undone", "wrong": wrong,

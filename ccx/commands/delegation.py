@@ -11,7 +11,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from .. import lanes, learn, ledger, router, usage
+from .. import lanes, learn, ledger, merge, router, usage
 from ..config import AGENTS, DELEGATE_AGENTS, PROVIDER_AGENTS, TIER_ORDER, load_config, paths
 from ..delegate import Request, compact, exit_ok, human_summary, recap, run, verify
 from ..gitstate import SHARED_WHY, STALE_WHY, clean, in_git
@@ -48,6 +48,11 @@ def cmd_ab(a) -> int:
 
 # ---------------------------------------------------------------- commands
 # a write run without --check: one line on stderr (PM review 2026-10-29); what ccx does is unchanged
+# 2026-10-31 new-machine walkthrough: `--effort medium` without --model left the route's codex:gpt-6-luna:low as it
+# was, and nothing said so. stderr only: the JSON a lead reads stays as it was.
+EFFORT_ALONE_NOTE = ("ccx: --effort is used only together with --model (or --provider); without one the route picks the "
+                     "model and its effort. To set the effort, name the model too (--model <m> --effort <e>), or pick "
+                     "a tier (--tier T0..T4)")
 NO_CHECK_NUDGE = ("ccx: tip: this run may edit files and has no --check; add --check \"<test command>\" so ccx re-runs "
                   "it and the result is checked, not only reported")
 
@@ -282,6 +287,8 @@ def cmd_run(a) -> int:
         raise ValueError("--bg needs the task as text or --brief-file (stdin is not passed on)")
     if a.wait is not None and not a.bg:
         raise ValueError("--wait N goes with --bg (a foreground run already waits until it is done)")
+    if a.effort and not a.model and not a.provider:
+        print(EFFORT_ALONE_NOTE, file=sys.stderr, flush=True)
     if a.bg and not auto:
         if a.proposal:
             # refuse a used-up, smaller or lapsed pre-authorisation here, before detaching: the detached child's
@@ -449,8 +456,9 @@ def cmd_ask(a) -> int:
                   escalate=False, label="ask", model=spec["model"], effort=effort, ephemeral=True)
     rec = run(req, p)
     c = compact(rec)
-    _out({k: c.get(k) for k in ("run_id", "agent", "model", "ok", "summary", "open_questions", "tokens")})
-    return 0 if rec["ok"] else 2
+    _out({k: c.get(k) for k in ("run_id", "agent", "model", "ok", "summary", "open_questions", "tokens", "kind",
+                                "hint") if k in c or k not in ("kind", "hint")})
+    return 0 if c["ok"] else 2
 
 
 def _run_records(p):
@@ -725,12 +733,13 @@ def cmd_batch(a) -> int:
         if git and not tidy:
             shared.append(t.get("id") or f"#{i}")
         return git and tidy
-    reqs, skipped = [], []
+    reqs, skipped, req_tasks = [], [], []
     for i, t in enumerate(tasks):
         kw, route = resolve(t, caller, p, cfg)
         if kw is None:
             skipped.append({"id": t.get("id"), "advice": route.get("advice")})
             continue
+        req_tasks.append(t)
         reqs.append(Request(brief=t["brief"], mode=t["mode"], mode_source=t["mode_source"], mode_why=t["mode_why"],
                             check=t.get("check"), review=t.get("review", "auto"), risk=t.get("risk"),
                             cwd=Path(t.get("cwd") or os.getcwd()), caller=caller, label=t.get("id", ""),
@@ -740,6 +749,12 @@ def cmd_batch(a) -> int:
         extra["stale_base"] = {"ids": stale, "why": STALE_WHY}
     threads = int(cfg["defaults"].get("max_parallel", 3))
     n = lanes.width(getattr(a, "lanes", None), cfg)
+    use_merge, why = merge.choose(getattr(a, "merge", None), getattr(a, "lanes", None), cfg)
+    if why:
+        _out({"error": why})
+        return 2
+    if use_merge:
+        return _batch_merged(p, cfg, reqs, req_tasks, skipped, extra, threads)
     if n:
         # warm lanes (ccx/lanes.py): same project + agent + mode share at most n sessions, piece after piece
         lane_list = lanes.split(reqs, n, lambda r: (str(r.cwd.resolve()), r.to, r.provider, r.mode))
@@ -767,6 +782,35 @@ def cmd_batch(a) -> int:
     results = [compact(rec) for rec in recs]
     _out({"results": results, "do_yourself": skipped, **extra})
     return 0 if all(exit_ok(rec) for rec in recs) else 2
+
+
+def _batch_merged(p, cfg: dict, reqs: list, tasks: list[dict], skipped: list, extra: dict, threads: int) -> int:
+    """`ccx batch --merge` (ccx/merge.py): pieces that fit run as one; the rest as before. `results` keeps one entry
+    per piece, in plan order; `merged` lists the merged runs."""
+    groups = merge.groups(list(zip(reqs, tasks)), cfg)
+
+    def job(idx: list[int]) -> list[tuple[int, dict, bool]]:
+        try:
+            if len(idx) == 1:
+                rec = run(reqs[idx[0]], p)
+                return [(idx[0], compact(rec), exit_ok(rec))]
+            rs, ts = [reqs[i] for i in idx], [tasks[i] for i in idx]
+            rec = run(merge.merged_request(rs, ts), p)
+            got = merge.finish(rec, rs, ts, p, cfg)
+            jobs_merged.append(got["merged"])
+            return [(i, r, bool(r.get("ok"))) for i, r in zip(idx, got["results"])]
+        except Exception as e:  # noqa: BLE001 — one group's error must not hide the others' results
+            why = f"{type(e).__name__}: {e}"[:300]
+            return [(i, {"label": reqs[i].label, "ok": False, "error": why}, False) for i in idx]
+
+    jobs_merged: list[dict] = []
+    with ThreadPoolExecutor(max_workers=threads) as ex:
+        done = [x for part in ex.map(job, groups) for x in part]
+    done.sort(key=lambda x: x[0])
+    merged_runs = sorted(jobs_merged, key=lambda m: m["run_id"])
+    _out({"results": [r for _, r, _ in done], "do_yourself": skipped,
+          **({"merged": merged_runs} if merged_runs else {}), **extra})
+    return 0 if all(ok for _, _, ok in done) else 2
 
 
 def cmd_quota(a) -> int:
@@ -1099,7 +1143,8 @@ def register(sub) -> None:
                    "L0/L1 stop; never a spending cap, approval rules or a merge into a protected branch)")
     _routing_args(r, into=adv)
     r.add_argument("--model", help="explicit model (skips routing), e.g. gpt-6.1-sol or sonnet")
-    r.add_argument("--effort", help="explicit reasoning effort: low|medium|high|xhigh|max")
+    r.add_argument("--effort", help="explicit reasoning effort with --model or --provider (alone it is "
+                   "ignored: the route picks the effort): low|medium|high|xhigh|max")
     adv.add_argument("--minutes", type=float, help="how long a skilled engineer would need, in minutes: the standard "
                    "difficulty unit (b = log2 minutes, blended 60/40 with the rubric); task-split learns from it too")
     adv.add_argument("--task", help="task-checkpoint task id: the session id is saved into it at once")
@@ -1179,23 +1224,25 @@ def register(sub) -> None:
                    help="with --ok 0: what was wrong (not finished / done wrong / changed what it shouldn't / other)")
     v.add_argument("--dismiss", action="store_true", help="a test, probe or leftover, not real work: it leaves "
                    "'waits for you', counts neither right nor wrong and is never learned from (a later --ok undoes it)")
-    v.add_argument("--sweep", action="store_true", help="record 'probably right' for finished runs nobody judged "
-                   "whose check or self-check passed and review (if any) passed (undone ones wait for you); also "
-                   "runs quietly at session start. Your own verdict always overrides these")
-    v.add_argument("--after-h", type=float, default=12.0, help="with --sweep: only runs at least this old (hours)")
-    v.add_argument("--sample", type=int, metavar="N", help="spot-check N random probable verdicts of this week: shows "
-                   "what changed and asks ok / wrong (J7: tells how far probable verdicts can be trusted)")
-    v.add_argument("--include-evals", action="store_true", help="with --sample: evaluation runs too")
-    v.add_argument("--list", action="store_true", help="with --sample: print the picks as JSON instead of asking")
-    v.add_argument("--builtin", metavar="RUNG", help="work your own built-in sub-agent did, e.g. claude-builtin:haiku:low")
-    v.add_argument("--b", type=float, help="with --builtin: the difficulty ccx route used")
-    v.add_argument("--agent-id", help="with --builtin: the sub-agent's id, so its real cost is read and learned")
+    vadv = v.add_argument_group("advanced (hooks, spot checks, built-in sub-agents)")
+    vadv.add_argument("--sweep", action="store_true", help="record 'probably right' for finished runs nobody judged "
+                      "whose check or self-check passed and review (if any) passed (undone ones wait for you); also "
+                      "runs quietly at session start. Your own verdict always overrides these")
+    vadv.add_argument("--after-h", type=float, default=12.0, help="with --sweep: only runs at least this old (hours)")
+    vadv.add_argument("--sample", type=int, metavar="N", help="spot-check N random probable verdicts of this week: "
+                      "shows what changed and asks ok / wrong (J7: tells how far probable verdicts can be trusted)")
+    vadv.add_argument("--include-evals", action="store_true", help="with --sample: evaluation runs too")
+    vadv.add_argument("--list", action="store_true", help="with --sample: print the picks as JSON instead of asking")
+    vadv.add_argument("--builtin", metavar="RUNG", help="work your own built-in sub-agent did, e.g. "
+                      "claude-builtin:haiku:low")
+    vadv.add_argument("--b", type=float, help="with --builtin: the difficulty ccx route used")
+    vadv.add_argument("--agent-id", help="with --builtin: the sub-agent's id, so its real cost is read and learned")
     v.set_defaults(fn=cmd_verify)
     pl = sub.add_parser("plan", help="task-split: size / check / template / record / show",
                         add_help=False)
     pl.add_argument("args", nargs=argparse.REMAINDER)
     pl.set_defaults(fn=cmd_plan)
-    rs = sub.add_parser("resume", help="follow up in the same sub-session (cheap: keeps its context)")
+    rs = sub.add_parser("resume", help="follow up in the same sub-session (it keeps its context)")
     rs.add_argument("run_id")
     rs.add_argument("brief", nargs="*")
     rs.add_argument("--brief-file")
@@ -1203,20 +1250,21 @@ def register(sub) -> None:
                     "--brief-file); wait for it with `ccx show <run_id> --wait`")
     rs.add_argument("--wait", type=float, metavar="SECONDS", help="with --bg: wait up to this long in the same call "
                     "and print the final result, as ccx run --bg --wait")
-    rs.add_argument("--tier", choices=["auto", *TIER_ORDER], default="auto")
-    rs.add_argument("--from", dest="caller", choices=[*DELEGATE_AGENTS, *PROVIDER_AGENTS, "user"])
-    rs.add_argument("--no-escalate", action="store_true")
+    radv = rs.add_argument_group("advanced (routing, caller and limits; most follow-ups need none)")
+    radv.add_argument("--tier", choices=["auto", *TIER_ORDER], default="auto")
+    radv.add_argument("--from", dest="caller", choices=[*DELEGATE_AGENTS, *PROVIDER_AGENTS, "user"])
+    radv.add_argument("--no-escalate", action="store_true")
     rs.add_argument("--model")
     rs.add_argument("--effort")
-    rs.add_argument("--budget", type=float, metavar="USD", help="a new spending cap for its own sub-agents (after "
-                    "an over_budget stop)")
+    radv.add_argument("--budget", type=float, metavar="USD", help="a new spending cap for its own sub-agents (after "
+                      "an over_budget stop)")
     rs.add_argument("--review", choices=["auto", "on", "off"], default=None, help="independent review of what this "
                     "follow-up changed, as for ccx run (default: the resumed run's own setting, auto for older runs)")
     rs.add_argument("--check", metavar="CMD", help="replace the run's acceptance command from here on (e.g. one "
                     "that named a missing file or ran no tests)")
-    rs.add_argument("--namecheck", choices=["warn", "fail", "off"], help="static check for names no scope "
-                    "defines in the functions the run changed: warn = shown to you and the reviewer (default, "
-                    "[defaults] namecheck); fail = a hit fails the work like a failed --check; off")
+    radv.add_argument("--namecheck", choices=["warn", "fail", "off"], help="static check for names no scope "
+                      "defines in the functions the run changed: warn = shown to you and the reviewer (default, "
+                      "[defaults] namecheck); fail = a hit fails the work like a failed --check; off")
     rs.set_defaults(fn=cmd_resume)
     nc = sub.add_parser("namecheck", help="static check for names no scope defines (NameError waiting to happen) "
                         "in changed Python functions; exit 1 on a hit")
@@ -1236,6 +1284,11 @@ def register(sub) -> None:
     b.add_argument("--lanes", type=int, metavar="N", help="warm lanes: pieces for the same project and agent share "
                    "at most N sub-sessions, one piece after another (each still its own run, check and ledger row); "
                    "0 = every piece its own session (default: [lanes] default, 0)")
+    b.add_argument("--merge", dest="merge", action="store_const", const=1, default=None,
+                   help="experimental: small write pieces (minutes <= 5) for the same folder, agent, model and mode "
+                   "run as one run; each keeps its own check, result line and `ccx undo --piece`; a piece not done "
+                   "gets one follow-up, then a run of its own (default: [merge] default, off)")
+    b.add_argument("--no-merge", dest="merge", action="store_const", const=0, help="off, whatever [merge] default says")
     b.set_defaults(fn=cmd_batch)
     ro = sub.add_parser("route", help="which agent/model/effort for a task (rubric -> task-routing)")
     ro.add_argument("text", nargs="*", help="the task description (used to recommend read or write)")

@@ -151,7 +151,8 @@ A printed result with a `run_id` means that delegation ran: do not send the same
 - **A passed `check` that runs the relevant tests, plus `files_changed` / `diffstat`, is enough**: don't re-run it
   (H11, 2026-10-24: a lead that re-ran it saved nothing by delegating). Run tests or read the full diff yourself
   only when the check failed, was absent or `weak` (that command has passed wrong work here before), or the status
-  is partial/blocked.
+  is partial/blocked. `check.covers` names the test files it ran: if they do not test what the task asked, it is
+  not "the relevant tests"; `check.basis_changed` means it passed on tests the sub-agent edited: read those first.
 - `check_broken` = the check tested nothing: `ccx resume <run_id> "what to test" --check "..."`. The task names an entry point
   (a command, a CLI) and no test runs it as a real process: resume once asking for one.
 - `no_changes` = a write run said done/partial but changed nothing (no edit, no commit; its check ran on the

@@ -74,9 +74,9 @@
   <section id="how">
     <h2>How it fits together</h2>
     <div class="figure">
-      <img class="for-light" src="assets/architecture-light.svg" width="1200" height="660"
-           alt="Claude Code, Codex and Gemini CLI connect to ccx; a lead hands a brief to another, which runs headless and returns JSON; ccx routes, reruns the check, asks another vendor to review, records verdicts and costs; below: the personal layer (hub), the project layer (.ccx) and ccx ui, a local read-only page">
-      <img class="for-dark" src="assets/architecture-dark.svg" width="1200" height="660" alt="">
+      <img class="for-light" src="assets/architecture-light.svg" width="1200" height="670"
+           alt="Architecture: Claude Code, Codex and DeepSeek connect to ccx, each can lead or take work; a lead hands a brief to another, which runs headless and returns JSON; ccx routes, reruns the check, asks another vendor to review, and writes a receipt for every delegated run (cost, check, review, verdict, undo) into the ledger, and reads the other tools' sessions for the shared working context; below: the personal layer (hub: shared memory, skills, MCP, ledger), the project layer (.ccx: context.md, journal, board, handoffs, checkpoints, undo snapshots, queue) and ccx ui, a local page with the receipts and where tokens go. Gemini CLI: a worker adapter, not run for real">
+      <img class="for-dark" src="assets/architecture-dark.svg" width="1200" height="670" alt="">
     </div>
     <ol class="how">
       <li><b>Score</b>Files touched, modules crossed, how clear the goal is, risk, new design → difficulty 0–10.</li>
@@ -105,16 +105,16 @@
 
   <section id="ui">
     <h2>The live page: <code>ccx ui</code></h2>
-    <p class="note">Read-only, on 127.0.0.1 only, never calls a model: what waits for your call (red) or review (amber), what each agent is doing, and whether the quota lasts at this pace. Screenshots use demo data (<code>scripts/ui_demo.py</code>).</p>
+    <p class="note">Read-only, on 127.0.0.1 only, never calls a model: what waits for your call (red) or review (amber), what each agent is doing, and whether the quota lasts at this pace. Screenshots: <code>ccx demo</code>'s made-up data (<code>scripts/make_shots.py</code>).</p>
     <div class="figure shot">
-      <img class="for-light" src="assets/ui/task-zh.png" width="1440" height="1000" loading="lazy"
-           alt="ccx ui task page in Chinese: a task as an org chart, one column per worker, the side panel showing why a piece needs your call (demo data)">
+      <img class="for-light" src="assets/ui/task-en.png" width="1440" height="1000" loading="lazy"
+           alt="ccx ui task page: a task as an org chart, one column per worker; the side panel is one hand-off's receipt: cost, the check ccx ran again, the review (demo data)">
       <img class="for-dark" src="assets/ui/task-en-dark.png" width="1440" height="1000" loading="lazy"
            alt="ccx ui task page in English, dark theme (demo data)">
     </div>
     <div class="figure shot">
-      <img src="assets/ui/overview-zh.png" width="1440" height="1000" loading="lazy"
-           alt="ccx ui overview in Chinese: what waits for you, the current lead, projects and the quota forecast (demo data)">
+      <img src="assets/ui/tokens-en.png" width="1440" height="1000" loading="lazy"
+           alt="ccx ui, where tokens go: one ledger across agents, requests per run, a Codex helper session under its run (demo data)">
     </div>
   </section>
 

@@ -87,6 +87,40 @@ python scripts/eval/r5.py summary --taskset holdout
 
 留出任务（`scripts/eval/tasks_holdout.py`）是留给最终结论用的。这个文件就在公开仓库里，所以它们已经不再是留出集；新的结论需要新的没见过的任务。
 
+### 已知的结构性限制：评测和开发共用一台机器、一个账号
+
+2026 年 10 月下旬的几轮评测，都在开发会话用的那台机器上跑，用的是同一个登录、同一份额度。这不是加个参数就能修好的 bug，
+而是工作环境本身的结构。2026-10-30，B3 的 r5 那一半连续启动失败四次；第五次跑完了（80 个单元，$10.01），但不能计入判定：
+
+1. **checkout 被挪走。** 评测用的是主仓库的一个 `git worktree`。桌面 app 为新会话建 worktree 时把主目录切走，还清掉了
+   评测的 worktree，评测在第一个单元后就停了。现在评测用的 checkout 改成独立的 `git clone`。
+2. **脚本没了。** 启动脚本放在一个会话的笔记目录里，归档它的父会话时连带归档了这个会话，目录被删。现在运行要用的脚本都
+   放进项目里。
+3. **机器忙。** 单元之间检查到别的项目在跑测试，干净环境检查让评测停下。
+4. **额度用完。** 加 `--force-unclean` 重新开跑后，评测和开发会话用的是同一份额度。额度用完后，每个单元 1 秒就失败、花费
+   $0，全部作废；开跑的那个会话结束时，评测也跟着停了。
+5. **整轮不干净。** 第五次开跑时别的会话正在跑测试，`--force-unclean` 让开跑检查放行，结果 80 行全部标成不干净，这一轮
+   没能计入判定规则（见 [B3 报告](research/2026-10-31-b3-lean-switches.zh.md)）。
+
+在同一台机器上能做的：
+
+- 评测用的 checkout 是独立 clone；
+- 脚本放在仓库里；
+- 日志最后一行写 `exit=`（第 4 步）；
+- `--wait-quiet <分钟>`（#201 起在 `scripts/eval/r5.py` 里）：开跑检查前和单元之间，最多等这么久，直到没有别的重进程。等完仍和别的工作重叠的单元照样标不干净，会显示在结果里，不会被藏起来；
+- 不要带 `--force-unclean` 开跑：它只会把一次"机器忙、开不了跑"变成一整轮不算数。
+
+这些都没法让数字完全不受同一台机器上其他工作的影响。
+
+**搬迁方案：**
+
+1. 评测换到第二台机器或云端会话，用单独的登录，额度和开发分开。
+2. 用固定提交（`--pin-commit`）的新 clone，那里不跑别的东西。
+3. 从那台机器自己的终端开跑，不从开发会话里开。
+4. 跑完只把结果文件、日志和汇总拷回来。
+
+在那之前，和别的会话同时开跑的一轮只作补充，B3 报告就是这么处理的。
+
 ## 5. 发版
 
 1. `python scripts/collect_changes.py` 预览由 `changes/*.md` 生成的 CHANGELOG 条目；加 `--version X.Y.Z --title "..." --apply`
@@ -94,3 +128,16 @@ python scripts/eval/r5.py summary --taskset holdout
 2. 在 `ccx/__init__.py`、`pyproject.toml`、`.claude-plugin/plugin.json`、`.codex-plugin/plugin.json` 里改版本号；更新
    [STATUS](STATUS.zh.md)（一页，中英两份）。
 3. 打 `vX.Y.Z` 标签；标签会触发完整的 CI 矩阵。发不发布（GitHub Release、PyPI）由维护者决定。
+4. PyPI，维护者点头之后再做（先 TestPyPI；包名 `relayline`，命令 `ccx`）：
+   - 在发版标签上（第 2、3 步已做：同一个版本号只能传一次），`dist/` 先清空：
+     `python -m pip install -U build twine`，再 `python -m build` 和 `python -m twine check --strict dist/*`
+     （CI 的 package 任务跑同样的检查）。
+   - 在 https://test.pypi.org/manage/account/token/ 建一个 API token（TestPyPI 账号和 pypi.org 是分开的）。
+     token 不进仓库：放在 `~/.pypirc`（Windows 上是 `%USERPROFILE%\.pypirc`）的 `[testpypi]` 下，写
+     `username = __token__` 和 `password = <token>`；或者只在一个终端里设 `TWINE_USERNAME=__token__` 和 `TWINE_PASSWORD`
+     （PowerShell：`$env:TWINE_PASSWORD = "..."`）。第一次上传只能用整个账号范围的 token；传完换成只限 `relayline`
+     的，再删掉宽的那个。
+   - `python -m twine upload --repository testpypi dist/*`，再到一台干净的机器或 venv 里：
+     `pipx install --index-url https://test.pypi.org/simple/ relayline`（没有依赖，不用第二个源），跑 `ccx -h`。
+   - pypi.org 一样，换成 pypi.org 的 token 和 `--repository pypi`（或者用 GitHub Actions 的 Trusted Publishing，
+     不用存 token；那是仓库设置，由维护者决定）。

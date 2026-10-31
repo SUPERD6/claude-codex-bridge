@@ -54,7 +54,7 @@ def cmd_archive(a) -> int:
 
 
 def cmd_undo(a) -> int:
-    _out(undo(paths(), a.run_id, a.apply, wrong=a.wrong))
+    _out(undo(paths(), a.run_id, a.apply, wrong=a.wrong, piece=getattr(a, "piece", None)))
     return 0
 
 
@@ -440,10 +440,11 @@ def register(sub) -> None:
                         "fresh conversation would be cheaper")
     ld.add_argument("--hours", type=float, default=24.0)
     ld.add_argument("--limit", type=int, default=10)
-    ld.add_argument("--threshold", type=int, default=150_000, help="tokens a turn reads before advising")
-    ld.add_argument("--hint", action="store_true", help="for a per-turn hook: read the hook's JSON on stdin and "
-                    "print one line only when this conversation is long (at most once every 20 turns)")
-    ld.add_argument("--as", dest="as_", choices=leads())
+    ladv = ld.add_argument_group("advanced (for hooks and other leads)")
+    ladv.add_argument("--threshold", type=int, default=150_000, help="tokens a turn reads before advising")
+    ladv.add_argument("--hint", action="store_true", help="for a per-turn hook: read the hook's JSON on stdin and "
+                      "print one line only when this conversation is long (at most once every 20 turns)")
+    ladv.add_argument("--as", dest="as_", choices=leads())
     ld.add_argument("--breakdown", action="store_true", help="what every turn re-reads, part by part (system "
                     "prompt, tools, each MCP server, instruction files, skill list, hook output), with advice")
     ld.add_argument("--cache", action="store_true", help="turns where the prompt cache broke, the likely cause "
@@ -465,6 +466,8 @@ def register(sub) -> None:
                     help="really restore the files; without it, only shows what would change")
     ud.add_argument("--wrong", action="store_true", help="with --apply: also record the run as wrong (teaches "
                     "routing). Without it undoing records no verdict")
+    ud.add_argument("--piece", metavar="ID", help="a `ccx batch --merge` run: put back only the paths this piece "
+                    "declared (its `paths` in the plan); no verdict is recorded for a piece")
     ud.set_defaults(fn=cmd_undo)
     sh = sub.add_parser("show", help="show a run (compact by default); --wait blocks until it is finished; "
                                      "several ids with --any: every one that has finished")

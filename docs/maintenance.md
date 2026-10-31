@@ -96,6 +96,46 @@ python scripts/eval/r5.py summary --taskset holdout
 The hold-out tasks (`scripts/eval/tasks_holdout.py`) were kept apart for final claims. The file is in the public
 repository, so they are no longer a hold-out set; a new claim needs new unseen tasks.
 
+### Known structural limit: evaluation and development share one machine and one account
+
+The evaluations of late October 2026 ran on the machine the development sessions use, under the same login and
+quota. That is not a bug a flag can fix: it is how the work is set up. On 2026-10-30 one evaluation round (B3, its r5
+half) failed to start four times, and the fifth start ran to the end (80 units, $10.01) but could not count:
+
+1. **The checkout moved.** The run used a `git worktree` of the main repository. When the desktop app made a
+   worktree for a new session, it switched the main checkout and removed the evaluation's worktree, so the run
+   stopped after its first unit. Evaluation checkouts are now separate `git clone`s.
+2. **The script was gone.** The start script lived in a session's notes folder. Archiving its parent session also
+   archived that session and deleted the folder. Scripts a run needs now live in the project.
+3. **The machine was busy.** Another project's test run, seen between units, stopped the run (the clean-room check).
+4. **The quota ran out.** Started again with `--force-unclean`, the run shared one usage limit with the development
+   sessions. Once the limit was reached, every unit failed in a second at $0 and was thrown away, and when the
+   session that had started the run ended, the run died with it.
+5. **The whole round was unclean.** At the fifth start another session was running tests. `--force-unclean` let the
+   start check pass, so all 80 rows were marked not clean and the round was left out of its decision rule (see the
+   [B3 report](research/2026-10-31-b3-lean-switches.md)).
+
+What helps on one machine:
+
+- the evaluation checkout is its own clone;
+- scripts are kept in the repository;
+- the log ends with `exit=` (step 4);
+- `--wait-quiet <minutes>` (in `scripts/eval/r5.py` since #201): before the start checks and between units, wait up
+  to that long for no other heavy process. A unit that still overlapped other work stays not clean, so it shows
+  in the rows instead of hiding;
+- don't start with `--force-unclean`: it only turns a busy start into a round that does not count.
+
+None of these makes the numbers safe from other work on the same machine.
+
+**The move:**
+
+1. Run evaluations on a second machine or in a cloud session, with a login of its own, so their quota is separate.
+2. Use a fresh clone at a pinned commit (`--pin-commit`), with nothing else running there.
+3. Start the run from that machine's own shell, not from a development session.
+4. Copy back only the results file, the log and the summary when it ends.
+
+Until then, treat a round started next to other sessions as supplementary, as the B3 report does.
+
 ## 5. Releasing
 
 1. `python scripts/collect_changes.py` previews the CHANGELOG entry from `changes/*.md`; with `--version X.Y.Z
@@ -103,3 +143,17 @@ repository, so they are no longer a hold-out set; a new claim needs new unseen t
 2. Bump the version in `ccx/__init__.py`, `pyproject.toml`, `.claude-plugin/plugin.json` and
    `.codex-plugin/plugin.json`; update [STATUS](STATUS.md) (one page, both languages).
 3. Tag `vX.Y.Z`; the full CI matrix runs on tags. Publishing (GitHub release, PyPI) is the maintainer's decision.
+4. PyPI, once the maintainer says yes (TestPyPI first; the package is `relayline`, the command `ccx`):
+   - On the release tag (steps 2–3 done: a version number can be uploaded only once), with an empty `dist/`:
+     `python -m pip install -U build twine`, then `python -m build` and `python -m twine check --strict dist/*`
+     (CI's package job runs the same check).
+   - Make an API token at https://test.pypi.org/manage/account/token/ (a TestPyPI account of its own, separate from
+     pypi.org). Keep it out of the repository: in `~/.pypirc` (`%USERPROFILE%\.pypirc` on Windows) under
+     `[testpypi]` with `username = __token__` and `password = <the token>`, or as `TWINE_USERNAME=__token__` and
+     `TWINE_PASSWORD` in one shell only (PowerShell: `$env:TWINE_PASSWORD = "..."`). The first upload needs an
+     account-wide token; afterwards replace it with one scoped to `relayline` and delete the wide one.
+   - `python -m twine upload --repository testpypi dist/*`, then from a clean machine or venv:
+     `pipx install --index-url https://test.pypi.org/simple/ relayline` (no dependencies, so no second index) and
+     `ccx -h`.
+   - pypi.org the same way with a pypi.org token and `--repository pypi` (or Trusted Publishing from GitHub Actions,
+     which needs no stored token; that is a repository setting, the maintainer's call).
