@@ -24,7 +24,20 @@ class TestRubric(unittest.TestCase):
     def test_edited_existing_tests_are_named(self):
         diff = "--- a/tests/test_old.py\n+++ b/tests/test_old.py\n@@ -1 +1 @@\n-    assert f() == 1\n+    assert f() == 2\n"
         b = review.brief("r1", "task", "did it", diff, 100_000)
-        self.assertIn("Name these files in your answer: a [must] as above for an assertion the task did not ask to change; otherwise one [note] listing them all", b)
+        self.assertIn("Name these files in one [note]; an edit is a [must] (b) only when a changed assertion now", b)
+
+    def test_switch_off_is_the_old_brief(self):
+        diff = "--- a/tests/test_old.py\n+++ b/tests/test_old.py\n@@ -1 +1 @@\n-    assert f() == 1\n+    assert f() == 2\n"
+        chk = {"cmd": "pytest tests/test_old.py", "passed": True, "exit": 0}
+        b = review.brief("r1", "t", "s", diff, 1000, chk, rubric=False,
+                         covers={"files": ["tests/test_old.py"], "n_files": 1})
+        # the sentence before P1-10, and nothing it added
+        self.assertIn("check the code meets it; the acceptance tests may cover only some of them.\n", b)
+        for added in ("own yardstick", "The test files it runs", "Name these files", "(if any)"):
+            self.assertNotIn(added, b)
+        self.assertIn("is a [must] (b).\n", b)
+        self.assertFalse(review.coverage_rubric({"coverage_rubric": False}))
+        self.assertTrue(review.coverage_rubric({}))
 
     def test_covers_line(self):
         chk = {"cmd": "pytest tests/test_a.py", "passed": True, "exit": 0}
