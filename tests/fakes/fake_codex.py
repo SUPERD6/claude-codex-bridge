@@ -196,3 +196,16 @@ if os.environ.get("FAKE_STOP_AT_END"):
     if os.environ["FAKE_STOP_AT_END"] == "lock":
         with open(os.path.join(rd, "final.lock"), "w", encoding="utf-8") as fh:
             fh.write('{"by": "ccx stop"}')
+if os.environ.get("FAKE_COMMAND_OUTPUT") is not None:
+    # FAKE_COMMAND_OUTPUT: a shell command it ran, as codex-cli 0.164 exec --json reports one (item.completed,
+    # command_execution, aggregated_output = this text); for the eval's Codex canary. Unset: no command event at all.
+    print(json.dumps({"type": "item.completed", "item": {
+        "id": "c1", "type": "command_execution", "command": "python -c \"print(760761*2)\"",
+        "aggregated_output": os.environ["FAKE_COMMAND_OUTPUT"], "exit_code": 0, "status": "completed"}}))
+if os.environ.get("FAKE_ERROR_EVENT"):       # an `error` event with this message (the run still ends normally)
+    print(json.dumps({"type": "error", "message": os.environ["FAKE_ERROR_EVENT"]}))
+if os.environ.get("FAKE_ERROR_ITEM"):        # an item.completed of type error with this message
+    print(json.dumps({"type": "item.completed", "item": {"id": "e1", "type": "error",
+                                                         "message": os.environ["FAKE_ERROR_ITEM"]}}))
+if os.environ.get("FAKE_EXIT"):              # the exit code, after everything above was printed
+    sys.exit(int(os.environ["FAKE_EXIT"]))
