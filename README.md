@@ -93,7 +93,7 @@ read the diff; the JSON result carries the run id, the check, the review and the
 has no `--check` gets a one-line reminder on stderr.
 
 You need Python 3.11+ and the `claude` and `codex` CLIs, logged in; DeepSeek (`dsh`, or a key in
-`DEEPSEEK_API_KEY`) is optional. `ccx -h` lists the everyday commands (run, resume, show, verify, q, undo, ui, mem, ...); `ccx advanced` (same as `ccx -h --all`) lists every group: the ones agents call to each other (board, say, reply, peek), the advanced ones (hub, several projects, install), maintenance, and the developer ones (trial, ab, bench) last, which also run as `ccx dev <command>`. Nothing was removed: old command lines work as before ([commands](docs/features.md#commands-everyday-first-nothing-removed)).
+`DEEPSEEK_API_KEY`) is optional. `ccx -h` lists the everyday commands (run, resume, show, verify, q, undo, ui, mem, ...); `ccx advanced` (same as `ccx -h --all`) lists every group: the ones agents call to each other (board, say, reply, peek), the advanced ones (hub, several projects, install), maintenance, and the developer ones (trial, ab, bench) last, which also run as `ccx dev <command>`. Nothing was removed: old command lines work as before ([commands](https://github.com/SUPERD6/relayline/blob/main/docs/features.md#commands-everyday-first-nothing-removed)).
 
 ## What else it does
 
@@ -114,10 +114,9 @@ there. The task timeline shows which lead worked when.
 ## Who works with whom
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture-dark.svg">
-  <img alt="Architecture: Claude Code, Codex and DeepSeek connect to ccx, each can lead or take work; a lead hands a brief to another, which runs headless and returns JSON; ccx routes, reruns the check, asks another vendor to review, and writes a receipt for every hand-off (cost, check, review, verdict, undo) into the ledger; below: the personal layer (hub: shared memory, skills, MCP, ledger), the project layer (.ccx: shared working context, journal, handoffs, board, undo snapshots, queue) and ccx ui, a local page with the receipts and where tokens go. Gemini CLI: a worker adapter, not run for real" src="docs/assets/architecture-light.svg" width="100%">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/SUPERD6/relayline/main/docs/assets/architecture-dark.svg">
+  <img alt="Architecture: Claude Code, Codex and DeepSeek connect to ccx, each can lead or take work; a lead hands a brief to another, which runs headless and returns JSON; ccx routes, reruns the check, asks another vendor to review, and writes a receipt for every delegated run (cost, check, review, verdict, undo) into the ledger, and reads the other tools' sessions for the shared working context; below: the personal layer (hub: shared memory, skills, MCP, ledger), the project layer (.ccx: context.md, journal, board, handoffs, checkpoints, undo snapshots, queue) and ccx ui, a local page with the receipts and where tokens go. Gemini CLI: a worker adapter, not run for real" src="https://raw.githubusercontent.com/SUPERD6/relayline/main/docs/assets/architecture-light.svg" width="100%">
 </picture>
-
 
 | | Lead | Takes work |
 |---|---|---|

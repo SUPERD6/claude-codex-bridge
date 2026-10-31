@@ -86,7 +86,7 @@ def architecture(c: dict) -> str:
     # bottom: personal layer, project layer (shared context), the local page. Lines never cross.
     receipt = (f'<rect x="742" y="306" width="234" height="80" rx="8" fill="{c["soft"]}" stroke="{c["ok"]}"/>'
                f'<text x="758" y="330" font-size="15" font-weight="600" fill="{c["ok"]}" font-family="{SANS}">'
-               'receipt, every hand-off</text>'
+               'receipt, every delegated run</text>'
                f'<text x="758" y="352" font-size="14" fill="{c["muted"]}" font-family="{MONO}">$ · check ran? · review</text>'
                f'<text x="758" y="372" font-size="14" fill="{c["muted"]}" font-family="{MONO}">verdict · undo · ledger</text>')
     parts = [
@@ -94,15 +94,15 @@ def architecture(c: dict) -> str:
         _box(425, 40, 350, 130, c, "Codex", ["lead or worker", "terminal / desktop app"], c["teal"]),
         _box(810, 40, 350, 130, c, "DeepSeek", ["lead or worker (dsh)", "or through Claude Code"], c["violet"]),
         _box(200, 250, 800, 150, c, "ccx", ["route → agent:model:effort · or “do it yourself”",
-                                            "run headless → JSON back",
+                                            "run headless → JSON back · reads the others' sessions",
                                             "check rerun · other-vendor review"]),
         receipt,
         _box(40, 480, 350, 140, c, "Personal layer · your hub",
              ["shared memory: snapshot + journal", "skills · MCP registry", "ledger: every receipt"]),
         _box(425, 480, 350, 140, c, "Project layer · .ccx/",
-             ["shared working context", "journal · handoffs · board", "undo snapshots · queue"]),
+             ["context.md · journal · board", "handoffs · checkpoints", "undo snapshots · queue"]),
         _box(810, 480, 350, 140, c, "ccx ui · local page",
-             ["receipts · where tokens go", "what waits for you · who works", "127.0.0.1, no model called"]),
+             ["receipts · where tokens go", "what waits for you · who works", "127.0.0.1 · viewing calls no model"]),
         _arrow("M215 172 V 248", c, both=True),
         _arrow("M600 172 V 248", c, both=True),
         _arrow("M985 172 V 248", c, both=True),
@@ -111,10 +111,12 @@ def architecture(c: dict) -> str:
         _arrow("M300 402 V 478", c, both=True),
         _arrow("M600 402 V 478", c, both=True),
         _arrow("M900 402 V 478", c),
-        f'<text x="450" y="436" font-size="14" fill="{c["muted"]}" font-family="{MONO}" text-anchor="middle">'
-        'at session start:</text>',
-        f'<text x="450" y="456" font-size="14" fill="{c["muted"]}" font-family="{MONO}" text-anchor="middle">'
-        'new memory · context · handoff</text>',
+        f'<text x="450" y="424" font-size="14" fill="{c["muted"]}" font-family="{MONO}" text-anchor="middle">'
+        'at session start</text>',
+        f'<text x="450" y="443" font-size="14" fill="{c["muted"]}" font-family="{MONO}" text-anchor="middle">'
+        '(Claude Code, Codex):</text>',
+        f'<text x="450" y="462" font-size="14" fill="{c["muted"]}" font-family="{MONO}" text-anchor="middle">'
+        'new memory · journal · handoff</text>',
         f'<text x="900" y="445" font-size="14" fill="{c["muted"]}" font-family="{MONO}" dx="12">reads files only</text>',
         f'<text x="600" y="648" font-size="13" fill="{c["muted"]}" font-family="{SANS}" text-anchor="middle">'
         'Gemini CLI: a worker adapter, not run for real · Kimi, GLM, Qwen, OpenRouter through Claude Code: configured, '
@@ -122,7 +124,7 @@ def architecture(c: dict) -> str:
     ]
     return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 670" width="1200" height="670" role="img" aria-labelledby="t d">
   <title id="t">How ccx connects Claude Code, Codex and DeepSeek, your hub, the project and the local page</title>
-  <desc id="d">Claude Code, Codex and DeepSeek each connect to ccx; any of them can lead and hand a brief to another, which runs headless and returns JSON. ccx routes, reruns the check, asks another vendor to review, and writes a receipt for every hand-off: what it cost, whether the check ran, who reviewed it, the verdict and how to undo it, into the ledger. Below: the personal layer (your hub: shared memory, skills, MCP, the ledger), the project layer (.ccx: shared working context, journal, handoffs, board, undo snapshots, queue) and ccx ui, a local page showing receipts, where tokens go and what waits for you. Gemini CLI has a worker adapter that has not run for real.</desc>
+  <desc id="d">Claude Code, Codex and DeepSeek each connect to ccx; any of them can lead and hand a brief to another, which runs headless and returns JSON. ccx routes, reruns the check, asks another vendor to review, and writes a receipt for every delegated run: what it cost, whether the check ran, who reviewed it, the verdict and how to undo it, into the ledger. Below: the personal layer (your hub: shared memory, skills, MCP, the ledger), the project layer (.ccx: context.md, journal, board, handoffs, checkpoints, undo snapshots, queue) and ccx ui, a local page showing receipts, where tokens go and what waits for you (viewing it calls no model). ccx also reads the other tools' own session files for the shared working context. Gemini CLI has a worker adapter that has not run for real.</desc>
   <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
     <path d="M0 0 L10 5 L0 10 z" fill="{c['arrow']}"/></marker></defs>
   <rect width="1200" height="670" rx="16" fill="{c['bg']}"/>

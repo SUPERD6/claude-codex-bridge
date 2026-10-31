@@ -16,7 +16,7 @@ English · [中文](features.zh.md) · back to the [README](../README.md)
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/architecture-dark.svg">
-  <img alt="Architecture: Claude Code, Codex and DeepSeek connect to ccx, each can lead or take work; a lead hands a brief to another, which runs headless and returns JSON; ccx routes, reruns the check, asks another vendor to review, and writes a receipt for every hand-off (cost, check, review, verdict, undo) into the ledger; below: the personal layer (hub: shared memory, skills, MCP, ledger), the project layer (.ccx: shared working context, journal, handoffs, board, undo snapshots, queue) and ccx ui, a local page with the receipts and where tokens go. Gemini CLI: a worker adapter, not run for real" src="assets/architecture-light.svg" width="100%">
+  <img alt="Architecture: Claude Code, Codex and DeepSeek connect to ccx, each can lead or take work; a lead hands a brief to another, which runs headless and returns JSON; ccx routes, reruns the check, asks another vendor to review, and writes a receipt for every delegated run (cost, check, review, verdict, undo) into the ledger, and reads the other tools' sessions for the shared working context; below: the personal layer (hub: shared memory, skills, MCP, ledger), the project layer (.ccx: context.md, journal, board, handoffs, checkpoints, undo snapshots, queue) and ccx ui, a local page with the receipts and where tokens go. Gemini CLI: a worker adapter, not run for real" src="assets/architecture-light.svg" width="100%">
 </picture>
 
 ## Commands: everyday first, nothing removed
