@@ -16,7 +16,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/architecture-dark.svg">
-  <img alt="架构图：Claude Code、Codex、Gemini CLI 都连到 ccx，谁当主都可以把简报交给另一家在后台跑、交回 JSON；ccx 选模型、重跑验收、请另一家审查、记对错和花费；下面是个人层（hub：记忆、技能、MCP、账本）、项目层（.ccx：背景、日志、交接、断点、撤回快照）和本机只读页面 ccx ui" src="assets/architecture-light.svg" width="100%">
+  <img alt="架构图：Claude Code、Codex、DeepSeek 都连到 ccx，谁都能当主导或接活；主导把简报交给另一家在后台跑、交回 JSON；ccx 选模型、重跑验收、请另一家审查，每次派活写一张收据（花费、验收、审查、结论、撤回）进账本；下面是个人层（hub：共享记忆、技能、MCP、账本）、项目层（.ccx：共享工作上下文、日志、交接、对话板、撤回快照、队列）和本机页面 ccx ui（收据、token 去向）。Gemini CLI 只有子智能体适配器，没真跑过" src="assets/architecture-light.svg" width="100%">
 </picture>
 
 ## 命令：日常的在前，一个不删
