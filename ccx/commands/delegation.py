@@ -1108,23 +1108,25 @@ def register(sub) -> None:
                    help="with --ok 0: what was wrong (not finished / done wrong / changed what it shouldn't / other)")
     v.add_argument("--dismiss", action="store_true", help="a test, probe or leftover, not real work: it leaves "
                    "'waits for you', counts neither right nor wrong and is never learned from (a later --ok undoes it)")
-    v.add_argument("--sweep", action="store_true", help="record 'probably right' for finished runs nobody judged "
-                   "whose check or self-check passed and review (if any) passed (undone ones wait for you); also "
-                   "runs quietly at session start. Your own verdict always overrides these")
-    v.add_argument("--after-h", type=float, default=12.0, help="with --sweep: only runs at least this old (hours)")
-    v.add_argument("--sample", type=int, metavar="N", help="spot-check N random probable verdicts of this week: shows "
-                   "what changed and asks ok / wrong (J7: tells how far probable verdicts can be trusted)")
-    v.add_argument("--include-evals", action="store_true", help="with --sample: evaluation runs too")
-    v.add_argument("--list", action="store_true", help="with --sample: print the picks as JSON instead of asking")
-    v.add_argument("--builtin", metavar="RUNG", help="work your own built-in sub-agent did, e.g. claude-builtin:haiku:low")
-    v.add_argument("--b", type=float, help="with --builtin: the difficulty ccx route used")
-    v.add_argument("--agent-id", help="with --builtin: the sub-agent's id, so its real cost is read and learned")
+    vadv = v.add_argument_group("advanced (hooks, spot checks, built-in sub-agents)")
+    vadv.add_argument("--sweep", action="store_true", help="record 'probably right' for finished runs nobody judged "
+                      "whose check or self-check passed and review (if any) passed (undone ones wait for you); also "
+                      "runs quietly at session start. Your own verdict always overrides these")
+    vadv.add_argument("--after-h", type=float, default=12.0, help="with --sweep: only runs at least this old (hours)")
+    vadv.add_argument("--sample", type=int, metavar="N", help="spot-check N random probable verdicts of this week: "
+                      "shows what changed and asks ok / wrong (J7: tells how far probable verdicts can be trusted)")
+    vadv.add_argument("--include-evals", action="store_true", help="with --sample: evaluation runs too")
+    vadv.add_argument("--list", action="store_true", help="with --sample: print the picks as JSON instead of asking")
+    vadv.add_argument("--builtin", metavar="RUNG", help="work your own built-in sub-agent did, e.g. "
+                      "claude-builtin:haiku:low")
+    vadv.add_argument("--b", type=float, help="with --builtin: the difficulty ccx route used")
+    vadv.add_argument("--agent-id", help="with --builtin: the sub-agent's id, so its real cost is read and learned")
     v.set_defaults(fn=cmd_verify)
     pl = sub.add_parser("plan", help="task-split: size / check / template / record / show",
                         add_help=False)
     pl.add_argument("args", nargs=argparse.REMAINDER)
     pl.set_defaults(fn=cmd_plan)
-    rs = sub.add_parser("resume", help="follow up in the same sub-session (cheap: keeps its context)")
+    rs = sub.add_parser("resume", help="follow up in the same sub-session (it keeps its context)")
     rs.add_argument("run_id")
     rs.add_argument("brief", nargs="*")
     rs.add_argument("--brief-file")
@@ -1132,20 +1134,21 @@ def register(sub) -> None:
                     "--brief-file); wait for it with `ccx show <run_id> --wait`")
     rs.add_argument("--wait", type=float, metavar="SECONDS", help="with --bg: wait up to this long in the same call "
                     "and print the final result, as ccx run --bg --wait")
-    rs.add_argument("--tier", choices=["auto", *TIER_ORDER], default="auto")
-    rs.add_argument("--from", dest="caller", choices=[*DELEGATE_AGENTS, *PROVIDER_AGENTS, "user"])
-    rs.add_argument("--no-escalate", action="store_true")
+    radv = rs.add_argument_group("advanced (routing, caller and limits; most follow-ups need none)")
+    radv.add_argument("--tier", choices=["auto", *TIER_ORDER], default="auto")
+    radv.add_argument("--from", dest="caller", choices=[*DELEGATE_AGENTS, *PROVIDER_AGENTS, "user"])
+    radv.add_argument("--no-escalate", action="store_true")
     rs.add_argument("--model")
     rs.add_argument("--effort")
-    rs.add_argument("--budget", type=float, metavar="USD", help="a new spending cap for its own sub-agents (after "
-                    "an over_budget stop)")
+    radv.add_argument("--budget", type=float, metavar="USD", help="a new spending cap for its own sub-agents (after "
+                      "an over_budget stop)")
     rs.add_argument("--review", choices=["auto", "on", "off"], default=None, help="independent review of what this "
                     "follow-up changed, as for ccx run (default: the resumed run's own setting, auto for older runs)")
     rs.add_argument("--check", metavar="CMD", help="replace the run's acceptance command from here on (e.g. one "
                     "that named a missing file or ran no tests)")
-    rs.add_argument("--namecheck", choices=["warn", "fail", "off"], help="static check for names no scope "
-                    "defines in the functions the run changed: warn = shown to you and the reviewer (default, "
-                    "[defaults] namecheck); fail = a hit fails the work like a failed --check; off")
+    radv.add_argument("--namecheck", choices=["warn", "fail", "off"], help="static check for names no scope "
+                      "defines in the functions the run changed: warn = shown to you and the reviewer (default, "
+                      "[defaults] namecheck); fail = a hit fails the work like a failed --check; off")
     rs.set_defaults(fn=cmd_resume)
     nc = sub.add_parser("namecheck", help="static check for names no scope defines (NameError waiting to happen) "
                         "in changed Python functions; exit 1 on a hit")

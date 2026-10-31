@@ -11,7 +11,7 @@ from ccx import cli
 def _commands() -> set[str]:
     ap = cli.build_parser()
     sub = next(a for a in ap._actions if isinstance(a, argparse._SubParsersAction))
-    return set(sub.choices)
+    return set(sub.choices) - set(cli.META)
 
 
 PENDING = {"demo"}        # grouped ahead of its PR: skipped in the help until the command is registered
@@ -77,7 +77,8 @@ def test_default_help_is_the_persons_commands_and_all_lists_the_rest(capsys):
         assert NL + t + ":" + NL in short
     for t in ("Between agents", "Advanced", "Maintenance", "Developer"):
         assert NL + t + ":" + NL not in short
-    assert "`ccx -h --all` lists" in short and "between agents (peek, board, say, reply)" in short
+    flat = " ".join(short.split())                    # the footer wraps with the terminal width
+    assert "`ccx advanced` (or `ccx -h --all`) lists" in flat and "between agents (peek, board, say, reply)" in flat
     for argv in (["-h", "--all"], ["--all", "-h"], ["--help", "--all"]):
         with pytest.raises(SystemExit) as e:
             cli.parse(argv)

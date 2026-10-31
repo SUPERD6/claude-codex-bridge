@@ -266,7 +266,7 @@ class TestRouteLanguage(FirstEnv):
 class TestUndoFirstRun(FirstEnv):
     def test_undo_is_everyday_and_apply_is_explained(self):
         h = self.ccx("-h").stdout
-        self.assertLess(h.index("undo"), h.index("Memory and context:"))
+        self.assertIn("\n  undo ", h.split("Everyday:", 1)[1].split("\n\n", 1)[0])
         self.assertIn("really restore", self.ccx("undo", "-h").stdout)
 
     def test_nothing_to_undo_says_so(self):
