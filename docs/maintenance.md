@@ -103,3 +103,17 @@ repository, so they are no longer a hold-out set; a new claim needs new unseen t
 2. Bump the version in `ccx/__init__.py`, `pyproject.toml`, `.claude-plugin/plugin.json` and
    `.codex-plugin/plugin.json`; update [STATUS](STATUS.md) (one page, both languages).
 3. Tag `vX.Y.Z`; the full CI matrix runs on tags. Publishing (GitHub release, PyPI) is the maintainer's decision.
+4. PyPI, once the maintainer says yes (TestPyPI first; the package is `relayline`, the command `ccx`):
+   - On the release tag (steps 2–3 done: a version number can be uploaded only once), with an empty `dist/`:
+     `python -m pip install -U build twine`, then `python -m build` and `python -m twine check --strict dist/*`
+     (CI's package job runs the same check).
+   - Make an API token at https://test.pypi.org/manage/account/token/ (a TestPyPI account of its own, separate from
+     pypi.org). Keep it out of the repository: in `~/.pypirc` (`%USERPROFILE%\.pypirc` on Windows) under
+     `[testpypi]` with `username = __token__` and `password = <the token>`, or as `TWINE_USERNAME=__token__` and
+     `TWINE_PASSWORD` in one shell only (PowerShell: `$env:TWINE_PASSWORD = "..."`). The first upload needs an
+     account-wide token; afterwards replace it with one scoped to `relayline` and delete the wide one.
+   - `python -m twine upload --repository testpypi dist/*`, then from a clean machine or venv:
+     `pipx install --index-url https://test.pypi.org/simple/ relayline` (no dependencies, so no second index) and
+     `ccx -h`.
+   - pypi.org the same way with a pypi.org token and `--repository pypi` (or Trusted Publishing from GitHub Actions,
+     which needs no stored token; that is a repository setting, the maintainer's call).
