@@ -157,7 +157,7 @@ def cold_start(w: Wizard, p) -> None:
 
 
 def run(yes: bool = False, hub: str | None = None) -> int:
-    from .commands.install import _saved_hub, init_hub
+    from .commands.install import init_hub
     from .sync import sync_all
     w = Wizard(yes, sys.stdin.isatty())
     w.say("ccx setup — every change is shown first and only made after you say yes.")
@@ -182,22 +182,25 @@ def run(yes: bool = False, hub: str | None = None) -> int:
     already = user_config_file().exists() and not hub
     where = Path(hub or (str(hub_dir()) if already else w.text("Where should it live?", str(hub_dir())))).expanduser()
     w.say(f"  hub: {where}" + ("  (already set; `ccx setup --hub <path>` to change)" if already else ""))
-    old = _saved_hub() if hub else None
-    if old and old != where.resolve():
-        w.say(f"  this replaces the hub set before ({old}); nothing in it is moved or deleted")
+    if hub and _replaces(where):
+        w.say(f"  this replaces the hub set before ({_replaces(where)}); nothing in it is moved or deleted")
     if not already:
         w.say("  Already have a shared AGENTS.md or your own sync script? Stop here and use "
               "`ccx init --hub … --snapshot … --external-sync …` instead.")
 
     if not w.yes and not w.interactive:
         return _plan_only(w, where, agents, logged_out)
+    if w.yes and hub and _replaces(where):
+        # --yes answers every question, so it would switch hubs unasked (as a walkthrough's temp hub once did)
+        w.say(f'  Stopped: --yes does not switch hubs. To switch: ccx init --hub "{where}" --force, then ccx setup.')
+        return 1
 
     w.step(3, "Create the hub skeleton (only adds files, never changes existing ones)")
     if not w.ask(f"Create/update ccx files in {where}?", default=True):
         w.say("  Stopped. Nothing was changed.")
         return 0
     with contextlib.redirect_stdout(io.StringIO()):
-        info = init_hub(str(where), force=True)    # asked above, and the line before says what it replaces
+        info = init_hub(str(where), force=True)    # asked above (not --yes), the line before says what it replaces
     w.say(f"  done: hub {info['hub']}")
 
     w.step(4, "Wire both tools (session-start hook, skills, MCP)")
@@ -262,11 +265,20 @@ def _finish(w: Wizard, agents: list[str], logged_out: list[str]) -> None:
     w.say("Then check it and record your verdict: ccx verify <run_id> --ok 1")
 
 
+def _replaces(where: Path) -> str | None:
+    """What `where` replaces in ~/.ccx/config.toml: the other hub it names, "a config.toml that does not parse", or
+    None (nothing, or the same hub). `ccx init --hub` stops on either without --force."""
+    from .commands.install import _saved_hub, _same
+    try:
+        old = _saved_hub()
+    except ValueError:
+        return "a config.toml that does not parse"
+    return str(old) if old and not _same(old, where.expanduser().resolve()) else None
+
+
 def _force(where: Path) -> str:
-    """` --force` when `where` replaces the hub ~/.ccx/config.toml names (`ccx init` stops without it)."""
-    from .commands.install import _saved_hub
-    old = _saved_hub()
-    return " --force" if old and old != where.expanduser().resolve() else ""
+    """` --force` when `where` replaces something (_replaces): the printed `ccx init` step then works as printed."""
+    return " --force" if _replaces(where) else ""
 
 
 def _plan_only(w: Wizard, where: Path, agents: list[str], logged_out: list[str]) -> int:

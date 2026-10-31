@@ -196,13 +196,19 @@ class HubInUse(Exception):
 
 
 def _saved_hub() -> Path | None:
-    """The hub ~/.ccx/config.toml names now ($CCX_HUB aside), or None."""
+    """The hub ~/.ccx/config.toml names now ($CCX_HUB aside), or None. Raises ValueError when the file is there but
+    does not parse (the hub it meant is unknown, so `init --hub` must not overwrite it unasked)."""
     from ..config import tomllib, user_config_file
     try:
-        hub = tomllib.loads(user_config_file().read_text(encoding="utf-8")).get("hub")
-    except (OSError, ValueError):
+        text = user_config_file().read_text(encoding="utf-8")
+    except OSError:
         return None
+    hub = tomllib.loads(text).get("hub")
     return Path(hub).expanduser().resolve() if isinstance(hub, str) and hub else None
+
+
+def _same(a: Path, b: Path) -> bool:
+    return os.path.normcase(str(a)) == os.path.normcase(str(b))      # Windows: C:\Hub and c:\hub are one folder
 
 
 def init_hub(hub: str | None = None, snapshot: str | None = None, external_sync: str | None = None,
@@ -213,11 +219,19 @@ def init_hub(hub: str | None = None, snapshot: str | None = None, external_sync:
     walkthrough's `ccx init --hub <temp folder>` sent every later record into that temp folder."""
     from ..config import hub_dir, save_hub
     new = Path(hub).expanduser().resolve() if hub else None
-    old = _saved_hub() if new else None
-    if new and old and old != new and not force:
+    how = ("add --force (install scripts: .\\install.ps1 -Hub <path> -Force, ./install.sh <path> --force); nothing "
+           "in the old hub is moved or deleted")
+    try:
+        old = _saved_hub() if new else None
+    except ValueError as e:
+        if not force:
+            from ..config import user_config_file
+            raise HubInUse({"error": f"{user_config_file()} does not parse ({e}), so the hub it names is unknown",
+                            "asked": str(new), "ask": f"fix that file, or replace it with {new}: {how}"})
+        old = None
+    if new and old and not _same(old, new) and not force:
         raise HubInUse({"error": "this machine already uses another hub", "hub_now": str(old), "asked": str(new),
-                        "ask": f"keep it: run without --hub; switch to {new}: add --force (nothing in the old hub "
-                               "is moved or deleted)"})
+                        "ask": f"keep it: run without --hub; switch to {new}: {how}"})
     text = None
     if snapshot or external_sync:
         lines = ["# hub layout for ccx (personal; lives in your hub, not in the repo)", "[layout]"]

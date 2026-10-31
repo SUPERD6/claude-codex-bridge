@@ -239,6 +239,23 @@ class TestHubTools(AdapterEnv):
         self.assertIn(str(other.resolve()), cfg.read_text(encoding="utf-8"))
         self.assertTrue((first / "ccx").is_dir() and (other / "ccx").is_dir())   # the old hub stays where it was
 
+    def test_init_hub_does_not_overwrite_a_config_that_does_not_parse(self):
+        cfg = Path(self.env["CCX_CONFIG"])
+        cfg.write_text('hub = "D:/hub\n', encoding="utf-8")       # the closing quote is missing: not valid TOML
+        new = self.hub.parent / "hub-c"
+        r = self.ccx("init", "--hub", str(new), env={"CCX_HUB": ""})
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn("does not parse", json.loads(r.stdout)["error"])
+        self.assertEqual(cfg.read_text(encoding="utf-8"), 'hub = "D:/hub\n')
+        self.j("init", "--hub", str(new), "--force", env={"CCX_HUB": ""})
+        self.assertIn(str(new.resolve()), cfg.read_text(encoding="utf-8"))
+
+    @unittest.skipUnless(os.name == "nt", "case-insensitive paths")
+    def test_init_hub_same_folder_in_other_case_is_the_same_hub(self):
+        hub = self.hub.parent / "Hub-D"
+        self.j("init", "--hub", str(hub), env={"CCX_HUB": ""})
+        self.j("init", "--hub", str(hub).lower(), env={"CCX_HUB": ""})   # no --force needed
+
     def test_init_does_not_replace_a_different_layout_without_force(self):
         self.j("init", "--snapshot", "AGENTS.md")
         lay = self.hub / "ccx" / "layout.toml"

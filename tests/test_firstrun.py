@@ -184,6 +184,11 @@ class TestSetupFirstRun(FirstEnv):
         self.assertIn(f'ccx init --hub "{new}" --force', r.stdout)      # the printed step works as printed
         r = self.ccx("setup", "--hub", str(old), stdin="")
         self.assertNotIn("--force", r.stdout)                            # the same hub: nothing to force
+        r = self.ccx("setup", "--yes", "--hub", str(new), env={"CCX_HUB": ""})
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)          # --yes never switches hubs unasked
+        self.assertIn("--force", r.stdout)
+        self.assertIn(str(old), Path(self.env["CCX_CONFIG"]).read_text(encoding="utf-8"))
+        self.assertFalse(new.exists())
 
     def test_not_on_a_terminal_lists_the_login_first(self):
         r = self.ccx("setup", "--hub", str(self.hub.parent / "h2"), stdin="", env={"FAKE_CODEX_LOGIN": NOT_LOGGED_IN})

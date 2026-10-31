@@ -49,7 +49,7 @@ cd relayline
 .\install.ps1 -Hub <你的个人hub路径>     # Windows；macOS/Linux（实验性，只在 CI 里跑过）：./install.sh <hub路径>
 ```
 
-安装脚本会：有 pipx 就 `pipx install --editable .`（之后直接用 `ccx`），没有就提示把 `bin\` 加进 PATH；然后 `ccx init`（只新建，不改已有文件）和 `ccx doctor`（体检：CLI、登录、接线，不确定的写 Unknown；routing prior、tier policy、hub layout 这类 ccx 内部的行只在有问题时显示，`--verbose` 全部显示）。接着运行向导 `ccx setup`（每一步都说明、改东西前先问），或者一步步来：
+安装脚本会：有 pipx 就 `pipx install --editable .`（之后直接用 `ccx`），没有就提示把 `bin\` 加进 PATH；然后 `ccx init`（只新建，不改已有文件；本机已经在用另一个 hub 时会停下并显示它，确实要换就加 `-Force`，macOS/Linux 是 `./install.sh <hub路径> --force`）和 `ccx doctor`（体检：CLI、登录、接线，不确定的写 Unknown；routing prior、tier policy、hub layout 这类 ccx 内部的行只在有问题时显示，`--verbose` 全部显示）。接着运行向导 `ccx setup`（每一步都说明、改东西前先问），或者一步步来：
 
 ```powershell
 ccx sync            # 预演：列出将要做的改动，不改任何文件
@@ -59,7 +59,7 @@ ccx selftest        # 每个已安装的智能体用最便宜的模型跑一个�
 
 之后在 Codex 里打开 `/hooks`，信任 "ccx: shared memory delta" 这个 hook（只需一次）。
 
-已经有自己的共享配置（比如一个 AGENTS.md 两边都读、自己的同步脚本）？用 `ccx init --hub <路径> --snapshot AGENTS.md --external-sync "<你的同步命令>"` 接进去，ccx 不再改两边的说明文件，技能和 MCP 交给你的脚本。
+已经有自己的共享配置（比如一个 AGENTS.md 两边都读、自己的同步脚本）？用 `ccx init --hub <路径> --snapshot AGENTS.md --external-sync "<你的同步命令>"` 接进去，ccx 不再改两边的说明文件，技能和 MCP 交给你的脚本。本机已经有另一个 hub，或 `layout.toml` 里是别的值时，它会停下说明，要替换就加 `--force`。
 
 ## 常用命令
 
