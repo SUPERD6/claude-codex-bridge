@@ -157,7 +157,7 @@ def cold_start(w: Wizard, p) -> None:
 
 
 def run(yes: bool = False, hub: str | None = None) -> int:
-    from .commands.install import init_hub
+    from .commands.install import _saved_hub, init_hub
     from .sync import sync_all
     w = Wizard(yes, sys.stdin.isatty())
     w.say("ccx setup — every change is shown first and only made after you say yes.")
@@ -182,6 +182,9 @@ def run(yes: bool = False, hub: str | None = None) -> int:
     already = user_config_file().exists() and not hub
     where = Path(hub or (str(hub_dir()) if already else w.text("Where should it live?", str(hub_dir())))).expanduser()
     w.say(f"  hub: {where}" + ("  (already set; `ccx setup --hub <path>` to change)" if already else ""))
+    old = _saved_hub() if hub else None
+    if old and old != where.resolve():
+        w.say(f"  this replaces the hub set before ({old}); nothing in it is moved or deleted")
     if not already:
         w.say("  Already have a shared AGENTS.md or your own sync script? Stop here and use "
               "`ccx init --hub … --snapshot … --external-sync …` instead.")
@@ -194,7 +197,7 @@ def run(yes: bool = False, hub: str | None = None) -> int:
         w.say("  Stopped. Nothing was changed.")
         return 0
     with contextlib.redirect_stdout(io.StringIO()):
-        info = init_hub(str(where))
+        info = init_hub(str(where), force=True)    # asked above, and the line before says what it replaces
     w.say(f"  done: hub {info['hub']}")
 
     w.step(4, "Wire both tools (session-start hook, skills, MCP)")
@@ -259,13 +262,20 @@ def _finish(w: Wizard, agents: list[str], logged_out: list[str]) -> None:
     w.say("Then check it and record your verdict: ccx verify <run_id> --ok 1")
 
 
+def _force(where: Path) -> str:
+    """` --force` when `where` replaces the hub ~/.ccx/config.toml names (`ccx init` stops without it)."""
+    from .commands.install import _saved_hub
+    old = _saved_hub()
+    return " --force" if old and old != where.expanduser().resolve() else ""
+
+
 def _plan_only(w: Wizard, where: Path, agents: list[str], logged_out: list[str]) -> int:
     """Not on a terminal and no --yes (e.g. a Claude Code or Codex Bash tool): show every remaining step as the exact
     command, change nothing. Before, it stopped at step 3 and showed nothing of steps 4-7."""
     w.say("\n  Not on a terminal, so setup changes nothing here. The remaining steps as commands (run them yourself,")
     w.say("  or let your agent run them; `ccx setup` in a terminal of your own asks before each change instead):")
     steps = [*_login_todo(logged_out),
-             f'create the hub skeleton (only adds files): ccx init --hub "{where}"',
+             f'create the hub skeleton (only adds files): ccx init --hub "{where}"' + _force(where),
              "preview the wiring (session-start hook, skills, MCP): ccx sync",
              "make those changes (each changed file is backed up; `ccx uninstall` removes them): ccx sync --apply",
              "health check: ccx doctor"]

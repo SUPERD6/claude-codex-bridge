@@ -175,6 +175,16 @@ class TestSetupFirstRun(FirstEnv):
         self.assertLess(before, r.stdout.index("Your first delegation"))
         self.assertIn("codex login", r.stdout[before:])
 
+    def test_another_hub_is_named_and_its_command_has_force(self):
+        old, new = self.hub.parent / "old-hub", self.hub.parent / "new-hub"
+        Path(self.env["CCX_CONFIG"]).write_text(f"hub = '{old}'\n", encoding="utf-8")
+        r = self.ccx("setup", "--hub", str(new), stdin="")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn(f"replaces the hub set before ({old.resolve()})", r.stdout)
+        self.assertIn(f'ccx init --hub "{new}" --force', r.stdout)      # the printed step works as printed
+        r = self.ccx("setup", "--hub", str(old), stdin="")
+        self.assertNotIn("--force", r.stdout)                            # the same hub: nothing to force
+
     def test_not_on_a_terminal_lists_the_login_first(self):
         r = self.ccx("setup", "--hub", str(self.hub.parent / "h2"), stdin="", env={"FAKE_CODEX_LOGIN": NOT_LOGGED_IN})
         plan = r.stdout[r.stdout.index("Not on a terminal"):]

@@ -3,6 +3,7 @@ import json
 import os
 import time
 import unittest
+from pathlib import Path
 
 from test_ccx import FAKES, Env
 
@@ -218,6 +219,37 @@ class TestHubTools(AdapterEnv):
         v = json.loads((self.hub / "ccx" / "version.json").read_text())
         self.assertEqual(v["hub_format"], 2)
         self.assertEqual(self.j("init")["migrated"], [])        # idempotent
+
+    def test_init_hub_does_not_replace_the_hub_in_use_without_force(self):
+        # a walkthrough's `ccx init --hub <temp>` once moved this machine's hub there without a word
+        cfg = Path(self.env["CCX_CONFIG"])
+        first, other = self.hub.parent / "hub-a", self.hub.parent / "hub-b"
+        own = {"CCX_HUB": ""}                                   # the saved hub decides, as on a real machine
+        self.j("init", "--hub", str(first), env=own)
+        self.j("init", "--hub", str(first), env=own)            # the same hub again: fine
+        before = cfg.read_text(encoding="utf-8")
+        r = self.ccx("init", "--hub", str(other), env=own)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        out = json.loads(r.stdout)
+        self.assertEqual((out["hub_now"], out["asked"]), (str(first.resolve()), str(other.resolve())))
+        self.assertIn("--force", out["ask"])
+        self.assertEqual(cfg.read_text(encoding="utf-8"), before)   # nothing written
+        self.assertFalse(other.exists())
+        self.j("init", "--hub", str(other), "--force", env=own)
+        self.assertIn(str(other.resolve()), cfg.read_text(encoding="utf-8"))
+        self.assertTrue((first / "ccx").is_dir() and (other / "ccx").is_dir())   # the old hub stays where it was
+
+    def test_init_does_not_replace_a_different_layout_without_force(self):
+        self.j("init", "--snapshot", "AGENTS.md")
+        lay = self.hub / "ccx" / "layout.toml"
+        before = lay.read_text(encoding="utf-8")
+        self.j("init", "--snapshot", "AGENTS.md")               # the same values again: fine
+        r = self.ccx("init", "--external-sync", "my-sync")
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertEqual(json.loads(r.stdout)["layout"], str(lay))
+        self.assertEqual(lay.read_text(encoding="utf-8"), before)
+        self.j("init", "--external-sync", "my-sync", "--force")
+        self.assertIn("my-sync", lay.read_text(encoding="utf-8"))
 
 
 class TestUndoAskTask(AdapterEnv):

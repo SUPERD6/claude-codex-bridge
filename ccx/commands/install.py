@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import time
 
 from pathlib import Path
 
 from .. import __version__, memory
-from ..config import DELEGATE_AGENTS, data_dir, load_config, paths
+from ..config import DELEGATE_AGENTS, Paths, data_dir, load_config, paths
 from ..delegate import Request, compact, exit_ok, run
 from ..runners import find_bin
 from .common import _caller, _out, installed_agents
@@ -179,26 +180,72 @@ def cmd_improve(a) -> int:
 
 
 def cmd_init(a) -> int:
-    _out(init_hub(a.hub, a.snapshot, a.external_sync))
+    try:
+        _out(init_hub(a.hub, a.snapshot, a.external_sync, force=a.force))
+    except HubInUse as e:
+        _out(e.info)
+        return 1
     return 0
 
 
-def init_hub(hub: str | None = None, snapshot: str | None = None, external_sync: str | None = None) -> dict:
-    """Create the hub skeleton (only new files; nothing existing is changed). Used by `init` and `setup`."""
-    from ..config import save_hub
-    saved = None
-    if hub:
-        saved = save_hub(Path(hub).expanduser().resolve())
-    p = paths()
-    lay = p.state / "layout.toml"
+class HubInUse(Exception):
+    """`ccx init` would replace a setting already there: the hub this machine uses, or the hub's layout.toml."""
+    def __init__(self, info: dict):
+        super().__init__(info["error"])
+        self.info = info
+
+
+def _saved_hub() -> Path | None:
+    """The hub ~/.ccx/config.toml names now ($CCX_HUB aside), or None."""
+    from ..config import tomllib, user_config_file
+    try:
+        hub = tomllib.loads(user_config_file().read_text(encoding="utf-8")).get("hub")
+    except (OSError, ValueError):
+        return None
+    return Path(hub).expanduser().resolve() if isinstance(hub, str) and hub else None
+
+
+def init_hub(hub: str | None = None, snapshot: str | None = None, external_sync: str | None = None,
+             force: bool = False) -> dict:
+    """Create the hub skeleton (only new files; nothing existing is changed). Used by `init` and `setup`.
+    Pointing this machine at another hub than the one ~/.ccx/config.toml names, or replacing a layout.toml that says
+    something else, needs force (raises HubInUse before anything is written): both used to happen silently, and a
+    walkthrough's `ccx init --hub <temp folder>` sent every later record into that temp folder."""
+    from ..config import hub_dir, save_hub
+    new = Path(hub).expanduser().resolve() if hub else None
+    old = _saved_hub() if new else None
+    if new and old and old != new and not force:
+        raise HubInUse({"error": "this machine already uses another hub", "hub_now": str(old), "asked": str(new),
+                        "ask": f"keep it: run without --hub; switch to {new}: add --force (nothing in the old hub "
+                               "is moved or deleted)"})
+    text = None
     if snapshot or external_sync:
-        p.state.mkdir(parents=True, exist_ok=True)
         lines = ["# hub layout for ccx (personal; lives in your hub, not in the repo)", "[layout]"]
         if snapshot:
             lines += [f"snapshot = {json.dumps(snapshot)}", 'snapshot_mode = "external"']
         if external_sync:
             lines.append(f"external_sync = {json.dumps(external_sync)}")
-        lay.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        text = "\n".join(lines) + "\n"
+    if text and not force:
+        # the hub paths() will name once --hub is saved ($CCX_HUB still wins over the saved one)
+        target = new if new and not os.environ.get("CCX_HUB") else hub_dir()
+        lay = Paths(target).state / "layout.toml"
+        try:
+            was = lay.read_text(encoding="utf-8")
+        except OSError:
+            was = None
+        if was is not None and was != text:
+            raise HubInUse({"error": "the hub already has a different layout.toml", "layout": str(lay),
+                            "ask": "edit that file, or add --force to replace it with these --snapshot / "
+                                   "--external-sync values"})
+    saved = None
+    if new:
+        saved = save_hub(new)
+    p = paths()
+    lay = p.state / "layout.toml"
+    if text:
+        p.state.mkdir(parents=True, exist_ok=True)
+        lay.write_text(text, encoding="utf-8")
     memory.ensure(p)
     seed = data_dir("hub-seed")
     reg = p.mcp_registry
@@ -272,6 +319,8 @@ def register(sub) -> None:
     i.add_argument("--snapshot", help="use an existing file (relative to the hub) as the shared snapshot that "
                                       "both tools already load, e.g. AGENTS.md; ccx then never edits their instruction files")
     i.add_argument("--external-sync", help="command that already links skills/MCP into both tools; ccx defers to it")
+    i.add_argument("--force", action="store_true", help="switch this machine to another hub than the one set before, "
+                   "or replace the hub's layout.toml (without it ccx shows what is there and stops)")
     i.set_defaults(fn=cmd_init)
     stp = sub.add_parser("setup", help="guided first run: check, hub, init, sync (asks first), doctor, selftest")
     stp.add_argument("--yes", action="store_true", help="accept every step (scripts / CI)")

@@ -19,7 +19,9 @@ ccx run --to codex --mode read "Summarise README.md in three lines for a new use
 
 The last line is your first delegation (the same one README and `ccx setup` suggest). Step by step instead of
 `ccx setup`: `ccx init --hub <your hub path>`, `ccx sync`, `ccx sync --apply`, `ccx doctor`. The hub is one folder
-of your own for shared memory, skills and the record of every run.
+of your own for shared memory, skills and the record of every run. Once this machine has a hub, `ccx init --hub`
+with another folder stops and shows the one in use; add `--force` to switch (the old hub's files stay where they
+are). The same goes for a `--snapshot` / `--external-sync` that would replace a different `layout.toml`.
 
 **From the plugin marketplace** (the repository is its own marketplace, `relayline`):
 
