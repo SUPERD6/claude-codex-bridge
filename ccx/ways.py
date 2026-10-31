@@ -287,7 +287,7 @@ def run(p: Paths, brief: str, choice: dict, *, cwd: Path, check: str | None = No
             diff = _diff(p, build)
             acc_brief = review.brief(build["run_id"], brief + "\n\n## The plan it was given\n" + plan_text,
                                      (build.get("result") or {}).get("summary", ""), diff, max_diff,
-                                     build.get("check"))
+                                     build.get("check"), covers=(build.get("check") or {}).get("covers"))
             acc = step("accept", runner(to=roles["planner"], brief=acc_brief, mode="read", review="off",
                                         allow_subagents=False, fallback=False, ephemeral=True,
                                         label=f"review:{build['run_id']}", **common))

@@ -42,7 +42,7 @@ BRIEF = """{mark} of run {run_id}] Review a change another agent made. Do not ed
 ## Answer
 You cannot run commands; judge from the diff and the files. Do not report that tests were not run.
 First go through the task above requirement by requirement (each return value, case, rule and error it names) and
-check the code meets it; the acceptance tests may cover only some of them.
+check the code meets it{coverage}
 `[must] file:line — "task words" — what is wrong` is only for: (a) a requirement stated in the task that the change
 does not meet or gets wrong, quoting the task sentence it rests on; (b) a bug that breaks existing behaviour or
 existing tests, or crashes on inputs the task itself names (say which); (c) a way the task's stated behaviour
@@ -53,6 +53,19 @@ safety problem the change adds (code execution, secrets, data loss). A [must] wi
 `[note] ...`, at most 3: hardening, extra validation, edge cases or robustness the task did not ask for, style,
 missing extra tests. Start summary with exactly `REVIEW: pass` (no [must]) or `REVIEW: issues` (at least one
 [must]); put the items in open_questions, [must] first. Status done."""
+
+# [review] coverage_rubric (P1-10, default on): judge test coverage against the task, not against the agent's own tests
+COVERAGE_RUBRIC = """. For each requirement, see whether a test the acceptance command (if any) runs really
+exercises it: a passed check proves only what its tests assert, and tests the agent wrote or changed in this change
+are its own yardstick, not evidence the task is met. Read the code hardest where no test covers a requirement, and
+decide from the code; a missing test, or one only the agent wrote, is by itself a [note], not a [must]."""
+NO_COVERAGE_RUBRIC = "; the acceptance tests may cover only some of them."
+
+
+def coverage_rubric(rc: dict) -> bool:
+    """[review] coverage_rubric: true (default) unless set to false."""
+    return rc.get("coverage_rubric", True) is not False
+
 
 # [review] fix_rereview = "focus" (B2, default "full" = the brief above unchanged): the review of a fix round also
 # gets the first review's problems and the fix alone (the diff since the run before it ended, end.json), and is
@@ -534,18 +547,63 @@ def reviewers(cfg: dict, worker: str, installed, p=None, cheapest: bool = False)
     return out
 
 
+def _covers_line(covers: dict | None) -> str:
+    """P1-10: under Checks, which test files the acceptance command runs and which of them the agent wrote or
+    changed, so the reviewer judges coverage against the task, not against the agent's own tests."""
+    if not covers:
+        return ""
+    if covers.get("unknown"):
+        return "\nWhich tests that command runs is not known (it is not pytest / unittest)."
+    files = covers.get("files") or []
+    n = covers.get("n_files", len(files))
+    if not files:
+        return "\nThat command names no test file ccx could find."
+    out = f"\nThe test files it runs: {', '.join(files[:8])}" + (f" (+{n - 8} more)" if n > 8 else "") + "."
+    if covers.get("filtered"):
+        out += f" Only the tests selected by {', '.join(f'`{x}`' for x in covers['filtered'][:3])} ran."
+    if covers.get("own_tests_only"):
+        out += " Every one of them was written by the agent in this change."
+    elif covers.get("written"):
+        out += f" Written by the agent in this change: {', '.join(covers['written'][:8])}."
+    if covers.get("added_to"):
+        out += f" Tests added by the agent to: {', '.join(covers['added_to'][:8])}."
+    if covers.get("edited"):
+        out += f" Changed by the agent: {', '.join(covers['edited'][:8])}."
+    return out
+
+
+def _covers(check: dict | None, cwd: Path, snap: dict | None, edited: list[str], diff: str) -> dict | None:
+    """coverage.summarize for the review brief (None without a command or on any error: the brief goes without)."""
+    if not (check or {}).get("cmd") or check.get("reason") == "namecheck":
+        return None
+    try:
+        from . import coverage
+        return coverage.summarize(check["cmd"], cwd, Path((snap or {}).get("repo") or cwd), edited,
+                                  coverage.new_tests(diff), coverage.added_to_tests(diff))
+    except Exception:  # noqa: BLE001 — weak evidence; never stops the review
+        return None
+
+
 def brief(run_id: str, task: str, summary: str, diff: str, max_chars: int, check: dict | None = None,
           edited: list[str] | None = None, static: str = "", cwd: Path | None = None,
-          focus: dict | None = None) -> str:
+          focus: dict | None = None, covers: dict | None = None, rubric: bool = True) -> str:
     """The reviewer's brief. `edited` (default: found in `diff`) names pre-existing test files the change edited;
     `static`: what ccx's own static checks found (namecheck), as weak evidence under Checks.
+    `covers` (coverage.summarize of the acceptance command): which test files it runs, which the agent wrote.
     `cwd` (the reviewed tree): add the code around the change, in what is left of `max_chars` after the diff.
     `focus` ({issues, delta}: [review] fix_rereview = "focus", a fix round's review): see FOCUS_HEAD."""
     if focus:
-        return _focus_brief(run_id, task, summary, diff, max_chars, check, edited, static, focus)
+        return _focus_brief(run_id, task, summary, diff, max_chars, check, edited, static, focus, covers, rubric)
     edited = edited_tests(diff) if edited is None else edited
     ed = (f"\nExisting tests edited: {', '.join(edited[:8])} — check the task requires it; an existing assertion "
           f"changed to fit the new code without the task asking for it is a [must] (b)." if edited else "")
+    if edited and rubric:
+        ed += (" Name these files in one [note]; an edit is a [must] (b) only when a changed assertion now contradicts "
+               "a task sentence or no longer tests behaviour the task left unchanged (renames, imports and setup the "
+               "change needs are fine).")
+    if covers and edited and covers.get("edited"):
+        covers = {**covers, "edited": [f for f in covers["edited"] if f not in edited]}   # named just above
+    ed += _covers_line(covers) if rubric else ""
     cut = f"; cut to {max_chars} characters, open the files for the rest" if len(diff) > max_chars else ""
     ran = (f"ccx ran the acceptance command `{check['cmd']}` after the change: "
            f"{'passed' if check.get('passed') else 'FAILED (exit %s)' % check.get('exit')}." if check
@@ -564,17 +622,19 @@ def brief(run_id: str, task: str, summary: str, diff: str, max_chars: int, check
         except (OSError, ValueError, RecursionError, re.error):
             context = ""
     return BRIEF.format(mark=MARK, run_id=run_id, task=task.strip()[:2000], summary=(summary or "")[:800],
-                        diff=shown or "(empty)", cut=cut, check=ran, edited=ed + static, context=context)
+                        diff=shown or "(empty)", cut=cut, check=ran, edited=ed + static, context=context,
+                        coverage=COVERAGE_RUBRIC if rubric else NO_COVERAGE_RUBRIC)
 
 
 def _focus_brief(run_id: str, task: str, summary: str, diff: str, max_chars: int, check: dict | None,
-                 edited: list[str] | None, static: str, focus: dict) -> str:
+                 edited: list[str] | None, static: str, focus: dict, covers: dict | None = None,
+                 rubric: bool = True) -> str:
     """brief() for a fix round's review with [review] fix_rereview = "focus": the whole change (or, past max_chars,
     a note that only the fix is shown), then the first review's problems and the fix alone, and FOCUS_ANSWER."""
     edited = edited_tests(diff) if edited is None else edited
     too_big = len(diff) > max_chars
     full = brief(run_id, task, summary, FOCUS_TOO_BIG.format(n=max_chars) if too_big else diff, max_chars, check,
-                 edited, static)
+                 edited, static, covers=covers, rubric=rubric)
     delta = focus.get("delta") or ""
     dmax = max_chars if too_big else max(4000, max_chars - len(diff))
     dcut = f"; cut to {dmax} characters, open the files for the rest" if len(delta) > dmax else ""
@@ -714,7 +774,10 @@ def review_run(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path, run_d
             focus = {"issues": list(req.prior_issues), "delta": delta}
     text = rv.brief(record["run_id"], task_for_review(p, req), res.get("summary", ""), diff,
                     int(rc.get("max_diff_chars", 12000)), record.get("check"), edited, nck.brief_note(nc),
-                    cwd=cwd if rc.get("context", False) else None, **({"focus": focus} if focus else {}))
+                    cwd=cwd if rc.get("context", False) else None, **({"focus": focus} if focus else {}),
+                    rubric=coverage_rubric(rc),
+                    covers=(record.get("check") or {}).get("covers") or _covers(record.get("check"), cwd, snap, edited,
+                                                                               diff))
     usd, tried = 0.0, []
     for agent, model, effort in cands[:2]:
         if cancel is not None and cancel.is_set():
