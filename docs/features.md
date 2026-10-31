@@ -22,7 +22,7 @@ English · [中文](features.zh.md) · back to the [README](../README.md)
 ## Commands: everyday first, nothing removed
 
 `ccx -h` lists the everyday commands only: `setup`, `doctor`, `run`, `ask`, `resume`, `stop`, `undo`, `verify`,
-`show`, `q`, `ui`, `mem`, `lead` (and `demo`). `ccx advanced` (same as `ccx -h --all`) lists every group: memory and
+`show`, `q`, `ui`, `mem`, `handoff`, `lead` (and `demo`). `ccx advanced` (same as `ccx -h --all`) lists every group: memory and
 context, accounting and reports, between agents (the commands open sessions call: `peek`, `board`, `say`, `reply`),
 advanced (the hub, several projects, installing: `init`, `projects`, `where`, `intake`, `sync`, `config`,
 `uninstall`, `repair`, `agents`), maintenance, and developer last. `ccx dev` lists the developer commands (`trial`,

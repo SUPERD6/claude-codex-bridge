@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -15,12 +16,21 @@ FROZEN = json.loads((Path(__file__).parent / "data" / "cli_surface.json").read_t
 NL = "\n"
 
 
+def _shape(a: argparse.Action) -> list:
+    """What an option parses to: dest, kind, nargs, choices, default, type (as JSON-comparable values)."""
+    return [a.dest, type(a).__name__, a.nargs if not isinstance(a.nargs, int) else int(a.nargs),
+            sorted(map(str, a.choices)) if a.choices else None, a.default if isinstance(
+                a.default, (str, int, float, bool, type(None))) else repr(a.default),
+            getattr(a.type, "__name__", None)]
+
+
 def _surface() -> dict[str, dict]:
     out: dict[str, dict] = {}
 
     def walk(p: argparse.ArgumentParser, path: list[str]) -> None:
         out[" ".join(path)] = {
             "options": {o for a in p._actions for o in a.option_strings},
+            "actions": {o: _shape(a) for a in p._actions for o in a.option_strings},
             "positionals": [a.dest for a in p._actions
                             if not a.option_strings and not isinstance(a, argparse._SubParsersAction)]}
         for a in p._actions:
@@ -38,6 +48,8 @@ def test_every_frozen_command_option_and_positional_is_still_there():
     for k, v in FROZEN.items():
         gone = set(v["options"]) - now[k]["options"]
         assert not gone, f"`ccx {k}` lost {sorted(gone)}"
+        for o, shape in v.get("actions", {}).items():          # moving an option to a help group changes none of it
+            assert now[k]["actions"][o] == shape, (k, o)
         assert v["positionals"] == now[k]["positionals"][:len(v["positionals"])], k
 
 
@@ -113,7 +125,8 @@ def test_rare_options_sit_under_advanced_and_still_parse(cmd, group, capsys):
     rare = {"verify": ("--sweep", "--sample", "--builtin", "--agent-id"), "resume": ("--tier", "--from", "--budget"),
             "lead": ("--hint", "--as")}[cmd]
     for o in rare:
-        assert NL + "  " + o + " " in adv and NL + "  " + o + " " not in head, o
+        at = re.compile(r"\n  " + re.escape(o) + r"(\s|$)")         # a narrow terminal wraps right after it
+        assert at.search(adv) and not at.search(head), o
     if cmd == "verify":
         a = cli.parse(["verify", "--sweep", "--after-h", "3", "--builtin", "claude-builtin:haiku:low", "--b", "2"])
         assert (a.sweep, a.after_h, a.builtin, a.b) == (True, 3.0, "claude-builtin:haiku:low", 2.0)

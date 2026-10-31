@@ -22,7 +22,7 @@
 ## 命令：日常的在前，一个不删
 
 `ccx -h` 只列日常命令：`setup`、`doctor`、`run`、`ask`、`resume`、`stop`、`undo`、`verify`、`show`、`q`、`ui`、
-`mem`、`lead`（以及 `demo`）。`ccx advanced`（等于 `ccx -h --all`）列出所有分组：记忆和上下文、账本和报告、智能体之间
+`mem`、`handoff`、`lead`（以及 `demo`）。`ccx advanced`（等于 `ccx -h --all`）列出所有分组：记忆和上下文、账本和报告、智能体之间
 （开着的会话互相调用的 `peek`、`board`、`say`、`reply`）、进阶（hub、多个项目、安装接线：`init`、`projects`、`where`、
 `intake`、`sync`、`config`、`uninstall`、`repair`、`agents`）、维护，开发者用的放最后。`ccx dev` 列出开发者命令
 （`trial`、`ab`、`bench`、`improve`、`namecheck`）；`ccx dev trial ...` 就是 `ccx trial ...`。`ccx run -h`、

@@ -20,8 +20,8 @@ DESCRIPTION = ("A team of AI coding agents: Claude Code, Codex and DeepSeek hand
 # board in `ccx ui`). Advanced: the hub, several projects, installing and wiring.
 GROUPS = (
     ("Everyday", ("setup", "doctor", "run", "ask", "resume", "stop", "undo", "verify", "show", "q", "ui", "mem",
-                  "lead", "demo")),
-    ("Memory and context", ("ctx", "project", "handoff", "fresh", "inbox", "skills")),
+                  "handoff", "lead", "demo")),
+    ("Memory and context", ("ctx", "project", "fresh", "inbox", "skills")),
     ("Accounting and reports", ("stats", "report", "quota")),
     ("Between agents", ("peek", "board", "say", "reply")),
     ("Advanced", ("init", "projects", "where", "intake", "sync", "config", "uninstall", "repair", "agents")),
@@ -83,7 +83,7 @@ def _dev_help(sub: argparse._SubParsersAction) -> str:
 
 
 def _print(text: str) -> int:
-    print(text)
+    print(text.rstrip("\n"))
     return 0
 
 
@@ -100,7 +100,9 @@ def build_parser(full: bool = False) -> argparse.ArgumentParser:
         m.register(sub)
     ap.epilog = _grouped_help(sub, full)
     dev_text = _dev_help(sub)
-    adv = sub.add_parser("advanced", help="every command, by group (same as `ccx -h --all`)")
+    adv = sub.add_parser("advanced", help="every command, by group (same as `ccx -h --all`)",
+                         description="Lists every command, by group: the same as `ccx -h --all`. Each command keeps "
+                         "its own name: `ccx advanced` only lists them.")
     adv.set_defaults(fn=lambda a: _print(build_parser(full=True).format_help()))
     dv = sub.add_parser("dev", help="the developer commands (measuring ccx itself); `ccx dev <command>` runs one",
                         description=dev_text, formatter_class=argparse.RawDescriptionHelpFormatter)
