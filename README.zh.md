@@ -56,7 +56,7 @@ sonnet 当主导，隐藏测试，子智能体是 Codex gpt-6-luna low。内置�
 
 <table><tr>
 <td width="50%"><img alt="ccx ui 一次派活的收据：Codex gpt-6-luna low 做的，花了 $0.0051（含审查），ccx 自己重跑的验收通过，Claude haiku 审查通过，实际改动的文件来自 ccx 自己的快照（ccx demo 演示数据）" src="docs/assets/ui/task-zh.png"></td>
-<td width="50%"><img alt="ccx ui 总管看板：正在跑的、现在的主导、各项目进度、这个月只显示实际花费（ccx demo 演示数据）" src="docs/assets/ui/k6-month-zh.png"></td>
+<td width="50%"><img alt="ccx ui 总管看板：正在跑的、现在的主导、各项目进度、这个月子智能体的花费（按 API 价格折算；实测之前不显示省了多少）（ccx demo 演示数据）" src="docs/assets/ui/k6-month-zh.png"></td>
 </tr><tr><td align="center">每次派活的收据</td><td align="center">项目与花费</td></tr></table>
 
 ## 快速开始

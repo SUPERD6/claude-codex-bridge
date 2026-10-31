@@ -29,12 +29,17 @@ SIZE = (1440, 1000)
 
 def browser(given: str | None) -> str:
     for name in (given, os.environ.get("CCX_TEST_BROWSER"), "google-chrome", "google-chrome-stable", "chromium",
-                 "chromium-browser", "chrome", "msedge"):
+                 "chromium-browser", "chrome", "msedge", "microsoft-edge"):
         if name and (shutil.which(name) or Path(name).is_file()):
             return shutil.which(name) or name
+    local = os.environ.get("LOCALAPPDATA", "")
     for f in (r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+              r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+              local and os.path.join(local, "Google", "Chrome", "Application", "chrome.exe"),
               r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-              "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"):
+              r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+              "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+              "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"):
         if Path(f).is_file():
             return f
     raise SystemExit("no Chrome, Chromium or Edge found: give one with --browser")
@@ -101,12 +106,13 @@ def scrolled(f: Path, top: int) -> None:
 
 
 def leaks(text: str, base: Path) -> list[str]:
-    """Where this machine keeps files, if the page text shows it: the demo folder, the home folder, a user folder."""
+    """Where this machine keeps files, if the page text shows it: the demo folder, the home folder, a user folder.
+    The text is what the page draws (text nodes); attribute values such as a title tooltip are not drawn in a shot."""
     found = []
     for s in {str(base), str(base).replace("\\", "/"), str(Path.home()), str(Path.home()).replace("\\", "/")}:
         if s and s in text:
             found.append(s)
-    found += re.findall(r"[A-Za-z]:[\/]+Users[\/]+[^\/\s]+|/(?:Users|home)/[^/\s]+", text)
+    found += re.findall(r"[A-Za-z]:[\\/]+Users[\\/]+[^\\/\s]+|/(?:Users|home)/[^/\s]+", text, re.IGNORECASE)
     return found
 
 

@@ -113,8 +113,8 @@ Screenshots: `ccx demo`'s data, taken by `python scripts/make_shots.py`.
 
 </details>
 
-The screenshots come from `python scripts/ui_demo.py --plain`: a throwaway hub with real ccx runs on stand-in CLIs,
-nobody's real work.
+The screenshots above come from `ccx demo`'s made-up data (`python scripts/make_shots.py`); `python scripts/ui_demo.py`
+still builds a throwaway hub with real ccx runs on stand-in CLIs, nobody's real work.
 
 ## How it works (one example)
 

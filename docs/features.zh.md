@@ -51,7 +51,7 @@
 
 </details>
 
-截图是用 `python scripts/ui_demo.py --plain` 生成的：临时 hub、模拟命令行跑出的真实 ccx 运行，不含任何人的真实工作。
+上面的截图用的是 `ccx demo` 编好的数据（`python scripts/make_shots.py` 拍）；`python scripts/ui_demo.py` 仍可生成临时 hub、用模拟命令行跑真实的 ccx 运行，不含任何人的真实工作。
 
 ## 它怎么工作（一个例子）
 
