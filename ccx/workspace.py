@@ -8,6 +8,7 @@ import json
 import os
 import re
 import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -15,7 +16,23 @@ from . import ledger
 from .config import Paths
 from .verdicts import _hard_verdict, verify
 
-def make_worktree(cwd: Path, run_id: str) -> Path:
+# `git worktree add` reads every worktree already registered; one another `worktree add` is creating at that moment
+# has its .git/worktrees/<name>/ but no commondir yet, and git stops: "fatal: failed to read
+# .git/worktrees/<name>/commondir" (CI, windows-latest, two writers of one `ccx q run`, 2026-10-30)
+_WT_RACE = re.compile(r"failed to read \S*worktrees[\\/][^\\/\s]+[\\/](commondir|gitdir)")
+_WT_LOCKS: dict[str, threading.Lock] = {}
+_WT_LOCKS_GUARD = threading.Lock()
+
+
+def _worktree_lock(root: Path) -> threading.Lock:
+    with _WT_LOCKS_GUARD:
+        return _WT_LOCKS.setdefault(os.path.normcase(str(root)), threading.Lock())
+
+
+def make_worktree(cwd: Path, run_id: str, tries: int = 3) -> Path:
+    """A new worktree on branch ccx/<run_id> beside the repo. Threads of this process (the writers of one `ccx q run`
+    or `ccx batch`) add theirs one at a time, so they never meet git's race above; another process (a second ccx)
+    still can, and then this one undoes its half-made branch and tries again, up to `tries` times."""
     top = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=cwd,
                          capture_output=True, text=True, encoding="utf-8", errors="replace")
     if top.returncode != 0:
@@ -23,11 +40,22 @@ def make_worktree(cwd: Path, run_id: str) -> Path:
     root = Path(top.stdout.strip())
     wt = root.parent / f".ccx-worktrees" / root.name / run_id
     wt.parent.mkdir(parents=True, exist_ok=True)
-    r = subprocess.run(["git", "worktree", "add", "-b", f"ccx/{run_id}", str(wt)], cwd=root,
-                       capture_output=True, text=True, encoding="utf-8", errors="replace")
-    if r.returncode != 0:
-        raise RuntimeError("git worktree add failed: " + r.stderr.strip())
-    return wt
+    with _worktree_lock(root):
+        for n in range(tries):
+            r = subprocess.run(["git", "worktree", "add", "-b", f"ccx/{run_id}", str(wt)], cwd=root,
+                               capture_output=True, text=True, encoding="utf-8", errors="replace")
+            if r.returncode == 0:
+                return wt
+            if n + 1 == tries or not _WT_RACE.search(r.stderr or ""):
+                break
+            # the branch is made before the step that failed; the folder may be there, empty: both are this run's own
+            _git(root, "branch", "-D", f"ccx/{run_id}")
+            try:
+                wt.rmdir()
+            except OSError:
+                pass
+            time.sleep(0.2 * (n + 1))         # the other process is mid-add: give it a moment to finish
+    raise RuntimeError("git worktree add failed: " + r.stderr.strip())
 
 
 # pytest's own exit codes for "this command did not test anything": 4 = usage error (e.g. a file that does not

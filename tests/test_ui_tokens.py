@@ -212,12 +212,17 @@ class TestTree(Hub):
     def test_period_project_and_caps(self):
         other = self.work.parent / "other"
         (other / ".git").mkdir(parents=True)
-        run(self.hub, self.p, "old", self.work, ts=time.time() - 10 * 86400)
-        run(self.hub, self.p, "mid", self.work, ts=time.time() - 3 * 86400)
-        run(self.hub, self.p, "new", other, ts=time.time() - 60)
+        # one fixed "now" for the records and the queries, and "new" inside today even just after midnight
+        # (time.time() - 60 at 00:00:56 fell on yesterday and failed CI)
+        now = time.time()
+        today = tokenflow.since_of("today", now)
+        now = max(now, today + 2)
+        run(self.hub, self.p, "old", self.work, ts=now - 10 * 86400)
+        run(self.hub, self.p, "mid", self.work, ts=now - 3 * 86400)
+        run(self.hub, self.p, "new", other, ts=max(now - 60, today + 1))
         self.assertEqual(self.data(period="all")["totals"]["runs"], 3)
-        self.assertEqual(self.data(period="7d")["totals"]["runs"], 2)
-        self.assertEqual(self.data(period="today")["totals"]["runs"], 1)
+        self.assertEqual(self.data(period="7d", now=now)["totals"]["runs"], 2)
+        self.assertEqual(self.data(period="today", now=now)["totals"]["runs"], 1)
         d = self.data(period="all")
         pid = next(x["id"] for x in d["projects"] if x["name"] == "other")
         self.assertEqual([t["runs"][0]["run_id"] for t in self.data(period="all", project=pid)["tasks"]], ["new"])
