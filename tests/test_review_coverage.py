@@ -14,16 +14,17 @@ from test_ccx import Env  # noqa: E402
 class TestRubric(unittest.TestCase):
     def test_rubric_asks_for_coverage_against_the_task(self):
         b = " ".join(review.brief("r1", "task", "did it", "+x", 100).split())
-        self.assertIn("see whether a test the acceptance command runs (under Checks) really exercises it", b)
+        self.assertIn("see whether a test the acceptance command (if any) runs really exercises it", b)
         self.assertIn("tests the agent wrote or changed in this change are its own yardstick", b)
         # a missing test stays a note: the review's false alarms already cost reruns (P1-10: 38 of 65)
-        self.assertIn("a missing test by itself is a [note], not a [must]", b)
+        self.assertIn("a missing test, or one only the agent wrote, is by itself a [note], not a [must]", b)
+        self.assertIn("the acceptance command (if any) runs", b)
         self.assertIn("missing extra tests", b)
 
     def test_edited_existing_tests_are_named(self):
         diff = "--- a/tests/test_old.py\n+++ b/tests/test_old.py\n@@ -1 +1 @@\n-    assert f() == 1\n+    assert f() == 2\n"
         b = review.brief("r1", "task", "did it", diff, 100_000)
-        self.assertIn("Name each of these files in your answer", b)
+        self.assertIn("Name these files in your answer: a [must] as above for an assertion the task did not ask to change; otherwise one [note] listing them all", b)
 
     def test_covers_line(self):
         chk = {"cmd": "pytest tests/test_a.py", "passed": True, "exit": 0}
@@ -55,7 +56,7 @@ class TestRubric(unittest.TestCase):
         b = review.brief("r1", "t", "s", "+x", 100, {"cmd": "pytest a.py", "passed": True}, [],
                          covers={"files": ["a_test.py"], "n_files": 1, "filtered": ["-k doctor"],
                                  "added_to": ["a_test.py"]})
-        self.assertIn("Only part of them: -k doctor. Tests added by the agent to: a_test.py.", b)
+        self.assertIn("Only the tests selected by `-k doctor` ran. Tests added by the agent to: a_test.py.", b)
 
 
 class TestReviewSeesCoverage(Env):
@@ -80,7 +81,8 @@ class TestReviewSeesCoverage(Env):
         out = json.loads(r.stdout)
         prompts = [c["prompt"] for c in self.calls() if c["agent"] == "claude" and "[ccx review" in c["prompt"]]
         self.assertTrue(prompts, out)
-        self.assertIn("The test files it runs: test_a.py. Changed by the agent: test_a.py.", prompts[-1])
+        self.assertIn("The test files it runs: test_a.py.", prompts[-1])
+        self.assertNotIn("Changed by the agent: test_a.py", prompts[-1])     # named once, under Existing tests
         self.assertIn("Existing tests edited: test_a.py", prompts[-1])
 
 

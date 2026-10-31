@@ -42,10 +42,10 @@ BRIEF = """{mark} of run {run_id}] Review a change another agent made. Do not ed
 ## Answer
 You cannot run commands; judge from the diff and the files. Do not report that tests were not run.
 First go through the task above requirement by requirement (each return value, case, rule and error it names) and
-check the code meets it; the acceptance tests may cover only some of them. For each requirement, see whether a test
-the acceptance command runs (under Checks) really exercises it: a passed check proves only what its tests assert, and
-tests the agent wrote or changed in this change are its own yardstick, not evidence the task is met. Read the code
-hardest where no test covers a requirement; a missing test by itself is a [note], not a [must].
+check the code meets it. For each requirement, see whether a test the acceptance command (if any) runs really
+exercises it: a passed check proves only what its tests assert, and tests the agent wrote or changed in this change
+are its own yardstick, not evidence the task is met. Read the code hardest where no test covers a requirement, and
+decide from the code; a missing test, or one only the agent wrote, is by itself a [note], not a [must].
 `[must] file:line — "task words" — what is wrong` is only for: (a) a requirement stated in the task that the change
 does not meet or gets wrong, quoting the task sentence it rests on; (b) a bug that breaks existing behaviour or
 existing tests, or crashes on inputs the task itself names (say which); (c) a way the task's stated behaviour
@@ -550,7 +550,7 @@ def _covers_line(covers: dict | None) -> str:
         return "\nThat command names no test file ccx could find."
     out = f"\nThe test files it runs: {', '.join(files[:8])}" + (f" (+{n - 8} more)" if n > 8 else "") + "."
     if covers.get("filtered"):
-        out += f" Only part of them: {', '.join(covers['filtered'][:3])}."
+        out += f" Only the tests selected by {', '.join(f'`{x}`' for x in covers['filtered'][:3])} ran."
     if covers.get("own_tests_only"):
         out += " Every one of them was written by the agent in this change."
     elif covers.get("written"):
@@ -586,8 +586,12 @@ def brief(run_id: str, task: str, summary: str, diff: str, max_chars: int, check
         return _focus_brief(run_id, task, summary, diff, max_chars, check, edited, static, focus, covers)
     edited = edited_tests(diff) if edited is None else edited
     ed = (f"\nExisting tests edited: {', '.join(edited[:8])} — check the task requires it; an existing assertion "
-          f"changed to fit the new code without the task asking for it is a [must] (b). Name each of these files in "
-          f"your answer (a [must] as above, or a [note] saying why the edit is what the task asked)." if edited else "")
+          f"changed to fit the new code without the task asking for it is a [must] (b). Name these files in your "
+          f"answer: a [must] as above for an assertion the task did not ask to change; otherwise one [note] listing "
+          f"them all, each with why the edit is what the task asked or why it does not change what the test "
+          f"asserts." if edited else "")
+    if covers and edited and covers.get("edited"):
+        covers = {**covers, "edited": [f for f in covers["edited"] if f not in edited]}   # named just above
     ed += _covers_line(covers)
     cut = f"; cut to {max_chars} characters, open the files for the rest" if len(diff) > max_chars else ""
     ran = (f"ccx ran the acceptance command `{check['cmd']}` after the change: "
