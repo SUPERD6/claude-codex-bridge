@@ -2,11 +2,13 @@
 
 build() writes a throwaway hub under the system's temporary folder, seeded from this file's own small fake data
 (deterministic: the same records every time, only the times follow the clock): two projects; runs in each state (done
-and accepted, review issues with real before/after snapshots so the decision card shows both columns and a file
-mismatch, running, failed on its environment); a three-piece work queue with one piece whose worktree is not merged
-yet; a board thread stopped by the machine-message cap and one message that asks the person; a ledger with a month of
-costs, so the overview shows spend and the saving estimate; a handoff between leads, so the switch-lead panel has a
-history. Then `ccx ui` serves it: the same server and page, which only shows a "demo data" mark (the hub carries the
+and accepted with its receipt — cost, the check ccx ran, who reviewed, the change from ccx's own snapshots; review
+issues with real before/after snapshots so the decision card shows both columns and a file mismatch; running; failed
+on its environment); the independent reviews as ccx records them (runs of their own, labelled review:<run>); a
+three-piece work queue with one piece whose worktree is not merged yet; a board thread stopped by the
+machine-message cap and one message that asks the person; a ledger with a month of costs, so the overview shows the
+spend (only the spend: a saving is shown once `ccx trial` has measured one); per-request numbers and one Codex helper
+session, so the token page has every part; a handoff between leads, so the switch-lead panel has a history. Then `ccx ui` serves it: the same server and page, which only shows a "demo data" mark (the hub carries the
 marker file DEMO_MARK).
 
 Nothing outside that folder is written: the hub, the tool homes (an empty Codex home and a Claude home holding one
@@ -71,16 +73,22 @@ def _write(f: Path, text: str) -> None:
 
 # ------------------------------------------------------------------ run records
 def _attempt(agent: str, model: str, effort: str, secs: float, tin: int, tout: int, usd: float) -> dict:
+    """One attempt, with the B3 ruler's per-request numbers (reqstats.fields): five requests whose inputs grow as the
+    conversation does and add up to the attempt's input (fresh + cached)."""
+    from .reqstats import fields
+    total = tin * 4
+    inputs = [int(total * w / 15) for w in (1, 2, 3, 4, 5)]
     return {"agent": agent, "rung": f"{agent}:{model}:{effort}", "model": model, "effort": effort, "seconds": secs,
-            "usage": {"input_tokens": tin, "cached_input_tokens": tin * 3, "output_tokens": tout}, "ae_usd": usd}
+            "usage": {"input_tokens": tin, "cached_input_tokens": tin * 3, "output_tokens": tout}, "ae_usd": usd,
+            **fields(inputs)}
 
 
 def _run(p: Paths, run_id: str, cwd: Path, brief: str, ts: float, *, to: str = "codex", model: str = "gpt-6-luna",
          effort: str = "low", caller: str = "claude", lead: str | None = LEAD_SESSION, secs: float = 140.0,
-         usd: float = 0.004, record: bool = True, **kw) -> dict:
+         usd: float = 0.004, record: bool = True, tin: int = 9000, tout: int = 1400, **kw) -> dict:
     rec = {"run_id": run_id, "label": None, "to": to, "caller": caller, "mode": "write", "cwd": str(cwd), "tier": "T1",
            "session_id": None, "lead_session": lead, "ts": ts, "first_rung": f"{to}:{model}:{effort}",
-           "attempts": [_attempt(to, model, effort, secs, 9000, 1400, usd)],
+           "attempts": [_attempt(to, model, effort, secs, tin, tout, usd)],
            "result": {"status": "done", "summary": "", "files_changed": [], "verification": ""},
            "ok": True, "state": "finished", "kind": None}
     rec.update(kw)
@@ -92,6 +100,14 @@ def _run(p: Paths, run_id: str, cwd: Path, brief: str, ts: float, *, to: str = "
         from . import ledger
         ledger.append(p, rec)
     return rec
+
+
+def _review(p: Paths, of: str, cwd: Path, ts: float, model: str, effort: str, usd: float) -> dict:
+    """The independent review of run `of`, as ccx records one: a run of its own labelled review:<run>, by the other
+    vendor (Claude here), hidden from the board but counted on the token page and in the month's spend."""
+    return _run(p, f"demo-rv-{of[len('demo-'):]}", cwd, f"Review the change of run {of}", ts, to="claude", model=model,
+                effort=effort, caller="ccx", lead=None, secs=40.0, usd=usd, label=f"review:{of}", mode="read",
+                result={"status": "done", "summary": "review", "files_changed": [], "verification": ""})
 
 
 def _verdict(p: Paths, run_id: str, ok: bool, ts: float, **kw) -> None:
@@ -117,6 +133,22 @@ def _shop(p: Paths, root: Path, now: float) -> dict:
                              "verification": "pytest -q tests/test_health.py: 2 passed"},
                      check={"cmd": "pytest -q", "exit": 0, "passed": True, "tail": "6 passed in 0.41s"},
                      review={"verdict": "pass", "issues": [], "by": "claude:haiku:low"}, verdict={"ok": True})
+    # the receipt's change, from ccx's own snapshots (as a real write run leaves them), then committed: the work
+    # that follows starts from a clean tree
+    if has_git:
+        run_dir = p.runs / "demo-r-ok"
+        snap = workspace.undo_snapshot(root)
+        if snap:
+            _write(run_dir / "undo.json", json.dumps(snap))
+            _write(root / "health.py", "VERSION = '0.3.1'\n\n\ndef health():\n"
+                   "    return {'status': 'ok', 'version': VERSION}\n")
+            _write(root / "tests" / "test_health.py", "from health import VERSION, health\n\n\n"
+                   "def test_health_ok():\n    assert health()['status'] == 'ok'\n\n\n"
+                   "def test_health_version():\n    assert health()['version'] == VERSION\n")
+            workspace.mark_run_end(run_dir, root)
+            workspace.write_end_tree(run_dir, root)
+            _git(root, "add", "-A") and _git(root, "commit", "-qm", "GET /health (ccx run demo-r-ok)")
+    _review(p, "demo-r-ok", root, now - 26 * 3600 + 150, "haiku", "low", 0.0011)
     _verdict(p, "demo-r-ok", True, now - 25 * 3600)
 
     # review issues, with ccx's own snapshots: the card shows what it says beside what ccx ran, and a mismatch
@@ -131,6 +163,7 @@ def _shop(p: Paths, root: Path, now: float) -> dict:
               review={"verdict": "issues", "by": "claude:sonnet:medium",
                       "issues": ["[must] an expired code is still applied for the last hour (local time used in "
                                  "is_expired)", "[should] a 100% code makes the total negative with shipping"]})
+    _review(p, rid, root, now - 3 * 3600 + 160, "sonnet", "medium", 0.0094)
     out["review"] = rv
 
     out["running"] = _run(p, "demo-r-running", root, "Write the OpenAPI description for the orders endpoints",
@@ -211,14 +244,16 @@ def _docs(p: Paths, root: Path, now: float) -> dict:
          result={"status": "done", "summary": "Search box with a prebuilt JSON index (38 KB); no network calls.",
                  "files_changed": ["search.js", "build.py", "index.md"], "verification": "built, searched 'install'"},
          check={"cmd": "python build.py --check-links", "exit": 0, "passed": True, "tail": "0 broken links"},
-         worktree=wt)
+         worktree=wt, tin=30000, tout=5200,
+         # Codex started one helper of its own (to build the index): the token page lists it under the run
+         codex_children={"019a0d3m-0000-7000-8000-00000000c0d1": {"input": 64000, "cached": 51000, "output": 2600}})
     wq.update(root, "q2", status="done", run="demo-q2", agent="codex", cost_usd=0.0064, worktree=wt)
     wq.set_budget(root, 0.05)
     return {"q1": r1}
 
 
 def _ledger_month(p: Paths, now: float, roots: list[Path]) -> None:
-    """A month of sub-agent runs in the ledger only (no run folders): the overview's spend and saving estimate."""
+    """A month of sub-agent runs in the ledger only (no run folders): the overview's spend."""
     from . import ledger
     from .ui import month_start
     rnd = random.Random(SEED)

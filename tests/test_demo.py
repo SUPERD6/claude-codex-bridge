@@ -142,6 +142,85 @@ def test_every_endpoint_returns_the_demo(server):
         assert get(srv, "/" + name)[0] == 200
 
 
+def test_receipt_and_token_page_have_every_part(server):
+    """P2-2: what the launch shows. One hand-off's receipt (what it cost, the check ccx ran, who reviewed, the change
+    from ccx's own snapshots) and the token page (the published table, per-request numbers, a review run grouped with
+    the run it reviewed, a Codex helper session under its run)."""
+    srv, base, p = server
+    code, _, body = get(srv, "/api/run/demo-r-ok")
+    r = json.loads(body)
+    assert code == 200 and r["check"]["passed"] and (r["review"]["verdict"], r["review"]["by"]) == ("pass", "claude:haiku:low")
+    assert r["agent"] == "codex" and r["ok"] and r["tokens"]
+    j = json.loads(get(srv, "/api/judge/demo-r-ok")[2])
+    assert j["ran"]["cmd"] == "pytest -q" and j["ran"]["passed"]
+    if HAS_GIT:                                   # the receipt's change comes from snapshots, not from what it said
+        assert {c["path"] for c in j["changed"]} == {"health.py", "tests/test_health.py"} and not j["mismatch"]
+    code, _, body = get(srv, "/api/tokens?period=7d")
+    tok = json.loads(body)
+    assert code == 200 and tok["measured"]["source"] == "docs/measured.md"
+    runs = {r["run_id"]: (t, r) for t in tok["tasks"] for r in t["runs"]}
+    assert runs["demo-r-ok"][1]["requests"] == 5
+    assert runs["demo-rv-r-ok"][0] is runs["demo-r-ok"][0]                   # the review sits with its run
+    kids = runs["demo-q2"][1]["children"]
+    assert len(kids) == 1 and kids[0]["vendor"] == "codex" and kids[0]["tokens"]["total"] > 0
+
+
+def _browser() -> str | None:
+    """A Chrome, Chromium or Edge to render the page headless; None skips. CCX_TEST_BROWSER names one."""
+    for name in (os.environ.get("CCX_TEST_BROWSER"), "google-chrome", "google-chrome-stable", "chromium",
+                 "chromium-browser", "chrome", "msedge"):
+        if name and shutil.which(name):
+            return shutil.which(name)
+    for f in (r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+              r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+              "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"):
+        if Path(f).is_file():
+            return f
+    return None
+
+
+def render(srv, route, tmp_path):
+    """The page as a headless browser leaves it after its scripts ran (--dump-dom), in English, as text."""
+    import re
+    prof = tmp_path / f"profile-{abs(hash(route))}"
+    # Linux runners (Ubuntu 24.04) refuse Chrome's own sandbox to an unprivileged user; the page is ours, on 127.0.0.1
+    extra = ["--no-sandbox"] if sys.platform.startswith("linux") else []
+    r = subprocess.run([_browser(), "--headless=new", "--disable-gpu", "--no-first-run", "--no-default-browser-check",
+                        *extra, f"--user-data-dir={prof}", "--lang=en-US", "--virtual-time-budget=10000", "--dump-dom",
+                        f"http://127.0.0.1:{srv.port}/#k={srv.token}&{route}"],
+                       capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120)
+    if r.returncode != 0 and "<main" not in r.stdout:      # the browser itself did not start: not the page's fault
+        pytest.skip(f"headless browser did not start: {r.stderr[-300:]}")
+    main = r.stdout[r.stdout.find("<main"):]
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", main)).replace("&amp;", "&")
+
+
+@pytest.mark.skipif(_browser() is None, reason="no Chrome / Chromium / Edge to render the page")
+def test_headless_browser_renders_the_demo(server, tmp_path):
+    """P2-2: the same seed, rendered for real (the page's own script against the real server): the overview, the
+    token page and one receipt show their parts, and no placeholder or JS value leaks into the text."""
+    import re
+    srv, base, p = server
+    en = json.loads((REPO / "ccx" / "ui_static" / "strings.json").read_text(encoding="utf-8"))["en"]
+    d = json.loads(get(srv, "/api/data")[2])
+    shop = project(d, demo.SHOP)
+    t = next(t for t in shop["tasks"] if any(pc["run_id"] == "demo-r-ok" for pc in walk(t["pieces"])))
+    pc = next(pc for pc in walk(t["pieces"]) if pc["run_id"] == "demo-r-ok")
+    pages = {
+        "/": [en["demo_banner"][:40], "Discount codes for the shop API", "docs-site"],
+        "/tokens": ["29/30", "$0.063", "27/28", "019a0d3m"],
+        f"/{shop['id']}/{t['id']}?sel={pc['id']}": ["Add a /health endpoint", "pytest -q", "6 passed in 0.41s",
+                                                   "health.py", "haiku"],
+    }
+    for route, want in pages.items():
+        text = render(srv, route, tmp_path)
+        for w in want:
+            assert w in text, (route, w, text[:600])
+        for bad in ("undefined", "NaN", "[object Object]"):
+            assert bad not in text, (route, bad)
+        assert not re.search(r"\{[a-z_]+\}", text), (route, re.search(r"\{[a-z_]+\}", text))
+
+
 def test_snapshot_keeps_board_text_as_escaped_data(built, tmp_path):
     _, p, _ = built
     out = ui.export(p, tmp_path / "snap.html")
@@ -249,7 +328,7 @@ def test_demo_shows_but_never_runs_a_command_that_starts_an_agent(server):
     i = next(i for i, b in enumerate(pc["act"]["buttons"]) if b["label"] == "b_one_more")   # one more round starts an agent
     code, prep = post(srv, "/api/act/prepare", {"project": shop["id"], "task": t["id"], "piece": pc["id"], "btn": f"a{i}"})
     assert code == 200 and prep["demo"] and prep["nonce"] is None and "ccx resume demo-r-review" in prep["cmd"]
-    assert len(list(p.runs.iterdir())) == 6                                       # nothing was started
+    assert len(list(p.runs.iterdir())) == 8                                       # nothing was started (6 + 2 reviews)
 
 
 def test_demo_server_refuses_a_spending_job_even_if_prepared(server):
@@ -257,7 +336,7 @@ def test_demo_server_refuses_a_spending_job_even_if_prepared(server):
     srv.pending["forged"] = {"argv": ["ccx", "resume", "demo-r-env"], "spends": True, "until": time.time() + 60}
     code, out = post(srv, "/api/act/run", {"nonce": "forged"})
     assert code == 409 and "demo" in json.dumps(out)
-    assert len(list(p.runs.iterdir())) == 6
+    assert len(list(p.runs.iterdir())) == 8
 
 
 def test_handoff_without_a_conversation_file_says_it_is_blank(server):
