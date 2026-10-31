@@ -93,3 +93,12 @@ python scripts/eval/r5.py summary --taskset holdout
 2. 在 `ccx/__init__.py`、`pyproject.toml`、`.claude-plugin/plugin.json`、`.codex-plugin/plugin.json` 里改版本号；更新
    [STATUS](STATUS.zh.md)（一页，中英两份）。
 3. 打 `vX.Y.Z` 标签；标签会触发完整的 CI 矩阵。发不发布（GitHub Release、PyPI）由维护者决定。
+4. PyPI，维护者点头之后再做（先 TestPyPI；包名 `relayline`，命令 `ccx`）：
+   - `python -m pip install build twine`，再 `python -m build` 和 `python -m twine check --strict dist/*`
+     （CI 的 package 任务跑同样的检查）。
+   - 在 https://test.pypi.org/manage/account/token/ 建一个 API token（TestPyPI 账号和 pypi.org 是分开的）。
+     token 不进仓库：放在 `~/.pypirc`（Windows 上是 `%USERPROFILE%\.pypirc`）的 `[testpypi]` 下，写
+     `username = __token__` 和 `password = <token>`；或者只在一个终端里设 `TWINE_USERNAME=__token__` 和 `TWINE_PASSWORD`。
+   - `python -m twine upload --repository testpypi dist/*`，再到一台干净的机器或 venv 里：
+     `pipx install --index-url https://test.pypi.org/simple/ relayline`（没有依赖，不用第二个源），跑 `ccx -h`。
+   - pypi.org 一样，换成 pypi.org 的 token 和 `--repository pypi`。同一个版本号只能传一次。

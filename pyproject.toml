@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]      # 77: license as an SPDX string + license-files
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,8 +8,29 @@ version = "0.5.0"
 description = "Claude Code, Codex and DeepSeek as each other's lead or sub-agent (Gemini CLI: sub-agent adapter, not run for real): routing, shared skills/MCP/incremental memory, resumable runs, token accounting"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["claude-code", "codex", "deepseek", "coding-agents", "multi-agent", "delegation", "llm", "cli"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development",
+    "Topic :: Software Development :: Build Tools",
+]
 dependencies = []            # stdlib only
+
+[project.urls]
+Homepage = "https://superd6.github.io/relayline/"
+Repository = "https://github.com/SUPERD6/relayline"
+Issues = "https://github.com/SUPERD6/relayline/issues"
+Changelog = "https://github.com/SUPERD6/relayline/blob/main/CHANGELOG.md"
 
 [project.scripts]
 ccx = "ccx.cli:main"
@@ -17,14 +38,20 @@ ccx = "ccx.cli:main"
 [tool.setuptools]
 # config/, skills/ and hub-seed/ stay at the top of the repo (the hub links to skills/ in a clone) and ship
 # inside the package as data: ccx/_config, ccx/_skills, ccx/_hubseed (see ccx.config.data_dir).
-packages = ["ccx", "ccx.commands", "ccx.agents", "ccx._config", "ccx._skills", "ccx._hubseed"]
+# ccx.data, ccx.ui_static and ccx._hubseed.mcp hold only data; listing them keeps setuptools from warning that an
+# importable folder is "absent from packages" (the files ship through package-data either way).
+packages = ["ccx", "ccx.commands", "ccx.agents", "ccx.data", "ccx.ui_static", "ccx._config", "ccx._skills",
+            "ccx._hubseed", "ccx._hubseed.mcp"]
 package-dir = { "ccx" = "ccx", "ccx.commands" = "ccx/commands", "ccx.agents" = "ccx/agents", "ccx._config" = "config", "ccx._skills" = "skills", "ccx._hubseed" = "hub-seed" }
 
 [tool.setuptools.package-data]
 "ccx" = ["ui_static/*", "data/*.json"]
 "ccx._config" = ["*.toml", "*.json"]
 "ccx._skills" = ["**/*.md", "**/*.py", "**/*.toml", "**/*.json"]
+"ccx.data" = ["*.json"]
+"ccx.ui_static" = ["*"]
 "ccx._hubseed" = ["**/*.md", "**/*.json"]
+"ccx._hubseed.mcp" = ["*.json"]
 
-# Install:   pipx install git+https://github.com/<owner>/relayline   (or from a clone: pipx install .)
+# Install:   pipx install git+https://github.com/SUPERD6/relayline   (or from a clone: pipx install .)
 # Develop:   python -m pip install -e <path-to-clone>   — a clone keeps using config/ and skills/ in place

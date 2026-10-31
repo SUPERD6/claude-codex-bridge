@@ -1,17 +1,17 @@
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.svg">
-  <img alt="relayline (command ccx): coding agents as each other's lead and sub-agent; a real run: Codex luna/low, done in one attempt, verified, $0.0023" src="docs/assets/banner-light.svg" width="100%">
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/SUPERD6/relayline/main/docs/assets/banner-dark.svg">
+  <img alt="relayline (command ccx): coding agents as each other's lead and sub-agent; a real run: Codex luna/low, done in one attempt, verified, $0.0023" src="https://raw.githubusercontent.com/SUPERD6/relayline/main/docs/assets/banner-light.svg" width="100%">
 </picture>
 
 <p align="center">
   <a href="https://github.com/SUPERD6/relayline/actions/workflows/test.yml"><img alt="tests" src="https://github.com/SUPERD6/relayline/actions/workflows/test.yml/badge.svg"></a>
   <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-3776AB">
   <img alt="dependencies: standard library only" src="https://img.shields.io/badge/dependencies-stdlib%20only-1f7a3a">
-  <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/license-MIT-0f7c80"></a>
+  <a href="https://github.com/SUPERD6/relayline/blob/main/LICENSE"><img alt="MIT" src="https://img.shields.io/badge/license-MIT-0f7c80"></a>
   <a href="https://github.com/SUPERD6/relayline/releases"><img alt="release" src="https://img.shields.io/github/v/release/SUPERD6/relayline"></a>
 </p>
 
-<p align="center">English · <a href="README.zh.md">中文</a> · <a href="https://superd6.github.io/relayline/">Website</a></p>
+<p align="center">English · <a href="https://github.com/SUPERD6/relayline/blob/main/README.zh.md">中文</a> · <a href="https://superd6.github.io/relayline/">Website</a></p>
 
 # relayline
 
@@ -25,7 +25,7 @@ command is `ccx`; Python standard library only.
 **Hold-out set (hc1, 2026-10-29):** on 10 tasks not used while building ccx (× 3 rounds, a sonnet lead, hidden
 tests), ccx was not seen to be less right (29/30, against 29/30 and 27/28) and cost less per success than doing it
 yourself and than the built-in sub-agent's default usage, but took about 3× the wall time of doing it yourself
-([report and limits](docs/research/2026-10-29-hc1-holdout.md)). **Dev set** (the other rows): round 5, ten real
+([report and limits](https://github.com/SUPERD6/relayline/blob/main/docs/research/2026-10-29-hc1-holdout.md)). **Dev set** (the other rows): round 5, ten real
 changes from this repository × 2, a sonnet lead, hidden tests, the sub-agent Codex gpt-6-luna low. Built-in: every run, the lean builtin2 included; ccx: the four runs
 after the round-5 fixes (the first run, before them, was 17/20 at $0.248).
 
@@ -34,7 +34,7 @@ after the round-5 fixes (the first run, before them, was 17/20 at $0.248).
 | Right | 19/20 (one run) | 17–19/20 (three runs) | 18–20/20 (four runs, r5e–r5h) |
 | Cost per success | $0.211 | $0.114–0.202 | $0.116–0.135 |
 | Wall time, median | 94 s | 276–316 s | 236–267 s |
-| [Hold-out set](docs/research/2026-10-29-hc1-holdout.md) (10 tasks × 3): right, cost per success, wall | 29/30, $0.090, 21 s | 27/28, $0.103, 123 s (default usage) | 29/30, $0.063, 61 s |
+| [Hold-out set](https://github.com/SUPERD6/relayline/blob/main/docs/research/2026-10-29-hc1-holdout.md) (10 tasks × 3): right, cost per success, wall | 29/30, $0.090, 21 s | 27/28, $0.103, 123 s (default usage) | 29/30, $0.063, 61 s |
 
 - **Cost.** On the hold-out set ccx cost about 30 % less per success than doing it yourself and about 39 % less
   than the built-in sub-agent's **default usage**; on its 5 tasks from other repositories (the clean half: this
@@ -55,7 +55,7 @@ after the round-5 fixes (the first run, before them, was 17/20 at $0.248).
 - **Limits:** the hold-out run had 10 tasks and only a sonnet lead, its prices are API-equivalent, and "not seen to
   be less right" is not a statistical non-inferiority test. The dev-set tasks were also used while fixing ccx, the
   lead doing it itself was not re-run after the first run, and round 5 came before the clean-environment checks. Every number, the unfavourable ones and the best-case
-  feature A/Bs too: [docs/measured.md](docs/measured.md).
+  feature A/Bs too: [docs/measured.md](https://github.com/SUPERD6/relayline/blob/main/docs/measured.md).
 
 **Try it without accounts:** `ccx demo` opens `ccx ui` on made-up projects, runs and costs in a temporary
 folder (offline, no Claude or Codex login; your own setup is not touched).
@@ -90,7 +90,7 @@ You need Python 3.11+ and the `claude` and `codex` CLIs, logged in; DeepSeek (`d
 
 ## What else it does
 
-The same seven things as [docs/features.md](docs/features.md), in one line each: (1) Claude Code, Codex and
+The same seven things as [docs/features.md](https://github.com/SUPERD6/relayline/blob/main/docs/features.md), in one line each: (1) Claude Code, Codex and
 DeepSeek as each other's lead and sub-agent; (2) models talking directly (`ccx ask`, `ccx discuss`, the board);
 (3) shared memory and working context; (4) splitting the work and routing each piece by difficulty and cost;
 (5) a slim sub-agent start-up and `ccx lead` for what the lead re-reads; (6) checks, cross-vendor review and a verdict
@@ -102,7 +102,7 @@ after a second click: it writes what is done, the decisions and what comes next 
 lead's own conversation file when it is there) and gives you the one line to paste when you open the other tool
 there. The task timeline shows which lead worked when.
 
-<p align="center"><img alt="Animated demo: ccx route picks codex:gpt-6.1-sol:medium, ccx run finishes in one attempt and ccx reruns the check, ccx verify records the verdict" src="docs/assets/demo.svg" width="100%"></p>
+<p align="center"><img alt="Animated demo: ccx route picks codex:gpt-6.1-sol:medium, ccx run finishes in one attempt and ccx reruns the check, ccx verify records the verdict" src="https://raw.githubusercontent.com/SUPERD6/relayline/main/docs/assets/demo.svg" width="100%"></p>
 
 ## Who works with whom
 
@@ -117,26 +117,26 @@ All "yes" cells ran for real on one Windows machine. **Experimental**, the main 
 each is described, and STATUS says how each is tested): Gemini CLI, a real quota stop, macOS and Linux (CI only, no real
 agent CLIs), installing the Codex plugin from a GitHub address, `ccx intake` against real GitHub; the full list is
 in STATUS. Still work in progress (the release badge above says which version): what is verified and how is in
-[docs/STATUS.md](docs/STATUS.md).
+[docs/STATUS.md](https://github.com/SUPERD6/relayline/blob/main/docs/STATUS.md).
 
 ## More
 
 | Page | What is there |
 |---|---|
-| [What it does, and how](docs/features.md) | the seven things in detail, `ccx ui`, one example end to end, where shared things live, tiers, safety |
-| [Install and commands](docs/install.md) | install from a clone, plugging in your own setup, every command |
-| [Measured](docs/measured.md) | all measurements with their limits (the hold-out run, the round-5 comparison, the best-case feature A/Bs), how a saving is estimated, external facts checked |
-| [Shared work context](docs/shared-context.md) · [The board](docs/board.md) | what open sessions share with each other, and how |
-| [Questions and similar projects](docs/faq.md) | cost, subscriptions, safety, which tools work; how ccx differs from similar projects |
-| [Design](docs/DESIGN.md) · [Decisions](docs/DECISIONS.md) · [Changes](CHANGELOG.md) | the inside |
-| [Maintenance](docs/maintenance.md) | picking ccx up again: known issues, experimental switches and why they are off, running an evaluation, releasing |
+| [What it does, and how](https://github.com/SUPERD6/relayline/blob/main/docs/features.md) | the seven things in detail, `ccx ui`, one example end to end, where shared things live, tiers, safety |
+| [Install and commands](https://github.com/SUPERD6/relayline/blob/main/docs/install.md) | install from a clone, plugging in your own setup, every command |
+| [Measured](https://github.com/SUPERD6/relayline/blob/main/docs/measured.md) | all measurements with their limits (the hold-out run, the round-5 comparison, the best-case feature A/Bs), how a saving is estimated, external facts checked |
+| [Shared work context](https://github.com/SUPERD6/relayline/blob/main/docs/shared-context.md) · [The board](https://github.com/SUPERD6/relayline/blob/main/docs/board.md) | what open sessions share with each other, and how |
+| [Questions and similar projects](https://github.com/SUPERD6/relayline/blob/main/docs/faq.md) | cost, subscriptions, safety, which tools work; how ccx differs from similar projects |
+| [Design](https://github.com/SUPERD6/relayline/blob/main/docs/DESIGN.md) · [Decisions](https://github.com/SUPERD6/relayline/blob/main/docs/DECISIONS.md) · [Changes](https://github.com/SUPERD6/relayline/blob/main/CHANGELOG.md) | the inside |
+| [Maintenance](https://github.com/SUPERD6/relayline/blob/main/docs/maintenance.md) | picking ccx up again: known issues, experimental switches and why they are off, running an evaluation, releasing |
 
 **Not the similarly named projects:** relayline was called `claude-codex-bridge`, but it is not
 [CCB](https://github.com/SeemSeam/claude_codex_bridge) and not OpenAI's
-[codex-plugin-cc](https://github.com/openai/codex-plugin-cc) ([how they differ](docs/faq.md#similar-projects)).
+[codex-plugin-cc](https://github.com/openai/codex-plugin-cc) ([how they differ](https://github.com/SUPERD6/relayline/blob/main/docs/faq.md#similar-projects)).
 
 ## Security, contributing, license
 
-What ccx runs and may change, and how to report a problem: [SECURITY.md](SECURITY.md). Contributing (tests, rules,
-adding an adapter for another agent CLI): [CONTRIBUTING.md](CONTRIBUTING.md) and the
-[code of conduct](CODE_OF_CONDUCT.md). MIT, see [LICENSE](LICENSE).
+What ccx runs and may change, and how to report a problem: [SECURITY.md](https://github.com/SUPERD6/relayline/blob/main/SECURITY.md). Contributing (tests, rules,
+adding an adapter for another agent CLI): [CONTRIBUTING.md](https://github.com/SUPERD6/relayline/blob/main/CONTRIBUTING.md) and the
+[code of conduct](https://github.com/SUPERD6/relayline/blob/main/CODE_OF_CONDUCT.md). MIT, see [LICENSE](https://github.com/SUPERD6/relayline/blob/main/LICENSE).
