@@ -64,8 +64,8 @@ def soft_verdicts(p: Paths, min_age_h: float = SOFT_AFTER_H, now: float | None =
         if (p.runs / r["run_id"] / "undone.json").exists():       # undone: right or wrong is the person's call
             continue
         if record.get("kind") in ("check_failed", "check_broken", "review_issues", "review_failed", "needs_write",
-                                 "split", "no_changes", "no_answer"):
-            continue
+                                 "split", "no_changes", "no_answer", "ok_self_checked"):
+            continue                    # ok_self_checked: its check is the sub-agent's own tests, no evidence (P0-8)
         if (record.get("namecheck") or {}).get("hits"):  # a possible NameError (warn mode): the lead looks first
             continue
         check = record.get("check")
