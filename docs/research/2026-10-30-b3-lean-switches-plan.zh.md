@@ -48,6 +48,7 @@
 - **M2**（`codex_lean_tools`）：D = `ccx2daily_leantools` 对同一个基线，题目相同。
 - **决策规则（现在就定好）：** 四条全满足才改默认：right_B ≥ right_A（做对数不降：用户定的规则）；输掉的配对（A 对、B 错；McNemar）≤ 2；没有哪道题 B 每轮都错而 A 至少对过一轮；子智能体每个单元的 prompt token 中位数（`sub_usage.prompt` = ccx 工作运行的 input + cached）降 ≥15%，每个开关都用这同一个指标。有单侧缺失的配对或缺 token 数就判 Unknown，开关保持关。`r5.py summary` 在干净的配对单元上套用它（`b3_rules`）。
 - 统计功效有限：基线约 95% 时，50 对只能看出 ≥10 个百分点的下降。输掉 2–3 对的边界情况，只对该组再补 50 个单元（约 $5）。
+  *2026-10-31 跑完之后的修订（上面保留登记时的原文）：*"输掉 2–3 对"不是第二个门槛：规则下输 2 对算过，输 3 对算不过。上面那句确实要求这样的组再补 50 个单元；这次没有补跑，偏离了计划。它不改变这次任何判定：`clean` 输了 3 对（补跑也翻不回来），其他组都没有输 2 或 3 对。边界情况怎么理解（是对勉强通过的再确认，还是可选）留给下次事先登记，这里不定。现在 B3 规则算到的对数少于登记的 50 对时，`r5.py summary` 会另外打印"registered 50 pairs, counted N"。
 
 命令（没有运行）：
 
@@ -68,5 +69,5 @@ python scripts/eval/r5.py run --taskset holdout --rounds 3 --arms ccx2daily,ccx2
 - **每次调用只冻结一次快照：** `run` 在开始时把用户的 memories / AGENTS.md / 技能（以及日常 home 从用户 config 里取的那几项设置）复制一次到 `<work>/daily-snapshot`；每个日常单元都从这里复制，行里记 `daily.snapshot`（`frozen` 和它的 `sha256`），跑完删除这个文件夹（冻结失败时也删；被强行结束的运行留下的文件夹，工作目录检查能认出来，下次开始运行时删除）。
 - **开关在每次运行里实际做了什么：** 每行有 `switches_applied`，来自这个单元每个 ccx run.json（`subagent_switches`、mode、agents），以及这些开关会给 Codex 加的 memory / 网页搜索 / 图片生成参数。ccx 的 run.json 不记 CLI 的 argv，所以这些参数是推出来的（`argv_recorded: false`），不是读回来的。
 - **均衡的组顺序：** `run --arm-order balanced` 在一个带种子的组顺序上按题目和轮次依次取 Williams 设计（平衡拉丁方）的各行：每走完一整轮行，每组在每个位置出现的次数相同，并且排在其他每组（包括基线）前面的次数正好一半（10 题 × 2 轮、4 组时，不论种子都是每组 20 次里 10 次）。`--dry-run` 会打印这些“基线在前”的次数。行里记 `arm_order` 和 `arm_pos`。默认仍是 `shuffle`，以前各次运行的排程不变。第二半应带 `--arm-order balanced` 跑。
-- **失败单元的证据：** 没做对的单元记 `hidden_failed`（没通过的隐藏测试 id），并把完整的隐藏 pytest 输出和最终 diff（在放入隐藏测试之前取）保存在 `<结果文件名>-artifacts/<标签>-<单元>/`；diff 保留 git 的原始字节（包括 CRLF 行），可以直接 apply。
+- **失败单元的证据：** 没做对的单元记 `hidden_failed`（没通过的隐藏测试 id），并把完整的隐藏 pytest 输出和最终 diff（在放入隐藏测试之前取）保存在 `<结果文件名>-artifacts/<标签>-<单元>/`；diff 保留 git 的原始字节（包括 CRLF 行），可以直接 apply。2026-10-31 起每次运行有自己的子目录 `<结果文件名>-artifacts/<UTC 开跑时间>Z/<标签>-<单元>/`，行里记为 `artifacts.run`；没有这个字段的旧行是平铺布局。
 - **事后归因：** 如果运行期间用户真实 hub 的账本变大了，报告列出每条新行的 type、run_id、ts，以及 run_id 是否属于某个单元的 `ccx_run_ids`（评测泄漏），不属于的多半是同时在跑的真实会话；`preflight.json` 里存为 `postflight_ledger`。

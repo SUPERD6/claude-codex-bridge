@@ -99,7 +99,9 @@ Codex in a dedicated CODEX_HOME with --ignore-user-config / --ignore-rules / mem
 in one Job Object and whatever survives the unit is listed, killed and logged. Every row carries `fingerprint`
 (commit, task-file hash, CLI versions, isolation, concurrency, preflight result), `audit` (what its agents loaded and
 which real paths their tool calls named), `leftovers` and `env_clean`. The CLI versions are checked again after
-every unit; a change, a busy machine or a process that cannot be killed stops the run (unless --force-unclean).
+every unit; a change, a busy machine or a process that cannot be killed stops the run (unless --force-unclean,
+which loses those rows to the rules; `--wait-quiet MINUTES` instead waits for a quiet machine before the checks and
+between units, and the unit that overlapped other work stays not env_clean).
 The work dir defaults to <temp>/<tag>, so two tags never share unit folders.
 
   python scripts/eval/r5.py run --rounds 1 --tasks waiting-evals --codex-home <eval codex home> --budget 3
@@ -671,6 +673,79 @@ def final_diff(repo: Path) -> str | None:
     return out.decode("utf-8", errors="surrogateescape")
 
 
+def _minutes(v: str) -> float:
+    try:
+        x = float(v)
+    except ValueError:
+        x = -1.0
+    if not 0 < x <= 24 * 60:
+        raise argparse.ArgumentTypeError("minutes: more than 0, at most 1440")
+    return x
+
+
+def run_artifacts_dir(out: Path, stamp: str | None = None) -> tuple[str, Path]:
+    """This invocation's evidence folder, created here so no other run gets it: <results>-artifacts/<UTC start>Z/ (a
+    taken name gets a suffix), so the folders of an aborted run never mix with this one's. Rows from before keep
+    theirs flat in <results>-artifacts/ (no `artifacts.run`)."""
+    stamp = stamp or time.strftime("%Y%m%d-%H%M%SZ", time.gmtime())
+    base = Path(out).parent / f"{Path(out).stem}-artifacts"
+    base.mkdir(parents=True, exist_ok=True)
+    run, n = stamp, 1
+    while True:
+        try:
+            (base / run).mkdir()
+            return run, base / run
+        except FileExistsError:
+            n += 1
+            run = f"{stamp}-{n}"
+
+
+QUIET_POLL_S = 30
+
+
+QUIET_CHECKS = 2           # after a busy spell, this many quiet checks in a row (QUIET_POLL_S apart) count as quiet
+
+
+def _busy_now(ours: list[str] | None = None) -> list[str] | None:
+    """Other heavy work on this machine (preflight.busy), or None when the processes cannot be listed."""
+    procs = PF.snapshot()
+    if procs is None:
+        return None
+    return PF.busy(procs, ours=ours, exclude=PF.job_pids_all())
+
+
+def wait_quiet(minutes: float, sleep=time.sleep, now=time.monotonic, busy=None) -> bool:
+    """Wait until no other heavy work runs on this machine (preflight.busy: another eval, a pytest, `ccx run`,
+    `claude -p`, `codex exec`), checking every QUIET_POLL_S seconds, at most `minutes`. A machine quiet at the first
+    look is quiet at once; after a busy spell it takes QUIET_CHECKS quiet checks in a row (another session's tests
+    come and go). True: quiet. False: still busy, or the processes cannot be listed (`busy` returns None: waiting
+    would not help, the preflight reports it). A unit that runs while another session's tests run is not env_clean;
+    --force-unclean would run on anyway and lose those rows to the rules."""
+    busy = busy or _busy_now
+    end = now() + minutes * 60
+    found = busy()
+    if found is None:
+        print("[wait-quiet] cannot list processes: not waiting", flush=True)
+        return False
+    if not found:
+        return True
+    print(f"[wait-quiet] {len(found)} other heavy process(es), e.g. {found[0][:120]}; waiting up to {minutes:g} min",
+          flush=True)
+    quiet = 0
+    while now() < end:
+        sleep(min(QUIET_POLL_S, max(0.0, end - now())))
+        found = busy()
+        if found is None:
+            print("[wait-quiet] cannot list processes: not waiting", flush=True)
+            return False
+        quiet = 0 if found else quiet + 1
+        if quiet >= QUIET_CHECKS:
+            print("[wait-quiet] quiet: going on", flush=True)
+            return True
+    print(f"[wait-quiet] still busy after {minutes:g} min", flush=True)
+    return False
+
+
 def keep_artifacts(dest: Path, row: dict, sc: dict | None, diff: str | None) -> None:
     """A unit that was not right (and every polyglot exercise unit): its failing hidden test ids in the row
     (`hidden_failed`, empty for a right one) and, under dest, the full hidden pytest output and its final diff, written
@@ -884,10 +959,13 @@ def sub_usage(hub: Path) -> dict:
     """What ccx's sub-agents read and wrote in this unit, per token class, from the hub's ledger (read before the hub
     goes): `input` (uncached), `cached`, `output` of the work runs, `prompt` = input + cached (what the B3 rule
     compares: memories, skills and tool definitions are prompt), the same for ccx's reviews apart (`review_*`), and
-    how many runs."""
+    how many runs. `requests` / `review_requests`: the model requests of those runs' own conversations (helpers and
+    Codex sub-sessions not counted, as ccx/reqstats.py records them), summed over the runs whose ledger row says
+    (`requests_runs` / `review_requests_runs` of them; None when none does: ccx before it recorded them)."""
     from ccx import ledger as _ledger
     out = {"input": 0, "cached": 0, "output": 0, "runs": 0, "review_input": 0, "review_cached": 0,
            "review_output": 0, "reviews": 0}
+    req = {"": [0, 0], "review_": [0, 0]}
     for r in _ledger.rows(r2.Paths(hub)):
         if r.get("type"):
             continue
@@ -896,8 +974,24 @@ def sub_usage(hub: Path) -> dict:
         for k in ("input", "cached", "output"):
             out[pre + k] += int(u.get(k, 0) or 0)
         out["reviews" if pre else "runs"] += 1
+        n = r.get("requests")
+        if isinstance(n, int) and not isinstance(n, bool) and n >= 0:
+            req[pre][0] += n
+            req[pre][1] += 1
     out["prompt"] = out["input"] + out["cached"]
+    for pre, (n, k) in req.items():
+        out[pre + "requests"] = n if k else None
+        out[pre + "requests_runs"] = k
     return out
+
+
+def sub_req_text(su: dict | None) -> str:
+    """The sub-agents' requests for the run log: "8 (2/4 runs)" when not every run said."""
+    su = su or {}
+    if su.get("requests") is None:
+        return "None"
+    k, n = su.get("requests_runs") or 0, su.get("runs") or 0
+    return str(su["requests"]) + (f" ({k}/{n} runs)" if k != n else "")
 
 
 def namecheck_stats(rows: list[dict]) -> dict | None:
@@ -1584,6 +1678,8 @@ def run_unit(u: dict, a, work: Path) -> dict:
                 if diff is None and not scored:    # it broke before scoring: the repo has no hidden tests in it yet
                     diff = final_diff(repo)
                 keep_artifacts(Path(art) / f"{u.get('tag') or 'untagged'}-{iso.key}", row, sc, diff)
+                if getattr(a, "artifacts_run", None) and "dir" in (row.get("artifacts") or {}):
+                    row["artifacts"]["run"] = a.artifacts_run
             except Exception as e:  # noqa: BLE001
                 row["artifacts"] = {"error": f"{type(e).__name__}: {e}"[:200]}
         fresh = u.get("taskset", "r5") != "r5"     # hold-out: nothing of a finished unit stays in the work dir
@@ -2055,8 +2151,15 @@ def cmd_run(a) -> int:
     if probs:
         print("other repositories not ready: not starting", flush=True)
         return 3
+    waited = None
+    if getattr(a, "wait_quiet", 0):
+        t0 = time.monotonic()
+        quiet = wait_quiet(a.wait_quiet)           # still busy after it: the preflight below says so and stops
+        waited = {"minutes": a.wait_quiet, "waited_s": round(time.monotonic() - t0), "quiet": quiet}
     rep = PF.run_checks(PF.options_from(a, arms, work, canary_on=not a.no_canary, start=True,
                                         tasks_file=Path(TASKSETS[a.taskset].__file__)))
+    if waited:
+        rep["wait_quiet"] = waited                 # in preflight.json: this run waited for a quiet machine
     for p in rep["problems"]:
         print(f"[preflight] {p}", flush=True)
     if not rep["ok"] and not a.force_unclean:
@@ -2076,7 +2179,9 @@ def cmd_run(a) -> int:
     print(f"[preflight] {rep['result']}: commit {rep['commit'][:12]} cli {rep['cli']} codex {rep['codex']['mode']} "
           f"claude {rep['claude_isolation']} jobs {a.jobs} canary {rep['canary']}", flush=True)
     a.preflight = rep
-    a.artifacts_dir = out.parent / f"{out.stem}-artifacts"    # a unit that was not right keeps its evidence here
+    # a unit that was not right keeps its evidence here, in a folder of this invocation's own (an aborted run's
+    # folders stay apart; row["artifacts"]["run"] names it)
+    a.artifacts_run, a.artifacts_dir = run_artifacts_dir(out)
     if daily:                                      # one snapshot of the person's setup for the whole invocation
         try:
             snap = freeze_daily(a, work / DAILY_SNAPSHOT)
@@ -2124,14 +2229,22 @@ def cmd_run(a) -> int:
         if (row.get("leftovers") or {}).get("unkilled"):
             why.append(f"processes that could not be killed: {row['leftovers']['unkilled']}")
         if why and not a.force_unclean:
-            print(f"stopping: {'; '.join(why)[:400]}", flush=True)
-            stop.set()
+            # --wait-quiet: when the only reason is other work on the machine, wait it out before the next unit (this
+            # unit stays not env_clean; it is not run again under this tag) instead of stopping the run
+            if (getattr(a, "wait_quiet", 0) and all(w.startswith("busy") for w in why)
+                    and wait_quiet(a.wait_quiet, busy=lambda: _busy_now(ours))):
+                print(f"[wait-quiet] {u['task']} {u['arm']} round {u['round']} ran while the machine was busy (not "
+                      "env_clean); going on", flush=True)
+            else:
+                print(f"stopping: {'; '.join(why)[:400]}", flush=True)
+                stop.set()
         with lock:
             append_jsonl(out, row)
             run_usd[0] += row.get("usd") or 0
             unit_runs.update(str(x) for x in row.get("ccx_run_ids") or [])
             print(f"r{u['round']} {u['task']:18} {u['arm']:8} ok={row.get('ok')} ${row.get('usd', 0):.4f} "
                   f"(lead ${row.get('lead_only_usd', 0) or 0:.4f}) req={row.get('lead_requests')} "
+                  f"sub_req={sub_req_text(row.get('sub_usage'))} "
                   f"lead_tok={row.get('lead_tokens')} {row.get('wall_s')}s deleg={row.get('delegated')} "
                   f"files={row.get('files_changed')} clean={row['env_clean']} "
                   f"{spend_line(out, a.tag, a.extra_spent, run_usd[0])}", flush=True)
@@ -2415,6 +2528,8 @@ def lost_pairs(rows: list[dict], A: str, B: str) -> dict:
     lost = [(x, y) for x, y in ps if _excluded(x) or _excluded(y)]
     side = {A: sum(bool(_excluded(x)) for x, _ in lost), B: sum(bool(_excluded(y)) for _, y in lost)}
     out = {"lost": len(lost), "of": len(ps), "unclean_side": side}
+    if lost:                                       # said even when even: the rule then stands on fewer pairs
+        out["left_out"] = f"{len(lost)} of {len(ps)} shared pairs left out (not env_clean on one side or both)"
     if side[A] != side[B]:
         out["note"] = (f"one-sided loss: {side[A]} of {A}'s and {side[B]} of {B}'s rows on shared units were not "
                        "env_clean; the comparison counts only the pairs left and may be biased")
@@ -2568,6 +2683,9 @@ def b3_paired(pa: list[float], pb: list[float], n: int = B3_BOOT_N, seed: int = 
                      "task_dropped": tinfo.get("dropped", 0)}}
 
 
+B3_REGISTERED_PAIRS = 50   # the B3 plan's paired units per arm (hold-out 10 x 3 + r5 10 x 2); report-only
+
+
 def b3_rule(rows: list[dict], arm: str, base: str = B3_BASE) -> dict | None:
     """The B3 decision rule fixed before any run (docs/research/2026-10-30-b3-lean-switches-plan.md), on the clean
     units both arms share: a switch's default changes only if right_B >= right_A (right not lower), at most 2 lost pairs (A right,
@@ -2612,6 +2730,13 @@ def b3_rule(rows: list[dict], arm: str, base: str = B3_BASE) -> dict | None:
     lp = lost_pairs(every, base, arm)
     out = {"units": len(ps), "tasks": len(tasks), "conditions": cond, "excluded_rows": excluded, "lost_pairs": lp,
            "result": "fail" if "fail" in res else "unknown" if "unknown" in res else "pass"}
+    if len(ps) < B3_REGISTERED_PAIRS:
+        # report-only (the result stays as the conditions give it): the plan registered B3_REGISTERED_PAIRS pairs per
+        # arm; a result on fewer is on less than the measurement was planned for, which the reader must see
+        out["registered"] = {"pairs": B3_REGISTERED_PAIRS, "counted": len(ps),
+                             "note": f"registered {B3_REGISTERED_PAIRS} pairs, counted {len(ps)}: this result is on "
+                                     f"fewer pairs than the B3 plan registered (both halves: summary --results "
+                                     f"<a> <b> --tag <hold-out> --tag <r5>)"}
     if lp.get("note"):
         out["exclusion_note"] = lp["note"]
         if out["result"] == "pass":
@@ -2653,7 +2778,8 @@ def b3_rule_lines(name: str, br: dict) -> list[str]:
     """One B3 rule as plain lines (cmd_summary prints them after the JSON, on stderr)."""
     c = br["conditions"]
     p = br.get("paired") or {}
-    out = [f"b3 rule {name}: {br['result']} on {br['units']} pairs ({br['tasks']} tasks); right {c['right']['value']}, "
+    out = [f"!! b3 rule {name}: {br['registered']['note']}"] if br.get("registered") else []
+    out += [f"b3 rule {name}: {br['result']} on {br['units']} pairs ({br['tasks']} tasks); right {c['right']['value']}, "
            f"lost {c['lost_pairs']['value']}, always lost {c['always_lost']['value'] or 'none'}, median prompt "
            f"{c['input']['value']} ({c['input']['result']})"]
     if p.get("pairs"):
@@ -2667,6 +2793,8 @@ def b3_rule_lines(name: str, br: dict) -> list[str]:
                    "becomes unknown)")
     if br.get("exclusion_note"):
         out.append(f"  {br['exclusion_note']}")
+    elif (br.get("lost_pairs") or {}).get("left_out"):
+        out.append(f"  {br['lost_pairs']['left_out']}")
     return out
 
 
@@ -2677,7 +2805,9 @@ def tier_rule_lines(tr: dict | None) -> list[str]:
     return [f"tier rule ({tr['units']} shared clean units): {tr['result']}"] + \
         [f"  {c['result']:7}  {c['rule']}: {c['value'][0]} vs {c['value'][1]}"
          + (f" (diff {c['diff_tasks']} tasks, CI {c['ci']})" if "ci" in c else "") for c in tr["conditions"].values()] \
-        + ([f"  note     {tr['exclusion_note']}"] if tr.get("exclusion_note") else [])
+        + ([f"  note     {tr['exclusion_note']}"] if tr.get("exclusion_note") else []) \
+        + ([f"  note     {tr['lost_pairs']['left_out']}"]
+           if (tr.get("lost_pairs") or {}).get("left_out") and not tr.get("exclusion_note") else [])
 
 
 def tier_rules(rows: list[dict]) -> dict:
@@ -2881,7 +3011,7 @@ def excluded_line(res: dict) -> str | None:
     arms = ("; per arm: " + ", ".join(f"{a} {c['unclean'] + c['env_unknown']}/{c['of']}" for a, c in per.items())
             if per else "")
     return (f"left out {n} rows that are not env_clean ({ex.get('unclean', 0)} unclean, {ex.get('env_unknown', 0)} "
-            f"from before the clean room){arms}; --include-unclean counts them (the tier rule never does)")
+            f"from before the clean room){arms}; --include-unclean counts them (the tier and B3 rules never do)")
 
 
 def cmd_summary(a) -> int:
@@ -2959,6 +3089,11 @@ def parser() -> argparse.ArgumentParser:
     r.add_argument("--pin-commit", default="", help="refuse to run unless this checkout is at this commit (a tag "
                    "is also refused at a commit other than its earlier rows')")
     r.add_argument("--no-canary", action="store_true", help="skip the one tiny real lead that checks the isolation")
+    r.add_argument("--wait-quiet", type=_minutes, default=0, metavar="MINUTES", help="wait up to this long for "
+                   "other heavy work on this machine (another eval, pytest, ccx run, claude -p, codex exec) to finish: "
+                   "before the checks (still busy then, the preflight refuses as usual), and between units when that "
+                   "work starts during a run (the unit it overlapped stays not env_clean and is not run again under "
+                   "this tag; still busy then, the run stops). Unlike --force-unclean it never runs on a busy machine")
     r.add_argument("--ext-cache", default="", help="a folder with local copies (clones) of the other repositories "
                    "of the hold-out set, named after them, to clone from instead of their URLs")
     r.add_argument("--ext-python", default="", help="the Python that runs the other repositories' tests (needs "
@@ -2978,15 +3113,16 @@ def parser() -> argparse.ArgumentParser:
     s.add_argument("--results", nargs="+", default=None, help="results files to read together (default: the task "
                    "set's own); a row in two of them is counted once")
     s.add_argument("--taskset", choices=sorted(TASKSETS), default="r5")
-    s.add_argument("--include-unclean", action="store_true", help="count rows that are not env_clean too (the "
-                   "tier rule still takes clean rows only)")
+    s.add_argument("--include-unclean", action="store_true", help="count rows that are not env_clean too in the "
+                   "tables and pair statistics (the tier rule and the B3 rule still take clean rows only)")
     s.set_defaults(fn=cmd_summary)
     e = sub.add_parser("export")
     e.add_argument("dest")
     e.add_argument("--tag", action="append", default=None)
     e.add_argument("--results", nargs="+", default=None)
     e.add_argument("--taskset", choices=sorted(TASKSETS), default="r5")
-    e.add_argument("--include-unclean", action="store_true")
+    e.add_argument("--include-unclean", action="store_true", help="count rows that are not env_clean in the "
+                   "summary section too (every row is exported either way)")
     e.set_defaults(fn=cmd_export)
     return ap
 
