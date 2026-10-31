@@ -143,9 +143,13 @@ def test_rule_pass_fail_and_unknown():
                shared_context={"est_tokens": 290, "deduped": 1, "deduped_chars": 27})]
     r5 = B.rule(m5, "m5")
     assert r5["verdict"] == "Pass" and r5["dedupe"]["deduped_chars"] == 27 and r5["keep"]["est_tokens"] == 300
-    # m5's prompt condition is per request: one more request is not a loss by itself
-    more = B.rule([m5[0], {**m5[1], "requests": 6, "prompt_tokens": 5988}], "m5")
-    assert more["checks"]["prompt_per_request_not_higher"] and "prompt_not_higher" not in more["checks"]
+    # m5's prompt totals are reported, not judged: one more turn is not a loss by itself
+    more = B.rule([m5[0], {**m5[1], "requests": 7, "prompt_tokens": 9000}], "m5")
+    assert more["verdict"] == "Pass" and "prompt_not_higher" not in more["checks"]
+    assert more["dedupe"]["prompt_per_request"] == round(9000 / 7, 1)
+    # m3 where neither arm spawned a child: the switch had nothing to act on
+    idle = [{**r, "children": {"n": 0}} for r in m3]
+    assert B.rule(idle, "m3")["verdict"] == "Unknown" and B.rule(idle, "m3")["pairs_without_children"] == 1
 
 
 def test_dry_run_prints_the_schedule_and_cost_and_runs_nothing(tmp_path, capsys):

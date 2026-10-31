@@ -197,13 +197,15 @@ also each piece's state, follow-ups and spun-off pieces; m5 `est_tokens` and `de
 
 1. the switch arm's right count is not below the baseline's (m4: over all pieces and over the trap pieces alone);
 2. its ccx runs or its `first_input` sum is lower;
-3. its total prompt tokens are not higher (m5: per request: dedupe saves tens of tokens a request, and one more
-   request, a ~20k prefix, would decide a total);
+3. its total prompt tokens are not higher (m5: reported, not judged: dedupe saves tens of tokens a request, while
+   one more turn adds a ~20k prefix and every later request carries the earlier turns, so totals and means follow
+   the number of turns; m5's saving is judged by condition 2's `first_input` sum);
 4. m3 only: no pair where the switch arm is wrong, the baseline right and the switch arm's run spawned children (a
    child that lacked the context it was not given, not caught by its parent).
 
 All hold = Pass; any fails = Fail. Fewer than 80% of the planned pairs finished (`run` writes the planned count into each
-row), or a unit whose switch did not take = Unknown. A unit that failed (an error in its row) is missing, not a switch
+row), a unit whose switch did not take, or (m3) more than half of the pairs spawning no
+child in either arm (the switch had nothing to act on) = Unknown. A unit that failed (an error in its row) is missing, not a switch
 that did not take, and `run` again retries it; the budget is checked before a pair starts, never between its units. Wall time is reported, not judged (M4 is expected to be slower). A spun-off piece climbs again from the low
 rung, one more chance than the baseline had; the report says so. A pass only makes a default-on change a candidate;
 whether to turn it on is decided separately.

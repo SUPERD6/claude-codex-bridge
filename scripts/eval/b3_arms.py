@@ -33,9 +33,10 @@ the children's), $, wall.
 The rule (registered before any unit ran, the plan doc's "Fewer runs" section), per experiment on the units both arms
 finished with the switch recorded: Pass when (1) the arm's right count is not below the baseline's (m4: over all
 pieces and over the trap pieces alone), (2) its ccx runs or its first_input sum is lower, (3) its total prompt
-tokens are not higher (m5: per request, since one more request would outweigh what dedupe saves); m3 also fails when a pair has the arm wrong, the baseline right and the arm's run spawned
+tokens are not higher (m5: reported only, since one more turn would outweigh what dedupe saves); m3 also fails when a pair has the arm wrong, the baseline right and the arm's run spawned
 children (a child that lacked the context it was not given, not caught by its parent). Fewer than 80% of the
-planned pairs (as the run recorded them in its rows), or any unit whose switch did not take: Unknown. A unit that
+planned pairs (as the run recorded them in its rows), any unit whose switch did not take, or (m3) more than half
+of the pairs spawning no child in either arm: Unknown. A unit that
 failed (an error in its row) is missing, not a switch that did not take, and `run` again retries it.
 
   python scripts/eval/b3_arms.py run --exp m4 --tag b3m4 --codex-home <eval codex home> --budget 5 [--dry-run]
@@ -427,6 +428,10 @@ def run_unit(u: dict, a, work: Path) -> dict:
         row.update(UNIT[u["exp"]](u, a, iso, env, job))
     except Exception as x:  # noqa: BLE001
         row.update(error=f"{type(x).__name__}: {x}"[:400], switch_ok=False)
+        try:                     # what a failed unit spent still counts against the budget
+            row.update({k: v for k, v in run_stats(iso.hub).items() if k not in row})
+        except Exception:  # noqa: BLE001
+            pass
     finally:
         try:
             row["archived_sessions"] = archive_hub(iso.hub, env) if env else 0
@@ -472,7 +477,8 @@ def estimate(todo: list[dict]) -> float:
 
 
 def commit() -> str:
-    return subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+    return subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True,
+                          encoding="utf-8", errors="replace").stdout.strip()
 
 
 def preflight(a, work: Path) -> list[str]:
@@ -597,11 +603,12 @@ def rule(rows: list[dict], exp: str, planned: int | None = None) -> dict:
     checks = {"right_not_lower": b["right"] >= a["right"],
               "runs_or_first_input_lower": b["runs"] < a["runs"] or b["first_input"] < a["first_input"]}
     if exp == "m5":
-        # m5 saves tens of tokens a request: one more request (a ~20k prefix) would decide a total, so its prompt
-        # condition is per request (registered so before any m5 unit ran)
-        per = {n: round(x["prompt_tokens"] / x["requests"], 1) if x["requests"] else None for n, x in ((base, a), (arm, b))}
-        a["prompt_per_request"], b["prompt_per_request"] = per[base], per[arm]
-        checks["prompt_per_request_not_higher"] = per[base] is not None and per[arm] is not None and per[arm] <= per[base]
+        # m5 saves tens of tokens a request, while one more request adds a ~20k prefix and every later request
+        # carries the earlier turns: a total or a mean would be decided by the number of turns. Its saving is judged
+        # by the first_input sum (condition 2, the prompt's own content); the totals are reported only (registered
+        # so before any m5 unit ran)
+        for x in (a, b):
+            x["prompt_per_request"] = round(x["prompt_tokens"] / x["requests"], 1) if x["requests"] else None
     else:
         checks["prompt_not_higher"] = b["prompt_tokens"] <= a["prompt_tokens"]
     if exp == "m4":
@@ -615,6 +622,11 @@ def rule(rows: list[dict], exp: str, planned: int | None = None) -> dict:
         why.append(f"{len(pairs)} of {planned} planned pairs finished (< {int(MIN_COVER * 100)}%)")
     if any(x["why"] == "switch did not take" for x in left_out):
         why.append("a unit's switch did not take")
+    if exp == "m3":              # fork_turns only acts when the run spawns: pairs where neither did compare nothing
+        idle = sum(not (p[0].get("children") or {}).get("n") and not (p[1].get("children") or {}).get("n")
+                   for p in pairs)
+        if pairs and idle * 2 > len(pairs):
+            why.append(f"{idle} of {len(pairs)} pairs spawned no child in either arm")
     verdict = "Unknown" if why else ("Pass" if all(checks.values()) else "Fail")
     out = {"exp": exp, "baseline": base, "arm": arm, "pairs": len(pairs), "planned_pairs": planned,
            "verdict": verdict, "checks": checks, base: a, arm: b, "left_out": left_out}
@@ -625,8 +637,7 @@ def rule(rows: list[dict], exp: str, planned: int | None = None) -> dict:
                        "baseline's piece had")
     if exp == "m3":
         out["child_context_losses"] = lost
-        out["pairs_without_children"] = sum(not (p[0].get("children") or {}).get("n")
-                                            and not (p[1].get("children") or {}).get("n") for p in pairs)
+        out["pairs_without_children"] = idle
         out["arm_fork_none_of_spawns"] = [sum((p[1].get("children") or {}).get("fork_none_calls") or 0 for p in pairs),
                                           sum((p[1].get("children") or {}).get("spawn_calls") or 0 for p in pairs)]
     return out
@@ -649,7 +660,7 @@ def parser() -> argparse.ArgumentParser:
     r.add_argument("--tag", default="b3arms")
     r.add_argument("--reps", type=int, default=0, help=f"repeats of every task x arm (default {REPS})")
     r.add_argument("--tasks", default="", help="comma-separated task / plan ids (default: all of the experiment)")
-    r.add_argument("--limit", type=int, default=0, help="run at most this many units (0: all)")
+    r.add_argument("--limit", type=int, default=0, help="run at most this many units (0: all; an even number, so no pair is cut)")
     r.add_argument("--arms", default="", help="only these arms (a pre-run, under a tag of its own: the rule needs both arms of a pair run back to back)")
     r.add_argument("--budget", type=float, default=5.0, help="stop before a new unit once this tag's rows reach $")
     r.add_argument("--extra-spent", type=float, default=0.0)
