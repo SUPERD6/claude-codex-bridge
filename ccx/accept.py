@@ -60,7 +60,7 @@ def evidence(rec: dict) -> str | None:
     c = rec.get("check") or {}
     if c.get("passed") and not c.get("broken"):
         return f"check passed: {c.get('cmd')}"
-    if (rec.get("review") or {}).get("verdict") == "pass":
+    if (rec.get("review") or {}).get("verdict") == "pass" and not (rec.get("review") or {}).get("downgraded"):
         return "review passed"
     return None
 

@@ -621,10 +621,19 @@ def _verdict_in_item(items: list[str]) -> tuple[str | None, list[str]]:
 # [review] must_needs_repro (P1-10, default off): when ccx's acceptance check passed, a [must] must carry a reproducible
 # failure, or it is no reason for a fix round. Of the 65 receipts after #158 that said "not ok" but were right, 38 came
 # from review [must]s on a passed check (all claude haiku low); none of the [must]s looked at carried a runnable repro.
-REPRO_NOTE = (" Because it passed, every [must] has to show a reproducible failure, written inside the item as "
-              "`repro: <the command to run, or the input and the wrong result it gives, or the test that fails>`; "
-              "a [must] without one counts as a [should] and starts no fix round.")
-_REPRO = re.compile(r"\brepro\s*[:：]\s*\S.{5,}", re.I | re.S)
+REPRO_NOTE = (" Because it passed, each [must] needs a `repro:` at its end that you derive by reading: the exact "
+              "call, command or input, and the wrong result the code gives (`repro: <call or command> -> <what the "
+              "code returns or raises>, expected <what the task says>`). You need not have run it. If you cannot "
+              "name both, write it as a [should]; never write `repro:` with anything else. A [must] without one "
+              "counts as a [should] and starts no fix round.")
+# a repro names something to run and what goes wrong; "repro: n/a", "repro: cannot run commands" do not count
+_REPRO = re.compile(r"(?<!no )(?<!no\s\*\*)[*_`]*\brepro(?:duction|duce)?[*_`]*\s*[:：]\s*"
+                    r"(?!(?:n/?a|none|cannot|can't|not\b|unknown|no\b|static|tbd)\b)(?P<body>\S[^\n]{5,})", re.I)
+_REPRO_SHAPE = re.compile(r"[(`]|->|→|\b(returns?|raises?|prints?|exit|gives?|fails?|crash\w*|error)\b", re.I)
+# kinds of [must] that have no wrong output to show: an edited test assertion (it passes by construction) and a safety
+# problem (rubric (b) / (d)); the rule leaves them as they are
+_EXEMPT = re.compile(r"\(d\)|\bsecret|injection|code execution|data loss|assertion (was )?changed|"
+                     r"changed (the |an )?(existing )?(test|assertion)", re.I)
 CONFIRM = """
 ## A first reviewer's [must] items (none shows a reproducible failure)
 {items}
@@ -640,16 +649,27 @@ def must_needs_repro(rc: dict) -> str:
     if v is True:
         return "downgrade"
     v = str(v or "").strip().lower()
+    if v in ("true", "on", "yes"):
+        return "downgrade"
     return v if v in ("downgrade", "confirm") else "off"
 
 
 def _musts(v: dict) -> list[str]:
-    return [x for x in (v.get("issues_full") or v.get("issues") or []) if x.lstrip().lower().startswith("[must]")]
+    """The items an "issues" verdict starts a fix round on: every item, tagged [must] or not (untagged problems, a
+    "- **[must]**" bullet, a [should] under REVIEW: issues all count, or they would slip past the rule)."""
+    if v.get("verdict") != "issues":
+        return []
+    return list(v.get("issues_full") or v.get("issues") or [])
+
+
+def has_repro(item: str) -> bool:
+    m = _REPRO.search(item)
+    return bool(m and _REPRO_SHAPE.search(m.group("body")))
 
 
 def without_repro(v: dict) -> list[str]:
-    """The verdict's [must] items that show no `repro:`."""
-    return [x for x in _musts(v) if not _REPRO.search(x)]
+    """The verdict's [must] items that show no `repro:` (exempt kinds left out: see _EXEMPT)."""
+    return [x for x in _musts(v) if not has_repro(x) and not _EXEMPT.search(x)]
 
 
 def downgrade(v: dict) -> dict:
@@ -659,14 +679,15 @@ def downgrade(v: dict) -> dict:
         return v
     full = v.get("issues_full") or v.get("issues") or []
     kept = [x for x in full if x not in lacking]
-    should = ["[should]" + x.lstrip()[len("[must]"):] for x in lacking]
+    should = ["[should] " + re.sub(r"^[\s*_`>-]*(\[(must|should|note)\][*_`]*)?\s*", "", x, flags=re.I) for x in lacking]
     out = {k: w for k, w in v.items() if k not in ("issues", "issues_full", "notes")}
     out["downgraded"] = len(lacking)
+    out["downgraded_items"] = lacking[:MAX_ISSUES]          # the reviewer's own words, for audit
     if kept:
         out.update(verdict="issues", issues=[x[:ISSUE_CHARS] for x in kept])
         if any(len(x) > ISSUE_CHARS for x in kept):
             out["issues_full"] = kept
-        out["notes"] = [x[:ISSUE_CHARS] for x in should][:3]
+        out["notes"] = ([x[:ISSUE_CHARS] for x in should] + (v.get("notes") or []))[:3]
     else:
         out.update(verdict="pass", issues=[], notes=([x[:ISSUE_CHARS] for x in should] + (v.get("notes") or []))[:3])
     return out
@@ -769,7 +790,9 @@ def review_run(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path, run_d
         if delta is not None:
             focus = {"issues": list(req.prior_issues), "delta": delta}
     # P1-10: only when ccx's own check passed (the review of a run whose check failed does not count anyway)
-    repro_mode = rv.must_needs_repro(rc) if (record.get("check") or {}).get("passed") else "off"
+    chk = record.get("check") or {}
+    # off where a passed check is weak evidence: edited pre-existing tests, or a command that passed wrong work before
+    repro_mode = rv.must_needs_repro(rc) if chk.get("passed") and not chk.get("weak") and not edited else "off"
     text = rv.brief(record["run_id"], task_for_review(p, req), res.get("summary", ""), diff,
                     int(rc.get("max_diff_chars", 12000)), record.get("check"), edited, nck.brief_note(nc),
                     cwd=cwd if rc.get("context", False) else None, **({"focus": focus} if focus else {}),
@@ -787,31 +810,39 @@ def review_run(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path, run_d
                                                                  "summary": (rev.get("error") or "")[:300]}
         if v["verdict"] != "not-run":
             break
-    repro_note = None
+    repro_note, adopted = None, None
     if repro_mode != "off" and v["verdict"] == "issues" and rv.without_repro(v):
         repro_note = {"mode": repro_mode, "without_repro": len(rv.without_repro(v))}
         if repro_mode == "confirm" and len(rv.without_repro(v)) == len(rv._musts(v)):
             # every [must] lacks a repro: the next stronger reviewer settles them once (not after a downgrade)
+            # a stronger reviewer: one of [review] also (the costlier fall-backs), never one already asked
+            also = {str(x) for x in (rc.get("also") or [])}
             more = [c for c in rv.reviewers(cfg, req.provider or req.to, find_bin, p)
-                    if f"{c[0]}:{c[1]}:{c[2]}" not in tried]
+                    if f"{c[0]}:{c[1]}:{c[2]}" not in tried and f"{c[0]}:{c[1]}:{c[2]}" in also]
             if more and not (cancel is not None and cancel.is_set()):
                 agent, model, effort = more[0]
                 items = "\n".join(f"{i}. {x}" for i, x in enumerate(rv._musts(v), 1))
-                ctext = text.replace("\n## Answer\n", rv.CONFIRM.format(items=items) + "\n## Answer\n", 1)
+                head, sep, tail = text.rpartition("\n## Answer\n")
+                ctext = head + rv.CONFIRM.format(items=items) + sep + tail
                 crev = run(Request(to=agent, model=model, effort=effort, tier="auto", mode="read", cwd=cwd,
                                    brief=ctext, caller="ccx-review", escalate=False, fallback=False, review="off",
                                    allow_subagents=False, ephemeral=True, label=f"review:{record['run_id']}"), p)
                 usd += sum(a.get("ae_usd") or 0 for a in crev.get("attempts", []))
+                tried.append(f"{agent}:{model}:{effort}")
                 cv = rv.verdict(crev.get("result")) if crev.get("ok") else {"verdict": "not-run"}
                 repro_note.update(confirm_by=f"{agent}:{model}:{effort}", confirm_run=crev["run_id"],
                                   confirm_verdict=cv["verdict"])
                 if cv["verdict"] in ("issues", "pass"):
                     v = cv
+                    adopted = (f"{agent}:{model}:{effort}", crev["run_id"])
         v = rv.downgrade(v)               # whatever still has no repro does not start a fix round
         repro_note["downgraded"] = v.get("downgraded", 0)
     record["review"] = {**v, "reason": why, "by": tried[-1], "run_id": rev["run_id"], "usd": round(usd, 4)}
     if repro_note:
         record["review"]["repro"] = repro_note
+    if adopted:                           # the verdict is the confirming reviewer's
+        record["review"].update(first_by=record["review"]["by"], first_run_id=record["review"]["run_id"],
+                                by=adopted[0], run_id=adopted[1])
     if len(tried) > 1:
         record["review"]["tried"] = tried
     if focus:

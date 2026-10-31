@@ -285,10 +285,11 @@ fix_rounds = 1        # 0 或 1（更大按 1 算）：第 5 轮评测里多轮�
 # 中位只省 2.4 s，[must] 漏得比 full 多（24 vs 21/33），见 docs/DECISIONS.md。focus 不附 [review] context 的“改动附近的代码”，
 # 已修好的首轮问题不单独写一行（不是逐条写“已解决/未解决”）。
 fix_rereview = "full"
-# P1-10（默认关）：ccx 的 check 已通过时，审查的 [must] 必须在条目里写 `repro: <命令 / 输入和错误结果 / 失败的测试>`。
-# "downgrade" = 没写的降为 [should]，不判 review_failed、不开修复轮；"confirm" = 全部 [must] 都没写时，先让下一档更强的审查员
+# P1-10（实验性，默认关）：ccx 的 check 已通过时，审查的 [must] 必须在条目里写 `repro: <命令 / 输入和错误结果 / 失败的测试>`。
+# "downgrade" = 没写的降为 [should]，不判 review_failed、不开修复轮；"confirm" = 全部 [must] 都没写时，先让 also 列表里一位更强的审查员
 # 确认一次（多花一次审查钱），之后仍没写的同样降级。false = 关。离线估算（verdict-audit 记录里找得到的 27 个"check 过 +
-# review_failed"单元，按宽口径判断有没有复现）：downgrade 去掉假阳性 13/25，但真阳性只保住 1/2，所以先测 confirm。
+# review_failed"单元，按宽口径判断有没有复现）：downgrade 最多去掉假阳性 13/25（上限：当时没要求写复现），
+# 真阳性只有 2 个、保住 1 个，结论未定，所以 confirm 一起测。改过既有测试、check 被标 weak、(d) 安全类和改断言的 [must] 不套这条。
 must_needs_repro = false
 max_diff_chars = 12000
 # true：审查简报在 diff 后附“改动附近的代码”（改动的函数全文、它们调用的定义、点名它们的测试），占 diff 用剩的 max_diff_chars。

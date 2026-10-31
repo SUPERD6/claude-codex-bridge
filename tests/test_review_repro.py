@@ -35,9 +35,27 @@ class TestRule(unittest.TestCase):
         v = review.verdict({"summary": "REVIEW: issues", "open_questions": [long]})
         self.assertEqual(review.without_repro(v), [])
 
+    def test_what_counts_as_a_repro(self):
+        for item in ("[must] a — repro: N/A (static reading)", "[must] a — repro: cannot run commands",
+                     "[must] a — no repro: none found", "[must] a — repro:\n\nnothing", "[must] a — repro: TBD later"):
+            self.assertFalse(review.has_repro(item), item)
+        for item in ("[must] a — **repro**: total([1,2]) returns 1", "[must] a — reproduction: f(0) raises KeyError",
+                     "[must] a — repro: `ccx q resume` -> exit 1, expected 0"):
+            self.assertTrue(review.has_repro(item), item)
+        # an edited assertion and a safety problem have no wrong output to show: left as they are
+        for item in ("[must] tests/t.py:3 — assertion changed from 3 to 2", "[must] x.py — (d) secret written to log"):
+            self.assertEqual(review.without_repro({"verdict": "issues", "issues": [item]}), [])
+
+    def test_untagged_items_under_issues_count_too(self):
+        for item in ("- **[must]** a.py:1 — off by one", "[should] a.py:1 — off by one", "a.py:1 off by one"):
+            d = review.downgrade({"verdict": "issues", "issues": [item], "summary": "REVIEW: issues"})
+            self.assertEqual((d["verdict"], d["downgraded"]), ("pass", 1), item)
+            self.assertTrue(d["notes"][0].startswith("[should] a.py:1"), d)
+            self.assertEqual(d["downgraded_items"], [item])
+
     def test_brief_says_so_only_with_a_passed_check(self):
         ok = {"cmd": "pytest", "passed": True, "exit": 0}
-        self.assertIn("repro: <the command to run", review.brief("r", "t", "s", "+x", 100, ok, repro=True))
+        self.assertIn("needs a `repro:` at its end", review.brief("r", "t", "s", "+x", 100, ok, repro=True))
         self.assertNotIn("repro:", review.brief("r", "t", "s", "+x", 100, ok))
         self.assertNotIn("repro:", review.brief("r", "t", "s", "+x", 100, {"cmd": "pytest", "passed": False,
                                                                            "exit": 1}, repro=True))
@@ -79,7 +97,7 @@ class TestRun(Env):
         self.assertNotIn("kind", out)
         self.assertTrue(out["ok"])
         self.assertEqual(len(self.reviews()), 1)                 # no fix round, no second review
-        self.assertIn("repro: <the command to run", self.reviews()[0]["prompt"])
+        self.assertIn("needs a `repro:` at its end", self.reviews()[0]["prompt"])
 
     def test_a_must_with_a_repro_still_starts_the_fix_round(self):
         out = self.go("downgrade", "issues,pass", must=WITH_REPRO)
@@ -95,7 +113,10 @@ class TestRun(Env):
         rv = self.reviews()
         self.assertEqual(len(rv), 2, [c["argv"] for c in rv])
         self.assertIn("A first reviewer's [must] items", rv[1]["prompt"])
+        self.assertIn("haiku", rv[0]["argv"])
+        self.assertIn("sonnet", rv[1]["argv"])                    # one of [review] also, not the cheapest again
         self.assertEqual(out["review"]["verdict"], "pass", out)
+        self.assertEqual(out["review"]["by"], "claude:sonnet:medium")
         self.assertNotIn("kind", out)
 
     def test_confirm_that_finds_it_again_still_needs_a_repro(self):

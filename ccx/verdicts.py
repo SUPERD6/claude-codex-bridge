@@ -70,6 +70,8 @@ def soft_verdicts(p: Paths, min_age_h: float = SOFT_AFTER_H, now: float | None =
             continue
         check = record.get("check")
         rev = (record.get("review") or {}).get("verdict")
+        if rev == "pass" and (record.get("review") or {}).get("downgraded"):
+            rev = "unclear"             # its [must]s were only downgraded (must_needs_repro): not a review pass
         checked = (check and check.get("passed")) or \
             (record.get("result") or {}).get("verification", "not-run") not in ("", "not-run")
         if not checked or (check and not check.get("passed")) or rev in ("issues", "unclear"):
