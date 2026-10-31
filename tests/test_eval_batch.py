@@ -49,7 +49,9 @@ def test_old_eval_arms_and_tasksets_are_untouched():
     # (.ccx/eval/batch vs .ccx/eval/r5), so only a different meaning under one name would be a clash
     assert not set(BT.ARMS) & set(r5.OPT_IN_ARMS) - {"self", "builtin", "balanced"}
     assert BT.OUT != r5.OUT
-    assert sorted(r5.TASKSETS) == ["holdout", "r5"]
+    # the old task sets are still there and unchanged; later sets (polyglot) only add, with their own default arms
+    assert r5.TASKSETS["r5"] is r5.tasks_r5 and r5.TASKSETS["holdout"] is tasks_holdout
+    assert set(r5.TASKSETS) - {"holdout", "r5"} == set(r5.DEFAULT_ARMS)
 
 
 # ------------------------------------------------------------------ the common start, on a small repository
