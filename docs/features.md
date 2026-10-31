@@ -89,22 +89,32 @@ Evaluations and tests (eval-* labels, `--no-ab`, ccx's probes, runs in the tempo
 folder) stay hidden until you press "show evaluations and tests"; `ccx verify RUN --dismiss --note why` clears a
 leftover from "waits for you" without counting it right or wrong, and routing never learns from it.
 
-<img alt="ccx ui task page in English, dark theme: a task as an org chart, one column per worker, the side panel showing why a piece needs your call (demo data)" src="assets/ui/task-en-dark.png" width="100%">
+Screenshots: `ccx demo`'s data, taken by `python scripts/make_shots.py`.
 
-<details><summary>Chinese interface, light</summary>
+<img alt="ccx ui overview: what waits for you across projects (questions, your calls, results to check), what is running (demo data)" src="assets/ui/overview-en.png" width="100%">
 
-<img alt="ccx ui as the manager's board: what waits for you across projects, this month's spend, the catalog's quiet projects (demo data; taken before the saving estimate was removed)" src="assets/ui/k6-month-zh.png" width="100%">
+<img alt="ccx ui task page: a task as an org chart, one column per worker; the side panel is one hand-off's receipt: who, cost, the check ccx ran again, the review, the verdict, the files actually changed (demo data)" src="assets/ui/task-en.png" width="100%">
 
-<img alt="A button's second click: the exact command, and whether it costs money (demo data)" src="assets/ui/k6-confirm-zh.png" width="100%">
+<img alt="ccx ui decision card: a run whose review still finds problems, what the agent says beside what ccx ran (demo data)" src="assets/ui/judge-en.png" width="100%">
 
-<img alt="ccx ui overview in Chinese: nine things waiting, the current lead, two projects and the quota forecast (demo data)" src="assets/ui/overview-zh.png" width="100%">
+<img alt="ccx ui as the manager's board: projects, the current leads, this month's spend (spend only until a saving is measured), who is reliable at what (demo data)" src="assets/ui/month-en.png" width="100%">
 
-<img alt="ccx ui task page in Chinese (demo data)" src="assets/ui/task-zh.png" width="100%">
+<img alt="ccx ui, where tokens go: one ledger across agents, requests per run, a Codex helper session under its run (demo data)" src="assets/ui/tokens-en.png" width="100%">
+
+<details><summary>Chinese interface; dark theme</summary>
+
+<img alt="ccx ui overview in Chinese (demo data)" src="assets/ui/overview-zh.png" width="100%">
+
+<img alt="ccx ui task page in Chinese, with the receipt (demo data)" src="assets/ui/task-zh.png" width="100%">
+
+<img alt="ccx ui manager's board in Chinese: projects and this month's spend (demo data)" src="assets/ui/k6-month-zh.png" width="100%">
+
+<img alt="ccx ui task page in English, dark theme (demo data)" src="assets/ui/task-en-dark.png" width="100%">
 
 </details>
 
-The screenshots come from `python scripts/ui_demo.py --plain`: a throwaway hub with real ccx runs on stand-in CLIs,
-nobody's real work.
+The screenshots above come from `ccx demo`'s made-up data (`python scripts/make_shots.py`); `python scripts/ui_demo.py`
+still builds a throwaway hub with real ccx runs on stand-in CLIs, nobody's real work.
 
 ## How it works (one example)
 
