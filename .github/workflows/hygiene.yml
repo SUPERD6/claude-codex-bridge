@@ -1,0 +1,28 @@
+name: hygiene
+# No personal data in the repository: machine paths (C:\Users\<name>, /home/<name>, ...), e-mail addresses,
+# machine names, one machine's local-state files. The patterns are generic shapes, never a real name or path
+# (tests/test_repo_hygiene.py). Runs on every push, docs-only pushes included (the tests workflow skips those),
+# and on pull requests. One short Linux job, so it costs almost nothing.
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: hygiene-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}   # every main commit keeps its result
+jobs:
+  personal-data:
+    runs-on: ubuntu-latest
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install pytest
+      - run: python -m pytest -q tests/test_repo_hygiene.py

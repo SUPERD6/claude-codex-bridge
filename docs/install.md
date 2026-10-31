@@ -6,7 +6,8 @@ English · [中文](install.zh.md) · back to the [README](../README.md)
 
 **Requirements:**
 - Python 3.11+ (standard library only).
-- `codex` and `claude` CLIs, both logged in. `gemini` is optional.
+- `codex` and `claude` CLIs, both logged in. `dsh` (DeepSeek Harness) optional; `gemini` optional and only as a
+  sub-agent (adapter written from its docs, not run for real).
 
 **Without a clone** (the skills and config ship inside the package):
 
@@ -25,8 +26,12 @@ of your own for shared memory, skills and the record of every run.
 ```bash
 claude plugin install relayline --marketplace SUPERD6/relayline     # Claude Code 2.1.275+, one step
 # older Claude Code: claude plugin marketplace add SUPERD6/relayline && claude plugin install relayline@relayline
-codex plugin marketplace add SUPERD6/relayline && codex plugin add relayline@relayline   # Codex 0.164
+codex plugin marketplace add SUPERD6/relayline && codex plugin add relayline@relayline   # Codex 0.164, experimental
 ```
+
+The Claude Code install ran for real (from a temporary config). The Codex install from a GitHub address is
+**experimental**: it follows Codex's plugin docs; the tests check only the plugin manifest, the install command
+itself has never run.
 
 - **Claude Code** gets the five skills (as `relayline:agent-delegate`, `relayline:task-routing`, `relayline:task-split`,
   `relayline:task-checkpoint`, `relayline:project-manager`) and ccx's two hooks: the start-of-session shared-memory
@@ -50,7 +55,7 @@ codex plugin marketplace add SUPERD6/relayline && codex plugin add relayline@rel
 ```powershell
 git clone https://github.com/SUPERD6/relayline
 cd relayline
-.\install.ps1 -Hub <your hub path>      # Windows; macOS/Linux: ./install.sh <hub path>
+.\install.ps1 -Hub <your hub path>      # Windows; macOS/Linux (experimental, CI only): ./install.sh <hub path>
 ```
 
 **The install script:**
