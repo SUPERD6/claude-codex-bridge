@@ -19,6 +19,8 @@
 这次运行花了多少记进账本，想撤回只要一条命令。反过来也行（Codex 或 DeepSeek 当主导、Claude Code 接活），大家共享记忆和
 工作上下文。命令是 `ccx`，只用 Python 标准库。
 
+<p align="center"><img alt="15 秒演示动画：ccx route 选出 Codex gpt-6-luna low；ccx run 把活从 Claude Code 交给 Codex，一次做完；收据写着 ccx 自己重跑的验收（通过）、另一家的审查（通过）和花费；ccx ui 在页面上显示同一张收据（替身 CLI，花费是编的）" src="docs/assets/demo.svg" width="100%"></p>
+
 ## 和自己做、和 Claude Code 自带的子智能体比
 
 **留出集（hc1，2026-10-29）：** 在做 ccx 时没用过的 10 个任务上（× 3 轮，sonnet 当主导，隐藏测试），ccx 未见正确率更差
@@ -89,8 +91,6 @@ ccx undo <run_id>            # 不想要：先显示会还原什么；加 --appl
 **换主导。** 前一半是 Claude Code 做的，后面想交给 Codex（或反过来）？在 `ccx ui` 的项目页点“交给 Codex 继续”/
 “交给 Claude 继续”，再点一次确认，就会为这个项目运行 `ccx handoff`：把做完了什么、定了什么、下一步写进项目（当前主导的
 对话文件在的话就从它整理），并给你一行话，在那个工具里打开这个项目时贴给它。任务时间线会显示每段时间由谁主导。
-
-<p align="center"><img alt="演示动画：ccx route 选出 codex:gpt-6.1-sol:medium，ccx run 一次完成并由 ccx 重跑验收命令，ccx verify 记下结论" src="docs/assets/demo.svg" width="100%"></p>
 
 ## 谁和谁配合
 

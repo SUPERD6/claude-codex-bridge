@@ -20,6 +20,8 @@ vendor's model reviews the diff, the cost of the run is recorded, and undoing it
 ways round too (Codex or DeepSeek leading, Claude Code taking work), with shared memory and working context. The
 command is `ccx`; Python standard library only.
 
+<p align="center"><img alt="Animated demo, 15 seconds: ccx route picks Codex gpt-6-luna low; ccx run hands the task from Claude Code to Codex and it is done in one attempt; the receipt shows the check ccx ran again (passed), another vendor's review (pass) and the cost; ccx ui shows the same receipt on its page (stand-in CLIs, made-up costs)" src="https://raw.githubusercontent.com/SUPERD6/relayline/main/docs/assets/demo.svg" width="100%"></p>
+
 ## Compared with doing it yourself and with Claude Code's own sub-agent
 
 **Hold-out set (hc1, 2026-10-29):** on 10 tasks not used while building ccx (× 3 rounds, a sonnet lead, hidden
@@ -93,7 +95,7 @@ read the diff; the JSON result carries the run id, the check, the review and the
 has no `--check` gets a one-line reminder on stderr.
 
 You need Python 3.11+ and the `claude` and `codex` CLIs, logged in; DeepSeek (`dsh`, or a key in
-`DEEPSEEK_API_KEY`) is optional. `ccx -h` lists the everyday commands (run, resume, show, verify, q, undo, ui, mem, ...); `ccx advanced` (same as `ccx -h --all`) lists every group: the ones agents call to each other (board, say, reply, peek), the advanced ones (hub, several projects, install), maintenance, and the developer ones (trial, ab, bench) last, which also run as `ccx dev <command>`. Nothing was removed: old command lines work as before ([commands](docs/features.md#commands-everyday-first-nothing-removed)).
+`DEEPSEEK_API_KEY`) is optional. `ccx -h` lists the everyday commands (run, resume, show, verify, q, undo, ui, mem, ...); `ccx advanced` (same as `ccx -h --all`) lists every group: the ones agents call to each other (board, say, reply, peek), the advanced ones (hub, several projects, install), maintenance, and the developer ones (trial, ab, bench) last, which also run as `ccx dev <command>`. Nothing was removed: old command lines work as before ([commands](https://github.com/SUPERD6/relayline/blob/main/docs/features.md#commands-everyday-first-nothing-removed)).
 
 ## What else it does
 
@@ -108,8 +110,6 @@ project's page in `ccx ui`, "Continue with Codex" / "Continue with Claude" runs 
 after a second click: it writes what is done, the decisions and what comes next into the project (from the current
 lead's own conversation file when it is there) and gives you the one line to paste when you open the other tool
 there. The task timeline shows which lead worked when.
-
-<p align="center"><img alt="Animated demo: ccx route picks codex:gpt-6.1-sol:medium, ccx run finishes in one attempt and ccx reruns the check, ccx verify records the verdict" src="https://raw.githubusercontent.com/SUPERD6/relayline/main/docs/assets/demo.svg" width="100%"></p>
 
 ## Who works with whom
 
