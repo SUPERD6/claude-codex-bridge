@@ -26,7 +26,22 @@ SNUG = 0.8
 PARALLEL = ("This task has parts that do not depend on each other. You are explicitly asked to use sub-agents for "
             "them: start one sub-agent per independent part (spawn_agent in Codex, the Agent tool in Claude Code), "
             "let them work in parallel, then combine their work and check the whole result yourself.")
+# [subagents] fork_turns = "none" (B3 item 7, measured in M3; default "all" = today's wording): codex-cli 0.164.0's
+# spawn_agent takes fork_turns ("Defaults to `all`; use `none` to start without parent history. Only `all` and `none`
+# are supported", its tool definition in a real session of 2026-10-28). A child forked with all of the parent's
+# history re-reads it on every one of its requests (~33.6k a child request measured, vs ~18-26k for a bare start).
+# Claude's Agent tool never passes the parent's conversation, so the line is only for a Codex sub-agent.
+FORK_NONE = (" When you call spawn_agent, pass fork_turns=\"none\" and put in its message everything that part needs "
+             "(the files, the goal, the constraints and how to check it): it starts without this conversation.")
+FORK_TURNS = ("all", "none")
 _ITEM = re.compile(r"^\s*(?:[-*•]|\d+[.)])\s+\S", re.M)
+
+
+def fork_turns(cfg: dict) -> str:
+    """[subagents] fork_turns: "all" (default, the tool's own default) or "none"; anything else counts as "all"."""
+    v = (cfg.get("subagents") or {}).get("fork_turns", "all")
+    v = v.strip().lower() if isinstance(v, str) else "all"
+    return v if v in FORK_TURNS else "all"
 
 
 def has_parts(brief: str, minimum: int = 3) -> bool:

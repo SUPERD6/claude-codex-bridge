@@ -182,6 +182,14 @@ codex_lean_tools = false  # true = 写入任务（不含只读/调研）的 Code
 # --disable image_generation、--disable goals，直连 OpenAI 时再加 --disable apps/plugins（codex-cli 0.164.0 核对过）。
 # 只读任务保留网页搜索；要查最新文档的写入任务会受影响
 
+[subagents]
+# 子智能体自己再开子智能体（--parallel 时才会让它开）。花费上限 max_usd 默认 2 美元（代码里，ccx/subagents.py）。
+# fork_turns：Codex 子智能体开的子会话带不带它自己的对话历史（codex-cli 0.164.0 的 spawn_agent 参数）。
+# "all" = 照旧（工具默认，什么都不加）；"none" = --parallel 的提示里多一句：用 fork_turns="none" 开子会话，并把文件、目标、约束、
+# 怎么检查都写进给它的消息。每个子会话的请求少带一段历史（估计每个子会话省 25–35k）；可能缺上下文，由父会话复查兜底。
+# 只对 Codex 有效（Claude 的 Agent 工具本来就不带父对话）。默认 "all"：等 M3（6 题 × all/none × 2 轮）证明做对不降再开。
+fork_turns = "all"
+
 [sessions]
 # 子智能体会话什么时候归档（Codex：codex archive；Claude：把记录挪到 ccx-archive，可恢复）：
 # after_run = 结果确定就马上归档（做完且验收过：--check 通过或它自己检查过；或已经 ccx verify 判过对错）。

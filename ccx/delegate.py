@@ -515,10 +515,18 @@ def run(req: Request, p: Paths) -> dict:
         selfcheck += CLEAN_LANG
     chome = clean_home(p, run_id) if switches["clean"] else None    # one empty HOME for the whole run's attempts
     brief = req.brief.strip()
+    fork_turns = None                  # [subagents] fork_turns this --parallel native Codex run went with (B3 M3)
     if req.allow_subagents and req.parallel:
         # F14: the explicit request Codex's own instructions wait for, only on --parallel. No longer added just
         # because the brief lists 3+ items (r5: 40/100 first runs got it, +$0.007-0.024 a run, no wall gain).
         brief += "\n\n" + subagents.PARALLEL
+        # [subagents] fork_turns = "none" (B3 item 7, off by default): a Codex sub-agent's own children start without
+        # its history. Decided on the agent asked for (a fallback to another vendor keeps the brief as it was)
+        # native Codex only: through a provider its own sub-agents are switched off (see the provider flags below)
+        if req.to == "codex" and not req.provider and not provider_of(cfg, req.to):
+            fork_turns = subagents.fork_turns(cfg)        # recorded for "all" too: M3 compares the two groups
+            if fork_turns == "none":
+                brief += subagents.FORK_NONE
     shared, shared_meta = "", None
     if (not prev or cont) and not req.fork_lead and context_share.wanted(req.share_context, cfg, req.mode):
         try:
@@ -579,6 +587,7 @@ def run(req: Request, p: Paths) -> dict:
         "review_mode": ((prev or {}).get("review_mode") or "auto") if req.review_round else req.review,
         "shared_context": shared_meta,
         "subagent_switches": switches,         # [subagent]: what this run's sub-agent loaded (ledger / eval group by it)
+        **({"parallel_fork_turns": fork_turns} if fork_turns else {}),
         **({"base_note": stale_base} if stale_base else {}),
     }
     _write_record(run_dir, record)          # visible to `ccx show` at once (background runs, crashes)
@@ -892,6 +901,8 @@ def run(req: Request, p: Paths) -> dict:
         break
 
     status = (oc.result or {}).get("status")
+    if record.get("parallel_fork_turns") and any(a.get("agent") != "codex" for a in record["attempts"]):
+        record["parallel_fork_turns_moved"] = True    # it went on another agent: no spawn_agent there (M3 drops it)
     record.update(result=oc.result, ok=oc.ok, error=None if oc.ok else oc.error,
                   auth_problem=oc.auth_problem, kind=oc.kind,
                   state="stopped" if oc.kind == "user_stopped" else "finished")

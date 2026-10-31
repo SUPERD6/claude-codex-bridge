@@ -113,7 +113,10 @@ DeepSeek Harness（`--to dsh`）：T1–T3 用 deepseek-flash 的 low / high / m
 | `clean = false` | `true`：Codex / dsh 每次运行用自己的空 HOME（`hub/ccx/agent-home/<运行>`，开始时清空，别的运行的超过一天就删）。这只去掉 `~/.agents/skills`：CODEX_HOME 不变，所以 `~/.codex/AGENTS.md`、`~/.codex/skills` 和 memories 照常加载；DSH_HOME、git 配置和已存在的工具链目录（`~/.rustup`、`~/.cargo`、`~/.local`）固定在用户原处，但测试命令调用的其他工具也会看到这个空 HOME。Claude 加 `--disable-slash-commands` 和 `--setting-sources project,local`（不加载用户设置和技能；MCP 仍按 `--mcp` / `[claude_subagent] mcp`）。提示里加一句"总结用任务描述的语言写"；Claude 子运行只在 `--parallel` 时才有 Agent 工具。`--fork` 运行每次尝试都保持主导原样 | 中：Claude 这边个人技能（比如验证类技能）和用户设置不再传给子智能体；Codex 这边只少了 `~/.agents` 的技能 |
 | `codex_lean_tools = false` | `true`，只对写入任务：Codex 关网页搜索（`-c web_search="disabled"`）、图片生成和 goals（`--disable`），直连 OpenAI 时再关 apps / plugins（codex-cli 0.164.0 核对过）；只读任务保留网页搜索 | 低；需要上网查最新文档的写入任务会受影响 |
 
-别和 `[subagents]` 搞混：那个是子智能体自己再开子智能体的花费上限。
+别和 `[subagents]` 搞混：那个是子智能体自己再开子智能体的花费上限。那一段也有一个实验性的键 `fork_turns = "all"`（默认：什么都不加）。
+设成 `"none"` 后，`ccx run --parallel` 的 Codex 运行（原生的，不经 provider）会多收到一句：用 `fork_turns="none"` 开自己的子会话（codex-cli 0.164.0 的 `spawn_agent` 参数），
+并把它需要的文件、目标、约束和检查方法写进给它的消息，这样子会话每次请求不再重读父会话的历史。Claude 的 Agent 工具本来就不带父对话，
+所以 Claude 运行不变。这类运行在记录里写 `parallel_fork_turns`（`all` 或 `none`；换到别的智能体上跑了再加 `parallel_fork_turns_moved`）。实测（M3）前不开。
 
 ## 安全边界
 
