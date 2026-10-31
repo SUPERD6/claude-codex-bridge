@@ -45,6 +45,21 @@ self 14 s vs ccx 63 s. Total spend against the lead doing it itself: about even 
 ($0.595 vs $0.567 per success), higher in round 3 ($0.071 vs $0.045, fresh short leads; the same as the built-in
 sub-agent there, ratio 1.02), lower in round 5 (above).
 
+## External benchmark (polyglot pg1, 2026-10-31)
+
+30 Python exercises of aider's polyglot benchmark × 1 round, a Sonnet medium lead, hidden tests with one try:
+
+| | Lead does it itself | ccx → Codex (luna low), lead delegates | Codex luna low direct, no lead |
+|---|---|---|---|
+| Right (all 30 / clean 29) | 25/30 / 24/29 | 12/30 / 12/29 | 9/30 / 9/29 |
+| Cost per success (all / clean) | $0.037 / $0.036 | $0.115 / $0.112 | $0.021 / $0.019 |
+| Wall time, median | 11 s | 57 s | 44 s |
+
+Self was right on 13 exercises ccx2 missed and ccx2 on none that self missed (p = 2.4e-4); ccx2 cost 3.1× self per
+success (95 % CI 2.1–5.2), 82 % of it on the lead's side. Small strict-interface tasks are not worth delegating; the
+saving needs tasks that are expensive to do yourself. Method, failures and all 11 limits in the
+[pg1 report](research/2026-10-31-polyglot-pg1.md).
+
 ## Lean sub-agent switches (B3, 2026-10-31)
 
 The three `[subagent]` switches, measured against the person's daily setup, keep their defaults and stay
