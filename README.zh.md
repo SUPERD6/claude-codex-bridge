@@ -49,6 +49,7 @@ sonnet 当主导，隐藏测试，子智能体是 Codex gpt-6-luna low。内置�
 - **目前的真实使用：** 几乎没有。一周里真实 hub 记了 283 次运行，只有 5 次（3 到 5 个任务）是 ccx 自测之外的活
   （[dogfood](docs/research/2026-10-31-dogfood.zh.md)，真实使用，不是对照实验）。
 - **跨厂商一本账：** 每次子智能体运行以及它自己开的子会话，Claude 和 Codex 记在同一本账上（2026-10-30 用 codex-cli 0.164.0 实测：通过 `--parallel` 要求的 Codex 子智能体用 `spawn_agent` 开了 3 个子会话，账本里这次运行的总数逐项恰好等于父会话加 3 个子会话）。Claude Code 自己有 `/context` 和 `/cost` 看它自己这个会话；ccx 多给的是两家共用的一本账，加上主导每轮重读内容的分部分明细（从主导自己的会话文件读，不在账本里；`ccx lead --breakdown`，以及 `ccx ui` 的“实测与 token 去向”页面）。
+- **诚实测量：** 负结果也公开（ccx 更慢；小任务上没省；开发集上精简用法的内置子智能体比它便宜），每个数字带限制，基准可以重跑：题目、隐藏测试、脚本和我们脱敏后的结果行都在 [bench/](bench/README.zh.md)（公开之后，留出集就不再是留出集）；每个数字和它的限制见 [docs/measured.zh.md](docs/measured.zh.md)。
 - **局限：** 留出集只有 10 个任务、只测了 sonnet 主导，金额是 API 等价价，“未见更差”不是统计意义上的非劣检验。开发集的
   任务也在修 ccx 时用过；主导自己做只跑了第一轮；第 5 轮早于干净环境检查。全部数字（包括不利的，
   以及单个功能的最好情况 A/B）：[docs/measured.zh.md](docs/measured.zh.md)。
