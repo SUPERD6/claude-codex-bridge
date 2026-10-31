@@ -203,5 +203,32 @@ class TestCheckCli(Env):
         self.assertTrue(res["check"]["passed"], res)
 
 
+class TestUnquotedKExpression(unittest.TestCase):
+    """P1-10: `-k undo or verify or verdict` without quotes was split by the shell (exit 4, 2 audit units)."""
+
+    def test_quoting(self):
+        from ccx.workspace import quote_k_expr as q
+        self.assertEqual(q("python -m pytest -q tests -k undo or verify or verdict"),
+                         'python -m pytest -q tests -k "undo or verify or verdict"')
+        self.assertEqual(q("pytest -k not slow tests"), 'pytest -k "not slow" tests')
+        self.assertEqual(q("pytest -m slow and not db -q"), 'pytest -m "slow and not db" -q')
+        self.assertEqual(q("pytest -k a or b && echo or"), 'pytest -k "a or b" && echo or')
+        for same in ('pytest -k "a or b" t', "pytest -k 'a or b' t", "pytest -k foo tests/or.py",
+                     "pytest tests -k undo or", "echo a or b", "pytest -k foo"):
+            self.assertEqual(q(same), same)
+
+    def test_run_check_passes_one_expression_in_this_shell(self):
+        # a stand-in for pytest that passes only when -k got the whole expression as one argument
+        d = Path(tempfile.mkdtemp())
+        (d / "fake_pytest.py").write_text(
+            "import sys\na = sys.argv[1:]\nsys.exit(0 if a[a.index('-k') + 1] == 'undo or verify' else 4)\n",
+            encoding="utf-8")
+        py = sys.executable.replace("\\", "/")
+        out = run_check(f'"{py}" fake_pytest.py -k undo or verify', d, timeout=60)
+        self.assertTrue(out["passed"], out)
+        self.assertEqual(out["ran"], f'"{py}" fake_pytest.py -k "undo or verify"')
+        self.assertEqual(out["cmd"], f'"{py}" fake_pytest.py -k undo or verify')    # what the lead wrote
+
+
 if __name__ == "__main__":
     unittest.main()

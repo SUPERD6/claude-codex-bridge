@@ -88,6 +88,48 @@ def _expand_globs(cmd: str, cwd: Path) -> str:
     return "".join(t if t.isspace() else one(t) for t in _shell_words(cmd))
 
 
+_BOOL_WORDS = ("or", "and", "not")
+_CMD_SEP = ("&&", "||", "|", ";", "&")
+
+
+def quote_k_expr(cmd: str) -> str:
+    """A pytest `-k` / `-m` expression written without quotes (`-k undo or verify or verdict`) reached pytest as
+    `-k undo` plus the paths `or`, `verify`, ... (exit 4: two units of the P1-10 audit judged "not ok" for that).
+    Such an expression is put in double quotes, which both cmd.exe and a POSIX shell read as one argument; anything
+    already quoted, and every other character of the command, is kept as it is."""
+    if "pytest" not in cmd or not any(f" {w} " in f" {cmd} " for w in _BOOL_WORDS):
+        return cmd
+    words = _shell_words(cmd)
+    idx = [i for i, t in enumerate(words) if not t.isspace()]
+    out = list(words)
+    k = 0
+    while k < len(idx):
+        if words[idx[k]] in ("-k", "-m") and k + 1 < len(idx):
+            j = k + 1
+            expr = []
+            want_operand = True
+            while j < len(idx):
+                t = words[idx[j]]
+                if t in _CMD_SEP or t.startswith(("-", '"', "'")) or any(c in t for c in "<>"):
+                    break
+                if want_operand:
+                    expr.append(t)
+                    want_operand = t == "not"            # `not x`: still an operand to come
+                elif t in _BOOL_WORDS:
+                    expr.append(t)
+                    want_operand = True
+                else:
+                    break
+                j += 1
+            if len(expr) > 1 and not want_operand:
+                first, last = idx[k + 1], idx[k + len(expr)]
+                out[first:last + 1] = ['"' + " ".join(expr) + '"'] + [""] * (last - first)
+            k = k + len(expr) + 1
+            continue
+        k += 1
+    return "".join(out)
+
+
 def _shell_words(cmd: str) -> list[str]:
     """cmd split into words and the whitespace runs between them (joined back, it is cmd again), tracking quote
     state the way the MSVC argv rules do: a `"` toggles it unless an odd number of backslashes comes right before
@@ -155,7 +197,8 @@ def run_check(cmd: str, cwd: Path, timeout: int = 900, tail_chars: int = 800) ->
     `broken` (status check_broken) = the command could not test anything, which is not a verdict on the work.
     `tail_chars`: how much of the end of its output is kept (a focused retry hands the sub-agent ~2000)."""
     t0 = time.time()
-    ran = _expand_globs(cmd, cwd) if os.name == "nt" else cmd
+    ran = quote_k_expr(cmd)
+    ran = _expand_globs(ran, cwd) if os.name == "nt" else ran
     try:
         r = subprocess.run(ran, shell=True, cwd=cwd, capture_output=True, text=True, timeout=timeout,
                            stdin=subprocess.DEVNULL, encoding="utf-8", errors="replace")
