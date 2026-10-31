@@ -87,19 +87,24 @@ th,td{text-align:left;vertical-align:top;padding:10px 14px;border-top:1px solid 
 thead th{border-top:0;font-size:13px;color:var(--muted);font-weight:600}
 td:first-child{font-weight:600;min-width:11em}td:last-child{color:var(--muted);min-width:8em}
 .shot{border:1px solid var(--line)}
+.hero.solo{grid-template-columns:minmax(0,1fr);padding-bottom:28px}.hero.solo h1{max-width:22em}
+.loop{border:1px solid var(--line);margin:0 0 52px}.loop img{display:block;width:100%}
+.how.three{grid-template-columns:repeat(3,minmax(0,1fr))}.how code{font-size:12.5px;overflow-wrap:anywhere;color:var(--ink)}
+.hc1 td:last-child{color:var(--ink)}.mutedtext{color:var(--muted);font-weight:400;font-size:13px}
+.limits{margin:-36px 0 12px;padding-left:20px;color:var(--muted);font-size:14.5px;max-width:52em}.limits li{margin:4px 0}.limits b{color:var(--ink)}
 #ui{margin-bottom:52px}
 
 @media (max-width:860px){
   .hero{grid-template-columns:1fr;gap:28px;padding-top:32px}
   h1{font-size:30px}
-  .feat,.feat.four{grid-template-columns:1fr 1fr}.how{grid-template-columns:1fr 1fr}
+  .feat,.feat.four{grid-template-columns:1fr 1fr}.how,.how.three{grid-template-columns:1fr 1fr}
 }
 @media (max-width:560px){
   .wrap{padding:0 16px}
   .bar nav a.hide-s{display:none}
   h1{font-size:26px}.sub{font-size:16px}
   .nums{grid-template-columns:1fr}.nums div{border-left:0;border-top:1px solid var(--line)}.nums div:first-child{border-top:0}
-  .feat,.feat.four{grid-template-columns:1fr}.how{grid-template-columns:1fr}
+  .feat,.feat.four{grid-template-columns:1fr}.how,.how.three{grid-template-columns:1fr}
   .term pre{font-size:12px}
 }
 @media (prefers-reduced-motion: reduce){*{transition:none!important}}
