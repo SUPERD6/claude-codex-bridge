@@ -107,6 +107,10 @@ DeepSeek Harness（`--to dsh`）：T1–T3 用 deepseek-flash 的 low / high / m
 要等前后对比证明正确率不降才改默认（[计划和评测组](research/2026-10-30-b3-lean-switches-plan.zh.md)）。没有单次运行的命令行开关。
 每次运行把用到的开关记在 run.json（`subagent_switches`）；账本行只列出改离默认值的那些。
 
+**2026-10-31 实测后，三个都保持默认值，仍是实验性**（[报告](research/2026-10-31-b3-lean-switches.zh.md)）：
+`codex_memories = false` 结论 Unknown；`clean = true` 结论 Fail（留出集输 3 对）；`codex_lean_tools = true` 按登记规则
+Fail（做对 29 对 30），事后解读为未定。按配对看，三个都没有显示出可靠的 token 节省。
+
 | 键（默认） | 改了以后 | 风险 |
 |---|---|---|
 | `codex_memories = true` | `false`：每一档 Codex 只加评测隔离用的那三项 memory 设置（`features.memories`、`memories.use_memories`、`memories.generate_memories` = false）；不加 `--ignore-user-config`（那会连 provider 和 sandbox 设置一起丢） | 低：留出集运行 hc1 就是关着 memories 跑的 |
