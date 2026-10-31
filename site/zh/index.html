@@ -29,7 +29,7 @@
   <section class="hero solo">
     <div>
       <h1>Claude Code、Codex、DeepSeek 互相派活，每次派活都有收据。</h1>
-      <p class="sub">花了多少、验收跑没跑、谁审的，撤回只要一条命令。三家谁都能当主导、谁都能接活，共享记忆和工作上下文。测量公开：负结果也公开，每个数字带限制，基准可以重跑（<a href="https://github.com/SUPERD6/relayline/blob/main/docs/measured.zh.md">实测</a>）。命令是 <code>ccx</code>，只用 Python 标准库。</p>
+      <p class="sub">花了多少、验收跑没跑、谁审的，撤回只要一条命令。三家谁都能当主导、谁都能接活，共享记忆和工作上下文。跨厂商一本账：每次子智能体运行和它自己开的子会话，Claude 和 Codex 记在同一本账上。测量公开：负结果也公开，每个数字带限制，基准可以重跑（<a href="https://github.com/SUPERD6/relayline/blob/main/docs/measured.zh.md">实测</a>）。命令是 <code>ccx</code>，只用 Python 标准库。</p>
       <div class="install">
         <code>pipx install git+https://github.com/SUPERD6/relayline</code>
         <button class="copy" type="button" data-copy="pipx install git+https://github.com/SUPERD6/relayline"
@@ -59,12 +59,12 @@
       </tbody>
     </table></div>
     <ul class="limits">
-      <li><b>没有看到更差</b>——用的是逐点规则，不是统计意义上的非劣检验。我们不说它更准。</li>
-      <li><b>每次成功比自己做便宜约 30%</b>（差值的 95% 区间 −$0.054 到 −$0.004）；只看 5 个外部仓库任务（干净的那一半）约便宜 15%。</li>
+      <li><b>未见更差</b>——用的是逐点规则，不是统计意义上的非劣检验。我们不说它更准。</li>
+      <li><b>每次成功比自己做便宜约 30%</b>（差值的 95% 区间 −$0.054 到 −$0.004）；只看 5 个外部仓库任务（干净的那一半：本仓库的任务答案可能就在 ccx 的代码里）约便宜 15%。</li>
       <li><b>用时约是自己做的 3 倍。</b>不是更快。</li>
-      <li>内置子智能体是默认用法；精简用法在开发集上比 ccx 便宜。只有 10 个任务、一种主导模型，金额是 API 等价价；只在一台 Windows 电脑上真跑（macOS、Linux 只在 CI 里跑）。</li>
+      <li>内置子智能体是默认用法；精简用法的内置子智能体在开发集上比 ccx 便宜。只有 10 个任务、一种主导模型，金额是 API 等价价；只在一台 Windows 电脑上真跑（macOS、Linux 只在 CI 里跑）。</li>
     </ul>
-    <p class="note">全部数字、怎么测的和全部 8 条局限：<a href="https://github.com/SUPERD6/relayline/blob/main/docs/measured.zh.md">实测</a> · <a href="https://github.com/SUPERD6/relayline/blob/main/docs/research/2026-10-29-hc1-holdout.md">留出集报告</a>。</p>
+    <p class="note">全部数字和怎么测的：<a href="https://github.com/SUPERD6/relayline/blob/main/docs/measured.zh.md">实测</a>；全部 8 条局限：<a href="https://github.com/SUPERD6/relayline/blob/main/docs/research/2026-10-29-hc1-holdout.zh.md">留出集报告</a>。</p>
   </section>
 
   <section id="start">
@@ -82,8 +82,8 @@
     <div><h3>2 · 两个模型直接对话</h3><p><code>ccx ask</code> 问另一家第二意见，<code>ccx resume</code> 在同一个子会话追问，<code>ccx send</code> 发消息进正在跑的 Codex 会话；<code>ccx discuss</code> 让 2–3 家不同厂商讨论选错代价高的决定（两家和三家都真跑过）。</p></div>
     <div><h3>3 · 共享记忆</h3><p>个人层（hub）和项目层（<code>.ccx/</code>）；开局只推对方新写的几行；<code>ccx handoff</code> 换主接力，<code>ccx fresh</code> 换新对话。</p></div>
     <div><h3>4 · 分工合作</h3><p>5 个问题打出难度 → 选智能体、模型、强度；自己做更划算或该先拆就直说。<code>ccx batch</code>、<code>ccx q</code> 并行，断了能续。</p></div>
-    <div><h3>5 · 省和高效</h3><p>子智能体精简启动；<code>ccx lead</code>（<code>--breakdown</code> / <code>--cache</code> / <code>--suggest</code>）看主导每轮重读什么；<code>ccx sum</code> 压缩大段输出。</p></div>
-    <div><h3>6 · 不掉质量</h3><p>ccx 自己重跑验收（<code>--check</code>）；另一家模型独立审查（<code>--review</code>）；每次记对错（<code>--reason</code>），没人判的按证据记“大概对/错”；<code>ccx trial</code> 一周对比。</p></div>
+    <div><h3>5 · 少重读</h3><p>子智能体精简启动；<code>ccx lead</code>（<code>--breakdown</code> / <code>--cache</code> / <code>--suggest</code>）看主导每轮重读什么；<code>ccx sum</code> 压缩大段输出。</p></div>
+    <div><h3>6 · 验收与审查</h3><p>ccx 自己重跑验收（<code>--check</code>）；另一家模型独立审查（<code>--review</code>）；每次记对错（<code>--reason</code>），没人判的按证据记“大概对/错”；<code>ccx trial</code> 一周对比。</p></div>
     <div><h3>7 · 不丢可控</h3><p>改配置先预演、先备份；<code>ccx undo</code> 撤回；<code>--mode read</code>、<code>--worktree</code> 不动工作区；子智能体不能再派；<code>ccx ui</code> 只读看全局。</p></div>
     <div><h3>有账可查</h3><p>每次运行的 token 和花费；<code>ccx report</code> 生成看板。<a href="../demo/">看示例看板</a>（假数据）。</p></div>
   </section>
@@ -125,7 +125,7 @@
 
   <section id="faq">
     <h2>常见问题</h2>
-    <details><summary>多一个智能体，不是更费 token 吗？</summary><p>有可能。实测里，小任务只有在主导看到 ccx 验收通过就直接答复时才省；主导再自己跑一遍测试，就是多花子任务的钱、多等十几秒。钱主要花在主导每轮重读自己的对话上，<code>ccx lead</code>、<code>ccx sum</code>、<code>ccx fresh</code> 管的是这一块。</p></details>
+    <details><summary>多一个智能体，不是更费 token 吗？</summary><p>有可能。实测里，小任务上主导看到 ccx 验收通过就直接答复，少发一次请求，但总花费基本持平；主导再自己跑一遍测试，就是多花子任务的钱、多等十几秒。钱主要花在主导每轮重读自己的对话上，<code>ccx lead</code>、<code>ccx sum</code>、<code>ccx fresh</code> 管的是这一块。</p></details>
     <details><summary>我用的是订阅，不是 API，也适用吗？</summary><p>适用。花费按 API 价格折算，方便比较；看板也会显示每个工具的额度用在了哪里。一边额度用完了，任务会换到另一边（目前只有模拟测试）。</p></details>
     <details><summary>让子智能体改文件安全吗？</summary><p>只能改任务所在的文件夹；每次可写运行都会拍快照，可以 <code>ccx undo</code>；<code>--mode read</code> 或 <code>--worktree</code> 不会动你的工作区。详见 <a href="https://github.com/SUPERD6/relayline/blob/main/SECURITY.zh.md">SECURITY.zh.md</a>。</p></details>
     <details><summary>支持哪些工具？</summary><p>Claude Code、Codex、DeepSeek（<code>dsh</code>，或经 Claude Code）都可以当主也可以当子，真机测过。Gemini CLI 按文档写了适配器但没真跑过，只能当子智能体；经 Claude Code 的 Kimi、GLM、Qwen、OpenRouter 配好了，没测过。</p></details>

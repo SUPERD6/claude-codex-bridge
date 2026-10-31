@@ -29,7 +29,7 @@
   <section class="hero solo">
     <div>
       <h1>Claude Code, Codex and DeepSeek hand work to each other. Every hand-off comes with a receipt.</h1>
-      <p class="sub">What it cost, whether the check ran, who reviewed it, and one command to undo it. Any of the three can lead or take work, with shared memory and working context. Measured in the open: negative results are published too, every number carries its limits, and the benchmark can be re-run (<a href="https://github.com/SUPERD6/relayline/blob/main/docs/measured.md">Measured</a>). The command is <code>ccx</code>; Python standard library only.</p>
+      <p class="sub">What it cost, whether the check ran, who reviewed it, and one command to undo it. Any of the three can lead or take work, with shared memory and working context. One ledger across vendors: every sub-agent run and its own child sessions, Claude and Codex in one book. Measured in the open: negative results are published too, every number carries its limits, and the benchmark can be re-run (<a href="https://github.com/SUPERD6/relayline/blob/main/docs/measured.md">Measured</a>). The command is <code>ccx</code>; Python standard library only.</p>
       <div class="install">
         <code>pipx install git+https://github.com/SUPERD6/relayline</code>
         <button class="copy" type="button" data-copy="pipx install git+https://github.com/SUPERD6/relayline"
@@ -60,11 +60,11 @@
     </table></div>
     <ul class="limits">
       <li><b>Not seen to be less right</b> &mdash; by a pointwise rule, not a statistical non-inferiority test. We don't claim it is more accurate.</li>
-      <li><b>About 30&nbsp;% cheaper per success than doing it yourself</b> (95&nbsp;% CI of the difference &minus;$0.054 to &minus;$0.004); about 15&nbsp;% on the 5 external-repository tasks, the clean half.</li>
+      <li><b>About 30&nbsp;% cheaper per success than doing it yourself</b> (95&nbsp;% CI of the difference &minus;$0.054 to &minus;$0.004); about 15&nbsp;% on the 5 external-repository tasks, the clean half (this repository's own tasks may have their answers in ccx's code).</li>
       <li><b>About 3&times;&nbsp;slower</b> than doing it yourself. Not faster.</li>
       <li>The built-in arm is its default usage; a leaner built-in recipe was cheaper than ccx on the dev set. 10 tasks, one lead model, API-equivalent prices; real runs on one Windows machine (macOS and Linux: CI only).</li>
     </ul>
-    <p class="note">Every number, how it was measured and all eight limits: <a href="https://github.com/SUPERD6/relayline/blob/main/docs/measured.md">Measured</a> &middot; <a href="https://github.com/SUPERD6/relayline/blob/main/docs/research/2026-10-29-hc1-holdout.md">hold-out report</a>.</p>
+    <p class="note">Every number and how it was measured: <a href="https://github.com/SUPERD6/relayline/blob/main/docs/measured.md">Measured</a>; all eight limits: <a href="https://github.com/SUPERD6/relayline/blob/main/docs/research/2026-10-29-hc1-holdout.md">hold-out report</a>.</p>
   </section>
 
   <section id="start">
@@ -82,8 +82,8 @@
     <div><h3>2 · Two models talking</h3><p><code>ccx ask</code> for the other vendor's second opinion, <code>ccx resume</code> to follow up in the same sub-session, <code>ccx send</code> into a live Codex session. <code>ccx discuss</code>: 2–3 vendors talk a costly decision through (ran for real with two and with three vendors).</p></div>
     <div><h3>3 · Shared memory</h3><p>A personal layer (your hub) and a project layer (<code>.ccx/</code>); only the other side's new lines arrive at start; <code>ccx handoff</code> passes the baton, <code>ccx fresh</code> starts a fresh conversation.</p></div>
     <div><h3>4 · Splitting the work</h3><p>Five questions → agent, model, effort and the odds; it says so when doing it yourself is cheaper or the task should be split. <code>ccx batch</code>, <code>ccx q</code>, resumable.</p></div>
-    <div><h3>5 · Cheap and fast</h3><p>Slim sub-agent start-up; <code>ccx lead</code> (<code>--breakdown</code> / <code>--cache</code> / <code>--suggest</code>) shows what the lead re-reads each turn; <code>ccx sum</code> trims big outputs.</p></div>
-    <div><h3>6 · No drop in quality</h3><p>ccx reruns the check (<code>--check</code>); another vendor reviews the diff (<code>--review</code>); every run gets a verdict (<code>--reason</code>), unjudged ones a probable one; <code>ccx trial</code> for a week-long comparison.</p></div>
+    <div><h3>5 · Less to re-read</h3><p>Slim sub-agent start-up; <code>ccx lead</code> (<code>--breakdown</code> / <code>--cache</code> / <code>--suggest</code>) shows what the lead re-reads each turn; <code>ccx sum</code> trims big outputs.</p></div>
+    <div><h3>6 · Checked and reviewed</h3><p>ccx reruns the check (<code>--check</code>); another vendor reviews the diff (<code>--review</code>); every run gets a verdict (<code>--reason</code>), unjudged ones a probable one; <code>ccx trial</code> for a week-long comparison.</p></div>
     <div><h3>7 · You stay in control</h3><p>Dry run and backups before config changes; <code>ccx undo</code>; <code>--mode read</code>, <code>--worktree</code>; sub-agents can't delegate further; <code>ccx ui</code> shows everything, read-only.</p></div>
     <div><h3>Receipts</h3><p>Tokens and cost of every run; <code>ccx report</code> builds a dashboard. <a href="demo/">See a sample</a> (stand-in data).</p></div>
   </section>
@@ -125,7 +125,7 @@
 
   <section id="faq">
     <h2>Questions</h2>
-    <details><summary>Doesn't a second agent cost more tokens?</summary><p>It can. In the measurements, a small task saved something only when the lead answered as soon as ccx's check passed; a lead that reran the tests itself paid for the sub-task on top and waited longer. Most of the money goes on the lead re-reading its own conversation, which is what <code>ccx lead</code>, <code>ccx sum</code> and <code>ccx fresh</code> are for.</p></details>
+    <details><summary>Doesn't a second agent cost more tokens?</summary><p>It can. On small tasks, a lead that answered as soon as ccx's check passed made one request fewer but spent about the same in total; a lead that reran the tests itself paid for the sub-task on top and waited longer. Most of the money goes on the lead re-reading its own conversation, which is what <code>ccx lead</code>, <code>ccx sum</code> and <code>ccx fresh</code> are for.</p></details>
     <details><summary>I'm on a subscription, not the API. Does this apply?</summary><p>Yes. Costs are shown at API prices so runs can be compared; the dashboard also shows how much of each tool's quota went where. When one tool runs out, the work moves to the other (tested with stand-ins only so far).</p></details>
     <details><summary>Is it safe to let a sub-agent edit files?</summary><p>Edits stay in the task's folder, every write run is snapshotted for <code>ccx undo</code>, and <code>--mode read</code> or <code>--worktree</code> keep your tree untouched. Details in <a href="https://github.com/SUPERD6/relayline/blob/main/SECURITY.md">SECURITY.md</a>.</p></details>
     <details><summary>Which tools work?</summary><p>Claude Code, Codex and DeepSeek (as <code>dsh</code>, or through Claude Code) can lead or work, tested for real. Gemini CLI is adapted from its docs but hasn't run for real, and only as a sub-agent; Kimi, GLM, Qwen and OpenRouter through Claude Code are configured, not tested.</p></details>
