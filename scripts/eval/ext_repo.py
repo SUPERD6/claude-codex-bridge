@@ -19,6 +19,7 @@ Only git reads the cached repositories here; nothing in them is executed except,
 from __future__ import annotations
 
 import io
+import json
 import os
 import shutil
 import stat
@@ -195,3 +196,41 @@ def run_env(spec: dict) -> dict:
     pip gets no package index: an agent cannot fetch the released library (which has the fix) or change the shared
     Python that scores every unit."""
     return {"PYTHONPATH": spec.get("pythonpath", "src"), "PIP_NO_INDEX": "1", "PIP_DISABLE_PIP_VERSION_CHECK": "1"}
+
+
+# ------------------------------------------------------------------ exercises (the polyglot task set)
+
+DOCS = ("introduction.md", "instructions.md", "instructions.append.md")
+
+
+def _tar_of(files: dict[str, bytes]) -> bytes:
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w") as tf:
+        for name, body in sorted(files.items()):
+            info = tarfile.TarInfo(name)
+            info.size, info.mode = len(body), 0o644
+            tf.addfile(info, io.BytesIO(body))
+    return buf.getvalue()
+
+
+def exercise_material(cache_repo: Path, sha: str, folder: str, solution: list[str], tests: list[str]) -> dict:
+    """One exercise at the pinned commit, read out of the clone: the starting tree (the solution stubs and nothing
+    else: no .meta/ with its example solution, no .approaches/, .docs/ or tests) as a tar, the test files (hidden),
+    the instruction texts and the commit's date. The test and solution file names come from the task (its
+    .meta/config.json, recorded in the selection), and are checked against the exercise's config here."""
+    if len(sha) != 40:
+        raise ValueError(f"external tasks pin the full 40-character sha, got {sha!r}")
+    got = _git(cache_repo, "rev-parse", "--verify", "--quiet", f"{sha}^{{commit}}").strip()
+    if got != sha:
+        raise LookupError(f"commit {sha} is not in {cache_repo}")
+    cfg = json.loads(_git(cache_repo, "show", f"{sha}:{folder}/.meta/config.json"))["files"]
+    if sorted(cfg.get("solution") or []) != sorted(solution) or sorted(cfg.get("test") or []) != sorted(tests):
+        raise ValueError(f"{folder}: its .meta/config.json names other files than the task "
+                         f"(solution {cfg.get('solution')}, test {cfg.get('test')})")
+    listed = _git(cache_repo, "ls-tree", "--name-only", f"{sha}:{folder}/.docs").split()
+    docs = {n: _git(cache_repo, "show", f"{sha}:{folder}/.docs/{n}") for n in DOCS if n in listed}
+    return {"parent": sha, "tar": _tar_of({f: _git(cache_repo, "show", f"{sha}:{folder}/{f}", data=True)
+                                           for f in solution}),
+            "tests": {t: _git(cache_repo, "show", f"{sha}:{folder}/{t}", data=True) for t in tests},
+            "docs": docs, "changed": list(solution),
+            "date": _git(cache_repo, "log", "-1", "--format=%cs", sha).strip()}

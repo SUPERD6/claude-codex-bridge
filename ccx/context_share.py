@@ -346,11 +346,34 @@ def _rel(f: str, root: Path) -> str | None:
         return None
 
 
+def _norm(t: str) -> str:
+    return " ".join(t.split()).casefold()
+
+
 def summary(evs: list[dict], agent: str, sid: str, root: Path, what: str, max_chars: int = MAX_CHARS,
-            asks: int = 5, decisions: int = 8, said: int = 1) -> str:
-    """The lead's recent asks, decisions, plan and files, newest last, each with time and source."""
+            asks: int = 5, decisions: int = 8, said: int = 1, dedupe: bool = False,
+            stats: dict | None = None) -> str:
+    """The lead's recent asks, decisions, plan and files, newest last, each with time and source.
+    dedupe ([shared_context] dedupe, B3 item 9, off by default): a "Settled" sentence that was cut from one of the
+    person's asks shown above it (same person, same message, its words shown there whole) is left out: the same words
+    twice. A decision the lead stated later, even in the same words, stays (it may be the lead settling a question the
+    person reopened), and nothing else is cut: how many items are shown (and the trimming below) is decided on the text
+    without dedupe, so the two settings differ only by the repeated sentences. `stats` gets how many were left out and
+    their characters."""
     ask = [e for e in evs if e["kind"] == "ask"][-asks:]
     dec = list({e["text"]: e for e in evs if e["kind"] == "decision"}.values())[-decisions:]
+    dec_all = dec
+    if dedupe and ask and dec:
+        shown: dict[float, set[str]] = {}
+        for i, e in enumerate(ask):          # the sentences of each ask as shown, a cut-off last one left out
+            txt = _short(e["text"], NEWEST_ASK if i == len(ask) - 1 else 500)
+            cut = txt.endswith("...") and txt != " ".join(e["text"].split())
+            sents = [x.strip(" -*#>\t") for x in _SENT.split(txt.removesuffix("...") if cut else txt)]
+            shown.setdefault(e["ts"], set()).update(_norm(x) for x in (sents[:-1] if cut else sents) if x)
+        keep = [e for e in dec if not (e["who"] == "person" and _norm(e["text"]) in shown.get(e["ts"], ()))]
+        if stats is not None:
+            stats.update(deduped=len(dec) - len(keep), deduped_chars=sum(len(e["text"]) for e in dec if e not in keep))
+        dec = keep
     last_said = [e for e in evs if e["kind"] == "said"][-said:] if said else []
     plan = next((json.loads(e["text"]) for e in reversed(evs) if e["kind"] == "plan"), [])
     files: dict[str, float] = {}
@@ -370,9 +393,11 @@ def summary(evs: list[dict], agent: str, sid: str, root: Path, what: str, max_ch
         parts.append("The person asked (newest last):\n" + "\n".join(
             f"- [{_when(e['ts'])} person, {src}] {_short(e['text'], NEWEST_ASK if i == len(ask) - 1 else 500)}"
             for i, e in enumerate(ask)))
-    if dec:
-        parts.append("Settled in that conversation (sentences that decide something):\n" + "\n".join(
-            f"- [{_when(e['ts'])} {e['who']}] {_short(e['text'], 300)}" for e in dec))
+    settled_at = len(parts)
+
+    def settled(items: list[dict]) -> list[str]:
+        return ["Settled in that conversation (sentences that decide something):\n" + "\n".join(
+            f"- [{_when(e['ts'])} {e['who']}] {_short(e['text'], 300)}" for e in items)] if items else []
     if plan:
         parts.append(f"{agent}'s plan as it last left it:\n" + "\n".join(
             f"- [{'x' if s.get('status') == 'completed' else ' '}] {_short(str(s.get('step')), 160)}"
@@ -384,13 +409,16 @@ def summary(evs: list[dict], agent: str, sid: str, root: Path, what: str, max_ch
     if last_said:
         parts.append(f"{agent}'s latest message:\n" + "\n".join(
             f"- [{_when(e['ts'])} {e['who']}] {_short(e['text'], 600)}" for e in last_said))
-    if len(parts) == 1:
+    plain = parts[:settled_at] + settled(dec_all) + parts[settled_at:]
+    if len(plain) == 1:
         return ""
-    text = redact("\n\n".join(parts))
-    if len(text) > max_chars:
+    full = redact("\n\n".join(plain))                # the size decisions use the text without dedupe
+    text = full if dec is dec_all else redact("\n\n".join(parts[:settled_at] + settled(dec) + parts[settled_at:]))
+    if len(full) > max_chars:
         if asks > 2 or decisions > 4:            # fewer items first; then cut what is left
-            return summary(evs, agent, sid, root, what, max_chars, max(2, asks - 2), max(4, decisions - 3), 0)
-        text = text[: max_chars - 40].rsplit("\n", 1)[0] + "\n... (trimmed)"
+            return summary(evs, agent, sid, root, what, max_chars, max(2, asks - 2), max(4, decisions - 3), 0,
+                           dedupe, stats)
+        text = text[: max_chars - 40].rsplit("\n", 1)[0] + "\n... (trimmed)" if len(text) > max_chars - 40 else text
     return text
 
 
@@ -419,12 +447,19 @@ def for_run(p, cfg: dict, caller: str, lead_session: str | None, cwd: Path) -> t
     if not evs:
         return "", {"source": str(f), "why": "nothing readable in the lead's session", "lead_only_dropped": dropped}
     sid = lead_session or (f.parent.name if caller == "deepseek" else f.stem)
+    dedupe = setting(cfg, "dedupe", False) is True
+    stats: dict = {}
     text = summary(evs, caller, sid, cwd, f"what your lead ({caller}) and its person have been working on, "
-                   f"for background", int(setting(cfg, "max_chars", MAX_CHARS)))
+                   f"for background", int(setting(cfg, "max_chars", MAX_CHARS)), dedupe=dedupe, stats=stats)
     if text and dropped:
         text += (f"\n\n(ccx left out {len(dropped)} clause(s) that only told the lead how to hand this work off or "
                  f"accept it; that was done by giving you this task.)")
-    meta = {"source": str(f), "chars": len(text), "items": sum(1 for e in evs if e["kind"] != "said")}
+    from .leadcost import est_tokens
+    meta = {"source": str(f), "chars": len(text), "est_tokens": int(est_tokens(text)),
+            "items": sum(1 for e in evs if e["kind"] != "said")}
+    if dedupe:                       # B3 M5: what the switch left out, to measure it
+        meta["deduped"] = stats.get("deduped", 0)
+        meta["deduped_chars"] = stats.get("deduped_chars", 0)
     if dropped:
         meta["lead_only_dropped"] = [_short(d, 200) for d in dropped[:20]]
     return text, meta

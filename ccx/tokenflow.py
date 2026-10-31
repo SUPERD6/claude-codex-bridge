@@ -27,6 +27,7 @@ from __future__ import annotations
 import bisect
 import json
 import re
+import statistics
 import time
 from pathlib import Path
 
@@ -100,6 +101,19 @@ def _model(row: dict) -> str:
     if rungs and isinstance(rungs[-1], str) and rungs[-1].count(":") >= 1:
         return rungs[-1].split(":")[1]
     return ""
+
+
+def _request_stats(rows: list[tuple]) -> dict:
+    """Over the runs that recorded their requests: how many there are, the mean requests a run, the median over
+    runs of the input per request, and of the first request's input. {} when none did, so the page shows nothing
+    rather than zeros."""
+    if not rows:
+        return {}
+    pre = [int(p) for _, p, _ in rows if p]
+    first = [int(x) for _, _, x in rows if x]
+    return {"measured_runs": len(rows), "requests_per_run": round(sum(n for n, _, _ in rows) / len(rows), 1),
+            "prefix_median": int(statistics.median(pre)) if pre else None,
+            "first_input_median": int(statistics.median(first)) if first else None}
 
 
 def _is_review(row: dict) -> str | None:
@@ -215,6 +229,7 @@ class Flow:
 
         # 2: totals across vendors, every run in the filter
         totals = {"runs": len(runs), "tokens": _zero(), "usd": 0.0, "by_agent": {}}
+        reqs: dict[str, list[tuple]] = {}        # agent -> (requests, input a request, first input) of the runs that have them
         for r in runs:
             t = tokens_of(r)
             _add(totals["tokens"], t)
@@ -222,6 +237,9 @@ class Flow:
             a = totals["by_agent"].setdefault(str(r.get("to") or "?"), {"runs": 0, "tokens": _zero(), "usd": 0.0})
             a["runs"] += 1
             _add(a["tokens"], t)
+            if r.get("requests"):
+                reqs.setdefault(str(r.get("to") or "?"), []).append((int(r["requests"]), r.get("prefix_tokens"),
+                                                                     r.get("first_input")))
             by = r.get("ae_by_agent") or {}
             if by:
                 for ag, v in by.items():
@@ -230,8 +248,10 @@ class Flow:
             else:
                 a["usd"] += float(r.get("ae_usd") or 0.0)
         totals["usd"] = round(totals["usd"], 4)
-        for a in totals["by_agent"].values():
+        for name, a in totals["by_agent"].items():
             a["usd"] = round(a["usd"], 4)
+            a.update(_request_stats(reqs.get(name) or []))
+        totals.update(_request_stats([x for v in reqs.values() for x in v]))
         totals["by_agent"] = dict(sorted(totals["by_agent"].items(),          # the biggest first
                                          key=lambda x: (-x[1]["tokens"]["total"], -x[1]["usd"])))
 
@@ -381,6 +401,11 @@ class Flow:
                 "status": clip(r.get("status"), 40), "ok": bool(r.get("ok")), "ts": r.get("ts"),
                 "mode": clip(r.get("actual_mode") or r.get("mode"), 20), "review": _is_review(r) is not None,
                 "label": clip(r.get("label")), "tokens": t,
+                # B3 ruler (ccx/reqstats.py): requests this run made and the median input of one; null for a run
+                # that recorded none (older runs, gemini / dsh, a session file that was gone)
+                "requests": int(r["requests"]) if r.get("requests") else None,
+                "prefix_tokens": int(r["prefix_tokens"]) if r.get("prefix_tokens") else None,
+                "first_input": int(r["first_input"]) if r.get("first_input") else None,
                 "usd": None if r.get("ae_usd") is None else round(float(r["ae_usd"]), 5),
                 "children": shown, "children_more": max(0, len(kids) - KIDS_MAX), "children_tokens": ct,
                 # not capped: above 1 the counts disagree, and the page says so

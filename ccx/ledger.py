@@ -91,6 +91,11 @@ def _slim(record: dict) -> dict:
     costs = [a["cost_usd"] for a in record["attempts"] if a.get("cost_usd") is not None]
     slim["cost_usd"] = round(sum(costs), 5) if costs else None
     slim["attempts"] = len(record["attempts"])
+    try:                                            # requests / prefix_tokens / first_input, when an attempt recorded them
+        from .reqstats import run_fields
+        slim.update(run_fields(record["attempts"]))
+    except Exception:  # noqa: BLE001 — a ruler; the row is written all the same
+        pass
     den = [a["permission_denials"] for a in record["attempts"] if a.get("permission_denials") is not None]
     if den:                      # tool calls the CLI refused (Claude reports them); e.g. a reviewer's shell reads
         slim["permission_denials"] = sum(den)

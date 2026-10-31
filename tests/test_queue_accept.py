@@ -260,6 +260,18 @@ class TestAccept(AcceptEnv):
 
 
 class TestPipelineEndToEnd(AcceptEnv):
+    def why(self) -> dict:
+        """Each item's status, summary and its run's kind and attempts (CI failures used to show only `failed`)."""
+        out = {}
+        for i, x in self.items().items():
+            try:
+                rec = self.rec(x["run"])
+                ran = (rec.get("kind"), [(a.get("kind"), a.get("error")) for a in rec.get("attempts") or []])
+            except (KeyError, TypeError, OSError, ValueError):
+                ran = None
+            out[i] = (x["status"], x.get("summary"), ran)
+        return out
+
     def test_q_run_then_ls_then_accept_then_the_dependent_runs(self):
         self.env["FAKE_TOUCH"] = "1"
         self.repo()
@@ -270,10 +282,11 @@ class TestPipelineEndToEnd(AcceptEnv):
         self.assertEqual(self.items()[after["id"]]["deps"], w)
         out = self.q("run")
         self.assertEqual({r["id"] for r in out["results"]}, set(w))
+        why = self.why()                                                    # what to read when one did not finish
         ls = self.ccx("q", "ls").stdout
         self.assertLess(len(ls.encode("utf-8")), 400 + 80)                  # 3 lines of pieces + the queue line
         for i in w:
-            self.assertIn(f"{i} unmerged codex", ls)
+            self.assertIn(f"{i} unmerged codex", ls, why)
             self.assertIn(f"next: ccx q done {i} --ok 1, then ccx q accept {i}", ls)   # verdict first, as in ccx ui
         acc = self.accept("--all-ready")
         self.assertEqual([x["id"] for x in acc["accepted"]], w)
