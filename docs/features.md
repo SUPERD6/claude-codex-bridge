@@ -66,8 +66,9 @@ Without that conversation file the handoff is a blank template, and the page say
 first. The task timeline marks who was leading when the task was asked and every switch since. This is the only new
 write path on the page.
 **`ccx demo`** (or `ccx ui --demo`) shows all of this without an account: it writes made-up data (two projects, runs
-in every state with a real snapshot diff, a work queue, a stopped board thread and an `@person` question, a month of
-costs) into a new folder in the system's temporary folder, points only its own process there, and serves the same
+in every state with a real snapshot diff, one hand-off's full receipt — cost, the check ccx ran, the other vendor's
+review — the reviews as runs of their own, a work queue, a stopped board thread and an `@person` question, a month of
+costs, per-request numbers and a Codex helper session for the token page) into a new folder in the system's temporary folder, points only its own process there, and serves the same
 page, marked "demo data". It works offline and starts no agent: a button that would start one shows its command
 only; a verdict or a handoff is written into the demo folder, which is removed when the page closes (`--keep` or
 `--dir` keeps it; `--export FILE` writes a static copy and then deletes the folder too). `--dir` takes only a new or
