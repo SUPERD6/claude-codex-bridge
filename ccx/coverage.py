@@ -319,7 +319,29 @@ def summarize(cmd: str, cwd: Path, repo: Path, edited: list[str], written: list[
         out["written"] = wr
     if files and {_key(f) for f in written} >= keys and not ed:
         out["own_tests_only"] = True       # every test the check runs is one the sub-agent wrote
+    if files and complete and {_key(f) for f in [*written, *ed]} >= keys:
+        # P0-8: every test file the check ran is one this run wrote or changed: its pass is the sub-agent's own
+        # yardstick (pg1: 18/18 hidden-test failures passed a test_own.py). added_to is left out: the tests those
+        # files had before the run still ran
+        out["self_authored"] = True
     return out
+
+
+def self_checked(cov: dict | None) -> bool:
+    """The check's basis is the sub-agent's own (coverage.summarize's self_authored)."""
+    return bool((cov or {}).get("self_authored"))
+
+
+SELF_CHECKED = "ok_self_checked"     # the run's kind: passed, but only on its own tests
+ON_SELF_CHECKED = ("off", "review", "rung")
+SELF_CHECKED_NOTE = ("check basis self-authored: every test the check ran was written or changed by the sub-agent "
+                     "in this run, not independently verified")
+
+
+def on_self_checked(cfg: dict) -> str:
+    """[escalate] on_self_checked: "review" (default; an unknown value too), "off" or "rung"."""
+    v = str((cfg.get("escalate") or {}).get("on_self_checked", "review")).strip().lower()
+    return v if v in ON_SELF_CHECKED else "review"
 
 
 def text(cov: dict | None, limit: int = 3) -> str:
