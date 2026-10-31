@@ -3,7 +3,6 @@
     python scripts/make_demo.py
 
 The story: `ccx route` picks a model, `ccx run --to codex` does the task in one attempt, the receipt (what it cost,
-The story: `ccx route` picks a model, `ccx run --to codex` does the task in one attempt, the receipt (what it cost,
 the check ccx ran again itself, who reviewed the diff), and `ccx ui` showing the same receipt on its page. The
 numbers are real ccx output (laid out as a receipt; the card is drawn after the page), run against the stand-in CLIs
 in tests/fakes with a throwaway hub and git repository: the check is a real `python -m unittest` on the files the
