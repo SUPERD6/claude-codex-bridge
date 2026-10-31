@@ -98,6 +98,11 @@ arm lists what would be copied and the overlays.
   switch stays off. `r5.py summary` applies it on clean paired units (`b3_rules`).
 - Power is limited: near a 95 % baseline, 50 pairs only show a drop of 10 points or more. On the edge (2–3 pairs lost),
   that arm alone gets 50 more units (about $5).
+  *Clarified 2026-10-31, after the run (the rule above is unchanged):* "2–3 pairs lost" was not a second threshold.
+  The rule is at most 2 lost pairs, so 2 passes and 3 fails. The 50 extra units were an option the lead session could
+  take for a result that close, with the rule then applied once more to all the pairs; they were not run (see the B3
+  result). `r5.py summary` now also prints, for a B3 rule on fewer pairs than the 50 registered, "registered 50 pairs,
+  counted N".
 
 Commands (not run):
 
