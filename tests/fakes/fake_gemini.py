@@ -6,6 +6,7 @@ import json
 import os
 import sys
 import uuid
+from fake_log import locked_append  # noqa: E402  (several fakes may append at once)
 
 argv = sys.argv[1:]
 stdin = sys.stdin.read() if "-p" in argv else ""
@@ -31,7 +32,6 @@ status = "blocked" if mode == "blocked" or (mode == "blocked_then_done" and not 
 res = {"status": status, "summary": f"fake gemini {status}", "files_changed": [], "commands_run": [],
        "verification": "not-run", "open_questions": [], "next_step": ""}
 from fake_discuss import answer as _discuss  # noqa: E402
-from fake_log import locked_append  # noqa: E402  (several fakes may append at once)
 res = _discuss(stdin, "gemini", log) or res
 text = "```json\n" + json.dumps(res) + "\n```"
 for i in range(0, len(text), 40):
