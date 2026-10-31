@@ -1,7 +1,7 @@
-# relayline (formerly claude-codex-bridge) — instructions for coding agents (Claude Code, Codex, Gemini CLI)
+# relayline (formerly claude-codex-bridge) — instructions for coding agents (Claude Code, Codex, DeepSeek, Gemini CLI)
 
-`ccx` lets Claude Code and Codex (and Gemini CLI) be each other's lead / sub-agent, with shared skills, MCP,
-incremental memory, resumable runs and token accounting. Python 3.11+, standard library only.
+`ccx` lets Claude Code, Codex and DeepSeek be each other's lead / sub-agent (Gemini CLI: sub-agent adapter,
+not run for real), with shared skills, MCP, incremental memory, resumable runs and token accounting. Python 3.11+, standard library only.
 
 **When you need to know where things stand** (picking the next item, not for a small fix): `docs/STATUS.md` is one
 page (now, next three, how sure we are); history is in `docs/STATUS-archive.md`, changes in CHANGELOG.md (plus `changes/*.md` not yet folded in).
@@ -26,6 +26,8 @@ task: whatever you read is re-read on every later turn. Keep STATUS one page (EN
 ## Rules
 - Run `python -m pytest -q tests` before every commit; all must pass (CI: Linux/Windows/macOS × 3.11–3.13).
 - Generic only: no personal paths, names or data in the repo. Personal things live in the user's hub.
+- Keep the core: no command or option is removed; a PR that changes one says in a line what it kept and how that
+  was checked. Paths not run for real are called experimental where they are described.
 - Docs are bilingual: `x.md` (English) + `x.zh.md` (Chinese), linking to each other. For real decisions, update
   docs/DECISIONS.md.
 - A PR adds one `changes/<PR>.md` with its CHANGELOG lines and does not edit CHANGELOG.md or docs/STATUS.md:

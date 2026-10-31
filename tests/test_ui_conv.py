@@ -72,7 +72,7 @@ class TestConversationData(Env):
 
     def test_a_message_that_asks_the_person_makes_a_todo(self):
         board.post(self.work, "claude", "all", "plain note for the others", thread="a")
-        board.post(self.work, "codex", "claude", "write to me@user.com about it", thread="a")    # an address
+        board.post(self.work, "codex", "claude", "write to me@example.com about it", thread="a")    # an address
         e = board.post(self.work, "codex", "all", "@person: Postgres or SQLite?", thread="db")
         todos = conv_of(ui.collect(self.p))["todos"]
         self.assertEqual([(x["kind"], x["thread"], x["id"], x["from"]) for x in todos], [("asks", "db", e["id"], "codex")])

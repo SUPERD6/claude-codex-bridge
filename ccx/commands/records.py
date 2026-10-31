@@ -483,8 +483,8 @@ def register(sub) -> None:
     st.add_argument("--summary", action="store_true")
     st.add_argument("--days", type=int, default=30)
     st.set_defaults(fn=cmd_stats)
-    rp = sub.add_parser("report", help="static HTML dashboard of tokens, spend and quota; a saving only as a "
-                        "labelled estimate")
+    rp = sub.add_parser("report", help="static HTML dashboard of tokens, spend and quota; a saving only once "
+                        "`ccx trial` has measured one")
     rp.add_argument("--days", type=int, default=30)
     rp.add_argument("--out", help="output file (default <hub>/ccx/report/index.html)")
     rp.add_argument("--no-lead", action="store_true", help="skip reading the lead's own session logs")

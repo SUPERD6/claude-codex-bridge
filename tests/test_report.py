@@ -84,8 +84,8 @@ class TestReport(ReportEnv):
         st = self.j("stats", "--summary")
         self.assertIn("saving", st["totals"])
         self.assertEqual(st["totals"]["saving_kind"], "model")               # no trial yet: shown as a model
-        self.assertIn("Estimated saving (model)", html)
-        self.assertIn("a model, not measured", html)
+        self.assertIn("not measured yet", html)                              # P1-4: spend only until ccx trial
+        self.assertNotIn("Estimated saving", html)
 
     def test_saving_from_a_trial_is_measured(self):
         import os

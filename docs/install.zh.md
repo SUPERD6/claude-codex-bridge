@@ -4,7 +4,7 @@
 
 ## 安装
 
-需要 Python 3.11+（只用标准库），并且 `codex` 和 `claude` 两个 CLI 都已登录（`gemini` 可选）。
+需要 Python 3.11+（只用标准库），并且 `codex` 和 `claude` 两个 CLI 都已登录；`dsh`（DeepSeek Harness）可选；`gemini` 可选，且只能当子智能体（适配器按它的文档写的，没真跑过）。
 
 **不克隆仓库**（技能和配置都打在包里）：
 
@@ -22,8 +22,10 @@ ccx run --to codex --mode read "Summarise README.md in three lines for a new use
 ```bash
 claude plugin install relayline --marketplace SUPERD6/relayline     # Claude Code 2.1.275+，一步装好
 # 旧版 Claude Code：claude plugin marketplace add SUPERD6/relayline && claude plugin install relayline@relayline
-codex plugin marketplace add SUPERD6/relayline && codex plugin add relayline@relayline   # Codex 0.164
+codex plugin marketplace add SUPERD6/relayline && codex plugin add relayline@relayline   # Codex 0.164，实验性
 ```
+
+Claude Code 这条真跑过（用临时配置）。从 GitHub 地址装 Codex 插件是**实验性**的：按 Codex 的插件文档写；测试只检查插件清单文件，安装命令本身没跑过。
 
 - **Claude Code** 得到五个技能（名字是 `relayline:agent-delegate`、`relayline:task-routing`、`relayline:task-split`、
   `relayline:task-checkpoint`、`relayline:project-manager`）和 ccx 的两个 hook：开局的共享记忆增量、每轮的留言板/共享
@@ -42,7 +44,7 @@ codex plugin marketplace add SUPERD6/relayline && codex plugin add relayline@rel
 ```powershell
 git clone https://github.com/SUPERD6/relayline
 cd relayline
-.\install.ps1 -Hub <你的个人hub路径>     # Windows；macOS/Linux：./install.sh <hub路径>
+.\install.ps1 -Hub <你的个人hub路径>     # Windows；macOS/Linux（实验性，只在 CI 里跑过）：./install.sh <hub路径>
 ```
 
 安装脚本会：有 pipx 就 `pipx install --editable .`（之后直接用 `ccx`），没有就提示把 `bin\` 加进 PATH；然后 `ccx init`（只新建，不改已有文件）和 `ccx doctor`（体检：CLI、登录、接线，不确定的写 Unknown；routing prior、tier policy、hub layout 这类 ccx 内部的行只在有问题时显示，`--verbose` 全部显示）。接着运行向导 `ccx setup`（每一步都说明、改东西前先问），或者一步步来：

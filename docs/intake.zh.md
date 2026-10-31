@@ -9,6 +9,8 @@
 | **手机 → 总管会话** | Claude Code 的 Remote Control：在 Claude 手机 App 里直接往统筹会话里打字 | 电脑开着不睡眠、那个会话开着 | 没有新东西，就是同一个会话 |
 | **issue → 总管** | 在你自己的**私人**仓库开一个带 `ccx-task` 标签的 issue；总管跑 `ccx intake pull`，做完在 issue 里回报 | `gh` 已登录、设好 `intake.github` | 一次性命令，不会自己定时跑 |
 
+**实验性：**issue 这条路只对替身 `gh`（测试里的）跑过，没对真实 GitHub 跑过。
+
 ## 1. 从手机：Remote Control
 
 对照 `claude remote-control --help`（Claude Code 2.1.309）和官方页面

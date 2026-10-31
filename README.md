@@ -111,10 +111,13 @@ there. The task timeline shows which lead worked when.
 | Claude Code | yes | yes |
 | Codex | yes | yes |
 | DeepSeek (`dsh`, or through Claude Code; as a sub-agent also through Codex) | yes | yes |
-| Gemini CLI; Kimi, GLM, Qwen, OpenRouter through Claude Code | no | adapted, not run for real |
+| Gemini CLI; Kimi, GLM, Qwen, OpenRouter through Claude Code | no | experimental: adapted, not run for real |
 
-All "yes" cells ran for real on one Windows machine; macOS and Linux run in CI only. This is v0.5, work in progress:
-what is verified and how is in [docs/STATUS.md](docs/STATUS.md).
+All "yes" cells ran for real on one Windows machine. **Experimental**, the main ones (not run for real; said so where
+each is described, and STATUS says how each is tested): Gemini CLI, a real quota stop, macOS and Linux (CI only, no real
+agent CLIs), installing the Codex plugin from a GitHub address, `ccx intake` against real GitHub; the full list is
+in STATUS. Still work in progress (the release badge above says which version): what is verified and how is in
+[docs/STATUS.md](docs/STATUS.md).
 
 ## More
 
@@ -126,6 +129,7 @@ what is verified and how is in [docs/STATUS.md](docs/STATUS.md).
 | [Shared work context](docs/shared-context.md) · [The board](docs/board.md) | what open sessions share with each other, and how |
 | [Questions and similar projects](docs/faq.md) | cost, subscriptions, safety, which tools work; how ccx differs from similar projects |
 | [Design](docs/DESIGN.md) · [Decisions](docs/DECISIONS.md) · [Changes](CHANGELOG.md) | the inside |
+| [Maintenance](docs/maintenance.md) | picking ccx up again: known issues, experimental switches and why they are off, running an evaluation, releasing |
 
 **Not the similarly named projects:** relayline was called `claude-codex-bridge`, but it is not
 [CCB](https://github.com/SeemSeam/claude_codex_bridge) and not OpenAI's

@@ -66,7 +66,7 @@ def sample_dashboard(out: Path) -> None:
     html = out.read_text(encoding="utf-8")
     note = ('<div style="margin:0;padding:10px 16px;background:#fff4d6;color:#4a3b00;font:14px/1.5 system-ui,sans-serif;'
             'border-bottom:1px solid #e6d28a">Sample dashboard built from <b>stand-in CLIs</b> (tests/fakes) by '
-            'scripts/build_site.py. It shows the layout; the numbers, including “saving”, are not results. '
+            'scripts/build_site.py. It shows the layout; the numbers are not results. '
             '<a href="../" style="color:#0b5c60">Back to ccx</a></div>')
     out.write_text(html.replace("<body>", "<body>" + note, 1) if "<body>" in html else note + html, encoding="utf-8")
 

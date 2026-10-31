@@ -6,8 +6,8 @@ English · [中文](features.zh.md) · back to the [README](../README.md)
 
 | | What | Where it stands |
 |---|---|---|
-| **1. Each other's lead and sub-agent** | Claude Code leads and Codex works, or the other way round; DeepSeek leads too (as `dsh`, or as Claude Code on a DeepSeek model) and takes work (through Claude Code, Codex, or `dsh`); Gemini CLI takes work (untested). One adapter per CLI; `ccx agents` lists what each can do, the version tested, official or community. | Both directions run for real; DeepSeek as lead (dsh, and Claude Code on DeepSeek) and as sub-agent (all three routes) for real; Gemini untested |
-| **2. Two models talking directly** | `ccx ask` gets a quick second opinion from the other vendor; `ccx resume` follows up in the same sub-session; `ccx send` puts a message into a live Codex session; `ccx say` / `ccx board` let open Claude Code, Codex and DeepSeek sessions in one project write to each other (each turn sees what is new for it; Claude Code desktop only sees it on its next turn, a DeepSeek session runs `ccx board` itself); `ccx discuss` lets 2–3 models from different vendors talk a costly decision through (propose, find faults, judge; at most 3 rounds) and shows it as a conversation in `ccx ui`. From outside: Remote Control from your phone, or `ccx intake` takes tasks you file as labelled issues in a private repository and reports back there ([docs](intake.md)). | The first three work for real; `ccx discuss` ran for real twice, two vendors and then three (Codex, Claude, DeepSeek; [notes](research/2026-10-25-discuss-three-vendors.md)); `ccx intake` only with a stand-in `gh` |
+| **1. Each other's lead and sub-agent** | Claude Code leads and Codex works, or the other way round; DeepSeek leads too (as `dsh`, or as Claude Code on a DeepSeek model) and takes work (through Claude Code, Codex, or `dsh`); Gemini CLI takes work (experimental, untested). One adapter per CLI; `ccx agents` lists what each can do, the version tested, official or community. | Both directions run for real; DeepSeek as lead (dsh, and Claude Code on DeepSeek) and as sub-agent (all three routes) for real; Gemini experimental, untested |
+| **2. Two models talking directly** | `ccx ask` gets a quick second opinion from the other vendor; `ccx resume` follows up in the same sub-session; `ccx send` puts a message into a live Codex session; `ccx say` / `ccx board` let open Claude Code, Codex and DeepSeek sessions in one project write to each other (each turn sees what is new for it; Claude Code desktop only sees it on its next turn, a DeepSeek session runs `ccx board` itself); `ccx discuss` lets 2–3 models from different vendors talk a costly decision through (propose, find faults, judge; at most 3 rounds) and shows it as a conversation in `ccx ui`. From outside: Remote Control from your phone, or `ccx intake` takes tasks you file as labelled issues in a private repository and reports back there ([docs](intake.md)). | The first three work for real; `ccx discuss` ran for real twice, two vendors and then three (Codex, Claude, DeepSeek; [notes](research/2026-10-25-discuss-three-vendors.md)); `ccx intake` experimental: only with a stand-in `gh`, not real GitHub |
 | **3. Shared memory** | A personal layer (your hub: memory, skills, MCP, ledger) and a project layer (`.ccx/`: context, journal, handoffs, checkpoints). The session-start hook brings only the other side's new lines; `ccx handoff` passes the baton, `ccx fresh` moves a long conversation to a fresh one of the same tool. A **shared work context** ([docs](shared-context.md)): what a session has been doing lately, read by code from each tool's session file, goes with delegated tasks (`ccx run --context`), on demand (`ccx peek`) and as one line per turn — each tool still keeps its own context. | Works for real; shared work context: first try right 36/36 vs 7/36 without, on tasks built to need it ([A/B](research/2026-10-25-shared-context-ab.md)) |
 | **4. Splitting the work** | A five-question difficulty score → agent, model, effort and the odds; when doing it yourself is cheaper, or the task should be split first, it says so instead of delegating. `ccx batch` / `ccx q` run pieces in parallel (`--lanes N`, off by default: small pieces for one agent continue a few warm sessions instead of each starting one); `ccx task resume` continues a long task after a stop. | Routing works for real but priors are uncalibrated; the queue only with stand-ins |
 | **5. Cheap and fast** | Slim sub-agent start-up; `ccx lead` shows what every turn of the lead re-reads (`--breakdown` part by part, `--cache` where the prompt cache broke, `--suggest` a model for the lead itself); `ccx sum` gives the lead only what matters of a big output. | The tools exist; how much they save depends on the lead using them (see below) |
@@ -26,8 +26,8 @@ who works on what (one column per agent, new agents get their own), and how the 
 block for the reason, the evidence and its buttons (a run stopped by the machine itself, `kind: env`, shows its fix
 hint and `ccx doctor` instead of "Try again"; an empty hub says what to run first). It is also the manager's board: every project in the `ccx projects`
 catalog (a work queue there shows even without a recent run; quiet projects are one line; a project's approval rules
-are quoted on its page), and what this month's sub-agents spent and, below that, a model estimate of the saving (not
-measured; measured totals so far about even, docs/measured.md; the same rule as `ccx report`). A button that changes something — stop a run, record right or wrong, one more fix round,
+are quoted on its page), and what this month's sub-agents spent; how much was saved appears only once `ccx trial` has
+measured it (measured totals so far about even, docs/measured.md; the same rule as `ccx report`). A button that changes something — stop a run, record right or wrong, one more fix round,
 continue, let it edit, change a queue's budget — first shows the exact `ccx` command it will run and runs it only
 on a second click; one that starts a sub-agent says it costs money and runs in the background. The page sends only
 which button, never a command; the server runs only a fixed list of ccx commands, as an argument list, from this page
@@ -80,7 +80,7 @@ leftover from "waits for you" without counting it right or wrong, and routing ne
 
 <details><summary>Chinese interface, light</summary>
 
-<img alt="ccx ui as the manager's board: what waits for you across projects, this month's spend and model estimate, the catalog's quiet projects (demo data)" src="assets/ui/k6-month-zh.png" width="100%">
+<img alt="ccx ui as the manager's board: what waits for you across projects, this month's spend, the catalog's quiet projects (demo data; taken before the saving estimate was removed)" src="assets/ui/k6-month-zh.png" width="100%">
 
 <img alt="A button's second click: the exact command, and whether it costs money (demo data)" src="assets/ui/k6-confirm-zh.png" width="100%">
 
@@ -113,13 +113,13 @@ In Claude Code you say: "make `loader.py` accept a custom delimiter and add test
    - Codex says done but ccx's own `--check` fails: it climbs a rung too (in the same session when the agent stays
      the same). With `ccx config set defaults.focused_retry true` that attempt is handed the failing command and the
      last ~2000 characters of its output and told to fix only that (default off until a measured round backs it).
-   - Codex is out of quota: Claude takes over.
+   - Codex is out of quota: Claude takes over (experimental: tested with stand-ins only, no real quota stop seen yet).
    - A timeout or crash: `ccx resume <run_id>` continues (as does `ccx task resume` for a checkpointed task),
      keeping the run's label, acceptance check and review setting (`ccx resume` takes `--check` / `--review` to
      change them; `ccx task resume` always keeps them).
    - You want it to stop: `ccx stop <run_id>` ends the sub-agent and everything it started; `ccx resume` goes on.
 6. **Learn and report.** Every run goes into a ledger and back into task-routing / task-split, so the next pick is
-   better. `ccx report` builds a dashboard: who spent how many tokens of which kind, quota use, spend first and then a labelled saving estimate.
+   better. `ccx report` builds a dashboard: who spent how many tokens of which kind, quota use and spend; a saving only once `ccx trial` has measured one.
 
 The other way round, run the same command inside Codex with `--to claude`: Codex leads, Claude Code is the sub-agent.
 Codex's sandbox decides whether that works: ccx writes its run records into the hub and the sub-agent needs the
@@ -191,7 +191,7 @@ preference or pitfall it finds; only the ones you say yes to are written (`ccx m
 Fixed tiers are the fallback. With rubric flags, task-routing picks by success probability and cost per success,
 and calibrates itself from real outcomes.
 
-| Tier | Work | Codex | Claude Code | Gemini CLI |
+| Tier | Work | Codex | Claude Code | Gemini CLI (experimental) |
 |---|---|---|---|---|
 | T0 | two or three steps | don't delegate | don't delegate | don't delegate |
 | T1 | mechanical | gpt-6-luna · low | haiku · low (no MCP loaded) | flash-lite |

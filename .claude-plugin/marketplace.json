@@ -1,6 +1,6 @@
 {
   "name": "relayline",
-  "description": "relayline: Claude Code, Codex and DeepSeek as each other's lead or sub-agent.",
+  "description": "relayline: Claude Code, Codex and DeepSeek as each other's lead or sub-agent (Gemini CLI: sub-agent adapter, not run for real).",
   "owner": { "name": "SUPERD6" },
   "plugins": [
     {

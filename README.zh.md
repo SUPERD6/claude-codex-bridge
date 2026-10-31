@@ -95,10 +95,12 @@ ccx undo <run_id>            # 不想要：先显示会还原什么；加 --appl
 | Claude Code | 能 | 能 |
 | Codex | 能 | 能 |
 | DeepSeek（`dsh`，或经 Claude Code；接活也可经 Codex） | 能 | 能 |
-| Gemini CLI；经 Claude Code 的 Kimi、GLM、Qwen、OpenRouter | 不能 | 已适配，没真跑过 |
+| Gemini CLI；经 Claude Code 的 Kimi、GLM、Qwen、OpenRouter | 不能 | 实验性：已适配，没真跑过 |
 
-所有“能”都在一台 Windows 电脑上真跑过；macOS 和 Linux 只在 CI 里跑。现在是 v0.5，仍在开发中：
-哪些验证过、怎么验证的，见 [docs/STATUS.zh.md](docs/STATUS.zh.md)。
+所有“能”都在一台 Windows 电脑上真跑过。**实验性**的主要几项（没真跑过；各自的说明里都标了，怎么测的见 STATUS）：Gemini CLI、
+真实的额度用完、macOS 和 Linux（只在 CI 里跑，没有真的智能体命令行）、从 GitHub 地址装 Codex 插件、`ccx intake` 对真实
+GitHub；完整清单见 STATUS。
+仍在开发中（版本号看上面的 release 徽章）：哪些验证过、怎么验证的，见 [docs/STATUS.zh.md](docs/STATUS.zh.md)。
 
 ## 更多
 
@@ -110,6 +112,7 @@ ccx undo <run_id>            # 不想要：先显示会还原什么；加 --appl
 | [共享工作上下文](docs/shared-context.zh.md) · [留言板](docs/board.zh.md) | 开着的会话之间共享什么、怎么共享 |
 | [常见问题和同类项目](docs/faq.zh.md) | 花费、订阅、安全、哪些工具能用；和同类项目有什么不同 |
 | [设计](docs/DESIGN.zh.md) · [决策](docs/DECISIONS.md) · [变更](CHANGELOG.md) | 内部 |
+| [维护](docs/maintenance.zh.md) | 隔一段时间再接手：已知问题、实验性开关和为什么关着、怎么跑评测、怎么发版 |
 
 **和同名项目不是一个东西：** relayline 原名 `claude-codex-bridge`，但不是
 [CCB](https://github.com/SeemSeam/claude_codex_bridge)，也不是 OpenAI 官方的

@@ -16,7 +16,7 @@ body:
     id: steps
     attributes:
       label: How to reproduce
-      description: The ccx command(s) you ran.
+      description: The ccx command(s) you ran, and which tool led and which took the work (e.g. Claude Code → Codex).
       render: shell
     validations:
       required: true
@@ -25,7 +25,7 @@ body:
     attributes:
       label: Versions
       description: "`ccx --version`, `codex --version`, `claude --version`, Python, OS"
-      placeholder: "ccx 0.3.0 · codex-cli 0.164.0 · Claude Code 2.1.309 · Python 3.12 · Windows 11"
+      placeholder: "ccx 0.x.y · codex-cli 0.164.0 · Claude Code 2.1.309 · Python 3.12 · Windows 11"
     validations:
       required: true
   - type: textarea
