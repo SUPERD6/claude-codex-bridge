@@ -23,6 +23,10 @@ of your own for shared memory, skills and the record of every run. Once this mac
 with another folder stops and shows the one in use; add `--force` to switch (the old hub's files stay where they
 are). The same goes for a `--snapshot` / `--external-sync` that would replace a different `layout.toml`.
 
+No pipx? A virtual environment does the same: `python -m venv ~/.relayline` and
+`~/.relayline/bin/python -m pip install git+https://github.com/SUPERD6/relayline` (Windows:
+`%USERPROFILE%\.relayline\Scripts\python.exe`), then put that `bin` (`Scripts`) folder on PATH so `ccx` is found.
+
 **From the plugin marketplace** (the repository is its own marketplace, `relayline`):
 
 ```bash
