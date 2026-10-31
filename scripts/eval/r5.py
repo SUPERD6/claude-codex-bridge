@@ -100,7 +100,8 @@ in one Job Object and whatever survives the unit is listed, killed and logged. E
 (commit, task-file hash, CLI versions, isolation, concurrency, preflight result), `audit` (what its agents loaded and
 which real paths their tool calls named), `leftovers` and `env_clean`. The CLI versions are checked again after
 every unit; a change, a busy machine or a process that cannot be killed stops the run (unless --force-unclean,
-which loses every row to the rules; `--wait-quiet MINUTES` waits for a quiet machine before the checks instead).
+which loses those rows to the rules; `--wait-quiet MINUTES` instead waits for a quiet machine before the checks and
+between units, and the unit that overlapped other work stays not env_clean).
 The work dir defaults to <temp>/<tag>, so two tags never share unit folders.
 
   python scripts/eval/r5.py run --rounds 1 --tasks waiting-evals --codex-home <eval codex home> --budget 3
@@ -672,42 +673,74 @@ def final_diff(repo: Path) -> str | None:
     return out.decode("utf-8", errors="surrogateescape")
 
 
+def _minutes(v: str) -> float:
+    try:
+        x = float(v)
+    except ValueError:
+        x = -1.0
+    if not 0 < x <= 24 * 60:
+        raise argparse.ArgumentTypeError("minutes: more than 0, at most 1440")
+    return x
+
+
 def run_artifacts_dir(out: Path, stamp: str | None = None) -> tuple[str, Path]:
-    """This invocation's evidence folder: <results>-artifacts/<start time>/ (a second run in the same second gets a
-    suffix), so the folders of an aborted run never mix with this one's."""
-    stamp = stamp or time.strftime("%Y%m%d-%H%M%S")
+    """This invocation's evidence folder, created here so no other run gets it: <results>-artifacts/<UTC start>Z/ (a
+    taken name gets a suffix), so the folders of an aborted run never mix with this one's. Rows from before keep
+    theirs flat in <results>-artifacts/ (no `artifacts.run`)."""
+    stamp = stamp or time.strftime("%Y%m%d-%H%M%SZ", time.gmtime())
     base = Path(out).parent / f"{Path(out).stem}-artifacts"
+    base.mkdir(parents=True, exist_ok=True)
     run, n = stamp, 1
-    while (base / run).exists():
-        n += 1
-        run = f"{stamp}-{n}"
-    return run, base / run
+    while True:
+        try:
+            (base / run).mkdir()
+            return run, base / run
+        except FileExistsError:
+            n += 1
+            run = f"{stamp}-{n}"
 
 
 QUIET_POLL_S = 30
 
 
-def _busy_now() -> list[str]:
-    return PF.busy(PF.snapshot())
+QUIET_CHECKS = 2           # after a busy spell, this many quiet checks in a row (QUIET_POLL_S apart) count as quiet
+
+
+def _busy_now(ours: list[str] | None = None) -> list[str] | None:
+    """Other heavy work on this machine (preflight.busy), or None when the processes cannot be listed."""
+    procs = PF.snapshot()
+    if procs is None:
+        return None
+    return PF.busy(procs, ours=ours, exclude=PF.job_pids_all())
 
 
 def wait_quiet(minutes: float, sleep=time.sleep, now=time.monotonic, busy=None) -> bool:
-    """Before a run: wait until no other heavy work runs on this machine (preflight.busy: another eval, a pytest,
-    `ccx run`, `claude -p`, `codex exec`), checking every QUIET_POLL_S seconds, at most `minutes`. True: quiet. A run
-    that starts while another session's tests run is not env_clean from its first unit; --force-unclean would start
-    it anyway and lose every row to the rule, so waiting is the way to a clean run."""
+    """Wait until no other heavy work runs on this machine (preflight.busy: another eval, a pytest, `ccx run`,
+    `claude -p`, `codex exec`), checking every QUIET_POLL_S seconds, at most `minutes`. A machine quiet at the first
+    look is quiet at once; after a busy spell it takes QUIET_CHECKS quiet checks in a row (another session's tests
+    come and go). True: quiet. False: still busy, or the processes cannot be listed (`busy` returns None: waiting
+    would not help, the preflight reports it). A unit that runs while another session's tests run is not env_clean;
+    --force-unclean would run on anyway and lose those rows to the rules."""
     busy = busy or _busy_now
     end = now() + minutes * 60
     found = busy()
+    if found is None:
+        print("[wait-quiet] cannot list processes: not waiting", flush=True)
+        return False
     if not found:
         return True
     print(f"[wait-quiet] {len(found)} other heavy process(es), e.g. {found[0][:120]}; waiting up to {minutes:g} min",
           flush=True)
+    quiet = 0
     while now() < end:
         sleep(min(QUIET_POLL_S, max(0.0, end - now())))
         found = busy()
-        if not found:
-            print("[wait-quiet] quiet: starting", flush=True)
+        if found is None:
+            print("[wait-quiet] cannot list processes: not waiting", flush=True)
+            return False
+        quiet = 0 if found else quiet + 1
+        if quiet >= QUIET_CHECKS:
+            print("[wait-quiet] quiet: going on", flush=True)
             return True
     print(f"[wait-quiet] still busy after {minutes:g} min", flush=True)
     return False
@@ -926,8 +959,9 @@ def sub_usage(hub: Path) -> dict:
     """What ccx's sub-agents read and wrote in this unit, per token class, from the hub's ledger (read before the hub
     goes): `input` (uncached), `cached`, `output` of the work runs, `prompt` = input + cached (what the B3 rule
     compares: memories, skills and tool definitions are prompt), the same for ccx's reviews apart (`review_*`), and
-    how many runs. `requests` / `review_requests`: the model requests those runs made, summed over the runs whose
-    ledger row says (`requests_runs` / `review_requests_runs` of them; None when none does: older ccx)."""
+    how many runs. `requests` / `review_requests`: the model requests of those runs' own conversations (helpers and
+    Codex sub-sessions not counted, as ccx/reqstats.py records them), summed over the runs whose ledger row says
+    (`requests_runs` / `review_requests_runs` of them; None when none does: ccx before it recorded them)."""
     from ccx import ledger as _ledger
     out = {"input": 0, "cached": 0, "output": 0, "runs": 0, "review_input": 0, "review_cached": 0,
            "review_output": 0, "reviews": 0}
@@ -949,6 +983,15 @@ def sub_usage(hub: Path) -> dict:
         out[pre + "requests"] = n if k else None
         out[pre + "requests_runs"] = k
     return out
+
+
+def sub_req_text(su: dict | None) -> str:
+    """The sub-agents' requests for the run log: "8 (2/4 runs)" when not every run said."""
+    su = su or {}
+    if su.get("requests") is None:
+        return "None"
+    k, n = su.get("requests_runs") or 0, su.get("runs") or 0
+    return str(su["requests"]) + (f" ({k}/{n} runs)" if k != n else "")
 
 
 def namecheck_stats(rows: list[dict]) -> dict | None:
@@ -2108,10 +2151,15 @@ def cmd_run(a) -> int:
     if probs:
         print("other repositories not ready: not starting", flush=True)
         return 3
+    waited = None
     if getattr(a, "wait_quiet", 0):
-        wait_quiet(a.wait_quiet)                   # still busy after it: the preflight below says so and stops
+        t0 = time.monotonic()
+        quiet = wait_quiet(a.wait_quiet)           # still busy after it: the preflight below says so and stops
+        waited = {"minutes": a.wait_quiet, "waited_s": round(time.monotonic() - t0), "quiet": quiet}
     rep = PF.run_checks(PF.options_from(a, arms, work, canary_on=not a.no_canary, start=True,
                                         tasks_file=Path(TASKSETS[a.taskset].__file__)))
+    if waited:
+        rep["wait_quiet"] = waited                 # in preflight.json: this run waited for a quiet machine
     for p in rep["problems"]:
         print(f"[preflight] {p}", flush=True)
     if not rep["ok"] and not a.force_unclean:
@@ -2181,15 +2229,22 @@ def cmd_run(a) -> int:
         if (row.get("leftovers") or {}).get("unkilled"):
             why.append(f"processes that could not be killed: {row['leftovers']['unkilled']}")
         if why and not a.force_unclean:
-            print(f"stopping: {'; '.join(why)[:400]}", flush=True)
-            stop.set()
+            # --wait-quiet: when the only reason is other work on the machine, wait it out before the next unit (this
+            # unit stays not env_clean; it is not run again under this tag) instead of stopping the run
+            if (getattr(a, "wait_quiet", 0) and all(w.startswith("busy") for w in why)
+                    and wait_quiet(a.wait_quiet, busy=lambda: _busy_now(ours))):
+                print(f"[wait-quiet] {u['task']} {u['arm']} round {u['round']} ran while the machine was busy (not "
+                      "env_clean); going on", flush=True)
+            else:
+                print(f"stopping: {'; '.join(why)[:400]}", flush=True)
+                stop.set()
         with lock:
             append_jsonl(out, row)
             run_usd[0] += row.get("usd") or 0
             unit_runs.update(str(x) for x in row.get("ccx_run_ids") or [])
             print(f"r{u['round']} {u['task']:18} {u['arm']:8} ok={row.get('ok')} ${row.get('usd', 0):.4f} "
                   f"(lead ${row.get('lead_only_usd', 0) or 0:.4f}) req={row.get('lead_requests')} "
-                  f"sub_req={(row.get('sub_usage') or {}).get('requests')} "
+                  f"sub_req={sub_req_text(row.get('sub_usage'))} "
                   f"lead_tok={row.get('lead_tokens')} {row.get('wall_s')}s deleg={row.get('delegated')} "
                   f"files={row.get('files_changed')} clean={row['env_clean']} "
                   f"{spend_line(out, a.tag, a.extra_spent, run_usd[0])}", flush=True)
@@ -2474,8 +2529,7 @@ def lost_pairs(rows: list[dict], A: str, B: str) -> dict:
     side = {A: sum(bool(_excluded(x)) for x, _ in lost), B: sum(bool(_excluded(y)) for _, y in lost)}
     out = {"lost": len(lost), "of": len(ps), "unclean_side": side}
     if lost:                                       # said even when even: the rule then stands on fewer pairs
-        out["left_out"] = (f"{len(lost)} of {len(ps)} shared pairs left out (not env_clean on one side or both): "
-                           f"counted on {len(ps) - len(lost)} pairs only")
+        out["left_out"] = f"{len(lost)} of {len(ps)} shared pairs left out (not env_clean on one side or both)"
     if side[A] != side[B]:
         out["note"] = (f"one-sided loss: {side[A]} of {A}'s and {side[B]} of {B}'s rows on shared units were not "
                        "env_clean; the comparison counts only the pairs left and may be biased")
@@ -2681,7 +2735,8 @@ def b3_rule(rows: list[dict], arm: str, base: str = B3_BASE) -> dict | None:
         # arm; a result on fewer is on less than the measurement was planned for, which the reader must see
         out["registered"] = {"pairs": B3_REGISTERED_PAIRS, "counted": len(ps),
                              "note": f"registered {B3_REGISTERED_PAIRS} pairs, counted {len(ps)}: this result is on "
-                                     f"fewer pairs than the plan registered"}
+                                     f"fewer pairs than the B3 plan registered (both halves: summary --results "
+                                     f"<a> <b> --tag <hold-out> --tag <r5>)"}
     if lp.get("note"):
         out["exclusion_note"] = lp["note"]
         if out["result"] == "pass":
@@ -3034,10 +3089,11 @@ def parser() -> argparse.ArgumentParser:
     r.add_argument("--pin-commit", default="", help="refuse to run unless this checkout is at this commit (a tag "
                    "is also refused at a commit other than its earlier rows')")
     r.add_argument("--no-canary", action="store_true", help="skip the one tiny real lead that checks the isolation")
-    r.add_argument("--wait-quiet", type=float, default=0, metavar="MINUTES", help="before the checks, wait up to "
-                   "this long for other heavy work on this machine (another eval, pytest, ccx run, claude -p, codex "
-                   "exec) to finish; still busy then, the preflight refuses as usual (use this, not --force-unclean, "
-                   "for a clean run)")
+    r.add_argument("--wait-quiet", type=_minutes, default=0, metavar="MINUTES", help="wait up to this long for "
+                   "other heavy work on this machine (another eval, pytest, ccx run, claude -p, codex exec) to finish: "
+                   "before the checks (still busy then, the preflight refuses as usual), and between units when that "
+                   "work starts during a run (the unit it overlapped stays not env_clean and is not run again under "
+                   "this tag; still busy then, the run stops). Unlike --force-unclean it never runs on a busy machine")
     r.add_argument("--ext-cache", default="", help="a folder with local copies (clones) of the other repositories "
                    "of the hold-out set, named after them, to clone from instead of their URLs")
     r.add_argument("--ext-python", default="", help="the Python that runs the other repositories' tests (needs "
@@ -3065,7 +3121,8 @@ def parser() -> argparse.ArgumentParser:
     e.add_argument("--tag", action="append", default=None)
     e.add_argument("--results", nargs="+", default=None)
     e.add_argument("--taskset", choices=sorted(TASKSETS), default="r5")
-    e.add_argument("--include-unclean", action="store_true", help="export rows that are not env_clean too")
+    e.add_argument("--include-unclean", action="store_true", help="count rows that are not env_clean in the "
+                   "summary section too (every row is exported either way)")
     e.set_defaults(fn=cmd_export)
     return ap
 
