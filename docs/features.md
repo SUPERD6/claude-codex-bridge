@@ -16,8 +16,20 @@ English · [中文](features.zh.md) · back to the [README](../README.md)
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/architecture-dark.svg">
-  <img alt="Architecture: Claude Code, Codex and Gemini CLI connect to ccx; a lead hands a brief to another, which runs headless and returns JSON; ccx routes, reruns the check, asks another vendor to review, records verdicts and costs; below: the personal layer (hub: memory, skills, MCP, ledger), the project layer (.ccx: context, journal, handoffs, checkpoints, undo snapshots) and ccx ui, a local read-only page" src="assets/architecture-light.svg" width="100%">
+  <img alt="Architecture: Claude Code, Codex and DeepSeek connect to ccx, each can lead or take work; a lead hands a brief to another, which runs headless and returns JSON; ccx routes, reruns the check, asks another vendor to review, and writes a receipt for every delegated run (cost, check, review, verdict, undo) into the ledger, and reads the other tools' sessions for the shared working context; below: the personal layer (hub: shared memory, skills, MCP, ledger), the project layer (.ccx: context.md, journal, board, handoffs, checkpoints, undo snapshots, queue) and ccx ui, a local page with the receipts and where tokens go. Gemini CLI: a worker adapter, not run for real" src="assets/architecture-light.svg" width="100%">
 </picture>
+
+## Commands: everyday first, nothing removed
+
+`ccx -h` lists the everyday commands only: `setup`, `doctor`, `run`, `ask`, `resume`, `stop`, `undo`, `verify`,
+`show`, `q`, `ui`, `mem`, `handoff`, `lead` (and `demo`). `ccx advanced` (same as `ccx -h --all`) lists every group: memory and
+context, accounting and reports, between agents (the commands open sessions call: `peek`, `board`, `say`, `reply`),
+advanced (the hub, several projects, installing: `init`, `projects`, `where`, `intake`, `sync`, `config`,
+`uninstall`, `repair`, `agents`), maintenance, and developer last. `ccx dev` lists the developer commands (`trial`,
+`ab`, `bench`, `improve`, `namecheck`); `ccx dev trial ...` is `ccx trial ...`. In `ccx run -h`, `ccx resume -h`,
+`ccx verify -h` and `ccx lead -h` the rarely used options sit under an "advanced" heading. This is help layout only:
+every command and option keeps its name and parses as before (`tests/data/cli_surface.json` froze the full list
+and a test checks it).
 
 ## See it live: `ccx ui`
 
@@ -66,8 +78,9 @@ Without that conversation file the handoff is a blank template, and the page say
 first. The task timeline marks who was leading when the task was asked and every switch since. This is the only new
 write path on the page.
 **`ccx demo`** (or `ccx ui --demo`) shows all of this without an account: it writes made-up data (two projects, runs
-in every state with a real snapshot diff, a work queue, a stopped board thread and an `@person` question, a month of
-costs) into a new folder in the system's temporary folder, points only its own process there, and serves the same
+in every state with a real snapshot diff, one hand-off's full receipt — cost, the check ccx ran, the other vendor's
+review — the reviews as runs of their own, a work queue, a stopped board thread and an `@person` question, a month of
+costs, per-request numbers and a Codex helper session for the token page) into a new folder in the system's temporary folder, points only its own process there, and serves the same
 page, marked "demo data". It works offline and starts no agent: a button that would start one shows its command
 only; a verdict or a handoff is written into the demo folder, which is removed when the page closes (`--keep` or
 `--dir` keeps it; `--export FILE` writes a static copy and then deletes the folder too). `--dir` takes only a new or
@@ -76,22 +89,32 @@ Evaluations and tests (eval-* labels, `--no-ab`, ccx's probes, runs in the tempo
 folder) stay hidden until you press "show evaluations and tests"; `ccx verify RUN --dismiss --note why` clears a
 leftover from "waits for you" without counting it right or wrong, and routing never learns from it.
 
-<img alt="ccx ui task page in English, dark theme: a task as an org chart, one column per worker, the side panel showing why a piece needs your call (demo data)" src="assets/ui/task-en-dark.png" width="100%">
+Screenshots: `ccx demo`'s data, taken by `python scripts/make_shots.py`.
 
-<details><summary>Chinese interface, light</summary>
+<img alt="ccx ui overview: what waits for you across projects (questions, your calls, results to check), what is running (demo data)" src="assets/ui/overview-en.png" width="100%">
 
-<img alt="ccx ui as the manager's board: what waits for you across projects, this month's spend, the catalog's quiet projects (demo data; taken before the saving estimate was removed)" src="assets/ui/k6-month-zh.png" width="100%">
+<img alt="ccx ui task page: a task as an org chart, one column per worker; the side panel is one hand-off's receipt: who, cost, the check ccx ran again, the review, the verdict, the files actually changed (demo data)" src="assets/ui/task-en.png" width="100%">
 
-<img alt="A button's second click: the exact command, and whether it costs money (demo data)" src="assets/ui/k6-confirm-zh.png" width="100%">
+<img alt="ccx ui decision card: a run whose review still finds problems, what the agent says beside what ccx ran (demo data)" src="assets/ui/judge-en.png" width="100%">
 
-<img alt="ccx ui overview in Chinese: nine things waiting, the current lead, two projects and the quota forecast (demo data)" src="assets/ui/overview-zh.png" width="100%">
+<img alt="ccx ui as the manager's board: projects, the current leads, this month's spend (spend only until a saving is measured), who is reliable at what (demo data)" src="assets/ui/month-en.png" width="100%">
 
-<img alt="ccx ui task page in Chinese (demo data)" src="assets/ui/task-zh.png" width="100%">
+<img alt="ccx ui, where tokens go: one ledger across agents, requests per run, a Codex helper session under its run (demo data)" src="assets/ui/tokens-en.png" width="100%">
+
+<details><summary>Chinese interface; dark theme</summary>
+
+<img alt="ccx ui overview in Chinese (demo data)" src="assets/ui/overview-zh.png" width="100%">
+
+<img alt="ccx ui task page in Chinese, with the receipt (demo data)" src="assets/ui/task-zh.png" width="100%">
+
+<img alt="ccx ui manager's board in Chinese: projects and this month's spend (demo data)" src="assets/ui/k6-month-zh.png" width="100%">
+
+<img alt="ccx ui task page in English, dark theme (demo data)" src="assets/ui/task-en-dark.png" width="100%">
 
 </details>
 
-The screenshots come from `python scripts/ui_demo.py --plain`: a throwaway hub with real ccx runs on stand-in CLIs,
-nobody's real work.
+The screenshots above come from `ccx demo`'s made-up data (`python scripts/make_shots.py`); `python scripts/ui_demo.py`
+still builds a throwaway hub with real ccx runs on stand-in CLIs, nobody's real work.
 
 ## How it works (one example)
 
@@ -214,6 +237,11 @@ Three switches in `config/tiers.toml` (override in `hub/ccx/tiers.toml`) change 
 its start. Each ships at today's behaviour and stays there until a before / after measurement shows the right-rate does
 not drop ([plan and arms](research/2026-10-30-b3-lean-switches-plan.md)). There is no per-run flag. Every run records
 the switches it ran with in run.json (`subagent_switches`); a ledger row names the ones away from the default.
+
+**Measured 2026-10-31: all three keep their defaults and stay experimental**
+([report](research/2026-10-31-b3-lean-switches.md)). `codex_memories = false` Unknown; `clean = true` Fail (3
+hold-out pairs lost); `codex_lean_tools = true` Fail under the registered rule (right 29 vs 30), undecided in a
+post-hoc reading. No switch showed a reliable token saving in the paired comparison.
 
 | Key (default) | When changed | Risk |
 |---|---|---|

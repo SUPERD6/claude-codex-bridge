@@ -45,6 +45,12 @@ self 14 s vs ccx 63 s. Total spend against the lead doing it itself: about even 
 ($0.595 vs $0.567 per success), higher in round 3 ($0.071 vs $0.045, fresh short leads; the same as the built-in
 sub-agent there, ratio 1.02), lower in round 5 (above).
 
+## Lean sub-agent switches (B3, 2026-10-31)
+
+The three `[subagent]` switches, measured against the person's daily setup, keep their defaults and stay
+experimental: Codex memories off Unknown, clean sub-agent Fail, fewer Codex tools Fail under the registered rule
+(undecided post hoc). Numbers, method and limits in the [B3 report](research/2026-10-31-b3-lean-switches.md).
+
 ## Best-case numbers of single features (formerly the README's four pillars)
 
 Each comes from an A/B built to test one feature; none of them is the saving a user should expect in general.

@@ -115,4 +115,20 @@ Pre-registered (written before the run, not changed afterwards):
 
 ## Pre-run
 
-(To be filled: the one unit run to prove the chain, its result and cost.)
+One unit, to prove the chain works (2026-10-31, tag `pg0`, commit 1142da3, sonnet medium lead): `pg-two-bucket`,
+arm `ccx2`. Not a result: one unit says nothing about any arm.
+
+| What | Value |
+|---|---|
+| hidden tests | 9 passed of 9 (the exercise's count) |
+| delegated | yes, ccx routed it to Codex gpt-6-luna low |
+| cost | $0.079 (lead $0.069) |
+| wall time | 79 s |
+| env_clean / audit | yes / clean |
+
+What it shows: the clean room, the delegating lead's own-test `--check` and `--brief-file`, the hidden-test scoring
+and the kept evidence work end to end. The final diff has the solution, the sub-agent's `test_own.py` and the lead's
+`brief.md`, nothing else. The run first waited for another session's tests to finish (`--wait-quiet`). The sub-agent's
+request count was not yet recorded (`sub_req=None`; the ccx that records it was not merged then). One exercise unit
+cost about two thirds of the round-5 mean of $0.12 used for the estimate, so a full round should come in under
+$11.

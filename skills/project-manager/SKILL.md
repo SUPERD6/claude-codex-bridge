@@ -51,7 +51,7 @@ work, dominates small runs.
 
 Large work: draft the split yourself with the task-split skill (or a read-only `ccx run --project <name> --mode read`
 when the code must be read first), then have another vendor's cheap model review the draft read-only:
-`ccx run --project <name> --mode read --to <other vendor> --effort low --brief-file draft.md`. Fix what it marks
+`ccx run --project <name> --mode read --to <other vendor> --tier T1 --brief-file draft.md`. Fix what it marks
 must, then dispatch each piece the default way. Don't use `ccx way` or `ccx discuss` unless a wrong answer would be
 costly (agent-delegate section 7) — they cost 20-39× more for the same rate of right answers here.
 

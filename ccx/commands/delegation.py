@@ -48,6 +48,11 @@ def cmd_ab(a) -> int:
 
 # ---------------------------------------------------------------- commands
 # a write run without --check: one line on stderr (PM review 2026-10-29); what ccx does is unchanged
+# 2026-10-31 new-machine walkthrough: `--effort medium` without --model left the route's codex:gpt-6-luna:low as it
+# was, and nothing said so. stderr only: the JSON a lead reads stays as it was.
+EFFORT_ALONE_NOTE = ("ccx: --effort is used only together with --model (or --provider); without one the route picks the "
+                     "model and its effort. To set the effort, name the model too (--model <m> --effort <e>), or pick "
+                     "a tier (--tier T0..T4)")
 NO_CHECK_NUDGE = ("ccx: tip: this run may edit files and has no --check; add --check \"<test command>\" so ccx re-runs "
                   "it and the result is checked, not only reported")
 
@@ -282,6 +287,8 @@ def cmd_run(a) -> int:
         raise ValueError("--bg needs the task as text or --brief-file (stdin is not passed on)")
     if a.wait is not None and not a.bg:
         raise ValueError("--wait N goes with --bg (a foreground run already waits until it is done)")
+    if a.effort and not a.model and not a.provider:
+        print(EFFORT_ALONE_NOTE, file=sys.stderr, flush=True)
     if a.bg and not auto:
         if a.proposal:
             # refuse a used-up, smaller or lapsed pre-authorisation here, before detaching: the detached child's
@@ -822,9 +829,14 @@ def _route_summary(out: dict) -> list[str]:
                  + (f", expected ~${usd:.4f}" if isinstance(usd, (int, float)) else "")]
         if out.get("advice"):
             lines.append(f"Advice: {out['advice']}")
+        if (out.get("small_self") or {}).get("applied"):
+            return lines + ["Next: do it yourself"]
         return lines + [f"Next: ccx run --to {out['rung'].split(':')[0]} \"<the task>\" with the same flags"]
     tier, label = out.get("tier"), out.get("label")
     why = ", ".join(out.get("reasons") or [])
+    if (out.get("small_self") or {}).get("applied"):
+        return [f"Tier: {tier} ({label})" + (f": {why}" if why else ""), f"Advice: {out['advice']}",
+                "Next: do it yourself"]
     if tier == "T0":
         nxt = ("do it yourself (a lead's `ccx run` refuses it; from your terminal, `ccx run --to <agent>` still "
                "delegates it, on the cheapest rung)")
@@ -844,6 +856,7 @@ def _route(a) -> dict:
         mode = apply_mode(spec)
         kw, route = resolve(spec, _caller(None), p, cfg)
         route["mode"] = mode            # recommended read/write and why; routing priced the start-up with it
+        lead_ctx = a.lead_ctx or 0
         if a.lead and route.get("rung"):
             ctx = a.ctx_tokens
             for f in a.ctx_files or []:        # rough: 4 bytes per token
@@ -877,6 +890,8 @@ def _route(a) -> dict:
             if choice:
                 choice.update(lead_ctx_tokens=lead_ctx, ctx_source=src)
                 route["choice"] = choice      # self / built-in sub-agent / ccx: see the agent-delegate skill
+        _small_self(p, cfg, route, a, lead_ctx,
+                    delegates=bool(route.get("rung")) and (route.get("policy") or {}).get("mode") != "self")
         _lead_by_task(cfg, route, a)    # after `choice`: its built-in pick wins over builtin_model
         return route
     r = router.classify(" ".join(a.text), a.files)
@@ -887,7 +902,65 @@ def _route(a) -> dict:
     for ag in AGENTS:
         if t.get(ag):
             out[ag] = t[ag]
+    _small_self(p, cfg, out, a, a.lead_ctx or 0, delegates=r.tier != "T0")
     return out
+
+
+def _small_self(p, cfg: dict, route: dict, a, lead_ctx: int, delegates: bool) -> None:
+    """P0-6, `routing.small_self` (off unless set): a task the lead estimates at <= small_self_files source files is
+    advised as do-it-yourself instead of delegated (files only: the measured basis; --minutes does not gate it, so
+    the agent-delegate offer path, which passes 15+ minutes, is covered). Advice only: `ccx run` and the rung, ladder
+    and tier plan are unchanged; a self/ccx `choice` is turned to self, its pick kept as `recommend_before`. Not when the person picked a tier (its rules win), --needs
+    names what only a ccx run gives, the lead's context is large, or the lead's own quota is tight (design:
+    r5 / hc1 self vs ccx2 by files changed)."""
+    rc = cfg.get("routing") or {}
+    on = rc.get("small_self", False)
+    if not (on is True or str(on).strip().lower() in ("on", "true", "yes", "1")) or not delegates:
+        return
+    def num(key, default):          # a hand-edited bad value falls back: a bad [routing] entry must not stop routing
+        try:
+            return float(rc.get(key, default))
+        except (TypeError, ValueError):
+            return float(default)
+    files, src = int(getattr(a, "files", 0) or 0), "--files"
+    if not files and (route.get("objective") or {}).get("files_named"):
+        files, src = int(route["objective"]["files_named"]), "brief"
+    if not files or files > num("small_self_files", 1):
+        return
+    pol = cfg.get("policy") or {}
+    lead = (a.lead or "").split(":")[0] or _caller(None)
+    skip = None
+    if picked_tier(cfg):
+        skip = f"you picked tier {picked_tier(cfg)} (policy.picked): its rules decide"
+    elif set(x for x in (getattr(a, "needs", None) or "").split(",") if x) & {"undo", "worktree", "other-vendor",
+                                                                             "resume"}:
+        skip = "--needs asks for what only a ccx run gives"
+    elif lead_ctx >= int((pol.get("bands") or {}).get("lead_ctx_large", 150000)):
+        skip = f"your context is large ({lead_ctx} tokens): each turn of your own re-reads it"
+    else:
+        q = (route.get("choice") or {}).get("quota")       # three_way already read it
+        if not isinstance(q, dict) and lead in AGENTS:
+            try:
+                q = learn.known_quota(parse_quota(getattr(a, "quota", None)), p)
+            except Exception:  # noqa: BLE001 — no reading: the rule applies as if quota were fine
+                q = None
+        used = (q or {}).get(lead)
+        limit = num("small_self_quota", 0.9)
+        limit = limit / 100 if limit > 1 else limit        # 90 means 90 %, like --quota
+        if isinstance(used, (int, float)) and used >= limit:
+            skip = f"your {lead} quota is tight ({used:.0%} projected)"
+    if skip:
+        route["small_self"] = {"applied": False, "files": files, "files_from": src, "why": skip}
+        return
+    why = (f"small task ({files} file{'s' if files > 1 else ''} by {src}"
+           + (f", {a.minutes:g} min" if a.minutes else "")
+           + "): doing it yourself is quicker; delegating saves a little money and takes minutes")
+    route["small_self"] = {"applied": True, "files": files, "files_from": src, "why": why}
+    if isinstance(route.get("choice"), dict) and route["choice"].get("recommend") != "self":
+        route["choice"].update(recommend_before=route["choice"].get("recommend"), recommend="self",
+                               why=f"routing.small_self: {why}")
+    route["advice"] = (f"do-it-yourself: {why} (routing.small_self; `ccx run` still delegates it if you need ccx's "
+                       "check, review or worktree)")
 
 
 _CJK = re.compile(r"[　-〿一-鿿＀-￯]")
@@ -972,6 +1045,9 @@ def cmd_propose(a) -> int:
                               ", then accept by its check + review (on review_failed, its hint)"))
             if mode == "direct":
                 out["may_be_wrong"] = True
+    elif (route.get("small_self") or {}).get("applied"):
+        out.update(worth_offering=False, recommend="self", why=route["small_self"]["why"],
+                   say=None, next="not worth offering: do it yourself, nothing to ask (routing.small_self)")
     else:
         worth = (c.get("recommend") == "delegate")
         out.update(worth_offering=worth, recommend=c.get("recommend"), why=c.get("why"),
@@ -988,6 +1064,8 @@ def cmd_propose(a) -> int:
             out["builtin_model"] = route["builtin_model"]
     out.update(self_usd=row["self_usd"], delegate_usd=row["delegate_usd"], p=row["p"],
                lead_ctx_tokens=row["lead_ctx_tokens"], ctx_source=c.get("ctx_source"))
+    if route.get("small_self"):
+        out["small_self"] = route["small_self"]
     if tp:
         out["tier"] = {k: tp.get(k) for k in ("tier", "band", "mode", "uncertain", "hard", "explicit", "provisional",
                                               "error") if k in tp}
@@ -1028,7 +1106,8 @@ def register(sub) -> None:
                    "L0/L1 stop; never a spending cap, approval rules or a merge into a protected branch)")
     _routing_args(r, into=adv)
     r.add_argument("--model", help="explicit model (skips routing), e.g. gpt-6.1-sol or sonnet")
-    r.add_argument("--effort", help="explicit reasoning effort: low|medium|high|xhigh|max")
+    r.add_argument("--effort", help="explicit reasoning effort with --model or --provider (alone it is "
+                   "ignored: the route picks the effort): low|medium|high|xhigh|max")
     adv.add_argument("--minutes", type=float, help="how long a skilled engineer would need, in minutes: the standard "
                    "difficulty unit (b = log2 minutes, blended 60/40 with the rubric); task-split learns from it too")
     adv.add_argument("--task", help="task-checkpoint task id: the session id is saved into it at once")
@@ -1108,23 +1187,25 @@ def register(sub) -> None:
                    help="with --ok 0: what was wrong (not finished / done wrong / changed what it shouldn't / other)")
     v.add_argument("--dismiss", action="store_true", help="a test, probe or leftover, not real work: it leaves "
                    "'waits for you', counts neither right nor wrong and is never learned from (a later --ok undoes it)")
-    v.add_argument("--sweep", action="store_true", help="record 'probably right' for finished runs nobody judged "
-                   "whose check or self-check passed and review (if any) passed (undone ones wait for you); also "
-                   "runs quietly at session start. Your own verdict always overrides these")
-    v.add_argument("--after-h", type=float, default=12.0, help="with --sweep: only runs at least this old (hours)")
-    v.add_argument("--sample", type=int, metavar="N", help="spot-check N random probable verdicts of this week: shows "
-                   "what changed and asks ok / wrong (J7: tells how far probable verdicts can be trusted)")
-    v.add_argument("--include-evals", action="store_true", help="with --sample: evaluation runs too")
-    v.add_argument("--list", action="store_true", help="with --sample: print the picks as JSON instead of asking")
-    v.add_argument("--builtin", metavar="RUNG", help="work your own built-in sub-agent did, e.g. claude-builtin:haiku:low")
-    v.add_argument("--b", type=float, help="with --builtin: the difficulty ccx route used")
-    v.add_argument("--agent-id", help="with --builtin: the sub-agent's id, so its real cost is read and learned")
+    vadv = v.add_argument_group("advanced (hooks, spot checks, built-in sub-agents)")
+    vadv.add_argument("--sweep", action="store_true", help="record 'probably right' for finished runs nobody judged "
+                      "whose check or self-check passed and review (if any) passed (undone ones wait for you); also "
+                      "runs quietly at session start. Your own verdict always overrides these")
+    vadv.add_argument("--after-h", type=float, default=12.0, help="with --sweep: only runs at least this old (hours)")
+    vadv.add_argument("--sample", type=int, metavar="N", help="spot-check N random probable verdicts of this week: "
+                      "shows what changed and asks ok / wrong (J7: tells how far probable verdicts can be trusted)")
+    vadv.add_argument("--include-evals", action="store_true", help="with --sample: evaluation runs too")
+    vadv.add_argument("--list", action="store_true", help="with --sample: print the picks as JSON instead of asking")
+    vadv.add_argument("--builtin", metavar="RUNG", help="work your own built-in sub-agent did, e.g. "
+                      "claude-builtin:haiku:low")
+    vadv.add_argument("--b", type=float, help="with --builtin: the difficulty ccx route used")
+    vadv.add_argument("--agent-id", help="with --builtin: the sub-agent's id, so its real cost is read and learned")
     v.set_defaults(fn=cmd_verify)
     pl = sub.add_parser("plan", help="task-split: size / check / template / record / show",
                         add_help=False)
     pl.add_argument("args", nargs=argparse.REMAINDER)
     pl.set_defaults(fn=cmd_plan)
-    rs = sub.add_parser("resume", help="follow up in the same sub-session (cheap: keeps its context)")
+    rs = sub.add_parser("resume", help="follow up in the same sub-session (it keeps its context)")
     rs.add_argument("run_id")
     rs.add_argument("brief", nargs="*")
     rs.add_argument("--brief-file")
@@ -1132,20 +1213,21 @@ def register(sub) -> None:
                     "--brief-file); wait for it with `ccx show <run_id> --wait`")
     rs.add_argument("--wait", type=float, metavar="SECONDS", help="with --bg: wait up to this long in the same call "
                     "and print the final result, as ccx run --bg --wait")
-    rs.add_argument("--tier", choices=["auto", *TIER_ORDER], default="auto")
-    rs.add_argument("--from", dest="caller", choices=[*DELEGATE_AGENTS, *PROVIDER_AGENTS, "user"])
-    rs.add_argument("--no-escalate", action="store_true")
+    radv = rs.add_argument_group("advanced (routing, caller and limits; most follow-ups need none)")
+    radv.add_argument("--tier", choices=["auto", *TIER_ORDER], default="auto")
+    radv.add_argument("--from", dest="caller", choices=[*DELEGATE_AGENTS, *PROVIDER_AGENTS, "user"])
+    radv.add_argument("--no-escalate", action="store_true")
     rs.add_argument("--model")
     rs.add_argument("--effort")
-    rs.add_argument("--budget", type=float, metavar="USD", help="a new spending cap for its own sub-agents (after "
-                    "an over_budget stop)")
+    radv.add_argument("--budget", type=float, metavar="USD", help="a new spending cap for its own sub-agents (after "
+                      "an over_budget stop)")
     rs.add_argument("--review", choices=["auto", "on", "off"], default=None, help="independent review of what this "
                     "follow-up changed, as for ccx run (default: the resumed run's own setting, auto for older runs)")
     rs.add_argument("--check", metavar="CMD", help="replace the run's acceptance command from here on (e.g. one "
                     "that named a missing file or ran no tests)")
-    rs.add_argument("--namecheck", choices=["warn", "fail", "off"], help="static check for names no scope "
-                    "defines in the functions the run changed: warn = shown to you and the reviewer (default, "
-                    "[defaults] namecheck); fail = a hit fails the work like a failed --check; off")
+    radv.add_argument("--namecheck", choices=["warn", "fail", "off"], help="static check for names no scope "
+                      "defines in the functions the run changed: warn = shown to you and the reviewer (default, "
+                      "[defaults] namecheck); fail = a hit fails the work like a failed --check; off")
     rs.set_defaults(fn=cmd_resume)
     nc = sub.add_parser("namecheck", help="static check for names no scope defines (NameError waiting to happen) "
                         "in changed Python functions; exit 1 on a hit")

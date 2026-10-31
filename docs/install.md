@@ -19,7 +19,22 @@ ccx run --to codex --mode read "Summarise README.md in three lines for a new use
 
 The last line is your first delegation (the same one README and `ccx setup` suggest). Step by step instead of
 `ccx setup`: `ccx init --hub <your hub path>`, `ccx sync`, `ccx sync --apply`, `ccx doctor`. The hub is one folder
-of your own for shared memory, skills and the record of every run.
+of your own for shared memory, skills and the record of every run. Once this machine has a hub, `ccx init --hub`
+with another folder stops and shows the one in use; add `--force` to switch (the old hub's files stay where they
+are). The same goes for a `--snapshot` / `--external-sync` that would replace a different `layout.toml`.
+
+No pipx? A virtual environment of its own does the same:
+
+```bash
+python3 -m venv ~/.relayline && ~/.relayline/bin/python -m pip install git+https://github.com/SUPERD6/relayline
+```
+
+```powershell
+python -m venv "$env:USERPROFILE\.relayline"; & "$env:USERPROFILE\.relayline\Scripts\python.exe" -m pip install git+https://github.com/SUPERD6/relayline
+```
+
+Then run `ccx` from that environment's `bin` (Windows: `Scripts`) folder, or link just `ccx` into a folder on your
+PATH (putting the whole folder on PATH also puts its `python` and `pip` first).
 
 **From the plugin marketplace** (the repository is its own marketplace, `relayline`):
 
@@ -61,7 +76,8 @@ cd relayline
 **The install script:**
 - Runs `pipx install --editable .` if pipx is there, so `ccx` is on your PATH. Otherwise it tells you to add `bin/`
   to PATH.
-- Runs `ccx init`, which only creates files and never changes existing ones.
+- Runs `ccx init`, which only creates files and never changes existing ones. When this machine already uses another
+  hub, it stops there and shows that hub; to switch, run it again with `-Force` (`./install.sh <hub path> --force`).
 - Runs `ccx doctor`, which checks CLIs, logins and wiring and reports Unknown when unsure. Rows about ccx's own
   workings (routing prior, tier policy, hub layout, ...) show only when something is wrong there, or with `--verbose`.
 
@@ -82,7 +98,8 @@ Finally, open `/hooks` in Codex once and trust the "ccx: shared memory delta" ho
 ccx init --hub <path> --snapshot AGENTS.md --external-sync "<your sync command>"
 ```
 
-ccx then never edits the tools' instruction files, and leaves skills and MCP to your script.
+ccx then never edits the tools' instruction files, and leaves skills and MCP to your script. On a machine that
+already has another hub, or a `layout.toml` with other values, it stops and says so; add `--force` to replace them.
 
 ## Commands
 

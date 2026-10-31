@@ -5,6 +5,8 @@ __pycache__/
 *.ccx-backup-*
 
 # build leftovers / personal launchers
+dist/
+build/
 *.egg-info/
 *.local.cmd
 *.local.sh

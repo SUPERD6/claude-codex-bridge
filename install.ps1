@@ -1,5 +1,6 @@
-# Install ccx from this clone (Windows). Usage: .\install.ps1 [-Hub D:\path\to\hub]
-param([string]$Hub = "")
+# Install ccx from this clone (Windows). Usage: .\install.ps1 [-Hub D:\path\to\hub] [-Force]
+# -Force: switch this machine to -Hub although another hub is set (ccx init --force; the old hub stays as it is)
+param([string]$Hub = "", [switch]$Force)
 # "Continue", not "Stop": Windows PowerShell 5.1 turns a native program's stderr into an error once output is
 # redirected (.\install.ps1 > log.txt), and pipx writes its progress there. Exit codes are checked instead.
 $ErrorActionPreference = "Continue"
@@ -16,7 +17,9 @@ if (Get-Command pipx -ErrorAction SilentlyContinue) {
 } else {
   Write-Host "pipx not found: add $PSScriptRoot\bin to PATH to use 'ccx' (or: python -m pip install --user -e .)"
 }
-if ($Hub) { python -X utf8 ccx.py init --hub $Hub } else { python -X utf8 ccx.py init }
+if ($Hub -and $Force) { python -X utf8 ccx.py init --hub $Hub --force }
+elseif ($Hub) { python -X utf8 ccx.py init --hub $Hub }
+else { python -X utf8 ccx.py init }
 if ($LASTEXITCODE -ne 0) { exit 1 }
 python -X utf8 ccx.py doctor
 Write-Host "`nNext: python ccx.py setup   (guided: explains each step and asks before changing anything)"
