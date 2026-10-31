@@ -105,6 +105,12 @@ def _slim(record: dict) -> dict:
                          "passed": bool(c.get("passed"))}
         if c.get("unchanged_tree"):                 # the run changed nothing: the check ran on the tree it found
             slim["check"]["unchanged_tree"] = True
+        cov = c.get("covers") or {}
+        if cov:                                     # P1-10: how many test files it ran; did the run change them
+            slim["check"]["covers_n"] = None if cov.get("unknown") else cov.get("n_files")
+            for k in ("basis_changed", "own_tests_only"):
+                if cov.get(k):
+                    slim["check"][k] = True
     return slim
 
 

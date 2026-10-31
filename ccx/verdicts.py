@@ -79,6 +79,9 @@ def soft_verdicts(p: Paths, min_age_h: float = SOFT_AFTER_H, now: float | None =
             if (trust.get(ledger.check_key(check.get("cmd", ""), record.get("cwd"))[0]) or {}).get("weak"):
                 continue
         why = "ccx check passed" if check else "self-checked"
+        if check and check.get("covers"):
+            from .coverage import text
+            why += f" ({text(check['covers'])})"
         if rev == "pass":
             why += ", review passed"
         _soft_verdict(p, record, True, "", f"auto after {min_age_h:g} h: {why}, not undone or reworked")

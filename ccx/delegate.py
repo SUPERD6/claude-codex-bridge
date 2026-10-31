@@ -988,14 +988,22 @@ def run(req: Request, p: Paths) -> dict:
         if ds:
             record["diffstat"] = ds
         mark_run_end(run_dir, cwd)           # the tree as this run left it: a resume inherits only if still so
-        if snap and "edited_tests" not in record:
+        chk = record.get("check") or {}
+        want_cov = bool(chk.get("cmd")) and chk.get("reason") != "namecheck"
+        if snap and ("edited_tests" not in record or want_cov):
             # changed pre-existing tests are flagged for every write run, not only when a review step ran
-            # (review off, an ephemeral run): the lead looks at those first
+            # (review off, an ephemeral run): the lead looks at those first. P1-10: the check's record says which
+            # test files it ran and which of them this run changed or wrote (display only)
             try:
                 from .review import changes, edited_tests
-                ed = edited_tests(changes(cwd, snap)[1])
+                diff = changes(cwd, snap)[1]
+                ed = record.get("edited_tests") or edited_tests(diff)
+                if want_cov:
+                    from . import coverage
+                    chk["covers"] = coverage.summarize(chk["cmd"], cwd, Path(snap.get("repo") or cwd), ed,
+                                                       coverage.new_tests(diff))
             except Exception:  # noqa: BLE001 — weak evidence only
-                ed = []
+                ed = record.get("edited_tests") or []
             if ed:
                 record["edited_tests"] = ed
     beat.set()
@@ -1247,6 +1255,11 @@ def compact(record: dict) -> dict:
         out["check"] = {"cmd": c["cmd"], "passed": c["passed"], "exit": c["exit"],
                         **({"weak": c["weak"], "note": c["note"]} if c.get("weak") else {}),
                         **({"status": "check_broken"} if c.get("broken") else {})}
+        if c.get("covers"):                         # P1-10: what it ran, and whether the run changed its yardstick
+            from .coverage import text
+            out["check"]["covers"] = text(c["covers"])
+            if c["covers"].get("basis_changed"):
+                out["check"]["basis_changed"] = c["covers"]["edited"]
         if c.get("unchanged_tree") and c.get("passed"):
             # it passed on the tree as it was before the run: no evidence about this run's work
             out["check"].update(passed=None, status=NO_CHANGES_NOTE)
@@ -1273,6 +1286,8 @@ def recap(record: dict, res: dict) -> str:
     check = "none" if not c else (NO_CHANGES_NOTE.replace(" ", "-") if c.get("status") == NO_CHANGES_NOTE else
                                   "passed" if c.get("passed") else
                                   f"{'broken' if record.get('kind') == 'check_broken' else 'failed'} (exit {c.get('exit')})")
+    if c and c.get("passed") and c.get("covers"):
+        check += f" ({c['covers']})"                # P1-10: "check passed (covers: ...)"
     review = (res.get("review") or {}).get("verdict") or "none"
     usd = sum(a.get("ae_usd") or 0 for a in record.get("attempts") or []) + ((res.get("review") or {}).get("usd") or 0)
     cc = record.get("cost_chain") or {}
