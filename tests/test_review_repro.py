@@ -118,6 +118,13 @@ class TestRun(Env):
         self.assertEqual(out["review"]["verdict"], "pass", out)
         self.assertEqual(out["review"]["by"], "claude:sonnet:medium")
         self.assertNotIn("kind", out)
+        rec = json.loads((self.hub / "ccx" / "runs" / out["run_id"] / "run.json").read_text(encoding="utf-8"))
+        self.assertEqual(rec["review"]["first_by"], "claude:haiku:low")
+
+    def test_confirm_not_adopted_keeps_the_first_reviewer(self):
+        out = self.go("confirm", "issues,unclear")
+        self.assertEqual(out["review"]["by"], "claude:haiku:low")
+        self.assertEqual(out["review"]["verdict"], "pass")        # the first one's [must], downgraded
 
     def test_confirm_that_finds_it_again_still_needs_a_repro(self):
         out = self.go("confirm", "issues,issues")                 # the stronger one repeats it, still no repro

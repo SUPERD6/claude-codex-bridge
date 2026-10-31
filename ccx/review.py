@@ -627,7 +627,7 @@ REPRO_NOTE = (" Because it passed, each [must] needs a `repro:` at its end that 
               "name both, write it as a [should]; never write `repro:` with anything else. A [must] without one "
               "counts as a [should] and starts no fix round.")
 # a repro names something to run and what goes wrong; "repro: n/a", "repro: cannot run commands" do not count
-_REPRO = re.compile(r"(?<!no )(?<!no\s\*\*)[*_`]*\brepro(?:duction|duce)?[*_`]*\s*[:：]\s*"
+_REPRO = re.compile(r"(?<!no )(?<!no\s\*\*)[*_`]*\brepro(?:duction|duce)?[*_`]*\s*[:：][ \t]*"
                     r"(?!(?:n/?a|none|cannot|can't|not\b|unknown|no\b|static|tbd)\b)(?P<body>\S[^\n]{5,})", re.I)
 _REPRO_SHAPE = re.compile(r"[(`]|->|→|\b(returns?|raises?|prints?|exit|gives?|fails?|crash\w*|error)\b", re.I)
 # kinds of [must] that have no wrong output to show: an edited test assertion (it passes by construction) and a safety
@@ -811,6 +811,7 @@ def review_run(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path, run_d
         if v["verdict"] != "not-run":
             break
     repro_note, adopted = None, None
+    first_by = tried[-1]                  # whose verdict this is unless a confirming review is adopted
     if repro_mode != "off" and v["verdict"] == "issues" and rv.without_repro(v):
         repro_note = {"mode": repro_mode, "without_repro": len(rv.without_repro(v))}
         if repro_mode == "confirm" and len(rv.without_repro(v)) == len(rv._musts(v)):
@@ -837,11 +838,11 @@ def review_run(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path, run_d
                     adopted = (f"{agent}:{model}:{effort}", crev["run_id"])
         v = rv.downgrade(v)               # whatever still has no repro does not start a fix round
         repro_note["downgraded"] = v.get("downgraded", 0)
-    record["review"] = {**v, "reason": why, "by": tried[-1], "run_id": rev["run_id"], "usd": round(usd, 4)}
+    record["review"] = {**v, "reason": why, "by": first_by, "run_id": rev["run_id"], "usd": round(usd, 4)}
     if repro_note:
         record["review"]["repro"] = repro_note
     if adopted:                           # the verdict is the confirming reviewer's
-        record["review"].update(first_by=record["review"]["by"], first_run_id=record["review"]["run_id"],
+        record["review"].update(first_by=first_by, first_run_id=record["review"]["run_id"],
                                 by=adopted[0], run_id=adopted[1])
     if len(tried) > 1:
         record["review"]["tried"] = tried
