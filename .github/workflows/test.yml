@@ -1,40 +1,45 @@
 name: tests
-# A push to a branch runs a small set (Linux 3.11 + 3.13, Windows 3.11, one package check): on a private repo every
-# minute is billed, macOS at 10x and Windows at 2x; the full matrix on every push most likely used up the free
-# minutes in October 2026 (jobs stopped starting: "spending limit"). The full matrix (3 OS x 3.11-3.13, package on 3 OS) runs on version tags, pull requests and by hand.
-# Pushes that only touch docs don't run.
+# A pull request runs a small set: Windows 3.11 and Ubuntu 3.13 (the oldest Python on the OS every real run used, the
+# newest on Linux), plus the package check on Ubuntu. A push to main, a version tag and a run by hand run the full
+# matrix (3 OS x 3.11-3.13, package on 3 OS), so whatever a pull request did not cover is checked once it lands.
+# Why: on a private repo every minute is billed (macOS 10x, Windows 2x); the full matrix on every push most likely used
+# up the free minutes in October 2026 (jobs stopped starting: "spending limit"), and a PR is pushed several times.
+# Pushes to other branches don't run (their pull request does), nor pushes to main that only touch docs.
+# Job names carry no "full" flag, so a PR check and the same cell on main have the same name.
 on:
   push:
-    branches: ["**"]
+    branches: [main]
     tags: ["v*"]
     paths-ignore: ["**.md", "docs/**", "site/**", "LICENSE"]
   pull_request:
   workflow_dispatch:
 concurrency:
   group: tests-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}   # every main commit keeps its full run
 jobs:
   plan:
     runs-on: ubuntu-latest
     outputs:
-      full: ${{ steps.p.outputs.full }}
+      test: ${{ steps.p.outputs.test }}
+      package: ${{ steps.p.outputs.package }}
     steps:
       - id: p
-        run: echo "full=${{ github.event_name != 'push' || startsWith(github.ref, 'refs/tags/') }}" >> "$GITHUB_OUTPUT"
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = pull_request ]; then
+            echo 'test={"include":[{"os":"windows-latest","python":"3.11"},{"os":"ubuntu-latest","python":"3.13"}]}' >> "$GITHUB_OUTPUT"
+            echo 'package={"os":["ubuntu-latest"]}' >> "$GITHUB_OUTPUT"
+          else
+            echo 'test={"os":["ubuntu-latest","windows-latest","macos-latest"],"python":["3.11","3.12","3.13"]}' >> "$GITHUB_OUTPUT"
+            echo 'package={"os":["ubuntu-latest","windows-latest","macos-latest"]}' >> "$GITHUB_OUTPUT"
+          fi
 
   test:
     needs: plan
+    name: test (${{ matrix.os }}, ${{ matrix.python }})
     strategy:
       fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        python: ["3.11", "3.12", "3.13"]
-        full: ["${{ needs.plan.outputs.full }}"]
-        exclude:
-          - {full: "false", os: macos-latest}
-          - {full: "false", os: windows-latest, python: "3.12"}
-          - {full: "false", os: windows-latest, python: "3.13"}
-          - {full: "false", os: ubuntu-latest, python: "3.12"}
+      matrix: ${{ fromJSON(needs.plan.outputs.test) }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -53,14 +58,10 @@ jobs:
   package:
     # build the wheel, install it into a clean venv outside the source tree, run the installed ccx
     needs: plan
+    name: package (${{ matrix.os }})
     strategy:
       fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        full: ["${{ needs.plan.outputs.full }}"]
-        exclude:
-          - {full: "false", os: macos-latest}
-          - {full: "false", os: windows-latest}
+      matrix: ${{ fromJSON(needs.plan.outputs.package) }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

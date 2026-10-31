@@ -24,12 +24,22 @@ python -m pytest -q tests            # must pass before every commit
 ```
 
 The tests never call a real agent: `tests/fakes/` holds stand-in `codex`, `claude` and `gemini` CLIs that speak the
-same event formats. CI runs them on Linux, Windows and macOS × Python 3.11–3.13, and also builds the wheel and runs
-the installed `ccx` (`tests/smoke_installed.py`).
+same event formats. A pull request runs them on Windows 3.11 and Ubuntu 3.13 and builds the wheel on Ubuntu; every
+push to main (and every version tag) runs Linux, Windows and macOS × Python 3.11–3.13 and checks the wheel on all
+three (it installs the wheel and runs the installed `ccx`, `tests/smoke_installed.py`).
 
 ## Rules
 
 - **Tests with every change.** A fix comes with a test that fails without it.
+- **Tests don't depend on the clock, the date or timing.**
+  - Code that reads the time takes it as a parameter (`now=`, as `tokenflow.since_of(period, now)`), and the test
+    passes a fixed one. A test that used "now − 60 s" as today failed in the first minute after midnight (#193).
+  - Don't hard-code a date that a time window is measured against; build it from that fixed now. A test with a
+    written-out 2026-10-24 timestamp failed once it fell out of a 7-day window (#190).
+  - Concurrent code is tested with a fixed interleaving: mock the slow call and hold a lock or barrier, as
+    `tests/test_worktree_race.py` does. Never sleep or raise a timeout to make a race go away.
+  - Tests that start real processes on the same repository or hub run them one after another (a fixture that
+    serializes them), not side by side.
 - **Keep the core.** Commands and options are not removed; a PR that changes one says in a line what it kept and how
   that was checked. Paths not run for real are called experimental where they are described.
 - **Nothing personal in the repo**: no names, local paths, e-mail addresses, machine names or data. Personal things live in the
