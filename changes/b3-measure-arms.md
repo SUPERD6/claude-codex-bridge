@@ -8,4 +8,5 @@
   reviews, requests, the `first_input` sum (m3: plus each child's first request, from its rollout), total prompt
   tokens, $, wall and right. The decision rule is registered in `docs/research/2026-10-30-b3-lean-switches-plan.md`
   ("Fewer runs") before any unit ran: right not below the baseline, fewer runs or a lower `first_input` sum, total
-  prompt not higher (m3: no child-context loss); `summary` applies it. No measurement yet.
+  prompt not higher (m5: per request; m3: also no child-context loss); fewer than 80% of the planned pairs or a switch
+  that did not take is Unknown; `summary` applies it. No measurement yet (one pre-run unit only).
