@@ -69,7 +69,7 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install build twine
       - run: python -m build --outdir dist          # wheel + sdist, what an upload to PyPI would carry
-      - run: python -m twine check --strict dist/*  # the long description (README.md) renders on PyPI
+      - run: python -m twine check --strict dist/*  # metadata PyPI would refuse (it does not render Markdown: tests/test_packaging.py checks README's links)
       - name: install into a clean venv and smoke-test
         shell: bash
         run: |
