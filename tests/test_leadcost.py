@@ -247,11 +247,12 @@ class TestFablePrice(Env):
         from ccx import learn
         p = Paths(self.hub)
         mtok = {"input_tokens": 1_000_000}
-        for model in ("fable", "claude-fable-5-1", "claude-fable-5"):
+        for model in ("fable", "claude-fable-5-1"):
             self.assertAlmostEqual(learn.price_usd(p, "claude", model, mtok), 10.0, places=6)
         self.assertAlmostEqual(learn.price_usd(p, "claude", "claude-fable-5-1", {"output_tokens": 1_000_000}), 50.0)
         self.assertAlmostEqual(leadcost._price_read(p, "claude", "claude-fable-5-1", 1_000_000), 0.25)
         self.assertAlmostEqual(learn.price_usd(p, "claude", "claude-opus-5-5", mtok), 4.0)   # opus unchanged
+        self.assertIsNone(learn.price_usd(p, "claude", "claude-fable-5", mtok))   # its cache price is unknown here
 
 
 if __name__ == "__main__":
