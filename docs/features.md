@@ -19,6 +19,18 @@ English · [中文](features.zh.md) · back to the [README](../README.md)
   <img alt="Architecture: Claude Code, Codex and Gemini CLI connect to ccx; a lead hands a brief to another, which runs headless and returns JSON; ccx routes, reruns the check, asks another vendor to review, records verdicts and costs; below: the personal layer (hub: memory, skills, MCP, ledger), the project layer (.ccx: context, journal, handoffs, checkpoints, undo snapshots) and ccx ui, a local read-only page" src="assets/architecture-light.svg" width="100%">
 </picture>
 
+## Commands: everyday first, nothing removed
+
+`ccx -h` lists the everyday commands only: `setup`, `doctor`, `run`, `ask`, `resume`, `stop`, `undo`, `verify`,
+`show`, `q`, `ui`, `mem`, `handoff`, `lead` (and `demo`). `ccx advanced` (same as `ccx -h --all`) lists every group: memory and
+context, accounting and reports, between agents (the commands open sessions call: `peek`, `board`, `say`, `reply`),
+advanced (the hub, several projects, installing: `init`, `projects`, `where`, `intake`, `sync`, `config`,
+`uninstall`, `repair`, `agents`), maintenance, and developer last. `ccx dev` lists the developer commands (`trial`,
+`ab`, `bench`, `improve`, `namecheck`); `ccx dev trial ...` is `ccx trial ...`. In `ccx run -h`, `ccx resume -h`,
+`ccx verify -h` and `ccx lead -h` the rarely used options sit under an "advanced" heading. This is help layout only:
+every command and option keeps its name and parses as before (`tests/data/cli_surface.json` froze the full list
+and a test checks it).
+
 ## See it live: `ccx ui`
 
 `ccx ui` opens a page on this machine: what waits for you (red = your call, amber = check the result, teal = a question for you),

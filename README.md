@@ -86,7 +86,7 @@ read the diff; the JSON result carries the run id, the check, the review and the
 has no `--check` gets a one-line reminder on stderr.
 
 You need Python 3.11+ and the `claude` and `codex` CLIs, logged in; DeepSeek (`dsh`, or a key in
-`DEEPSEEK_API_KEY`) is optional. `ccx -h` lists the commands you type (run, resume, show, q, undo, ui, ...); `ccx -h --all` also lists the ones agents call to each other (board, say, reply, peek), the advanced and maintenance ones, and the developer ones (trial, ab, bench) last.
+`DEEPSEEK_API_KEY`) is optional. `ccx -h` lists the everyday commands (run, resume, show, verify, q, undo, ui, mem, ...); `ccx advanced` (same as `ccx -h --all`) lists every group: the ones agents call to each other (board, say, reply, peek), the advanced ones (hub, several projects, install), maintenance, and the developer ones (trial, ab, bench) last, which also run as `ccx dev <command>`. Nothing was removed: old command lines work as before ([commands](docs/features.md#commands-everyday-first-nothing-removed)).
 
 ## What else it does
 

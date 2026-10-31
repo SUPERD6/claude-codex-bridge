@@ -73,7 +73,7 @@ ccx undo <run_id>            # 不想要：先显示会还原什么；加 --appl
 验收、审查和花费。可能改文件、却没给 `--check` 的运行，会在 stderr 提醒一行。
 
 需要 Python 3.11+，以及登录好的 `claude` 和 `codex` 命令行；DeepSeek（`dsh`，或 `DEEPSEEK_API_KEY` 里的密钥）可选。
-`ccx -h` 列出你自己会敲的命令（run、resume、show、q、undo、ui 等）；`ccx -h --all` 还列出智能体之间互相调用的（board、say、reply、peek）、进阶和维护用的，开发者用的（trial、ab、bench 等）放在最后。
+`ccx -h` 只列日常命令（run、resume、show、verify、q、undo、ui、mem 等）；`ccx advanced`（等于 `ccx -h --all`）列出所有分组：智能体之间互相调用的（board、say、reply、peek）、进阶（hub、多个项目、安装）、维护，开发者用的（trial、ab、bench 等）放在最后，也可以写成 `ccx dev <命令>`。一个命令都没删，旧写法照常能用（[命令](docs/features.zh.md#命令日常的在前一个不删)）。
 
 ## 其他能做的
 
