@@ -25,7 +25,7 @@ task: whatever you read is re-read on every later turn. Keep STATUS one page (EN
 
 ## Rules
 - Run `python -m pytest -q tests` before every commit; all must pass (CI: a PR runs Windows 3.11 + Ubuntu 3.13, a push to
-  main runs Linux/Windows/macOS × 3.11–3.13).
+  main runs Linux/Windows/macOS × 3.11–3.13; check main's run after a merge, see CONTRIBUTING).
 - Generic only: no personal paths, names or data in the repo. Personal things live in the user's hub.
 - Keep the core: no command or option is removed; a PR that changes one says in a line what it kept and how that
   was checked. Paths not run for real are called experimental where they are described.
