@@ -1,0 +1,2799 @@
+{
+ "source": "pg1-results.jsonl",
+ "tasks": 30,
+ "rows": 90,
+ "unclean_rows": [
+  {
+   "task": "pg-book-store",
+   "arm": "ccx2",
+   "ok": false,
+   "other_processes_seen": 3
+  },
+  {
+   "task": "pg-book-store",
+   "arm": "self",
+   "ok": true,
+   "other_processes_seen": 55
+  },
+  {
+   "task": "pg-scale-generator",
+   "arm": "direct",
+   "ok": false,
+   "other_processes_seen": 1
+  }
+ ],
+ "arms": {
+  "all": {
+   "self": {
+    "ok": 25,
+    "n": 30,
+    "wilson95": [
+     0.664,
+     0.927
+    ],
+    "usd": 0.915,
+    "cost_per_success": 0.0366,
+    "lead_usd": 0.915,
+    "ccx_usd": 0,
+    "wall_median_s": 11.1
+   },
+   "ccx2": {
+    "ok": 12,
+    "n": 30,
+    "wilson95": [
+     0.246,
+     0.577
+    ],
+    "usd": 1.381,
+    "cost_per_success": 0.1151,
+    "lead_usd": 1.1353,
+    "ccx_usd": 0.2457,
+    "wall_median_s": 57.4
+   },
+   "direct": {
+    "ok": 9,
+    "n": 30,
+    "wilson95": [
+     0.167,
+     0.479
+    ],
+    "usd": 0.1874,
+    "cost_per_success": 0.0208,
+    "lead_usd": 0,
+    "ccx_usd": 0.1874,
+    "wall_median_s": 44.3
+   }
+  },
+  "clean": {
+   "self": {
+    "ok": 24,
+    "n": 29,
+    "wilson95": [
+     0.655,
+     0.924
+    ],
+    "usd": 0.8714,
+    "cost_per_success": 0.0363,
+    "lead_usd": 0.8714,
+    "ccx_usd": 0,
+    "wall_median_s": 10.8
+   },
+   "ccx2": {
+    "ok": 12,
+    "n": 29,
+    "wilson95": [
+     0.255,
+     0.593
+    ],
+    "usd": 1.3411,
+    "cost_per_success": 0.1118,
+    "lead_usd": 1.1012,
+    "ccx_usd": 0.2399,
+    "wall_median_s": 57.4
+   },
+   "direct": {
+    "ok": 9,
+    "n": 29,
+    "wilson95": [
+     0.173,
+     0.492
+    ],
+    "usd": 0.1749,
+    "cost_per_success": 0.0194,
+    "lead_usd": 0,
+    "ccx_usd": 0.1749,
+    "wall_median_s": 43.9
+   }
+  }
+ },
+ "direct_blocked": [
+  {
+   "task": "pg-bottle-song",
+   "wall_s": 4.2
+  },
+  {
+   "task": "pg-zebra-puzzle",
+   "wall_s": 4.2
+  }
+ ],
+ "paired": {
+  "self vs ccx2": {
+   "all": {
+    "pairs": 30,
+    "only_self": 13,
+    "only_ccx2": 0,
+    "p_exact": 0.000244,
+    "only_self_tasks": [
+     "pg-book-store",
+     "pg-bowling",
+     "pg-connect",
+     "pg-food-chain",
+     "pg-forth",
+     "pg-grade-school",
+     "pg-grep",
+     "pg-hangman",
+     "pg-phone-number",
+     "pg-react",
+     "pg-rest-api",
+     "pg-simple-linked-list",
+     "pg-zipper"
+    ],
+    "only_ccx2_tasks": [],
+    "p_holm3": 0.000488
+   },
+   "clean": {
+    "pairs": 29,
+    "only_self": 12,
+    "only_ccx2": 0,
+    "p_exact": 0.000488,
+    "only_self_tasks": [
+     "pg-bowling",
+     "pg-connect",
+     "pg-food-chain",
+     "pg-forth",
+     "pg-grade-school",
+     "pg-grep",
+     "pg-hangman",
+     "pg-phone-number",
+     "pg-react",
+     "pg-rest-api",
+     "pg-simple-linked-list",
+     "pg-zipper"
+    ],
+    "only_ccx2_tasks": [],
+    "p_holm3": 0.000976
+   }
+  },
+  "self vs direct": {
+   "all": {
+    "pairs": 30,
+    "only_self": 16,
+    "only_direct": 0,
+    "p_exact": 3.05e-05,
+    "only_self_tasks": [
+     "pg-beer-song",
+     "pg-book-store",
+     "pg-bottle-song",
+     "pg-forth",
+     "pg-grade-school",
+     "pg-grep",
+     "pg-hangman",
+     "pg-phone-number",
+     "pg-react",
+     "pg-rest-api",
+     "pg-scale-generator",
+     "pg-sgf-parsing",
+     "pg-simple-linked-list",
+     "pg-two-bucket",
+     "pg-wordy",
+     "pg-zebra-puzzle"
+    ],
+    "only_direct_tasks": [],
+    "p_holm3": 9.15e-05
+   },
+   "clean": {
+    "pairs": 28,
+    "only_self": 14,
+    "only_direct": 0,
+    "p_exact": 0.000122,
+    "only_self_tasks": [
+     "pg-beer-song",
+     "pg-bottle-song",
+     "pg-forth",
+     "pg-grade-school",
+     "pg-grep",
+     "pg-hangman",
+     "pg-phone-number",
+     "pg-react",
+     "pg-rest-api",
+     "pg-sgf-parsing",
+     "pg-simple-linked-list",
+     "pg-two-bucket",
+     "pg-wordy",
+     "pg-zebra-puzzle"
+    ],
+    "only_direct_tasks": [],
+    "p_holm3": 0.000366
+   }
+  },
+  "direct vs ccx2": {
+   "all": {
+    "pairs": 30,
+    "only_direct": 4,
+    "only_ccx2": 7,
+    "p_exact": 0.549,
+    "only_direct_tasks": [
+     "pg-bowling",
+     "pg-connect",
+     "pg-food-chain",
+     "pg-zipper"
+    ],
+    "only_ccx2_tasks": [
+     "pg-beer-song",
+     "pg-bottle-song",
+     "pg-scale-generator",
+     "pg-sgf-parsing",
+     "pg-two-bucket",
+     "pg-wordy",
+     "pg-zebra-puzzle"
+    ],
+    "p_holm3": 0.549
+   },
+   "clean": {
+    "pairs": 28,
+    "only_direct": 4,
+    "only_ccx2": 6,
+    "p_exact": 0.754,
+    "only_direct_tasks": [
+     "pg-bowling",
+     "pg-connect",
+     "pg-food-chain",
+     "pg-zipper"
+    ],
+    "only_ccx2_tasks": [
+     "pg-beer-song",
+     "pg-bottle-song",
+     "pg-sgf-parsing",
+     "pg-two-bucket",
+     "pg-wordy",
+     "pg-zebra-puzzle"
+    ],
+    "p_holm3": 0.754
+   },
+   "without_blocked": {
+    "pairs": 28,
+    "only_direct": 4,
+    "only_ccx2": 5,
+    "p_exact": 1.0,
+    "only_direct_tasks": [
+     "pg-bowling",
+     "pg-connect",
+     "pg-food-chain",
+     "pg-zipper"
+    ],
+    "only_ccx2_tasks": [
+     "pg-beer-song",
+     "pg-scale-generator",
+     "pg-sgf-parsing",
+     "pg-two-bucket",
+     "pg-wordy"
+    ]
+   },
+   "without_blocked_clean": {
+    "pairs": 26,
+    "only_direct": 4,
+    "only_ccx2": 4,
+    "p_exact": 1.0,
+    "only_direct_tasks": [
+     "pg-bowling",
+     "pg-connect",
+     "pg-food-chain",
+     "pg-zipper"
+    ],
+    "only_ccx2_tasks": [
+     "pg-beer-song",
+     "pg-sgf-parsing",
+     "pg-two-bucket",
+     "pg-wordy"
+    ]
+   }
+  }
+ },
+ "bootstrap_ccx2_over_self": {
+  "clean": {
+   "pairs": 29,
+   "resamples": 2000,
+   "seed": 31,
+   "unit": "task",
+   "total_ratio": 1.539,
+   "total_ratio_ci": [
+    1.346,
+    1.746
+   ],
+   "cost_per_success_ratio": 3.078,
+   "cost_per_success_ratio_ci": [
+    2.123,
+    5.155
+   ],
+   "resamples_without_a_success": 0,
+   "tasks_ccx2_dearer": 27,
+   "tasks_ccx2_slower": 29,
+   "wall_diff_median_s": 46.3,
+   "wall_median_diff_s": 46.6,
+   "ci_method": "percentile, index floor(q * (n - 1)) of the sorted resamples, no interpolation"
+  },
+  "all": {
+   "pairs": 30,
+   "resamples": 2000,
+   "seed": 31,
+   "unit": "task",
+   "total_ratio": 1.509,
+   "total_ratio_ci": [
+    1.322,
+    1.711
+   ],
+   "cost_per_success_ratio": 3.144,
+   "cost_per_success_ratio_ci": [
+    2.209,
+    5.431
+   ],
+   "resamples_without_a_success": 0,
+   "tasks_ccx2_dearer": 27,
+   "tasks_ccx2_slower": 30,
+   "wall_diff_median_s": 46.8,
+   "wall_median_diff_s": 46.3,
+   "ci_method": "percentile, index floor(q * (n - 1)) of the sorted resamples, no interpolation"
+  }
+ },
+ "bootstrap_direct_over_self": {
+  "clean": {
+   "pairs": 28,
+   "resamples": 2000,
+   "seed": 31,
+   "unit": "task",
+   "total_ratio": 0.2,
+   "total_ratio_ci": [
+    0.172,
+    0.231
+   ],
+   "cost_per_success_ratio": 0.512,
+   "cost_per_success_ratio_ci": [
+    0.339,
+    0.99
+   ],
+   "resamples_without_a_success": 0,
+   "tasks_direct_dearer": 0,
+   "tasks_direct_slower": 26,
+   "wall_diff_median_s": 31.3,
+   "wall_median_diff_s": 32.7,
+   "ci_method": "percentile, index floor(q * (n - 1)) of the sorted resamples, no interpolation"
+  },
+  "all": {
+   "pairs": 30,
+   "resamples": 2000,
+   "seed": 31,
+   "unit": "task",
+   "total_ratio": 0.205,
+   "total_ratio_ci": [
+    0.176,
+    0.239
+   ],
+   "cost_per_success_ratio": 0.569,
+   "cost_per_success_ratio_ci": [
+    0.373,
+    1.137
+   ],
+   "resamples_without_a_success": 0,
+   "tasks_direct_dearer": 0,
+   "tasks_direct_slower": 28,
+   "wall_diff_median_s": 33.5,
+   "wall_median_diff_s": 33.2,
+   "ci_method": "percentile, index floor(q * (n - 1)) of the sorted resamples, no interpolation"
+  }
+ },
+ "lead_side": {
+  "all": {
+   "ccx2_lead_usd": 1.1353,
+   "ccx2_usd": 1.381,
+   "lead_share": 0.822,
+   "ccx2_lead_usd_median": 0.0346,
+   "self_usd_median": 0.0275,
+   "tasks_ccx2_lead_alone_dearer_than_self": 24,
+   "of": 30,
+   "ccx2_cost_per_success_if_all_right": 0.046,
+   "self_cost_per_success": 0.0366
+  },
+  "clean": {
+   "ccx2_lead_usd": 1.1012,
+   "ccx2_usd": 1.3411,
+   "lead_share": 0.821,
+   "ccx2_lead_usd_median": 0.035,
+   "self_usd_median": 0.0274,
+   "tasks_ccx2_lead_alone_dearer_than_self": 24,
+   "of": 29,
+   "ccx2_cost_per_success_if_all_right": 0.0462,
+   "self_cost_per_success": 0.0363
+  },
+  "fields": "lead_usd (all of the lead's Claude spend in the unit, brief, waiting turn and acceptance included) / usd (lead_usd + ccx_usd; ccx_usd holds ccx's work runs and its reviews) of the ccx2 rows; self's usd is its lead_usd",
+  "reworked_units": 7,
+  "ccx2_lead_usd_median_reworked": 0.0481,
+  "ccx2_lead_usd_median_not_reworked": 0.0336,
+  "ccx2_cheaper_than_self": [
+   {
+    "task": "pg-book-store",
+    "self_usd": 0.043581,
+    "ccx2_usd": 0.039854,
+    "self_cost_rank": [
+     28,
+     30
+    ]
+   },
+   {
+    "task": "pg-paasio",
+    "self_usd": 0.037158,
+    "ccx2_usd": 0.035372,
+    "self_cost_rank": [
+     26,
+     30
+    ]
+   },
+   {
+    "task": "pg-sgf-parsing",
+    "self_usd": 0.072999,
+    "ccx2_usd": 0.047024,
+    "self_cost_rank": [
+     30,
+     30
+    ]
+   }
+  ]
+ },
+ "check": {
+  "ccx2_check_passed": 30,
+  "of": 30,
+  "passed_but_hidden_failed": 18,
+  "hidden_failed": 18
+ },
+ "routes": {
+  "rungs": [
+   "codex:gpt-6-luna:low"
+  ],
+  "ccx2_second_attempts": {
+   "pg-dot-dsl": "the lead sent it back (ccx resume)",
+   "pg-forth": "the lead sent it back (ccx resume)",
+   "pg-pig-latin": "ccx retried on the same rung after its check failed",
+   "pg-pov": "the lead sent it back (ccx resume)",
+   "pg-react": "ccx retried on the same rung after its check failed",
+   "pg-wordy": "ccx retried on the same rung after its check failed"
+  },
+  "ccx2_units_with_a_fix_round": 4,
+  "ccx2_units_with_2_attempts": 6,
+  "ccx2_units_reviewed": 30
+ },
+ "direct_review": {
+  "failed_not_blocked": 19,
+  "last_verdict_pass": 18
+ },
+ "failures": {
+  "all_three_wrong": [
+   "pg-dot-dsl",
+   "pg-go-counting",
+   "pg-paasio",
+   "pg-pov",
+   "pg-tree-building"
+  ],
+  "ccx2_failed_direct_right": [
+   "pg-bowling",
+   "pg-connect",
+   "pg-food-chain",
+   "pg-zipper"
+  ],
+  "ccx2_won_direct_lost": [
+   {
+    "task": "pg-beer-song",
+    "why": "ccx2 first try",
+    "ccx2_attempts": 1,
+    "ccx2_fix_rounds": 0,
+    "direct_wall_s": 38.1
+   },
+   {
+    "task": "pg-bottle-song",
+    "why": "direct blocked",
+    "ccx2_attempts": 1,
+    "ccx2_fix_rounds": 0,
+    "direct_wall_s": 4.2
+   },
+   {
+    "task": "pg-scale-generator",
+    "why": "direct row unclean",
+    "ccx2_attempts": 1,
+    "ccx2_fix_rounds": 1,
+    "direct_wall_s": 110.4
+   },
+   {
+    "task": "pg-sgf-parsing",
+    "why": "ccx2 first try",
+    "ccx2_attempts": 1,
+    "ccx2_fix_rounds": 0,
+    "direct_wall_s": 56.1
+   },
+   {
+    "task": "pg-two-bucket",
+    "why": "ccx2 first try",
+    "ccx2_attempts": 1,
+    "ccx2_fix_rounds": 0,
+    "direct_wall_s": 59.0
+   },
+   {
+    "task": "pg-wordy",
+    "why": "ccx2 retried",
+    "ccx2_attempts": 2,
+    "ccx2_fix_rounds": 0,
+    "direct_wall_s": 78.4
+   },
+   {
+    "task": "pg-zebra-puzzle",
+    "why": "direct blocked",
+    "ccx2_attempts": 1,
+    "ccx2_fix_rounds": 0,
+    "direct_wall_s": 4.2
+   }
+  ],
+  "ccx2_failure_codes": {
+   "interface": 14,
+   "logic": 4,
+   "uncoded": 0
+  },
+  "ccx2_failure_coding": {
+   "pg-book-store": {
+    "code": "interface",
+    "what": "rejects the basket format the tests pass (expects counts for five books)"
+   },
+   "pg-bowling": {
+    "code": "logic",
+    "what": "two bonus-roll validation cases not raised"
+   },
+   "pg-connect": {
+    "code": "logic",
+    "what": "wrong winner on several boards"
+   },
+   "pg-dot-dsl": {
+    "code": "interface",
+    "what": "attrs default [] instead of {}; error messages differ"
+   },
+   "pg-food-chain": {
+    "code": "interface",
+    "what": "returns one string, the tests expect a list of lines; its own test_own.py fixed that"
+   },
+   "pg-forth": {
+    "code": "interface",
+    "what": "takes one string, the tests pass a list of lines"
+   },
+   "pg-go-counting": {
+    "code": "interface",
+    "what": "the module lacks the WHITE/BLACK/NONE constants the tests import"
+   },
+   "pg-grade-school": {
+    "code": "interface",
+    "what": "raises on a duplicate name, the tests expect add_student to return False"
+   },
+   "pg-grep": {
+    "code": "interface",
+    "what": "returns a list of lines, the tests expect one string"
+   },
+   "pg-hangman": {
+    "code": "logic",
+    "what": "wrong guess count and status after the last miss"
+   },
+   "pg-paasio": {
+    "code": "logic",
+    "what": "context-manager behaviour of the wrapped object"
+   },
+   "pg-phone-number": {
+    "code": "interface",
+    "what": "no .pretty() method / attributes the tests use"
+   },
+   "pg-pov": {
+    "code": "interface",
+    "what": "error message text differs from the tests'"
+   },
+   "pg-react": {
+    "code": "interface",
+    "what": "callbacks get values spread out, the tests pass one list"
+   },
+   "pg-rest-api": {
+    "code": "interface",
+    "what": "payload taken as dict, the tests pass a JSON string"
+   },
+   "pg-simple-linked-list": {
+    "code": "interface",
+    "what": "head()/pop return int where the tests expect a node with .value"
+   },
+   "pg-tree-building": {
+    "code": "interface",
+    "what": "error message text differs from the tests'"
+   },
+   "pg-zipper": {
+    "code": "interface",
+    "what": "tuple trees instead of the tests' dict trees; its own test_own.py fixed that shape"
+   }
+  },
+  "coding_is": "hand coding of the hidden-test error lines (FAILURE_CODES), not a field of the rows",
+  "direct_ccx2_clean_pairs_opposite": {
+   "opposite": 10,
+   "of": 28
+  },
+  "direct_ccx2_clean_pairs_opposite_without_blocked": {
+   "opposite": 8,
+   "of": 26
+  }
+ },
+ "self_right_without_bash": {
+  "count": 5,
+  "tasks": [
+   "pg-book-store",
+   "pg-grade-school",
+   "pg-grep",
+   "pg-phone-number",
+   "pg-wordy"
+  ],
+  "fields": "lead_tools has no Bash: the lead never ran a command (a Bash call that only wrote a file still counts as Bash here)"
+ },
+ "feature_auc": {
+  "by_feature": {
+   "exercism_difficulty": {
+    "ccx2_fails": {
+     "auc": 0.57,
+     "ci95": [
+      0.35,
+      0.77
+     ],
+     "ci_contains_0_5": true,
+     "failures": 18,
+     "skipped_resamples": 0
+    },
+    "direct_fails": {
+     "auc": 0.54,
+     "ci95": [
+      0.32,
+      0.76
+     ],
+     "ci_contains_0_5": true,
+     "failures": 21,
+     "skipped_resamples": 0
+    }
+   },
+   "tests": {
+    "ccx2_fails": {
+     "auc": 0.51,
+     "ci95": [
+      0.28,
+      0.74
+     ],
+     "ci_contains_0_5": true,
+     "failures": 18,
+     "skipped_resamples": 0
+    },
+    "direct_fails": {
+     "auc": 0.38,
+     "ci95": [
+      0.16,
+      0.61
+     ],
+     "ci_contains_0_5": true,
+     "failures": 21,
+     "skipped_resamples": 0
+    }
+   },
+   "instruction_chars": {
+    "ccx2_fails": {
+     "auc": 0.34,
+     "ci95": [
+      0.14,
+      0.56
+     ],
+     "ci_contains_0_5": true,
+     "failures": 18,
+     "skipped_resamples": 0
+    },
+    "direct_fails": {
+     "auc": 0.62,
+     "ci95": [
+      0.37,
+      0.84
+     ],
+     "ci_contains_0_5": true,
+     "failures": 21,
+     "skipped_resamples": 0
+    }
+   }
+  },
+  "in_sample": true,
+  "post_hoc": true,
+  "bootstrap": {
+   "unit": "task",
+   "resamples": 4000,
+   "seed": 7,
+   "ci_method": "percentile, index floor(q * (n - 1)), no interpolation"
+  },
+  "from": "scripts/eval/polyglot_selection.json (difficulty, tests, instruction_chars)"
+ },
+ "units": [
+  {
+   "task": "pg-affine-cipher",
+   "arm": "self",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.028793,
+   "lead_usd": 0.028793,
+   "ccx_usd": 0,
+   "wall_s": 10.1,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": null,
+   "rungs": [],
+   "attempts": null,
+   "reviews": null,
+   "fix_rounds": null,
+   "lead_tools": {
+    "Read": 1,
+    "Write": 1,
+    "Bash": 1
+   }
+  },
+  {
+   "task": "pg-affine-cipher",
+   "arm": "ccx2",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.046087,
+   "lead_usd": 0.040572,
+   "ccx_usd": 0.005515,
+   "wall_s": 57.4,
+   "hidden_failed": 0,
+   "ccx_check_passed": true,
+   "verdicts": null,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": {
+    "Bash": 2
+   }
+  },
+  {
+   "task": "pg-affine-cipher",
+   "arm": "direct",
+   "ok": true,
+   "env_clean": true,
+   "status": "done",
+   "usd": 0.004228,
+   "lead_usd": null,
+   "ccx_usd": 0.004228,
+   "wall_s": 38.9,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": [
+    "pass"
+   ],
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": null
+  },
+  {
+   "task": "pg-beer-song",
+   "arm": "self",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.041377,
+   "lead_usd": 0.041377,
+   "ccx_usd": 0,
+   "wall_s": 10.8,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": null,
+   "rungs": [],
+   "attempts": null,
+   "reviews": null,
+   "fix_rounds": null,
+   "lead_tools": {
+    "Read": 1,
+    "Write": 1,
+    "Bash": 1
+   }
+  },
+  {
+   "task": "pg-beer-song",
+   "arm": "ccx2",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.058205,
+   "lead_usd": 0.052717,
+   "ccx_usd": 0.005488,
+   "wall_s": 55.0,
+   "hidden_failed": 0,
+   "ccx_check_passed": true,
+   "verdicts": null,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": {
+    "Bash": 3
+   }
+  },
+  {
+   "task": "pg-beer-song",
+   "arm": "direct",
+   "ok": false,
+   "env_clean": true,
+   "status": "done",
+   "usd": 0.005487,
+   "lead_usd": null,
+   "ccx_usd": 0.005487,
+   "wall_s": 38.1,
+   "hidden_failed": 8,
+   "ccx_check_passed": null,
+   "verdicts": [
+    "pass"
+   ],
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": null
+  },
+  {
+   "task": "pg-book-store",
+   "arm": "self",
+   "ok": true,
+   "env_clean": false,
+   "status": "success",
+   "usd": 0.043581,
+   "lead_usd": 0.043581,
+   "ccx_usd": 0,
+   "wall_s": 11.4,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": null,
+   "rungs": [],
+   "attempts": null,
+   "reviews": null,
+   "fix_rounds": null,
+   "lead_tools": {
+    "Read": 1,
+    "Write": 1
+   }
+  },
+  {
+   "task": "pg-book-store",
+   "arm": "ccx2",
+   "ok": false,
+   "env_clean": false,
+   "status": "success",
+   "usd": 0.039854,
+   "lead_usd": 0.034113,
+   "ccx_usd": 0.005741,
+   "wall_s": 61.6,
+   "hidden_failed": 20,
+   "ccx_check_passed": true,
+   "verdicts": null,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": {
+    "Bash": 2
+   }
+  },
+  {
+   "task": "pg-book-store",
+   "arm": "direct",
+   "ok": false,
+   "env_clean": true,
+   "status": "done",
+   "usd": 0.006823,
+   "lead_usd": null,
+   "ccx_usd": 0.006823,
+   "wall_s": 46.6,
+   "hidden_failed": 19,
+   "ccx_check_passed": null,
+   "verdicts": [
+    "pass"
+   ],
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": null
+  },
+  {
+   "task": "pg-bottle-song",
+   "arm": "self",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.021811,
+   "lead_usd": 0.021811,
+   "ccx_usd": 0,
+   "wall_s": 8.6,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": null,
+   "rungs": [],
+   "attempts": null,
+   "reviews": null,
+   "fix_rounds": null,
+   "lead_tools": {
+    "Read": 1,
+    "Write": 1,
+    "Bash": 1
+   }
+  },
+  {
+   "task": "pg-bottle-song",
+   "arm": "ccx2",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.039399,
+   "lead_usd": 0.029787,
+   "ccx_usd": 0.009612,
+   "wall_s": 54.9,
+   "hidden_failed": 0,
+   "ccx_check_passed": true,
+   "verdicts": null,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": {
+    "Bash": 2
+   }
+  },
+  {
+   "task": "pg-bottle-song",
+   "arm": "direct",
+   "ok": false,
+   "env_clean": true,
+   "status": "blocked",
+   "usd": 0.00171,
+   "lead_usd": null,
+   "ccx_usd": 0.00171,
+   "wall_s": 4.2,
+   "hidden_failed": 7,
+   "ccx_check_passed": null,
+   "verdicts": [],
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 0,
+   "fix_rounds": 0,
+   "lead_tools": null
+  },
+  {
+   "task": "pg-bowling",
+   "arm": "self",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.030613,
+   "lead_usd": 0.030613,
+   "ccx_usd": 0,
+   "wall_s": 12.7,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": null,
+   "rungs": [],
+   "attempts": null,
+   "reviews": null,
+   "fix_rounds": null,
+   "lead_tools": {
+    "Read": 1,
+    "Write": 1,
+    "Bash": 1
+   }
+  },
+  {
+   "task": "pg-bowling",
+   "arm": "ccx2",
+   "ok": false,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.054619,
+   "lead_usd": 0.041461,
+   "ccx_usd": 0.013158,
+   "wall_s": 117.4,
+   "hidden_failed": 2,
+   "ccx_check_passed": true,
+   "verdicts": null,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": {
+    "Bash": 2
+   }
+  },
+  {
+   "task": "pg-bowling",
+   "arm": "direct",
+   "ok": true,
+   "env_clean": true,
+   "status": "done",
+   "usd": 0.009404,
+   "lead_usd": null,
+   "ccx_usd": 0.009404,
+   "wall_s": 72.1,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": [
+    "pass"
+   ],
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": null
+  },
+  {
+   "task": "pg-connect",
+   "arm": "self",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.028613,
+   "lead_usd": 0.028613,
+   "ccx_usd": 0,
+   "wall_s": 11.9,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": null,
+   "rungs": [],
+   "attempts": null,
+   "reviews": null,
+   "fix_rounds": null,
+   "lead_tools": {
+    "Read": 1,
+    "Write": 1,
+    "Bash": 1
+   }
+  },
+  {
+   "task": "pg-connect",
+   "arm": "ccx2",
+   "ok": false,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.037475,
+   "lead_usd": 0.031992,
+   "ccx_usd": 0.005483,
+   "wall_s": 54.7,
+   "hidden_failed": 4,
+   "ccx_check_passed": true,
+   "verdicts": null,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": {
+    "Bash": 3
+   }
+  },
+  {
+   "task": "pg-connect",
+   "arm": "direct",
+   "ok": true,
+   "env_clean": true,
+   "status": "done",
+   "usd": 0.007363,
+   "lead_usd": null,
+   "ccx_usd": 0.007363,
+   "wall_s": 59.1,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": [
+    "issues",
+    "pass"
+   ],
+   "rungs": [
+    "codex:gpt-6-luna:low",
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 2,
+   "fix_rounds": 1,
+   "lead_tools": null
+  },
+  {
+   "task": "pg-dominoes",
+   "arm": "self",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.024249,
+   "lead_usd": 0.024249,
+   "ccx_usd": 0,
+   "wall_s": 12.3,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": null,
+   "rungs": [],
+   "attempts": null,
+   "reviews": null,
+   "fix_rounds": null,
+   "lead_tools": {
+    "Read": 1,
+    "Write": 1,
+    "Bash": 1
+   }
+  },
+  {
+   "task": "pg-dominoes",
+   "arm": "ccx2",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.032849,
+   "lead_usd": 0.027434,
+   "ccx_usd": 0.005415,
+   "wall_s": 50.7,
+   "hidden_failed": 0,
+   "ccx_check_passed": true,
+   "verdicts": null,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": {
+    "Bash": 2
+   }
+  },
+  {
+   "task": "pg-dominoes",
+   "arm": "direct",
+   "ok": true,
+   "env_clean": true,
+   "status": "done",
+   "usd": 0.009009,
+   "lead_usd": null,
+   "ccx_usd": 0.009009,
+   "wall_s": 68.5,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": [
+    "issues",
+    "pass"
+   ],
+   "rungs": [
+    "codex:gpt-6-luna:low",
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 2,
+   "fix_rounds": 1,
+   "lead_tools": null
+  },
+  {
+   "task": "pg-dot-dsl",
+   "arm": "self",
+   "ok": false,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.027374,
+   "lead_usd": 0.027374,
+   "ccx_usd": 0,
+   "wall_s": 10.7,
+   "hidden_failed": 5,
+   "ccx_check_passed": null,
+   "verdicts": null,
+   "rungs": [],
+   "attempts": null,
+   "reviews": null,
+   "fix_rounds": null,
+   "lead_tools": {
+    "Read": 1,
+    "Bash": 1
+   }
+  },
+  {
+   "task": "pg-dot-dsl",
+   "arm": "ccx2",
+   "ok": false,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.077985,
+   "lead_usd": 0.063824,
+   "ccx_usd": 0.014161,
+   "wall_s": 113.3,
+   "hidden_failed": 11,
+   "ccx_check_passed": true,
+   "verdicts": null,
+   "rungs": [
+    "codex:gpt-6-luna:low",
+    "codex:gpt-6-luna:low",
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 2,
+   "reviews": 3,
+   "fix_rounds": 1,
+   "lead_tools": {
+    "Bash": 6
+   }
+  },
+  {
+   "task": "pg-dot-dsl",
+   "arm": "direct",
+   "ok": false,
+   "env_clean": true,
+   "status": "done",
+   "usd": 0.005019,
+   "lead_usd": null,
+   "ccx_usd": 0.005019,
+   "wall_s": 43.1,
+   "hidden_failed": 11,
+   "ccx_check_passed": null,
+   "verdicts": [
+    "pass"
+   ],
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": null
+  },
+  {
+   "task": "pg-food-chain",
+   "arm": "self",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.027373,
+   "lead_usd": 0.027373,
+   "ccx_usd": 0,
+   "wall_s": 9.4,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": null,
+   "rungs": [],
+   "attempts": null,
+   "reviews": null,
+   "fix_rounds": null,
+   "lead_tools": {
+    "Read": 1,
+    "Write": 1,
+    "Bash": 1
+   }
+  },
+  {
+   "task": "pg-food-chain",
+   "arm": "ccx2",
+   "ok": false,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.045007,
+   "lead_usd": 0.039841,
+   "ccx_usd": 0.005166,
+   "wall_s": 47.4,
+   "hidden_failed": 10,
+   "ccx_check_passed": true,
+   "verdicts": null,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": {
+    "Bash": 2
+   }
+  },
+  {
+   "task": "pg-food-chain",
+   "arm": "direct",
+   "ok": true,
+   "env_clean": true,
+   "status": "done",
+   "usd": 0.004921,
+   "lead_usd": null,
+   "ccx_usd": 0.004921,
+   "wall_s": 44.6,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": [
+    "pass"
+   ],
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": null
+  },
+  {
+   "task": "pg-forth",
+   "arm": "self",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.053133,
+   "lead_usd": 0.053133,
+   "ccx_usd": 0,
+   "wall_s": 20.4,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": null,
+   "rungs": [],
+   "attempts": null,
+   "reviews": null,
+   "fix_rounds": null,
+   "lead_tools": {
+    "Read": 1,
+    "Write": 1,
+    "Edit": 2,
+    "Bash": 2
+   }
+  },
+  {
+   "task": "pg-forth",
+   "arm": "ccx2",
+   "ok": false,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.079319,
+   "lead_usd": 0.05759,
+   "ccx_usd": 0.021729,
+   "wall_s": 180.6,
+   "hidden_failed": 54,
+   "ccx_check_passed": true,
+   "verdicts": null,
+   "rungs": [
+    "codex:gpt-6-luna:low",
+    "codex:gpt-6-luna:low",
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 2,
+   "reviews": 3,
+   "fix_rounds": 1,
+   "lead_tools": {
+    "Write": 1,
+    "Bash": 4
+   }
+  },
+  {
+   "task": "pg-forth",
+   "arm": "direct",
+   "ok": false,
+   "env_clean": true,
+   "status": "done",
+   "usd": 0.011346,
+   "lead_usd": null,
+   "ccx_usd": 0.011346,
+   "wall_s": 95.2,
+   "hidden_failed": 54,
+   "ccx_check_passed": null,
+   "verdicts": [
+    "issues",
+    "pass"
+   ],
+   "rungs": [
+    "codex:gpt-6-luna:low",
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 2,
+   "fix_rounds": 1,
+   "lead_tools": null
+  },
+  {
+   "task": "pg-go-counting",
+   "arm": "self",
+   "ok": false,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.027561,
+   "lead_usd": 0.027561,
+   "ccx_usd": 0,
+   "wall_s": 39.0,
+   "hidden_failed": 1,
+   "ccx_check_passed": null,
+   "verdicts": null,
+   "rungs": [],
+   "attempts": null,
+   "reviews": null,
+   "fix_rounds": null,
+   "lead_tools": {
+    "Read": 1,
+    "Write": 1
+   }
+  },
+  {
+   "task": "pg-go-counting",
+   "arm": "ccx2",
+   "ok": false,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.035679,
+   "lead_usd": 0.029752,
+   "ccx_usd": 0.005927,
+   "wall_s": 53.8,
+   "hidden_failed": 1,
+   "ccx_check_passed": true,
+   "verdicts": null,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": {
+    "Bash": 2
+   }
+  },
+  {
+   "task": "pg-go-counting",
+   "arm": "direct",
+   "ok": false,
+   "env_clean": true,
+   "status": "done",
+   "usd": 0.005785,
+   "lead_usd": null,
+   "ccx_usd": 0.005785,
+   "wall_s": 43.1,
+   "hidden_failed": 1,
+   "ccx_check_passed": null,
+   "verdicts": [
+    "pass"
+   ],
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": null
+  },
+  {
+   "task": "pg-grade-school",
+   "arm": "self",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.019207,
+   "lead_usd": 0.019207,
+   "ccx_usd": 0,
+   "wall_s": 8.2,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": null,
+   "rungs": [],
+   "attempts": null,
+   "reviews": null,
+   "fix_rounds": null,
+   "lead_tools": {
+    "Read": 1,
+    "Write": 1
+   }
+  },
+  {
+   "task": "pg-grade-school",
+   "arm": "ccx2",
+   "ok": false,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.03259,
+   "lead_usd": 0.028698,
+   "ccx_usd": 0.003892,
+   "wall_s": 38.6,
+   "hidden_failed": 10,
+   "ccx_check_passed": true,
+   "verdicts": null,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": {
+    "Bash": 2
+   }
+  },
+  {
+   "task": "pg-grade-school",
+   "arm": "direct",
+   "ok": false,
+   "env_clean": true,
+   "status": "done",
+   "usd": 0.004627,
+   "lead_usd": null,
+   "ccx_usd": 0.004627,
+   "wall_s": 26.7,
+   "hidden_failed": 10,
+   "ccx_check_passed": null,
+   "verdicts": [
+    "pass"
+   ],
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": null
+  },
+  {
+   "task": "pg-grep",
+   "arm": "self",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.021951,
+   "lead_usd": 0.021951,
+   "ccx_usd": 0,
+   "wall_s": 9.4,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": null,
+   "rungs": [],
+   "attempts": null,
+   "reviews": null,
+   "fix_rounds": null,
+   "lead_tools": {
+    "Read": 1,
+    "Write": 1
+   }
+  },
+  {
+   "task": "pg-grep",
+   "arm": "ccx2",
+   "ok": false,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.036696,
+   "lead_usd": 0.029389,
+   "ccx_usd": 0.007307,
+   "wall_s": 60.2,
+   "hidden_failed": 25,
+   "ccx_check_passed": true,
+   "verdicts": null,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": {
+    "Bash": 2
+   }
+  },
+  {
+   "task": "pg-grep",
+   "arm": "direct",
+   "ok": false,
+   "env_clean": true,
+   "status": "done",
+   "usd": 0.003927,
+   "lead_usd": null,
+   "ccx_usd": 0.003927,
+   "wall_s": 37.7,
+   "hidden_failed": 25,
+   "ccx_check_passed": null,
+   "verdicts": [
+    "pass"
+   ],
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": null
+  },
+  {
+   "task": "pg-hangman",
+   "arm": "self",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.023972,
+   "lead_usd": 0.023972,
+   "ccx_usd": 0,
+   "wall_s": 10.6,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": null,
+   "rungs": [],
+   "attempts": null,
+   "reviews": null,
+   "fix_rounds": null,
+   "lead_tools": {
+    "Read": 1,
+    "Bash": 1
+   }
+  },
+  {
+   "task": "pg-hangman",
+   "arm": "ccx2",
+   "ok": false,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.03981,
+   "lead_usd": 0.033948,
+   "ccx_usd": 0.005862,
+   "wall_s": 51.9,
+   "hidden_failed": 3,
+   "ccx_check_passed": true,
+   "verdicts": null,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": {
+    "Bash": 2
+   }
+  },
+  {
+   "task": "pg-hangman",
+   "arm": "direct",
+   "ok": false,
+   "env_clean": true,
+   "status": "done",
+   "usd": 0.005548,
+   "lead_usd": null,
+   "ccx_usd": 0.005548,
+   "wall_s": 64.8,
+   "hidden_failed": 3,
+   "ccx_check_passed": null,
+   "verdicts": [
+    "pass"
+   ],
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": null
+  },
+  {
+   "task": "pg-paasio",
+   "arm": "self",
+   "ok": false,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.037158,
+   "lead_usd": 0.037158,
+   "ccx_usd": 0,
+   "wall_s": 16.3,
+   "hidden_failed": 6,
+   "ccx_check_passed": null,
+   "verdicts": null,
+   "rungs": [],
+   "attempts": null,
+   "reviews": null,
+   "fix_rounds": null,
+   "lead_tools": {
+    "Read": 1,
+    "Bash": 1
+   }
+  },
+  {
+   "task": "pg-paasio",
+   "arm": "ccx2",
+   "ok": false,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.035372,
+   "lead_usd": 0.027744,
+   "ccx_usd": 0.007628,
+   "wall_s": 53.3,
+   "hidden_failed": 6,
+   "ccx_check_passed": true,
+   "verdicts": null,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": {
+    "Bash": 3
+   }
+  },
+  {
+   "task": "pg-paasio",
+   "arm": "direct",
+   "ok": false,
+   "env_clean": true,
+   "status": "done",
+   "usd": 0.005882,
+   "lead_usd": null,
+   "ccx_usd": 0.005882,
+   "wall_s": 52.1,
+   "hidden_failed": 15,
+   "ccx_check_passed": null,
+   "verdicts": [
+    "pass"
+   ],
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": null
+  },
+  {
+   "task": "pg-phone-number",
+   "arm": "self",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.025883,
+   "lead_usd": 0.025883,
+   "ccx_usd": 0,
+   "wall_s": 9.6,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": null,
+   "rungs": [],
+   "attempts": null,
+   "reviews": null,
+   "fix_rounds": null,
+   "lead_tools": {
+    "Read": 1,
+    "Write": 1
+   }
+  },
+  {
+   "task": "pg-phone-number",
+   "arm": "ccx2",
+   "ok": false,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.051381,
+   "lead_usd": 0.046225,
+   "ccx_usd": 0.005156,
+   "wall_s": 50.3,
+   "hidden_failed": 3,
+   "ccx_check_passed": true,
+   "verdicts": null,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": {
+    "Write": 1,
+    "Bash": 2
+   }
+  },
+  {
+   "task": "pg-phone-number",
+   "arm": "direct",
+   "ok": false,
+   "env_clean": true,
+   "status": "done",
+   "usd": 0.004144,
+   "lead_usd": null,
+   "ccx_usd": 0.004144,
+   "wall_s": 39.7,
+   "hidden_failed": 3,
+   "ccx_check_passed": null,
+   "verdicts": [
+    "pass"
+   ],
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": null
+  },
+  {
+   "task": "pg-pig-latin",
+   "arm": "self",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.02095,
+   "lead_usd": 0.02095,
+   "ccx_usd": 0,
+   "wall_s": 7.0,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": null,
+   "rungs": [],
+   "attempts": null,
+   "reviews": null,
+   "fix_rounds": null,
+   "lead_tools": {
+    "Read": 1,
+    "Write": 1,
+    "Bash": 1
+   }
+  },
+  {
+   "task": "pg-pig-latin",
+   "arm": "ccx2",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.057909,
+   "lead_usd": 0.044819,
+   "ccx_usd": 0.01309,
+   "wall_s": 115.1,
+   "hidden_failed": 0,
+   "ccx_check_passed": true,
+   "verdicts": null,
+   "rungs": [
+    "codex:gpt-6-luna:low",
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 2,
+   "reviews": 3,
+   "fix_rounds": 1,
+   "lead_tools": {
+    "Write": 1,
+    "Bash": 2
+   }
+  },
+  {
+   "task": "pg-pig-latin",
+   "arm": "direct",
+   "ok": true,
+   "env_clean": true,
+   "status": "done",
+   "usd": 0.006653,
+   "lead_usd": null,
+   "ccx_usd": 0.006653,
+   "wall_s": 54.8,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": [
+    "issues",
+    "pass"
+   ],
+   "rungs": [
+    "codex:gpt-6-luna:low",
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 2,
+   "fix_rounds": 1,
+   "lead_tools": null
+  },
+  {
+   "task": "pg-poker",
+   "arm": "self",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.024995,
+   "lead_usd": 0.024995,
+   "ccx_usd": 0,
+   "wall_s": 12.4,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": null,
+   "rungs": [],
+   "attempts": null,
+   "reviews": null,
+   "fix_rounds": null,
+   "lead_tools": {
+    "Read": 1,
+    "Write": 1,
+    "Bash": 1
+   }
+  },
+  {
+   "task": "pg-poker",
+   "arm": "ccx2",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.031451,
+   "lead_usd": 0.024192,
+   "ccx_usd": 0.007259,
+   "wall_s": 57.4,
+   "hidden_failed": 0,
+   "ccx_check_passed": true,
+   "verdicts": null,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": {
+    "Bash": 2
+   }
+  },
+  {
+   "task": "pg-poker",
+   "arm": "direct",
+   "ok": true,
+   "env_clean": true,
+   "status": "done",
+   "usd": 0.005608,
+   "lead_usd": null,
+   "ccx_usd": 0.005608,
+   "wall_s": 59.9,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": [
+    "pass"
+   ],
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": null
+  },
+  {
+   "task": "pg-pov",
+   "arm": "self",
+   "ok": false,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.025456,
+   "lead_usd": 0.025456,
+   "ccx_usd": 0,
+   "wall_s": 9.3,
+   "hidden_failed": 1,
+   "ccx_check_passed": null,
+   "verdicts": null,
+   "rungs": [],
+   "attempts": null,
+   "reviews": null,
+   "fix_rounds": null,
+   "lead_tools": {
+    "Read": 1,
+    "Edit": 1
+   }
+  },
+  {
+   "task": "pg-pov",
+   "arm": "ccx2",
+   "ok": false,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.062988,
+   "lead_usd": 0.052811,
+   "ccx_usd": 0.010177,
+   "wall_s": 89.6,
+   "hidden_failed": 1,
+   "ccx_check_passed": true,
+   "verdicts": null,
+   "rungs": [
+    "codex:gpt-6-luna:low",
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 2,
+   "reviews": 2,
+   "fix_rounds": 0,
+   "lead_tools": {
+    "Bash": 5
+   }
+  },
+  {
+   "task": "pg-pov",
+   "arm": "direct",
+   "ok": false,
+   "env_clean": true,
+   "status": "done",
+   "usd": 0.005742,
+   "lead_usd": null,
+   "ccx_usd": 0.005742,
+   "wall_s": 43.9,
+   "hidden_failed": 3,
+   "ccx_check_passed": null,
+   "verdicts": [
+    "pass"
+   ],
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": null
+  },
+  {
+   "task": "pg-react",
+   "arm": "self",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.027441,
+   "lead_usd": 0.027441,
+   "ccx_usd": 0,
+   "wall_s": 12.0,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": null,
+   "rungs": [],
+   "attempts": null,
+   "reviews": null,
+   "fix_rounds": null,
+   "lead_tools": {
+    "Read": 1,
+    "Write": 1,
+    "Bash": 1
+   }
+  },
+  {
+   "task": "pg-react",
+   "arm": "ccx2",
+   "ok": false,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.032286,
+   "lead_usd": 0.024906,
+   "ccx_usd": 0.00738,
+   "wall_s": 71.3,
+   "hidden_failed": 12,
+   "ccx_check_passed": true,
+   "verdicts": null,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 2,
+   "reviews": 2,
+   "fix_rounds": 0,
+   "lead_tools": {
+    "Bash": 2
+   }
+  },
+  {
+   "task": "pg-react",
+   "arm": "direct",
+   "ok": false,
+   "env_clean": true,
+   "status": "done",
+   "usd": 0.011209,
+   "lead_usd": null,
+   "ccx_usd": 0.011209,
+   "wall_s": 76.5,
+   "hidden_failed": 12,
+   "ccx_check_passed": null,
+   "verdicts": [
+    "issues",
+    "pass"
+   ],
+   "rungs": [
+    "codex:gpt-6-luna:low",
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 2,
+   "fix_rounds": 1,
+   "lead_tools": null
+  },
+  {
+   "task": "pg-rest-api",
+   "arm": "self",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.034293,
+   "lead_usd": 0.034293,
+   "ccx_usd": 0,
+   "wall_s": 13.5,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": null,
+   "rungs": [],
+   "attempts": null,
+   "reviews": null,
+   "fix_rounds": null,
+   "lead_tools": {
+    "Bash": 2
+   }
+  },
+  {
+   "task": "pg-rest-api",
+   "arm": "ccx2",
+   "ok": false,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.039138,
+   "lead_usd": 0.033641,
+   "ccx_usd": 0.005497,
+   "wall_s": 50.8,
+   "hidden_failed": 9,
+   "ccx_check_passed": true,
+   "verdicts": null,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": {
+    "Bash": 2
+   }
+  },
+  {
+   "task": "pg-rest-api",
+   "arm": "direct",
+   "ok": false,
+   "env_clean": true,
+   "status": "done",
+   "usd": 0.005721,
+   "lead_usd": null,
+   "ccx_usd": 0.005721,
+   "wall_s": 38.9,
+   "hidden_failed": 9,
+   "ccx_check_passed": null,
+   "verdicts": [
+    "pass"
+   ],
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": null
+  },
+  {
+   "task": "pg-scale-generator",
+   "arm": "self",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.032647,
+   "lead_usd": 0.032647,
+   "ccx_usd": 0,
+   "wall_s": 11.8,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": null,
+   "rungs": [],
+   "attempts": null,
+   "reviews": null,
+   "fix_rounds": null,
+   "lead_tools": {
+    "Read": 1,
+    "Write": 1,
+    "Bash": 2
+   }
+  },
+  {
+   "task": "pg-scale-generator",
+   "arm": "ccx2",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.064237,
+   "lead_usd": 0.04815,
+   "ccx_usd": 0.016087,
+   "wall_s": 117.1,
+   "hidden_failed": 0,
+   "ccx_check_passed": true,
+   "verdicts": null,
+   "rungs": [
+    "codex:gpt-6-luna:low",
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 3,
+   "fix_rounds": 1,
+   "lead_tools": {
+    "Bash": 3
+   }
+  },
+  {
+   "task": "pg-scale-generator",
+   "arm": "direct",
+   "ok": false,
+   "env_clean": false,
+   "status": "done",
+   "usd": 0.012558,
+   "lead_usd": null,
+   "ccx_usd": 0.012558,
+   "wall_s": 110.4,
+   "hidden_failed": 2,
+   "ccx_check_passed": null,
+   "verdicts": [
+    "issues",
+    "issues"
+   ],
+   "rungs": [
+    "codex:gpt-6-luna:low",
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 2,
+   "fix_rounds": 1,
+   "lead_tools": null
+  },
+  {
+   "task": "pg-sgf-parsing",
+   "arm": "self",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.072999,
+   "lead_usd": 0.072999,
+   "ccx_usd": 0,
+   "wall_s": 29.2,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": null,
+   "rungs": [],
+   "attempts": null,
+   "reviews": null,
+   "fix_rounds": null,
+   "lead_tools": {
+    "Read": 1,
+    "Bash": 5,
+    "Edit": 2
+   }
+  },
+  {
+   "task": "pg-sgf-parsing",
+   "arm": "ccx2",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.047024,
+   "lead_usd": 0.038131,
+   "ccx_usd": 0.008893,
+   "wall_s": 78.3,
+   "hidden_failed": 0,
+   "ccx_check_passed": true,
+   "verdicts": null,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": {
+    "Bash": 2
+   }
+  },
+  {
+   "task": "pg-sgf-parsing",
+   "arm": "direct",
+   "ok": false,
+   "env_clean": true,
+   "status": "done",
+   "usd": 0.009113,
+   "lead_usd": null,
+   "ccx_usd": 0.009113,
+   "wall_s": 56.1,
+   "hidden_failed": 3,
+   "ccx_check_passed": null,
+   "verdicts": [
+    "pass"
+   ],
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": null
+  },
+  {
+   "task": "pg-simple-linked-list",
+   "arm": "self",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.034685,
+   "lead_usd": 0.034685,
+   "ccx_usd": 0,
+   "wall_s": 14.0,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": null,
+   "rungs": [],
+   "attempts": null,
+   "reviews": null,
+   "fix_rounds": null,
+   "lead_tools": {
+    "Read": 1,
+    "Bash": 1
+   }
+  },
+  {
+   "task": "pg-simple-linked-list",
+   "arm": "ccx2",
+   "ok": false,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.049248,
+   "lead_usd": 0.042704,
+   "ccx_usd": 0.006544,
+   "wall_s": 53.2,
+   "hidden_failed": 7,
+   "ccx_check_passed": true,
+   "verdicts": null,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": {
+    "Bash": 3
+   }
+  },
+  {
+   "task": "pg-simple-linked-list",
+   "arm": "direct",
+   "ok": false,
+   "env_clean": true,
+   "status": "done",
+   "usd": 0.004402,
+   "lead_usd": null,
+   "ccx_usd": 0.004402,
+   "wall_s": 43.1,
+   "hidden_failed": 3,
+   "ccx_check_passed": null,
+   "verdicts": [
+    "pass"
+   ],
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": null
+  },
+  {
+   "task": "pg-tree-building",
+   "arm": "self",
+   "ok": false,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.029793,
+   "lead_usd": 0.029793,
+   "ccx_usd": 0,
+   "wall_s": 13.1,
+   "hidden_failed": 3,
+   "ccx_check_passed": null,
+   "verdicts": null,
+   "rungs": [],
+   "attempts": null,
+   "reviews": null,
+   "fix_rounds": null,
+   "lead_tools": {
+    "Read": 1,
+    "Bash": 1
+   }
+  },
+  {
+   "task": "pg-tree-building",
+   "arm": "ccx2",
+   "ok": false,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.040018,
+   "lead_usd": 0.031791,
+   "ccx_usd": 0.008227,
+   "wall_s": 64.1,
+   "hidden_failed": 6,
+   "ccx_check_passed": true,
+   "verdicts": null,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": {
+    "Bash": 2
+   }
+  },
+  {
+   "task": "pg-tree-building",
+   "arm": "direct",
+   "ok": false,
+   "env_clean": true,
+   "status": "done",
+   "usd": 0.004117,
+   "lead_usd": null,
+   "ccx_usd": 0.004117,
+   "wall_s": 31.7,
+   "hidden_failed": 6,
+   "ccx_check_passed": null,
+   "verdicts": [
+    "pass"
+   ],
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": null
+  },
+  {
+   "task": "pg-two-bucket",
+   "arm": "self",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.029942,
+   "lead_usd": 0.029942,
+   "ccx_usd": 0,
+   "wall_s": 11.3,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": null,
+   "rungs": [],
+   "attempts": null,
+   "reviews": null,
+   "fix_rounds": null,
+   "lead_tools": {
+    "Read": 1,
+    "Write": 1,
+    "Bash": 1
+   }
+  },
+  {
+   "task": "pg-two-bucket",
+   "arm": "ccx2",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.047112,
+   "lead_usd": 0.039583,
+   "ccx_usd": 0.007529,
+   "wall_s": 76.3,
+   "hidden_failed": 0,
+   "ccx_check_passed": true,
+   "verdicts": null,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": {
+    "Bash": 2
+   }
+  },
+  {
+   "task": "pg-two-bucket",
+   "arm": "direct",
+   "ok": false,
+   "env_clean": true,
+   "status": "done",
+   "usd": 0.00668,
+   "lead_usd": null,
+   "ccx_usd": 0.00668,
+   "wall_s": 59.0,
+   "hidden_failed": 7,
+   "ccx_check_passed": null,
+   "verdicts": [
+    "pass"
+   ],
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": null
+  },
+  {
+   "task": "pg-variable-length-quantity",
+   "arm": "self",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.022349,
+   "lead_usd": 0.022349,
+   "ccx_usd": 0,
+   "wall_s": 9.8,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": null,
+   "rungs": [],
+   "attempts": null,
+   "reviews": null,
+   "fix_rounds": null,
+   "lead_tools": {
+    "Read": 1,
+    "Write": 1,
+    "Bash": 1
+   }
+  },
+  {
+   "task": "pg-variable-length-quantity",
+   "arm": "ccx2",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.039665,
+   "lead_usd": 0.033277,
+   "ccx_usd": 0.006388,
+   "wall_s": 53.8,
+   "hidden_failed": 0,
+   "ccx_check_passed": true,
+   "verdicts": null,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": {
+    "Bash": 2
+   }
+  },
+  {
+   "task": "pg-variable-length-quantity",
+   "arm": "direct",
+   "ok": true,
+   "env_clean": true,
+   "status": "done",
+   "usd": 0.004662,
+   "lead_usd": null,
+   "ccx_usd": 0.004662,
+   "wall_s": 33.8,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": [
+    "pass"
+   ],
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": null
+  },
+  {
+   "task": "pg-wordy",
+   "arm": "self",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.027666,
+   "lead_usd": 0.027666,
+   "ccx_usd": 0,
+   "wall_s": 9.8,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": null,
+   "rungs": [],
+   "attempts": null,
+   "reviews": null,
+   "fix_rounds": null,
+   "lead_tools": {
+    "Read": 1,
+    "Write": 1
+   }
+  },
+  {
+   "task": "pg-wordy",
+   "arm": "ccx2",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.044584,
+   "lead_usd": 0.034993,
+   "ccx_usd": 0.009591,
+   "wall_s": 92.7,
+   "hidden_failed": 0,
+   "ccx_check_passed": true,
+   "verdicts": null,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 2,
+   "reviews": 2,
+   "fix_rounds": 0,
+   "lead_tools": {
+    "Bash": 2
+   }
+  },
+  {
+   "task": "pg-wordy",
+   "arm": "direct",
+   "ok": false,
+   "env_clean": true,
+   "status": "done",
+   "usd": 0.010201,
+   "lead_usd": null,
+   "ccx_usd": 0.010201,
+   "wall_s": 78.4,
+   "hidden_failed": 4,
+   "ccx_check_passed": null,
+   "verdicts": [
+    "issues",
+    "pass"
+   ],
+   "rungs": [
+    "codex:gpt-6-luna:low",
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 2,
+   "fix_rounds": 1,
+   "lead_tools": null
+  },
+  {
+   "task": "pg-zebra-puzzle",
+   "arm": "self",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.024013,
+   "lead_usd": 0.024013,
+   "ccx_usd": 0,
+   "wall_s": 9.0,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": null,
+   "rungs": [],
+   "attempts": null,
+   "reviews": null,
+   "fix_rounds": null,
+   "lead_tools": {
+    "Read": 1,
+    "Write": 1,
+    "Bash": 1
+   }
+  },
+  {
+   "task": "pg-zebra-puzzle",
+   "arm": "ccx2",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.042895,
+   "lead_usd": 0.03814,
+   "ccx_usd": 0.004755,
+   "wall_s": 54.0,
+   "hidden_failed": 0,
+   "ccx_check_passed": true,
+   "verdicts": null,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": {
+    "Bash": 3
+   }
+  },
+  {
+   "task": "pg-zebra-puzzle",
+   "arm": "direct",
+   "ok": false,
+   "env_clean": true,
+   "status": "blocked",
+   "usd": 0.000667,
+   "lead_usd": null,
+   "ccx_usd": 0.000667,
+   "wall_s": 4.2,
+   "hidden_failed": 2,
+   "ccx_check_passed": null,
+   "verdicts": [],
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 0,
+   "fix_rounds": 0,
+   "lead_tools": null
+  },
+  {
+   "task": "pg-zipper",
+   "arm": "self",
+   "ok": true,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.025105,
+   "lead_usd": 0.025105,
+   "ccx_usd": 0,
+   "wall_s": 10.8,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": null,
+   "rungs": [],
+   "attempts": null,
+   "reviews": null,
+   "fix_rounds": null,
+   "lead_tools": {
+    "Read": 1,
+    "Bash": 1
+   }
+  },
+  {
+   "task": "pg-zipper",
+   "arm": "ccx2",
+   "ok": false,
+   "env_clean": true,
+   "status": "success",
+   "usd": 0.040096,
+   "lead_usd": 0.033066,
+   "ccx_usd": 0.00703,
+   "wall_s": 60.8,
+   "hidden_failed": 12,
+   "ccx_check_passed": true,
+   "verdicts": null,
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": {
+    "Bash": 2
+   }
+  },
+  {
+   "task": "pg-zipper",
+   "arm": "direct",
+   "ok": true,
+   "env_clean": true,
+   "status": "done",
+   "usd": 0.004886,
+   "lead_usd": null,
+   "ccx_usd": 0.004886,
+   "wall_s": 34.8,
+   "hidden_failed": 0,
+   "ccx_check_passed": null,
+   "verdicts": [
+    "pass"
+   ],
+   "rungs": [
+    "codex:gpt-6-luna:low"
+   ],
+   "attempts": 1,
+   "reviews": 1,
+   "fix_rounds": 0,
+   "lead_tools": null
+  }
+ ]
+}
