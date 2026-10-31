@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import fnmatch
 import os
+import posixpath
 import re
 import shlex
 import subprocess
@@ -92,7 +93,9 @@ def parse(cmd: str) -> tuple[list[str], list[str]] | None:
     pattern = None
     for toks in _parts(cmd):
         if toks[0] == "cd" and len(toks) == 2:
-            base = toks[1].rstrip("/") + "/" if toks[1] not in (".", "") else base
+            d = toks[1] if toks[1].startswith("/") or ":" in toks[1][:3] else base + toks[1]
+            d = posixpath.normpath(d)
+            base = "" if d == "." else d + "/"
             continue
         r = _runner(toks)
         if r is None:
@@ -109,19 +112,30 @@ def parse(cmd: str) -> tuple[list[str], list[str]] | None:
             nxt = args[k + 1] if k + 1 < len(args) else ""
             if t.startswith("-"):
                 opt = t.split("=", 1)[0]
-                takes = opt in vals or (kind == "pytest" and not t.startswith("--") and len(t) > 2
-                                        and "=" not in t and t[-1] in _PYTEST_SHORT_VAL)
-                val = t.split("=", 1)[1] if "=" in t else (nxt if takes else None)
-                flag = opt if opt in vals else "-" + t[-1] if takes else opt
+                eaten = False                       # the value is the next token
+                if opt in vals:
+                    flag = opt
+                    val = t.split("=", 1)[1] if "=" in t else nxt
+                    eaten = "=" not in t
+                elif not t.startswith("--") and len(t) > 2 and "=" not in t:
+                    # a short cluster: -ktest_io (value attached), -xk EXPR (no-value flags, then one taking it)
+                    short = _PYTEST_SHORT_VAL if kind == "pytest" else {x[1] for x in vals if len(x) == 2}
+                    at = next((i for i in range(1, len(t)) if t[i] in short), None)
+                    if at is None:
+                        flag, val = opt, None
+                    else:
+                        flag = "-" + t[at]
+                        val = t[at + 1:] or nxt
+                        eaten = not t[at + 1:]
+                else:
+                    flag, val = opt, None
                 if flag in _FILTERS and val:
                     filters.append(f"{flag} {val}")
                 if kind == "unittest" and flag in ("-s", "--start-directory") and val:
                     start = val
                 if kind == "unittest" and flag in ("-p", "--pattern") and val:
                     pattern = val
-                if kind == "unittest" and flag == "-k" and val:
-                    filters.append(f"-k {val}")
-                k += 2 if takes and "=" not in t else 1
+                k += 2 if eaten else 1
                 continue
             k += 1
             if kind == "unittest":
@@ -137,7 +151,7 @@ def parse(cmd: str) -> tuple[list[str], list[str]] | None:
         if kind == "unittest" and not paths:
             paths = [start or "."]
             pattern = pattern or "test*.py"
-        out.extend(base + p if base and not p.startswith("/") and ":" not in p[:3] else p for p in (paths or ["."]))
+        out.extend(posixpath.normpath(base + p) if base and not p.startswith("/") and ":" not in p[:3] else p for p in (paths or ["."]))
     if pattern:
         filters.append(f"pattern {pattern}")
     return (list(dict.fromkeys(out)), list(dict.fromkeys(filters))) if seen else None
@@ -151,7 +165,10 @@ def targets(cmd: str) -> list[str] | None:
 
 def _rel(p: Path, repo: Path) -> str | None:
     try:
-        return os.path.relpath(os.path.abspath(p), os.path.abspath(repo)).replace("\\", "/")
+        r = os.path.relpath(os.path.abspath(p), os.path.abspath(repo)).replace("\\", "/")
+        if r.startswith(".."):                # a junction / symlink / short name on one side: compare real paths
+            r = os.path.relpath(p.resolve(), repo.resolve()).replace("\\", "/")
+        return r
     except ValueError:                        # another drive
         return None
 
@@ -306,7 +323,7 @@ def summarize(cmd: str, cwd: Path, repo: Path, edited: list[str], written: list[
 
 
 def text(cov: dict | None, limit: int = 3) -> str:
-    """'covers: a.py, b.py +2 more · basis changed: a.py edited by the sub-agent' for receipts and recaps (no ';':
+    """'covers: a.py, b.py +2 more | basis changed: a.py edited by the sub-agent' for receipts and recaps (no ";":
     the recap line uses it as its own separator)."""
     if not cov:
         return ""
@@ -325,11 +342,11 @@ def text(cov: dict | None, limit: int = 3) -> str:
     if cov.get("filtered"):
         out += f" (only {', '.join(cov['filtered'][:2])})"
     if cov.get("basis_changed"):
-        out += f" · basis changed: {', '.join(cov['edited'][:limit])} edited by the sub-agent"
+        out += f" | basis changed: {', '.join(cov['edited'][:limit])} edited by the sub-agent"
     if cov.get("added_to"):
-        out += f" · tests added by the sub-agent in {', '.join(cov['added_to'][:limit])}"
+        out += f" | tests added by the sub-agent in {', '.join(cov['added_to'][:limit])}"
     if cov.get("own_tests_only"):
-        out += " · only tests the sub-agent wrote"
+        out += " | only tests the sub-agent wrote"
     elif cov.get("written"):
-        out += f" · written by the sub-agent: {', '.join(cov['written'][:limit])}"
+        out += f" | written by the sub-agent: {', '.join(cov['written'][:limit])}"
     return out

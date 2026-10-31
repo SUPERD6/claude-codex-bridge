@@ -21,6 +21,11 @@ class TestTargets(unittest.TestCase):
         self.assertEqual(cv.targets("ruff check . && python -m pytest -q tests/x_test.py --maxfail 1"),
                          ["tests/x_test.py"])
         self.assertEqual(cv.targets("uv run pytest --deselect tests/test_c.py::t tests"), ["tests"])
+        # a value attached to a short option does not eat the next path; a cluster ending in one does
+        self.assertEqual(cv.parse("pytest -ktest_io tests/test_x.py"), (["tests/test_x.py"], ["-k test_io"]))
+        self.assertEqual(cv.parse("pytest -nauto tests/test_x.py"), (["tests/test_x.py"], []))
+        self.assertEqual(cv.parse("pytest -xk foo tests/test_x.py"), (["tests/test_x.py"], ["-k foo"]))
+        self.assertEqual(cv.targets("cd sub && pytest && cd .. && pytest tests"), ["sub", "tests"])
 
     def test_unittest(self):
         self.assertEqual(cv.targets("python -m unittest -q"), ["."])
@@ -67,9 +72,9 @@ class TestSummarize(unittest.TestCase):
         self.assertEqual(c["written"], ["tests/sub/test_c.py"])
         self.assertNotIn("own_tests_only", c)
         t = cv.text(c)
-        self.assertIn("covers: tests/test_a.py, tests/test_b.py, tests/sub/test_c.py ·", t)
+        self.assertIn("covers: tests/test_a.py, tests/test_b.py, tests/sub/test_c.py |", t)
         self.assertNotIn(";", t)                        # the recap line uses ';' as its own separator
-        self.assertEqual(cv.text(c, limit=2)[:32], "covers: tests/ (3 test files) · ")
+        self.assertEqual(cv.text(c, limit=2)[:32], "covers: tests/ (3 test files) | ")
         self.assertIn("basis changed: tests/test_a.py edited by the sub-agent", t)
         self.assertIn("written by the sub-agent: tests/sub/test_c.py", t)
 
@@ -154,9 +159,9 @@ class TestReceipt(Env):
                          f'"{py}" -m pytest -q -p no:cacheprovider test_a.py')
         self.assertTrue(out["check"]["passed"], out)
         self.assertEqual(out["check"]["basis_changed"], ["test_a.py"])
-        self.assertIn("covers: test_a.py · basis changed: test_a.py edited by the sub-agent", out["check"]["covers"])
+        self.assertIn("covers: test_a.py | basis changed: test_a.py edited by the sub-agent", out["check"]["covers"])
         self.assertTrue(out["ok"])                                  # the verdict itself is unchanged
-        self.assertIn("check=passed (covers: test_a.py · basis changed", r.stdout + r.stderr)
+        self.assertIn("check=passed (covers: test_a.py | basis changed", r.stdout + r.stderr)
         lc = self.ledger_check()
         self.assertEqual((lc["covers_n"], lc.get("basis_changed")), (1, True))
 
