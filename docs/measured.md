@@ -53,12 +53,15 @@ sub-agent there, ratio 1.02), lower in round 5 (above).
 |---|---|---|---|
 | Right (all 30 / clean 29) | 25/30 / 24/29 | 12/30 / 12/29 | 9/30 / 9/29 |
 | Cost per success (all / clean) | $0.037 / $0.036 | $0.115 / $0.112 | $0.021 / $0.019 |
-| Wall time, median | 11 s | 57 s | 44 s |
+| Wall time, median (all 30) | 11 s | 57 s | 44 s |
 
-Self was right on 13 exercises ccx2 missed and ccx2 on none that self missed (p = 2.4e-4); ccx2 cost 3.1× self per
-success (95 % CI 2.1–5.2), 82 % of it on the lead's side. Small strict-interface tasks are not worth delegating; the
-saving needs tasks that are expensive to do yourself. Method, failures and all 11 limits in the
-[pg1 report](research/2026-10-31-polyglot-pg1.md).
+Over all 30: self was right on 13 exercises ccx2 missed and ccx2 on none that self missed (p = 2.4e-4); ccx2 cost
+3.1× self per success (95 % CI 2.2–5.4), 82 % of it on the lead's side; the clean count gives 12 / 0 (p = 4.9e-4) and
+3.1× (2.1–5.2). Without a lead (direct) the same tier cost 0.57× self per success (95 % CI 0.37–1.14; 0.51, 0.34–0.99
+on the clean pairs) but was right 9/30. The exercises have no tests of their own, so ccx's check was the sub-agent's
+own tests; it passed in all 18 ccx2 failures. Small strict-interface tasks are not worth delegating; so far a saving
+has been seen only on repository tasks that are costlier to do yourself (hc1, a different version and task set, not
+paired with pg1). Method, failures and all 12 limits in the [pg1 report](research/2026-10-31-polyglot-pg1.md).
 
 ## Lean sub-agent switches (B3, 2026-10-31)
 

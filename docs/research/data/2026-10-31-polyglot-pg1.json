@@ -61,7 +61,7 @@
     "cost_per_success": 0.0208,
     "lead_usd": 0,
     "ccx_usd": 0.1874,
-    "wall_median_s": 44.2
+    "wall_median_s": 44.3
    }
   },
   "clean": {
@@ -319,7 +319,8 @@
    "tasks_ccx2_dearer": 27,
    "tasks_ccx2_slower": 29,
    "wall_diff_median_s": 46.3,
-   "wall_median_diff_s": 46.6
+   "wall_median_diff_s": 46.6,
+   "ci_method": "percentile, index floor(q * (n - 1)) of the sorted resamples, no interpolation"
   },
   "all": {
    "pairs": 30,
@@ -340,7 +341,54 @@
    "tasks_ccx2_dearer": 27,
    "tasks_ccx2_slower": 30,
    "wall_diff_median_s": 46.8,
-   "wall_median_diff_s": 46.3
+   "wall_median_diff_s": 46.3,
+   "ci_method": "percentile, index floor(q * (n - 1)) of the sorted resamples, no interpolation"
+  }
+ },
+ "bootstrap_direct_over_self": {
+  "clean": {
+   "pairs": 28,
+   "resamples": 2000,
+   "seed": 31,
+   "unit": "task",
+   "total_ratio": 0.2,
+   "total_ratio_ci": [
+    0.172,
+    0.231
+   ],
+   "cost_per_success_ratio": 0.512,
+   "cost_per_success_ratio_ci": [
+    0.339,
+    0.99
+   ],
+   "resamples_without_a_success": 0,
+   "tasks_direct_dearer": 0,
+   "tasks_direct_slower": 26,
+   "wall_diff_median_s": 31.3,
+   "wall_median_diff_s": 32.7,
+   "ci_method": "percentile, index floor(q * (n - 1)) of the sorted resamples, no interpolation"
+  },
+  "all": {
+   "pairs": 30,
+   "resamples": 2000,
+   "seed": 31,
+   "unit": "task",
+   "total_ratio": 0.205,
+   "total_ratio_ci": [
+    0.176,
+    0.239
+   ],
+   "cost_per_success_ratio": 0.569,
+   "cost_per_success_ratio_ci": [
+    0.373,
+    1.137
+   ],
+   "resamples_without_a_success": 0,
+   "tasks_direct_dearer": 0,
+   "tasks_direct_slower": 28,
+   "wall_diff_median_s": 33.5,
+   "wall_median_diff_s": 33.2,
+   "ci_method": "percentile, index floor(q * (n - 1)) of the sorted resamples, no interpolation"
   }
  },
  "lead_side": {
@@ -366,7 +414,39 @@
    "ccx2_cost_per_success_if_all_right": 0.0462,
    "self_cost_per_success": 0.0363
   },
-  "fields": "lead_usd (the lead's model spend) / usd (lead_usd + ccx_usd) of the ccx2 rows; self's usd is its lead_usd"
+  "fields": "lead_usd (all of the lead's Claude spend in the unit, brief, waiting turn and acceptance included) / usd (lead_usd + ccx_usd; ccx_usd holds ccx's work runs and its reviews) of the ccx2 rows; self's usd is its lead_usd",
+  "reworked_units": 7,
+  "ccx2_lead_usd_median_reworked": 0.0481,
+  "ccx2_lead_usd_median_not_reworked": 0.0336,
+  "ccx2_cheaper_than_self": [
+   {
+    "task": "pg-book-store",
+    "self_usd": 0.043581,
+    "ccx2_usd": 0.039854,
+    "self_cost_rank": [
+     28,
+     30
+    ]
+   },
+   {
+    "task": "pg-paasio",
+    "self_usd": 0.037158,
+    "ccx2_usd": 0.035372,
+    "self_cost_rank": [
+     26,
+     30
+    ]
+   },
+   {
+    "task": "pg-sgf-parsing",
+    "self_usd": 0.072999,
+    "ccx2_usd": 0.047024,
+    "self_cost_rank": [
+     30,
+     30
+    ]
+   }
+  ]
  },
  "check": {
   "ccx2_check_passed": 30,
@@ -378,6 +458,14 @@
   "rungs": [
    "codex:gpt-6-luna:low"
   ],
+  "ccx2_second_attempts": {
+   "pg-dot-dsl": "the lead sent it back (ccx resume)",
+   "pg-forth": "the lead sent it back (ccx resume)",
+   "pg-pig-latin": "ccx retried on the same rung after its check failed",
+   "pg-pov": "the lead sent it back (ccx resume)",
+   "pg-react": "ccx retried on the same rung after its check failed",
+   "pg-wordy": "ccx retried on the same rung after its check failed"
+  },
   "ccx2_units_with_a_fix_round": 4,
   "ccx2_units_with_2_attempts": 6,
   "ccx2_units_reviewed": 30
@@ -534,6 +622,10 @@
   "direct_ccx2_clean_pairs_opposite": {
    "opposite": 10,
    "of": 28
+  },
+  "direct_ccx2_clean_pairs_opposite_without_blocked": {
+   "opposite": 8,
+   "of": 26
   }
  },
  "self_right_without_bash": {
@@ -550,19 +642,80 @@
  "feature_auc": {
   "by_feature": {
    "exercism_difficulty": {
-    "ccx2_fails": 0.57,
-    "direct_fails": 0.54
+    "ccx2_fails": {
+     "auc": 0.57,
+     "ci95": [
+      0.35,
+      0.77
+     ],
+     "ci_contains_0_5": true,
+     "failures": 18,
+     "skipped_resamples": 0
+    },
+    "direct_fails": {
+     "auc": 0.54,
+     "ci95": [
+      0.32,
+      0.76
+     ],
+     "ci_contains_0_5": true,
+     "failures": 21,
+     "skipped_resamples": 0
+    }
    },
    "tests": {
-    "ccx2_fails": 0.51,
-    "direct_fails": 0.38
+    "ccx2_fails": {
+     "auc": 0.51,
+     "ci95": [
+      0.28,
+      0.74
+     ],
+     "ci_contains_0_5": true,
+     "failures": 18,
+     "skipped_resamples": 0
+    },
+    "direct_fails": {
+     "auc": 0.38,
+     "ci95": [
+      0.16,
+      0.61
+     ],
+     "ci_contains_0_5": true,
+     "failures": 21,
+     "skipped_resamples": 0
+    }
    },
    "instruction_chars": {
-    "ccx2_fails": 0.34,
-    "direct_fails": 0.62
+    "ccx2_fails": {
+     "auc": 0.34,
+     "ci95": [
+      0.14,
+      0.56
+     ],
+     "ci_contains_0_5": true,
+     "failures": 18,
+     "skipped_resamples": 0
+    },
+    "direct_fails": {
+     "auc": 0.62,
+     "ci95": [
+      0.37,
+      0.84
+     ],
+     "ci_contains_0_5": true,
+     "failures": 21,
+     "skipped_resamples": 0
+    }
    }
   },
   "in_sample": true,
+  "post_hoc": true,
+  "bootstrap": {
+   "unit": "task",
+   "resamples": 4000,
+   "seed": 7,
+   "ci_method": "percentile, index floor(q * (n - 1)), no interpolation"
+  },
   "from": "scripts/eval/polyglot_selection.json (difficulty, tests, instruction_chars)"
  },
  "units": [

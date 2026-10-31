@@ -5,6 +5,12 @@
 Read-only, standard library only, and separate from scripts/eval/r5.py (it does not import it), so the report's numbers
 are a second computation next to `r5.py summary`. The output has no paths: per unit only the task, arm and the fields
 the report uses. The bootstrap resamples tasks with a fixed seed (--seed, default 31), so a re-run prints the same CIs.
+A bootstrap interval is the percentile interval with no interpolation: the values at index floor(q * (n - 1)) of the
+sorted resamples, q = 0.025 and 0.975. Wall times are rounded half up to 0.1 s (Decimal ROUND_HALF_UP on the float's
+shortest decimal text), so a median that falls on .x5 does not depend on binary floats.
+
+The feature AUCs and their intervals (--auc-seed, default 7, --auc-resamples, default 4000, resampling tasks) are a
+post-hoc exploration: the plan did not include them.
 
 Two counts are reported everywhere: all 30 tasks, and the clean rows only (`env_clean`, as `r5.py summary` counts).
 A pair is two arms on the same task (one round). Sign tests are exact two-sided binomial tests on the discordant pairs
@@ -19,6 +25,7 @@ import argparse
 import json
 import random
 import statistics
+from decimal import ROUND_HALF_UP, Decimal
 from math import comb
 from pathlib import Path
 
@@ -48,6 +55,11 @@ FAILURE_CODES = {
     "pg-connect": ("logic", "wrong winner on several boards"),
     "pg-paasio": ("logic", "context-manager behaviour of the wrapped object"),
 }
+
+
+def r1(x: float) -> float:
+    """Round half up to 0.1 (wall seconds), on the shortest decimal text of the float."""
+    return float(Decimal(repr(x)).quantize(Decimal("0.1"), rounding=ROUND_HALF_UP))
 
 
 def load(path: Path) -> list[dict]:
@@ -86,7 +98,7 @@ def arm_stats(rows: list[dict]) -> dict:
             "cost_per_success": round(usd / ok, 4) if ok else None,
             "lead_usd": round(sum(r.get("lead_usd") or 0 for r in rows), 4),
             "ccx_usd": round(sum(r.get("ccx_usd") or 0 for r in rows), 4),
-            "wall_median_s": round(statistics.median(r["wall_s"] for r in rows), 1)}
+            "wall_median_s": r1(statistics.median(r["wall_s"] for r in rows))}
 
 
 def paired(by: dict, a: str, b: str, tasks: list[str]) -> dict:
@@ -131,17 +143,41 @@ def bootstrap(by: dict, tasks: list[str], a: str, b: str, n: int, seed: int) -> 
             "resamples_without_a_success": skipped,
             f"tasks_{b}_dearer": sum(1 for t in tasks if by[t][b]["usd"] > by[t][a]["usd"]),
             f"tasks_{b}_slower": sum(1 for t in wall if t > 0),
-            "wall_diff_median_s": round(statistics.median(wall), 1),
-            "wall_median_diff_s": round(statistics.median(by[t][b]["wall_s"] for t in tasks)
-                                        - statistics.median(by[t][a]["wall_s"] for t in tasks), 1)}
+            "wall_diff_median_s": r1(statistics.median(wall)),
+            "wall_median_diff_s": r1(statistics.median(by[t][b]["wall_s"] for t in tasks)
+                                     - statistics.median(by[t][a]["wall_s"] for t in tasks)),
+            "ci_method": "percentile, index floor(q * (n - 1)) of the sorted resamples, no interpolation"}
 
 
-def auc(scores_pos: list[float], scores_neg: list[float]) -> float | None:
+def auc_raw(scores_pos: list[float], scores_neg: list[float]) -> float | None:
     """P(score of a positive > score of a negative), ties counted half (Mann-Whitney)."""
     if not scores_pos or not scores_neg:
         return None
     w = sum(1.0 if p > q else 0.5 if p == q else 0.0 for p in scores_pos for q in scores_neg)
-    return round(w / (len(scores_pos) * len(scores_neg)), 2)
+    return w / (len(scores_pos) * len(scores_neg))
+
+
+def auc(scores_pos: list[float], scores_neg: list[float]) -> float | None:
+    v = auc_raw(scores_pos, scores_neg)
+    return None if v is None else round(v, 2)
+
+
+def auc_boot(tasks: list[str], feat: dict, failed: dict, n: int, seed: int) -> dict:
+    """One feature's AUC for "the unit failed" with a bootstrap interval that resamples tasks; a resample with no
+    failure or no success is skipped (and counted)."""
+    rng = random.Random(seed)
+    vals, skipped = [], 0
+    for _ in range(n):
+        s = [rng.choice(tasks) for _ in tasks]
+        v = auc_raw([feat[t] for t in s if failed[t]], [feat[t] for t in s if not failed[t]])
+        if v is None:
+            skipped += 1
+        else:
+            vals.append(v)
+    lo, hi = boot_ci(vals)
+    return {"auc": auc([feat[t] for t in tasks if failed[t]], [feat[t] for t in tasks if not failed[t]]),
+            "ci95": [round(lo, 2), round(hi, 2)], "ci_contains_0_5": lo <= 0.5 <= hi,
+            "failures": sum(1 for t in tasks if failed[t]), "skipped_resamples": skipped}
 
 
 def scrub(r: dict) -> dict:
@@ -161,6 +197,8 @@ def main() -> int:
     ap.add_argument("--selection", type=Path, default=SELECTION)
     ap.add_argument("--seed", type=int, default=31)
     ap.add_argument("--resamples", type=int, default=2000)
+    ap.add_argument("--auc-seed", type=int, default=7)
+    ap.add_argument("--auc-resamples", type=int, default=4000)
     ap.add_argument("--out", type=Path)
     a = ap.parse_args()
 
@@ -201,6 +239,9 @@ def main() -> int:
     ct = [t for t in tasks if clean(t, "self", "ccx2")]
     out["bootstrap_ccx2_over_self"] = {"clean": bootstrap(by, ct, "self", "ccx2", a.resamples, a.seed),
                                        "all": bootstrap(by, tasks, "self", "ccx2", a.resamples, a.seed)}
+    dt = [t for t in tasks if clean(t, "self", "direct")]
+    out["bootstrap_direct_over_self"] = {"clean": bootstrap(by, dt, "self", "direct", a.resamples, a.seed),
+                                         "all": bootstrap(by, tasks, "self", "direct", a.resamples, a.seed)}
 
     # Where ccx2's money goes: the lead's side (brief, wait, acceptance) vs ccx's runs (work + reviews).
     def lead_side(ts):
@@ -216,15 +257,41 @@ def main() -> int:
                 "of": len(ts),
                 "ccx2_cost_per_success_if_all_right": round(tot / len(ts), 4),
                 "self_cost_per_success": round(sum(r["usd"] for r in s) / sum(r["ok"] for r in s), 4)}
+    def reworked(t):
+        p = by[t]["ccx2"].get("phases") or {}
+        return (p.get("n_attempts") or 0) > 1 or bool(p.get("n_fix_rounds"))
+    self_rank = {t: i + 1 for i, t in enumerate(sorted(tasks, key=lambda t: by[t]["self"]["usd"]))}
     out["lead_side"] = {"all": lead_side(tasks), "clean": lead_side(ct),
-                        "fields": "lead_usd (the lead's model spend) / usd (lead_usd + ccx_usd) of the ccx2 rows; "
-                                  "self's usd is its lead_usd"}
+                        "fields": "lead_usd (all of the lead's Claude spend in the unit, brief, waiting turn and "
+                                  "acceptance included) / usd (lead_usd + ccx_usd; ccx_usd holds ccx's work runs and "
+                                  "its reviews) of the ccx2 rows; self's usd is its lead_usd",
+                        "reworked_units": sum(1 for t in tasks if reworked(t)),
+                        "ccx2_lead_usd_median_reworked": round(statistics.median(
+                            by[t]["ccx2"]["lead_usd"] for t in tasks if reworked(t)), 4),
+                        "ccx2_lead_usd_median_not_reworked": round(statistics.median(
+                            by[t]["ccx2"]["lead_usd"] for t in tasks if not reworked(t)), 4),
+                        # In sample and post hoc: where the tasks ccx2 was cheaper on sit in self's cost order.
+                        "ccx2_cheaper_than_self": [{"task": t, "self_usd": by[t]["self"]["usd"],
+                                                    "ccx2_usd": by[t]["ccx2"]["usd"],
+                                                    "self_cost_rank": [self_rank[t], len(tasks)]}
+                                                   for t in tasks if by[t]["ccx2"]["usd"] < by[t]["self"]["usd"]]}
 
     c2 = [by[t]["ccx2"] for t in tasks]
     out["check"] = {"ccx2_check_passed": sum(1 for r in c2 if r.get("ccx_check_passed")), "of": len(c2),
                     "passed_but_hidden_failed": sum(1 for r in c2 if r.get("ccx_check_passed") and not r["ok"]),
                     "hidden_failed": sum(1 for r in c2 if not r["ok"])}
+    def second_attempt(r):
+        parts = ((r.get("timeline") or {}).get("parts") or {}).get("sub") or {}
+        if "sent back by the lead (resume)" in parts:
+            return "the lead sent it back (ccx resume)"
+        if any(k.startswith("retry after") for k in parts):
+            return "ccx retried on the same rung after its check failed"
+        if any(k.startswith("climb after") for k in parts):
+            return "climbed"
+        return "unknown"
     out["routes"] = {"rungs": sorted({x for r in rows for x in scrub(r)["rungs"]}),
+                     "ccx2_second_attempts": {r["task"]: second_attempt(r) for r in c2
+                                              if ((r.get("phases") or {}).get("n_attempts") or 0) > 1},
                      "ccx2_units_with_a_fix_round": sum(1 for r in c2 if (r.get("phases") or {}).get("n_fix_rounds")),
                      "ccx2_units_with_2_attempts": sum(1 for r in c2
                                                        if ((r.get("phases") or {}).get("n_attempts") or 0) > 1),
@@ -256,6 +323,9 @@ def main() -> int:
         "direct_ccx2_clean_pairs_opposite": (lambda c: {"opposite": sum(1 for t in c if by[t]["direct"]["ok"]
                                                                          != by[t]["ccx2"]["ok"]), "of": len(c)})(
             [t for t in tasks if clean(t, "direct", "ccx2")]),
+        "direct_ccx2_clean_pairs_opposite_without_blocked": (lambda c: {"opposite": sum(
+            1 for t in c if by[t]["direct"]["ok"] != by[t]["ccx2"]["ok"]), "of": len(c)})(
+            [t for t in nb if clean(t, "direct", "ccx2")]),
     }
     s_rows = [by[t]["self"] for t in tasks]
     out["self_right_without_bash"] = {
@@ -267,11 +337,12 @@ def main() -> int:
     # Pre-delegation features vs ccx2 failing (AUC > 0.5: a higher value goes with failing).
     feats = {}
     for f in ("exercism_difficulty", "tests", "instruction_chars"):
-        feats[f] = {"ccx2_fails": auc([sel[t][f] for t in tasks if not by[t]["ccx2"]["ok"]],
-                                      [sel[t][f] for t in tasks if by[t]["ccx2"]["ok"]]),
-                    "direct_fails": auc([sel[t][f] for t in tasks if not by[t]["direct"]["ok"]],
-                                        [sel[t][f] for t in tasks if by[t]["direct"]["ok"]])}
-    out["feature_auc"] = {"by_feature": feats, "in_sample": True,
+        fv = {t: sel[t][f] for t in tasks}
+        feats[f] = {arm + "_fails": auc_boot(tasks, fv, {t: not by[t][arm]["ok"] for t in tasks},
+                                             a.auc_resamples, a.auc_seed) for arm in ("ccx2", "direct")}
+    out["feature_auc"] = {"by_feature": feats, "in_sample": True, "post_hoc": True,
+                          "bootstrap": {"unit": "task", "resamples": a.auc_resamples, "seed": a.auc_seed,
+                                        "ci_method": "percentile, index floor(q * (n - 1)), no interpolation"},
                           "from": "scripts/eval/polyglot_selection.json (difficulty, tests, instruction_chars)"}
     out["units"] = [scrub(by[t][x]) for t in tasks for x in ARMS]
 

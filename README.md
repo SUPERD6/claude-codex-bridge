@@ -29,9 +29,11 @@ tests), ccx was not seen to be less right (29/30, against 29/30 and 27/28) and c
 yourself and than the built-in sub-agent's default usage, but took about 3× the wall time of doing it yourself
 ([report and limits](https://github.com/SUPERD6/relayline/blob/main/docs/research/2026-10-29-hc1-holdout.md)).
 
-**External benchmark (pg1, 2026-10-31):** on 30 polyglot Python exercises, delegating to the cheapest tier passed 12/30
-vs 25/30 self, ~3× cost/success. Don't delegate small strict-interface tasks; savings appear only on costlier repo
-tasks ([report and limits](https://github.com/SUPERD6/relayline/blob/main/docs/research/2026-10-31-polyglot-pg1.md)).
+**External benchmark (pg1, 2026-10-31):** on 30 polyglot Python exercises with no tests of their own (ccx's check
+was the sub-agent's own tests), ccx through a Sonnet lead to the cheapest tier was right 12/30 vs 25/30 doing it
+yourself, at ~3× the cost per success and ~5× the wall time. Small strict-interface tasks are not worth delegating;
+so far savings were seen only on costlier repo tasks (hc1, not paired with pg1)
+([report and limits](https://github.com/SUPERD6/relayline/blob/main/docs/research/2026-10-31-polyglot-pg1.md)).
 
 **Dev set** (the other rows): round 5, ten real
 changes from this repository × 2, a sonnet lead, hidden tests, the sub-agent Codex gpt-6-luna low. Built-in: every run, the lean builtin2 included; ccx: the four runs
