@@ -68,8 +68,8 @@ after the round-5 fixes (the first run, before them, was 17/20 at $0.248).
 folder (offline, no Claude or Codex login; your own setup is not touched).
 
 <table><tr>
-<td width="50%"><img alt="ccx ui, one hand-off's receipt: Codex gpt-6-luna low did it, cost $0.0040, the check ccx ran again passed, Claude haiku's review passed, the files actually changed from ccx's own snapshots (ccx demo data)" src="docs/assets/ui/task-en.png"></td>
-<td width="50%"><img alt="ccx ui, where tokens go: one ledger across Claude, Codex and DeepSeek, requests per run, a Codex helper session under its run, the review as a run of its own (ccx demo data)" src="docs/assets/ui/tokens-en.png"></td>
+<td width="50%"><img alt="ccx ui, one hand-off's receipt: Codex gpt-6-luna low did it, cost $0.0051 with its review, the check ccx ran again passed, Claude haiku's review passed, the files actually changed from ccx's own snapshots (ccx demo data)" src="docs/assets/ui/task-en.png"></td>
+<td width="50%"><img alt="ccx ui, where tokens go: one ledger across Claude, Codex and DeepSeek, requests per run, a Codex helper session under its run, (ccx demo data)" src="docs/assets/ui/tokens-en.png"></td>
 </tr><tr><td align="center">Every hand-off's receipt</td><td align="center">Where the tokens went</td></tr></table>
 
 ## Quick start
