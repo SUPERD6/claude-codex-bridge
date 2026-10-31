@@ -19,6 +19,8 @@
 这次运行花了多少记进账本，想撤回只要一条命令。反过来也行（Codex 或 DeepSeek 当主导、Claude Code 接活），大家共享记忆和
 工作上下文。命令是 `ccx`，只用 Python 标准库。
 
+<p align="center"><img alt="15 秒演示动画：ccx route 选出 Codex gpt-6-luna low；ccx run 把活从 Claude Code 交给 Codex，一次做完；收据写着 ccx 自己重跑的验收（通过）、另一家的审查（通过）和花费；ccx ui 在页面上显示同一张收据（替身 CLI，花费是编的）" src="docs/assets/demo.svg" width="100%"></p>
+
 ## 和自己做、和 Claude Code 自带的子智能体比
 
 **留出集（hc1，2026-10-29）：** 在做 ccx 时没用过的 10 个任务上（× 3 轮，sonnet 当主导，隐藏测试），ccx 未见正确率更差
@@ -95,9 +97,12 @@ ccx undo <run_id>            # 不想要：先显示会还原什么；加 --appl
 “交给 Claude 继续”，再点一次确认，就会为这个项目运行 `ccx handoff`：把做完了什么、定了什么、下一步写进项目（当前主导的
 对话文件在的话就从它整理），并给你一行话，在那个工具里打开这个项目时贴给它。任务时间线会显示每段时间由谁主导。
 
-<p align="center"><img alt="演示动画：ccx route 选出 codex:gpt-6.1-sol:medium，ccx run 一次完成并由 ccx 重跑验收命令，ccx verify 记下结论" src="docs/assets/demo.svg" width="100%"></p>
-
 ## 谁和谁配合
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture-dark.svg">
+  <img alt="架构图：Claude Code、Codex、DeepSeek 都连到 ccx，谁都能当主导或接活；主导把简报交给另一家在后台跑、交回 JSON；ccx 选模型、重跑验收、请另一家审查，每次派活写一张收据（花费、验收、审查、结论、撤回）进账本，并从各工具自己的会话文件读出共享工作上下文；下面是个人层（hub：共享记忆、技能、MCP、账本）、项目层（.ccx：context.md、日志、对话板、交接、断点、撤回快照、队列）和本机页面 ccx ui（收据、token 去向）。Gemini CLI 只有子智能体适配器，没真跑过" src="docs/assets/architecture-light.svg" width="100%">
+</picture>
 
 | | 当主导 | 接活 |
 |---|---|---|
@@ -118,6 +123,7 @@ GitHub；完整清单见 STATUS。
 | [做什么、怎么做](docs/features.zh.md) | 七件事的细节、`ccx ui`、一个从头到尾的例子、共享的东西放在哪、分级、安全边界 |
 | [安装和命令](docs/install.zh.md) | 从源码安装、接入你已有的配置、全部命令 |
 | [实测](docs/measured.zh.md) | 全部测量和局限（留出集运行、第 5 轮对比、单个功能的最好情况 A/B）、省了多少怎么估、核对过的外部事实 |
+| [公开基准](bench/README.zh.md) | 留出集和开发集的题、隐藏测试和我们的结果行：自己重跑这组对比 |
 | [共享工作上下文](docs/shared-context.zh.md) · [留言板](docs/board.zh.md) | 开着的会话之间共享什么、怎么共享 |
 | [常见问题和同类项目](docs/faq.zh.md) | 花费、订阅、安全、哪些工具能用；和同类项目有什么不同 |
 | [设计](docs/DESIGN.zh.md) · [决策](docs/DECISIONS.md) · [变更](CHANGELOG.md) | 内部 |

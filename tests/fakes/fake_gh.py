@@ -5,11 +5,12 @@ FAKE_GH_LOGIN: the signed-in account (default "me"). Every call is logged to FAK
 import json
 import os
 import sys
+from fake_log import locked_append  # noqa: E402  (several fakes may append at once)
 
 argv = sys.argv[1:]
 log = os.environ.get("FAKE_LOG")
 if log:
-    with open(log, "a", encoding="utf-8") as f:
+    with locked_append(log) as f:
         f.write(json.dumps({"agent": "gh", "argv": argv}) + "\n")
 state_f = os.environ["FAKE_GH_STATE"]
 st = json.load(open(state_f, encoding="utf-8")) if os.path.exists(state_f) else {"issues": {}}

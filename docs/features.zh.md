@@ -16,7 +16,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/architecture-dark.svg">
-  <img alt="架构图：Claude Code、Codex、Gemini CLI 都连到 ccx，谁当主都可以把简报交给另一家在后台跑、交回 JSON；ccx 选模型、重跑验收、请另一家审查、记对错和花费；下面是个人层（hub：记忆、技能、MCP、账本）、项目层（.ccx：背景、日志、交接、断点、撤回快照）和本机只读页面 ccx ui" src="assets/architecture-light.svg" width="100%">
+  <img alt="架构图：Claude Code、Codex、DeepSeek 都连到 ccx，谁都能当主导或接活；主导把简报交给另一家在后台跑、交回 JSON；ccx 选模型、重跑验收、请另一家审查，每次派活写一张收据（花费、验收、审查、结论、撤回）进账本，并从各工具自己的会话文件读出共享工作上下文；下面是个人层（hub：共享记忆、技能、MCP、账本）、项目层（.ccx：context.md、日志、对话板、交接、断点、撤回快照、队列）和本机页面 ccx ui（收据、token 去向）。Gemini CLI 只有子智能体适配器，没真跑过" src="assets/architecture-light.svg" width="100%">
 </picture>
 
 ## 命令：日常的在前，一个不删
@@ -135,6 +135,22 @@ Fail（做对 29 对 30），事后解读为未定。按配对看，三个都没
 设成 `"none"` 后，`ccx run --parallel` 的 Codex 运行（原生的，不经 provider）会多收到一句：用 `fork_turns="none"` 开自己的子会话（codex-cli 0.164.0 的 `spawn_agent` 参数），
 并把它需要的文件、目标、约束和检查方法写进给它的消息，这样子会话每次请求不再重读父会话的历史。Claude 的 Agent 工具本来就不带父对话，
 所以 Claude 运行不变。这类运行在记录里写 `parallel_fork_turns`（`all` 或 `none`；换到别的智能体上跑了再加 `parallel_fork_turns_moved`）。实测（M3）前不开。
+
+### 实验性：`ccx batch --merge`（`[merge]`，实测前不开）
+
+子智能体的输入大半是每次请求都重发的前缀，五个小块分开跑就要付五次启动。加 `--merge`（或设 `[merge] default = true`；`--no-merge`
+单次关掉）后，同一批里同一目录、同一家、同一模型档、同一 worktree 和 namecheck 设置、写了估计且不超过 `piece_minutes`（5 分钟；没写
+`minutes` 的块不合并）、声明的路径（`paths`，列表；批处理计划里的 `files` 仍是选模型用的文件数估计）不重叠的写入块，合成一次运行，
+最多 `max_pieces`（5）块、合计 `total_minutes`（15 分钟）。这次运行不升档、不开自己的子智能体。之后逐块判定：有 `check` 的看 check
+（不管整次运行的状态），没有的看它在 summary 里自己那行 `[id] done|partial|failed`；两样都没有的标 `unconfirmed`（不算做完，也不重做，
+请看 diff）。没做完的块在同一会话里修一次；check 还不过、或者仍报 failed/partial 的块，单独跑一次（照常升档）。如果运行是因为重试也过不去的
+原因停下的（额度、登录、`ccx stop`、超时、机器问题、预算），就不再起任何运行，这些块标 `not_run`，用 `ccx resume` 续那次停下的运行。如果审查（修复轮之后）或 ccx 否决了整个合并改动（`review_issues`、
+`review_failed`、`no_changes`、`check_broken`），哪一块都不算做完，不管它自己的 check 怎样。修复轮或拆出去的运行跑过之后，之前通过的 check
+会再跑一次，以最后一次为准。`results` 仍然每块
+一项（多了 `merged_run`、`merged_with`、`piece_state`），`ccx undo <运行> --piece <id>` 只还原这一块声明的路径（不记对错；只适用于在项目目录里跑的合并运行：干净仓库里并行写入会各开 worktree，worktree 运行没有 undo 快照）。修复和拆出去的
+运行在 run.json 和账本里带 `merge_of`，账本另有一条 `merge` 事件列出每块的结果。代价：审查按整个改动判（50 行门槛按所有块合计；修复和拆出去
+的运行可能再审一次）、墙钟变长；只要有合并的块没做完，退出码就是 2（单独跑的块仍按 `ccx run` 原来的退出码）。命令行上的 `--merge` 优先于
+`[lanes] default`，命令行上的 `--lanes` 优先于 `[merge] default`；两个都写在命令行上会报错。
 
 ## 安全边界
 

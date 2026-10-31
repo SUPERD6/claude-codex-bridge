@@ -37,6 +37,7 @@ from .plan import _fallback_plan, _plan, _provider_envs, _rung_spec, _usable, _w
 from .prompts import (CLEAN_LANG, CHECK_RETRY, CHECK_RETRY_SAME, CHECK_RETRY_STRONGER, CHECK_TAIL_CHARS, CONTINUE, ESCALATE, FOLLOWUP, LEAD_NOTE, NEEDS_WRITE, POLICY_MARKERS, POLICY_RETRY, PROMPT,  # noqa: F401
                       REVIEW_CALLER, REVIEW_FINISH, REVIEW_PERMISSION, SELFCHECK, SELFCHECK_CMD, _policy_rejections,
                       review_permission)
+from .merge import REVIEW_LINE
 from .review import review_run as _review  # noqa: F401
 from .verdicts import (REASONS, SOFT_AFTER_H, _hard_verdict, _soft_verdict, soft_verdicts, verify,  # noqa: F401
                        verify_builtin)
@@ -88,6 +89,8 @@ class Request:
     namecheck: str | None = None    # warn | fail | off: static undefined-name check (None = [defaults] namecheck)
     run_id: str | None = None       # the id to use (`ccx q run` names it up front so `q ls` can show it)
     progress: bool = False          # a foreground `ccx run`/`resume`: one stderr line every ~30 s while it waits
+    finish_note: str | None = None  # `ccx batch --merge`: the merged run's own Finish text (ccx/merge.py FINISH)
+    merge_of: str | None = None     # a follow-up / spun-off run of a merged run (`ccx batch --merge`): that run's id
 
 
 def _busy(p: Paths, prev: dict, scan: int = 300) -> str | None:
@@ -506,6 +509,7 @@ def run(req: Request, p: Paths) -> dict:
         # --ignore-user-config (checked 2026-10-24), so the rule has to be said; the spend watchdog stays as backstop
         mode_text += "; do not start sub-agents of your own (no spawn_agent / Agent tool)"
     selfcheck = (REVIEW_FINISH if reviewer
+                 else req.finish_note if req.finish_note
                  else SELFCHECK_CMD.format(check=req.check) if req.check else SELFCHECK)
     switches = subagent_switches(cfg)
     # a fork run keeps the lead's own start on every Claude attempt (the forked session is resumed with the same
@@ -582,6 +586,7 @@ def run(req: Request, p: Paths) -> dict:
         "forked_from_lead": bool(req.fork_lead), "ephemeral": req.ephemeral,
         "mode_source": req.mode_source, "mode_why": req.mode_why, "check_cmd": req.check, "risk": req.risk,
         "namecheck_mode": req.namecheck,
+        **({"merge_of": req.merge_of} if req.merge_of else {}),
         # the review the person asked for, which a later resume inherits; a review fix round (forced "on")
         # keeps the setting of the run it fixes
         "review_mode": ((prev or {}).get("review_mode") or "auto") if req.review_round else req.review,
@@ -1047,11 +1052,14 @@ def run(req: Request, p: Paths) -> dict:
                           "Fix the real ones (say which you think are wrong and why), then re-run only the tests touching "
                           "your fix (-k NAME / one test id)"
                           + ("; not the whole check, ccx runs that itself. " if req.check else ". ") +
-                          "Change only what the task needs; do not add checks or hardening it did not ask for.",
+                          "Change only what the task needs; do not add checks or hardening it did not ask for."
+                          + (REVIEW_LINE if req.finish_note else ""),
                           resume_run=run_id, caller=req.caller, cwd=req.cwd, review="on", risk=req.risk,
                           review_round=req.review_round + 1, check=req.check, fallback=False, task=req.task,
                           step=req.step, label=req.label, namecheck=req.namecheck, progress=req.progress,
-                          prior_issues=list(record["review"].get("issues") or [])), p)
+                          prior_issues=list(record["review"].get("issues") or []),
+                          merge_of=req.merge_of or (run_id if req.finish_note else None),
+                          finish_note=req.finish_note), p)
         fix["review_of"], fix["first_review"] = run_id, record["review"]
         try:                               # the lead sees what the whole chain cost, not only its last run
             fix["cost_chain"] = ledger.chain_cost(p, [run_id, *((fix.get("cost_chain") or {}).get("runs")

@@ -20,6 +20,8 @@ vendor's model reviews the diff, the cost of the run is recorded, and undoing it
 ways round too (Codex or DeepSeek leading, Claude Code taking work), with shared memory and working context. The
 command is `ccx`; Python standard library only.
 
+<p align="center"><img alt="Animated demo, 15 seconds: ccx route picks Codex gpt-6-luna low; ccx run hands the task from Claude Code to Codex and it is done in one attempt; the receipt shows the check ccx ran again (passed), another vendor's review (pass) and the cost; ccx ui shows the same receipt on its page (stand-in CLIs, made-up costs)" src="https://raw.githubusercontent.com/SUPERD6/relayline/main/docs/assets/demo.svg" width="100%"></p>
+
 ## Compared with doing it yourself and with Claude Code's own sub-agent
 
 **Hold-out set (hc1, 2026-10-29):** on 10 tasks not used while building ccx (× 3 rounds, a sonnet lead, hidden
@@ -114,9 +116,12 @@ after a second click: it writes what is done, the decisions and what comes next 
 lead's own conversation file when it is there) and gives you the one line to paste when you open the other tool
 there. The task timeline shows which lead worked when.
 
-<p align="center"><img alt="Animated demo: ccx route picks codex:gpt-6.1-sol:medium, ccx run finishes in one attempt and ccx reruns the check, ccx verify records the verdict" src="https://raw.githubusercontent.com/SUPERD6/relayline/main/docs/assets/demo.svg" width="100%"></p>
-
 ## Who works with whom
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/SUPERD6/relayline/main/docs/assets/architecture-dark.svg">
+  <img alt="Architecture: Claude Code, Codex and DeepSeek connect to ccx, each can lead or take work; a lead hands a brief to another, which runs headless and returns JSON; ccx routes, reruns the check, asks another vendor to review, and writes a receipt for every delegated run (cost, check, review, verdict, undo) into the ledger, and reads the other tools' sessions for the shared working context; below: the personal layer (hub: shared memory, skills, MCP, ledger), the project layer (.ccx: context.md, journal, board, handoffs, checkpoints, undo snapshots, queue) and ccx ui, a local page with the receipts and where tokens go. Gemini CLI: a worker adapter, not run for real" src="https://raw.githubusercontent.com/SUPERD6/relayline/main/docs/assets/architecture-light.svg" width="100%">
+</picture>
 
 | | Lead | Takes work |
 |---|---|---|
@@ -138,6 +143,7 @@ in STATUS. Still work in progress (the release badge above says which version): 
 | [What it does, and how](https://github.com/SUPERD6/relayline/blob/main/docs/features.md) | the seven things in detail, `ccx ui`, one example end to end, where shared things live, tiers, safety |
 | [Install and commands](https://github.com/SUPERD6/relayline/blob/main/docs/install.md) | install from a clone, plugging in your own setup, every command |
 | [Measured](https://github.com/SUPERD6/relayline/blob/main/docs/measured.md) | all measurements with their limits (the hold-out run, the round-5 comparison, the best-case feature A/Bs), how a saving is estimated, external facts checked |
+| [Public benchmark](https://github.com/SUPERD6/relayline/blob/main/bench/README.md) | the hold-out and dev tasks, hidden tests and our result rows: re-run the comparison yourself |
 | [Shared work context](https://github.com/SUPERD6/relayline/blob/main/docs/shared-context.md) · [The board](https://github.com/SUPERD6/relayline/blob/main/docs/board.md) | what open sessions share with each other, and how |
 | [Questions and similar projects](https://github.com/SUPERD6/relayline/blob/main/docs/faq.md) | cost, subscriptions, safety, which tools work; how ccx differs from similar projects |
 | [Design](https://github.com/SUPERD6/relayline/blob/main/docs/DESIGN.md) · [Decisions](https://github.com/SUPERD6/relayline/blob/main/docs/DECISIONS.md) · [Changes](https://github.com/SUPERD6/relayline/blob/main/CHANGELOG.md) | the inside |
