@@ -15,7 +15,7 @@
 | 现在到哪了 | [docs/STATUS.zh.md](STATUS.zh.md)（一页） | 现状、接下来三件、有多确定；旧页面在 [STATUS-archive.zh.md](STATUS-archive.zh.md) |
 | 改了什么 | [CHANGELOG.md](../CHANGELOG.md) 和 [changes/](../changes/) 里的小文件 | `changes/*.md` 是上次发版之后合进来、还没折进 CHANGELOG 的 PR |
 | 为什么是这样 | [docs/DECISIONS.md](DECISIONS.md) | 每个真正的决定一行，新的在上，带依据 |
-| 测过什么 | [docs/research/README.zh.md](research/README.zh.md) | 每份报告一行：问题和结果 |
+| 测过什么 | [docs/research/README.zh.md](research/README.zh.md) | 每份报告一行：问题、结果、主要局限 |
 | 上一个会话的笔记 | 你本机检出里的 `.ccx/handoff.md`（如果有） | 只在本机，从不进仓库 |
 
 然后跑一遍测试（`python -m pytest -q tests`）；测试从不调用真正的智能体命令行。

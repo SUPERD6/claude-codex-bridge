@@ -16,7 +16,7 @@ Read these in this order, and stop when you know enough for the task at hand:
 | Where things stand | [docs/STATUS.md](STATUS.md) (one page) | now, the next three items, how sure we are; older pages in [STATUS-archive.md](STATUS-archive.md) |
 | What changed | [CHANGELOG.md](../CHANGELOG.md) and the notes in [changes/](../changes/) | `changes/*.md` are the PRs merged since the last release, not yet folded into the CHANGELOG |
 | Why it is the way it is | [docs/DECISIONS.md](DECISIONS.md) | one row per real decision, newest first, with the evidence |
-| What was measured | [docs/research/README.md](research/README.md) | one row per report: question and result |
+| What was measured | [docs/research/README.md](research/README.md) | one row per report: question, result, main limit |
 | The previous session's notes | `.ccx/handoff.md` in your checkout, if it exists | local only, never in the repository |
 
 Then run the tests once (`python -m pytest -q tests`); they never call a real agent CLI.

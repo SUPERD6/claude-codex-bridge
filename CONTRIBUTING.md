@@ -11,7 +11,8 @@ CLI checked against that CLI. Please keep it that way.
   public issue.
 - Bigger changes: open an issue first, so we agree on the shape before you write it.
 - Where things stand and what's next: [docs/STATUS.md](docs/STATUS.md). Design and reasons:
-  [docs/DESIGN.md](docs/DESIGN.md), [docs/DECISIONS.md](docs/DECISIONS.md).
+  [docs/DESIGN.md](docs/DESIGN.md), [docs/DECISIONS.md](docs/DECISIONS.md). Known issues, the switches that ship off
+  and how to run an evaluation: [docs/maintenance.md](docs/maintenance.md).
 
 ## Set up
 
@@ -29,7 +30,11 @@ the installed `ccx` (`tests/smoke_installed.py`).
 ## Rules
 
 - **Tests with every change.** A fix comes with a test that fails without it.
-- **Nothing personal in the repo**: no names, local paths or data. Personal things live in the user's hub.
+- **Keep the core.** Commands and options are not removed; a PR that changes one says in a line what it kept and how
+  that was checked. Paths not run for real are called experimental where they are described.
+- **Nothing personal in the repo**: no names, local paths, e-mail addresses, machine names or data. Personal things live in the
+  user's hub. `tests/test_repo_hygiene.py` checks every tracked file (text, and the strings inside images) on every
+  push; look at screenshots yourself too, since a path drawn in the pixels is not caught.
 - **Two languages for docs**: `x.md` (English) and `x.zh.md` (Chinese), linking to each other. Record real decisions
   in `docs/DECISIONS.md`.
 - **One change note per PR**: add `changes/<PR number>.md` with the lines for the CHANGELOG instead of editing

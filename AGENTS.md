@@ -26,6 +26,8 @@ task: whatever you read is re-read on every later turn. Keep STATUS one page (EN
 ## Rules
 - Run `python -m pytest -q tests` before every commit; all must pass (CI: Linux/Windows/macOS × 3.11–3.13).
 - Generic only: no personal paths, names or data in the repo. Personal things live in the user's hub.
+- Keep the core: no command or option is removed; a PR that changes one says in a line what it kept and how that
+  was checked. Paths not run for real are called experimental where they are described.
 - Docs are bilingual: `x.md` (English) + `x.zh.md` (Chinese), linking to each other. For real decisions, update
   docs/DECISIONS.md.
 - A PR adds one `changes/<PR>.md` with its CHANGELOG lines and does not edit CHANGELOG.md or docs/STATUS.md:
