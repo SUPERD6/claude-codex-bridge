@@ -1057,7 +1057,8 @@ def run(req: Request, p: Paths) -> dict:
                           resume_run=run_id, caller=req.caller, cwd=req.cwd, review="on", risk=req.risk,
                           review_round=req.review_round + 1, check=req.check, fallback=False, task=req.task,
                           step=req.step, label=req.label, namecheck=req.namecheck, progress=req.progress,
-                          prior_issues=list(record["review"].get("issues") or []),
+                          prior_issues=list(record["review"].get("issues_full") or record["review"].get("issues")
+                                            or []),
                           merge_of=req.merge_of or (run_id if req.finish_note else None),
                           finish_note=req.finish_note), p)
         fix["review_of"], fix["first_review"] = run_id, record["review"]
@@ -1273,7 +1274,7 @@ def compact(record: dict) -> dict:
     if record.get("review"):
         rv = record["review"]
         out["review"] = {k: rv[k] for k in ("verdict", "reason", "by", "issues", "notes", "usd", "error",
-                                            "edited_tests") if rv.get(k)}
+                                            "edited_tests", "downgraded") if rv.get(k)}
         if rv.get("edited_tests"):                    # a builder that changed existing tests: the lead looks first
             out["edited_tests"] = rv["edited_tests"]
     if record.get("cost_chain_error"):
