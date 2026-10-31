@@ -38,6 +38,10 @@ rungs = [
 "deepseek-flash" = "deepseek-flash"
 "deepseek-v4-pro" = "deepseek-v4-pro"
 "gemini-4-argon" = "gemini-4-argon"
+"fable" = "fable"                  # no rung of its own: a fable lead or `--model fable` run is priced by its name
+"claude-fable-5-1" = "fable"
+# claude-fable-5: same input/output price, but its cache-read price is not known here (the source lists $0.25 as new
+# in 5.1): Unknown, so no entry
 
 # IRT 2PL: P(success) = 1 / (1 + exp(-a * (theta - b)))
 # b = task difficulty 0..10 from the rubric; theta = rung ability on the same scale.
@@ -99,11 +103,16 @@ cache_write_1h_mult = 2.0    # headless claude -p writes its ~48.7k-token start-
 input = 4.00
 cached = 0.20
 output = 20.00
-# TODO(fable): Claude Code accepts `--model fable` (config/tiers.toml), but no pricing source in this repo gives
-# Fable's per-token prices: docs/research/2026-10-23-token-cost-quantification.md has only its cache-read multiplier
-# (0.025 of input). Read input/output from platform.claude.com/docs/en/about-claude/pricing, then add [prices.fable]
-# (with the two cache_write multipliers above) and "fable" = "fable" under [model_prices]. Until then a fable lead
-# or run has no price: `ccx lead --breakdown/--cache` show $0 for it and the ledger shows its cost as unknown.
+[prices.fable]
+# Claude Fable 5.1 (claude-fable-5-1): $10 input, $50 output, cache reads $0.25 (0.025 of input,
+# as docs/research/2026-10-23-token-cost-quantification.md has it). Source: the Claude API reference bundled with
+# Claude Code 2.1.309 (model table cached 2026-10-06, from platform.claude.com/docs/en/about-claude/pricing); the
+# cache-write multipliers are Anthropic's usual ones, not checked for Fable separately. Verify before trusting.
+cache_write_5m_mult = 1.25
+cache_write_1h_mult = 2.0
+input = 10.00
+cached = 0.25
+output = 50.00
 
 # After an agent's own ladder, escalation continues on this agent's rungs above it (a failed DeepSeek piece goes to
 # Claude, not back to the lead).
