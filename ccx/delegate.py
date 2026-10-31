@@ -945,8 +945,9 @@ def run(req: Request, p: Paths) -> dict:
             _review(req, p, cfg, record, cwd, run_dir)
         except Exception as e:  # noqa: BLE001 — a review that can't run never fails the work itself
             record["review"] = {"verdict": "not-run", "error": f"{type(e).__name__}: {e}"[:200]}
+    res_now = oc.result or {}
     if (req.mode == "read" and oc.ok and status in ("done", "partial") and record.get("kind") in (None, "ok")
-            and len("".join(((oc.result or {}).get("summary") or "").split())) < NO_ANSWER_CHARS):
+            and not str(req.label or "").startswith("discuss") and no_answer(res_now)):
         # 2026-10-31 install walkthrough: the README's first example (a read run on T1) came back 4/4 with an empty
         # answer and the receipt said ok. A read run's answer is its summary: none is not a success
         record["kind"] = "no_answer"
@@ -1147,7 +1148,18 @@ REVIEW_FAILED_HINT = ("an independent review still finds problems after one fix 
 
 
 NO_CHANGES_NOTE = "ran on unchanged tree"
-NO_ANSWER_CHARS = 10        # a read run whose summary has fewer non-blank characters gave no answer
+# a read run's summary that says nothing: empty, or only a placeholder word ("ok", "done", ...)
+NO_ANSWER_WORDS = {"", "ok", "okay", "done", "finished", "complete", "completed", "n/a", "none", "完成", "好", "好的",
+                   "已完成", "无"}
+
+
+def no_answer(res: dict) -> bool:
+    """The read run answered nothing: its summary is empty or a placeholder, and nothing is in open_questions or
+    next_step either (a short real answer such as "42" or "Yes." counts)."""
+    if res.get("open_questions") or str(res.get("next_step") or "").strip():
+        return False
+    s = " ".join(str(res.get("summary") or "").split()).strip(" .!。！").lower()
+    return s in NO_ANSWER_WORDS
 
 
 def _left_unchanged(p: Paths, record: dict) -> bool | None:
@@ -1234,9 +1246,11 @@ def compact(record: dict) -> dict:
             out["needs_lead"] = f"no_changes: status {st}, nothing changed"
         if record["kind"] == "no_answer":
             out["needs_lead"] = "no_answer: the read run returned no answer"
-            out["hint"] = (f"the sub-agent said {r.get('status') or 'done'} but its answer is empty; ask again on a "
-                           f"stronger tier (`ccx resume {record['run_id']} \"answer the question\" --tier T2`) or read "
-                           f"it yourself")
+            out["hint"] = (f"the sub-agent said {r.get('status') or 'done'} but its answer is empty; " +
+                           ("ask again (one-off session: nothing to resume), on another agent or model, or read it "
+                            "yourself" if record.get("ephemeral") else
+                            f"ask again on a stronger tier (`ccx resume {record['run_id']} \"answer the question\" "
+                            f"--tier T2`) or read it yourself"))
         if record["kind"] == "needs_write":
             out["hint"] = ("read-only run: the sub-agent says it needs to edit files (see summary). If you agree, "
                            f"run it again with --mode write")
