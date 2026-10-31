@@ -2162,6 +2162,8 @@ def cmd_run(a) -> int:
         rep["wait_quiet"] = waited                 # in preflight.json: this run waited for a quiet machine
     for p in rep["problems"]:
         print(f"[preflight] {p}", flush=True)
+    for w in rep.get("warnings") or []:          # not a problem, but the person must see it
+        print(f"[preflight] *** {w} ***", flush=True)
     if not rep["ok"] and not a.force_unclean:
         print("preflight failed: not starting (fix the above, or --force-unclean to run anyway; it is recorded)",
               flush=True)
@@ -2177,7 +2179,10 @@ def cmd_run(a) -> int:
     work.mkdir(parents=True, exist_ok=True)
     (work / "preflight.json").write_text(json.dumps(rep, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"[preflight] {rep['result']}: commit {rep['commit'][:12]} cli {rep['cli']} codex {rep['codex']['mode']} "
-          f"claude {rep['claude_isolation']} jobs {a.jobs} canary {rep['canary']}", flush=True)
+          f"claude {rep['claude_isolation']} jobs {a.jobs} canary {rep['canary']}"
+          + (f" codex canary {rep['codex_canary']}" if rep.get("codex_canary") else "")
+          + (f" codex windows sandbox {rep['codex']['windows_sandbox']}" if rep["codex"].get("windows_sandbox") else ""),
+          flush=True)
     a.preflight = rep
     # a unit that was not right keeps its evidence here, in a folder of this invocation's own (an aborted run's
     # folders stay apart; row["artifacts"]["run"] names it)
@@ -2953,6 +2958,11 @@ def summarize(rows: list[dict], include_unclean: bool = False) -> dict:
     if ex_arm:
         res["excluded_by_arm"] = ex_arm
         res["excluded_by_tag"] = ex_tag
+    # the Codex Windows sandbox each row actually ran under: the rows without an error, clean or not (as batch.py),
+    # whose arm starts Codex
+    mix = PF.sandbox_mix(every)
+    if mix:
+        res["codex_windows_sandbox"] = mix
     b3 = b3_rules(every)
     if b3:
         res["b3_rules"] = b3
@@ -3020,6 +3030,9 @@ def cmd_summary(a) -> int:
     line = excluded_line(res)
     if line:
         print(line, file=sys.stderr)
+    note = (res.get("codex_windows_sandbox") or {}).get("note")
+    if note:                                                  # rounds under different sandboxes: say so loudly
+        print(f"*** {note} ***", file=sys.stderr)
     for name, tr in (res.get("tier_rules") or {}).items():   # stdout stays one JSON object
         for line in tier_rule_lines(tr):
             print(line if name == "balanced vs save" else line.replace("tier rule", f"tier rule {name}", 1),
@@ -3088,7 +3101,9 @@ def parser() -> argparse.ArgumentParser:
     r.add_argument("--dry-run", action="store_true")
     r.add_argument("--pin-commit", default="", help="refuse to run unless this checkout is at this commit (a tag "
                    "is also refused at a commit other than its earlier rows')")
-    r.add_argument("--no-canary", action="store_true", help="skip the one tiny real lead that checks the isolation")
+    r.add_argument("--no-canary", action="store_true",
+                   help="skip the canaries: the one tiny real lead that checks the isolation and, when an arm starts "
+                        "Codex, the one real Codex T1 request that must run a shell command")
     r.add_argument("--wait-quiet", type=_minutes, default=0, metavar="MINUTES", help="wait up to this long for "
                    "other heavy work on this machine (another eval, pytest, ccx run, claude -p, codex exec) to finish: "
                    "before the checks (still busy then, the preflight refuses as usual), and between units when that "
