@@ -88,8 +88,16 @@ class TestWorktreeRace(unittest.TestCase):
         with mock.patch.object(workspace.subprocess, "run", run), mock.patch.object(workspace.time, "sleep"):
             wt = workspace.make_worktree(self.repo, "run-x")
         self.assertEqual(len(calls), 2)
+        self.assertNotIn("-b", calls[1])             # the branch git made the first time is used, not deleted
         self.assertTrue((wt / "a.txt").exists())
         self.assertEqual(git(wt, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip(), "ccx/run-x")
+
+    def test_the_race_is_known_by_its_path_in_any_language(self):
+        for err in ("fatal: failed to read .git/worktrees/20261031-020710-648a/commondir: No error",
+                    "致命错误：无法读取 C:/Users/Jo Doe/repo/.git/worktrees/20261031-1/gitdir",
+                    "fatal: failed to read C:\\Users\\Jo Doe\\repo\\.git\\worktrees\\r-2\\commondir"):
+            self.assertTrue(workspace._WT_RACE.search(err), err)
+        self.assertFalse(workspace._WT_RACE.search("fatal: a branch named 'ccx/x' already exists"))
 
     def test_any_other_failure_is_not_tried_again(self):
         workspace.make_worktree(self.repo, "dup")

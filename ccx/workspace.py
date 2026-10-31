@@ -19,20 +19,25 @@ from .verdicts import _hard_verdict, verify
 # `git worktree add` reads every worktree already registered; one another `worktree add` is creating at that moment
 # has its .git/worktrees/<name>/ but no commondir yet, and git stops: "fatal: failed to read
 # .git/worktrees/<name>/commondir" (CI, windows-latest, two writers of one `ccx q run`, 2026-10-30)
-_WT_RACE = re.compile(r"failed to read \S*worktrees[\\/][^\\/\s]+[\\/](commondir|gitdir)")
+# matched on the path, not on the (translated) message; a path may hold spaces
+_WT_RACE = re.compile(r"worktrees[\\/][^\\/\r\n]+[\\/](commondir|gitdir)")
 _WT_LOCKS: dict[str, threading.Lock] = {}
 _WT_LOCKS_GUARD = threading.Lock()
 
 
 def _worktree_lock(root: Path) -> threading.Lock:
+    """One lock per repository: keyed by its common git folder, which every linked worktree of it shares."""
+    rc, common = _git(root, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    key = os.path.normcase(os.path.abspath(common if rc == 0 and common else str(root)))
     with _WT_LOCKS_GUARD:
-        return _WT_LOCKS.setdefault(os.path.normcase(str(root)), threading.Lock())
+        return _WT_LOCKS.setdefault(key, threading.Lock())
 
 
 def make_worktree(cwd: Path, run_id: str, tries: int = 3) -> Path:
     """A new worktree on branch ccx/<run_id> beside the repo. Threads of this process (the writers of one `ccx q run`
-    or `ccx batch`) add theirs one at a time, so they never meet git's race above; another process (a second ccx)
-    still can, and then this one undoes its half-made branch and tries again, up to `tries` times."""
+    or `ccx batch`) add theirs one at a time, so they never meet git's race above. Another process (a second ccx, a
+    `ccx run --bg --worktree` beside it) still can: then this one tries again, up to `tries` times, on the branch git
+    already made for it (deleting it first would read the worktrees again and meet the same race)."""
     top = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=cwd,
                          capture_output=True, text=True, encoding="utf-8", errors="replace")
     if top.returncode != 0:
@@ -40,18 +45,20 @@ def make_worktree(cwd: Path, run_id: str, tries: int = 3) -> Path:
     root = Path(top.stdout.strip())
     wt = root.parent / f".ccx-worktrees" / root.name / run_id
     wt.parent.mkdir(parents=True, exist_ok=True)
+    branch = f"ccx/{run_id}"
     with _worktree_lock(root):
+        args = ["-b", branch, str(wt)]
         for n in range(tries):
-            r = subprocess.run(["git", "worktree", "add", "-b", f"ccx/{run_id}", str(wt)], cwd=root,
+            r = subprocess.run(["git", "worktree", "add", *args], cwd=root,
                                capture_output=True, text=True, encoding="utf-8", errors="replace")
             if r.returncode == 0:
                 return wt
             if n + 1 == tries or not _WT_RACE.search(r.stderr or ""):
                 break
-            # the branch is made before the step that failed; the folder may be there, empty: both are this run's own
-            _git(root, "branch", "-D", f"ccx/{run_id}")
+            if _git(root, "rev-parse", "--verify", "--quiet", f"refs/heads/{branch}")[0] == 0:
+                args = [str(wt), branch]      # git made this run's branch before the step that failed: use it
             try:
-                wt.rmdir()
+                wt.rmdir()                    # an empty folder git may have left (never one with files)
             except OSError:
                 pass
             time.sleep(0.2 * (n + 1))         # the other process is mid-add: give it a moment to finish
