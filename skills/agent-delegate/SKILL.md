@@ -45,6 +45,12 @@ odds, and `say`.
   close it with `ccx ab done`). Check it (section 4) and always give `ccx verify <run_id> --ok 1|0`.
 - no → `ccx propose --no <id>`, do it yourself, and don't offer that kind of piece again in this conversation.
 One offer per piece. Small edits, questions, and work that needs your judgement turn by turn are never offered.
+**Small tasks yourself** (when the person turned on `ccx config set routing.small_self on`; off as shipped): give
+`--files` (source files you expect to change, tests not counted) to `ccx propose`, and for a piece you would
+delegate without an offer, run `ccx route --files N` first. A task within
+`small_self_files` (1) then comes back as `small_self.applied: true` with a `do-it-yourself` advice: do it here and don't offer it — it is
+quicker, for a few percent more cost (provisional until a measured round). `applied: false` names why it still goes out (your picked tier, `--needs`, a large
+context of yours, your quota). A person's own `ccx run` and an approved handoff still delegate, whatever the size.
 The same rule — one line with what it costs, act only on a yes — holds for a discussion between vendors (section 7).
 
 ## 1. Decide who and with what

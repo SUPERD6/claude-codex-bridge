@@ -80,6 +80,15 @@ large = "direct"
 uncertain = "direct"
 hard = "direct"
 
+# 小活自己做（P0-6，默认关，等留出集一轮实测再开）：开了以后 ccx route / ccx propose 对主导 --files 估计 <= small_self_files
+# 个源文件的活（只看文件数，--minutes 不挡）建议 do it yourself，不再提议派；ccx run 照派、rung 照算。
+# 选了档位（policy.picked）、--needs 要 ccx 才有的东西、主导上下文 >= policy.bands.lead_ctx_large、主导额度 >= small_self_quota
+# 时不生效。依据：r5 / hc1 上 self 与 ccx2 按改动文件数分流（文件 <= 1 自己做：留出集对数不变、墙钟 -14%、成本 +5%）。
+[routing]
+small_self = false        # ccx config set routing.small_self on
+small_self_files = 1
+small_self_quota = 0.9
+
 [lead]                    # 主导平时用的模型：估算“如果自己做要花多少”；lead.model_by_task 开时也是“强档”的名字（强档不传 --model，工具照常用自己的模型）
 claude = "opus"
 codex = "gpt-6.1-sol"

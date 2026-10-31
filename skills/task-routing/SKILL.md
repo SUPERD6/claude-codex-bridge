@@ -69,6 +69,14 @@ pre-authorised proposal covers one run of that task at the size you proposed: a 
 smaller one, is refused.
 The default tier stays `save` until a confirmation run decides.
 
+**Small tasks yourself** (`routing.small_self`, off as shipped; the person turns it on): with no tier picked,
+`ccx route` / `ccx propose` advise `do-it-yourself` for a task you estimate at `small_self_files` (1) source file
+by `--files` (else the files the brief names; `--minutes` does not gate it). Not when the
+person picked a tier, `--needs` asks for what only ccx gives, your context reaches `lead_ctx_large`, or your quota
+reaches `small_self_quota` (0.9): `small_self.why` says which. The rung, ladder and tier plan are shown as before;
+`ccx run` is unchanged. Basis: on the r5 and hold-out task sets, one-file tasks done by the lead and the rest by
+`ccx2` lost no task and cut wall time, for a few percent more cost (provisional until a measured round).
+
 **Lead model by task** (off unless the person runs `ccx config set lead.model_by_task on`): a running
 conversation keeps its model (switching drops its cache). From the same b, `ccx route` / `ccx propose` add
 `new_lead` (a new conversation's model: `[lead_by_task]` easy model up to `easy_max_b`, else yours: start it on
