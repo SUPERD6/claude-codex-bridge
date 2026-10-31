@@ -120,8 +120,10 @@ What helps on one machine:
 - the evaluation checkout is its own clone;
 - scripts are kept in the repository;
 - the log ends with `exit=` (step 4);
-- before starting, wait until no other test or agent run is going, and don't start with `--force-unclean`: it only
-  turns a busy start into a round that does not count.
+- `--wait-quiet <minutes>` (in `scripts/eval/r5.py` since #201): before the start checks and between units, wait up
+  to that long for no other heavy process. A unit that still overlapped other work stays not clean, so it shows
+  in the rows instead of hiding;
+- don't start with `--force-unclean`: it only turns a busy start into a round that does not count.
 
 None of these makes the numbers safe from other work on the same machine.
 
