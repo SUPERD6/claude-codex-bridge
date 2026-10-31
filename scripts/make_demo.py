@@ -4,7 +4,7 @@
 
 The story: `ccx route` picks a model, `ccx run --to codex` does the task in one attempt, the receipt (what it cost,
 the check ccx ran again itself, who reviewed the diff), and `ccx ui` showing the same receipt on its page. The
-session is real ccx output, run against the stand-in CLIs in tests/fakes with a throwaway hub and git repository: the
+numbers are real ccx output (laid out as a receipt; the card is drawn after the page), run against the stand-in CLIs in tests/fakes with a throwaway hub and git repository: the
 check is a real `python -m unittest` on the files the stand-in wrote, the review is the stand-in Claude's. So it can
 be re-made at any time without spending tokens; the numbers are the stand-ins', and the frame says so. Needs git."""
 from __future__ import annotations
@@ -44,7 +44,8 @@ def session() -> dict:
                "CLAUDE_CONFIG_DIR": str(t / "claude"), "CCX_CONFIG": str(t / "cfg.toml"),
                "CCX_CODEX_BIN": str(FAKES / "fake_codex.py"), "CCX_CLAUDE_BIN": str(FAKES / "fake_claude.py"),
                "CCX_AB_RATE": "0", "CCX_NO_BENCH_REFRESH": "1", "CCX_NO_QUOTA_PROBE": "1", "PYTHONUTF8": "1",
-               "FAKE_WRITE": WRITE, "FAKE_REVIEW": "pass", "FAKE_SUMMARY": "slugify() in slug.py, with a test"}
+               "FAKE_WRITE": WRITE, "FAKE_REVIEW": "pass", "FAKE_SUMMARY": "slugify() in slug.py, with a test",
+               "PATH": os.path.dirname(sys.executable) + os.pathsep + os.environ.get("PATH", "")}
         for k in ("CLAUDECODE", "CLAUDE_CODE_SESSION_ID", "CODEX_THREAD_ID", "CCX_DEPTH", "CCX_ROLE", "CCX_LEAD_SESSION"):
             env.pop(k, None)
 
@@ -61,10 +62,12 @@ def session() -> dict:
                   TASK)
         rec = json.loads((t / "hub" / "ccx" / "runs" / run["run_id"] / "run.json").read_text(encoding="utf-8"))
         ccx("verify", run["run_id"], "--ok", "1")
-    if not (run.get("ok") and (run.get("check") or {}).get("passed") and (run.get("review") or {}).get("verdict") == "pass"):
-        raise SystemExit(f"the stand-in run did not finish clean: {run.get('recap')}")
+        wrote = (work / "test_slug.py").is_file()   # the check ran a real test (0 tests also exit 0 on Python 3.11)
     cost = re.search(r"cost=~?\$([0-9.]+)", run.get("recap") or "")
-    return {"route": route, "run": run, "rec": rec, "cost": float(cost.group(1)) if cost else None}
+    if not (wrote and cost and run.get("ok") and (run.get("check") or {}).get("passed")
+            and (run.get("review") or {}).get("verdict") == "pass" and ":" in (run["review"].get("by") or "")):
+        raise SystemExit(f"the stand-in run did not finish clean: {run.get('recap')}")
+    return {"route": route, "run": run, "rec": rec, "cost": float(cost.group(1))}
 
 
 def lines(s: dict) -> list[tuple[str, str]]:
@@ -76,14 +79,14 @@ def lines(s: dict) -> list[tuple[str, str]]:
     n = len(rec["attempts"])
     return [
         ("cmd", "ccx route --to codex --b 2"),
-        ("out", f"  {route['rung']}   likely to finish {route['p']:.0%} · ~${route['expected_usd']:.4f}"),
+        ("out", f"  {route['rung']}   likely to finish {route['p']:.0%}"),
         ("gap", ""),
         ("cmd", f'ccx run --to codex --b 2 --check "{CHECK}" --review on "{TASK}"'),
         ("out", f"  claude → codex  {a['model']} {a['effort']} · {n} attempt{'s' if n > 1 else ''} · {run['status']}"),
         ("dim", "  receipt"),
         ("ok", f"    check    {ck['cmd']}  rerun by ccx: {'passed' if ck['passed'] else 'FAILED'}"),
         ("ok", f"    review   {who} (another vendor): {rv['verdict']}"),
-        ("out", f"    cost     ${s['cost']:.4f} API-equivalent, review included · undo: ccx undo"),
+        ("out", f"    cost     ${s['cost']:.4f} (stand-in price), review included · undo: ccx undo <run>"),
         ("gap", ""),
         ("cmd", "ccx ui"),
         ("card", ""),
@@ -91,7 +94,7 @@ def lines(s: dict) -> list[tuple[str, str]]:
 
 
 def svg(rows_in: list[tuple[str, str]], s: dict) -> str:
-    W, top, step, per, hold = 920, 74, 26, 0.85, 4.5     # px; seconds a line; seconds the full screen stays
+    W, top, step, per, hold = 920, 74, 26, 0.85, 6.5     # px; seconds a line; seconds the full screen stays (~15 s)
     color = {"cmd": "#d9dee5", "out": "#aab3bf", "ok": "#58c27a", "dim": "#7f8996", "gap": "#aab3bf"}
     shown = [k for k, _ in rows_in if k != "gap"]
     card_h = 118
@@ -118,7 +121,7 @@ def svg(rows_in: list[tuple[str, str]], s: dict) -> str:
                        f'<text class="ui" x="{x0 + cw - 16}" y="{y0 + 26}" text-anchor="end" fill="#1f7a3a">✓ done</text>'
                        f'<text class="ui" x="{x0 + 16}" y="{y0 + 50}" fill="#5b6573">Who  Codex · {escape(a["model"])} {escape(a["effort"])}     Cost  ${s["cost"]:.4f}</text>'
                        f'<text class="ui" x="{x0 + 16}" y="{y0 + 72}" fill="#5b6573">Check  {escape(CHECK)} · passed</text>'
-                       f'<text class="ui" x="{x0 + 16}" y="{y0 + 94}" fill="#5b6573">Review  pass · {escape(rv[0])} · {escape(rv[1])}     Verdict  right</text>'
+                       f'<text class="ui" x="{x0 + 16}" y="{y0 + 94}" fill="#5b6573">Review  pass · {escape(" · ".join(rv))}     Verdict  right (yours)</text>'
                        f'</g>')
             out.append(f'<text class="ui" x="{x0 + cw + 18}" y="{y0 + 50}" fill="#aab3bf" style="animation-name:c{n}">← the same receipt,</text>')
             out.append(f'<text class="ui" x="{x0 + cw + 18}" y="{y0 + 72}" fill="#aab3bf" style="animation-name:c{n}">every hand-off, one page</text>')

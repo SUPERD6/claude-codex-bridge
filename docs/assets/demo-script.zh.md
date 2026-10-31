@@ -16,8 +16,8 @@
 | 0–5 秒 | 在仓库里打开 Claude Code | "Claude Code 要把一件杂活交给 Codex。" |
 | 5–15 秒 | 在 Claude Code 里说：*"加一个 `slugify()` 和测试；通过 ccx 交给 Codex，用 `pytest -q` 验收。"* Claude 先跑 `ccx route`，再跑 `ccx run --to codex --check "pytest -q" …` | "ccx 挑一个最便宜、又大概率做得完的 Codex 模型。" |
 | 15–30 秒 | 运行中（等待剪掉），然后最后一行：`status=done ok=true check=passed review=pass cost=~$…` | "Codex 一次做完。ccx 自己又跑了一遍验收，另一家的模型审了改动。" |
-| 30–45 秒 | `ccx ui` → 这件任务 → 点完成的那块：谁做的、花费、验收（带输出）、审查、改了哪些文件 | "每次派活都有收据：花了多少、验收跑没跑、谁审的。撤回点一下。" |
-| 45–55 秒 | `ccx ui` →"实测与 token 去向"：留出集那张表 | "在我们 10 题的留出集上，ccx 没有看到更差——30 次对 29 次——每次成功比自己做便宜约 30%。但用时约 3 倍。" |
+| 30–45 秒 | `ccx ui` → 这件任务 → 点完成的那块：谁做的、花费、验收（带输出）、审查、改了哪些文件 | "每次派活都有收据：花了多少、验收跑没跑、谁审的。撤回也只是一个按钮。" |
+| 45–55 秒 | `ccx ui` →"实测与 token 去向"：留出集那张表 | "在我们 10 题的留出集上，ccx 30 次做对 29 次，和自己做一样——没有看到更差——每次成功便宜约 30%。但用时约是自己做的 3 倍。" |
 | 55–60 秒 | `pipx install git+https://github.com/SUPERD6/relayline` 和 `ccx demo` | "不用账号先看看：`ccx demo`。" |
 
 **说实话**（和 README 同一套规矩）

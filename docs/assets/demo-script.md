@@ -17,8 +17,8 @@ For recording by hand with your own Claude Code and Codex. The 15-second loop in
 | 0–5 s | Claude Code open in the repository | "Claude Code is about to hand a chore to Codex." |
 | 5–15 s | In Claude Code: *"Add a `slugify()` helper with a test; hand it to Codex through ccx, check with `pytest -q`."* Claude runs `ccx route` then `ccx run --to codex --check "pytest -q" …` | "ccx picks the cheapest Codex model likely to finish." |
 | 15–30 s | The run working (cut the wait), then its last line: `status=done ok=true check=passed review=pass cost=~$…` | "Codex did it in one attempt. ccx ran the check again itself, and another vendor's model reviewed the diff." |
-| 30–45 s | `ccx ui` → the task → click the finished piece: who, cost, check (with its output), review, the changed files | "Every hand-off comes with a receipt: what it cost, whether the check ran, who reviewed it. Undo is one click." |
-| 45–55 s | `ccx ui` → "Measured & where tokens go": the hold-out table | "On our 10-task hold-out set, ccx was not seen to be less right — 29 of 30 — and cost about 30 % less per success than doing it yourself. It was about 3× slower." |
+| 30–45 s | `ccx ui` → the task → click the finished piece: who, cost, check (with its output), review, the changed files | "Every hand-off comes with a receipt: what it cost, whether the check ran, who reviewed it. Undo is one button." |
+| 45–55 s | `ccx ui` → "Measured & where tokens go": the hold-out table | "On our 10-task hold-out set, ccx got 29 of 30 right, the same as doing it yourself — not seen to be less right — and cost about 30 % less per success. It took about 3× the wall time." |
 | 55–60 s | `pipx install git+https://github.com/SUPERD6/relayline` and `ccx demo` | "Try it without an account: `ccx demo`." |
 
 **Keep it honest** (the same rules as the README)
