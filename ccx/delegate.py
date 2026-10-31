@@ -586,13 +586,13 @@ def run(req: Request, p: Paths) -> dict:
         "forked_from_lead": bool(req.fork_lead), "ephemeral": req.ephemeral,
         "mode_source": req.mode_source, "mode_why": req.mode_why, "check_cmd": req.check, "risk": req.risk,
         "namecheck_mode": req.namecheck,
+        **({"merge_of": req.merge_of} if req.merge_of else {}),
         # the review the person asked for, which a later resume inherits; a review fix round (forced "on")
         # keeps the setting of the run it fixes
         "review_mode": ((prev or {}).get("review_mode") or "auto") if req.review_round else req.review,
         "shared_context": shared_meta,
         "subagent_switches": switches,         # [subagent]: what this run's sub-agent loaded (ledger / eval group by it)
         **({"parallel_fork_turns": fork_turns} if fork_turns else {}),
-        **({"merge_of": req.merge_of} if req.merge_of else {}),
         **({"base_note": stale_base} if stale_base else {}),
     }
     _write_record(run_dir, record)          # visible to `ccx show` at once (background runs, crashes)
