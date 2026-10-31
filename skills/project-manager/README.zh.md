@@ -37,7 +37,7 @@ ccx run --project <名字> --minutes <n> --tradeoff save --review on --check "CM
 
 并行：每块一条 `ccx run --project <名字> --bg --worktree ...`（每块都带项目规则文件和审批停顿），再用 `ccx show <run_id> --wait` 等结果。`ccx batch plan.json` 和 `ccx q run` 也能并行，但每个任务只给普通的 `"cwd"`（路径来自 `ccx projects show`），不会附上规则文件，所以只在项目没有审批规则时用。不到 5 分钟的小块合并成少数几路：小块的花费主要是启动开销，不是活本身。
 
-大活：自己用 task-split 技能出草案（必须先读代码时，用只读的 `ccx run --project <名字> --mode read`），再让另一家的便宜模型只读审草案：`ccx run --project <名字> --mode read --to <另一家> --effort low --brief-file draft.md`。改掉它标成 must 的问题，再按默认方式一块一块派。除非做错代价很高（agent-delegate 第 7 节），不要用 `ccx way` 或 `ccx discuss`：在这类任务上它们贵 20–39 倍，做对率一样。
+大活：自己用 task-split 技能出草案（必须先读代码时，用只读的 `ccx run --project <名字> --mode read`），再让另一家的便宜模型只读审草案：`ccx run --project <名字> --mode read --to <另一家> --tier T1 --brief-file draft.md`。改掉它标成 must 的问题，再按默认方式一块一块派。除非做错代价很高（agent-delegate 第 7 节），不要用 `ccx way` 或 `ccx discuss`：在这类任务上它们贵 20–39 倍，做对率一样。
 
 共享工作上下文：`ccx run --context auto`（默认）会给每次写任务附上这段对话最近在做什么。只读任务（比如审草案）如果依赖这段对话，加 `--context on`。
 

@@ -63,7 +63,7 @@ class TestFirstDelegation(FirstEnv):
         r = self.ccx("run", "--to", "codex", "--mode", "read", "--effort", "high", setup.FIRST_TASK)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn("--effort is used only together with --model", r.stderr)
-        self.assertNotEqual(json.loads(r.stdout)["model"].split("/")[-1], "high")   # what the note says
+        self.assertNotEqual(json.loads(r.stdout)["route"]["source"], "explicit")    # the route picked, as it says
         r = self.ccx("run", "--to", "codex", "--mode", "read", "--model", "gpt-6.1-sol", "--effort", "high",
                      setup.FIRST_TASK)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)

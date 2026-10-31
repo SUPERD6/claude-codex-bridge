@@ -51,8 +51,8 @@ def cmd_ab(a) -> int:
 # 2026-10-31 new-machine walkthrough: `--effort medium` without --model left the route's codex:gpt-6-luna:low as it
 # was, and nothing said so. stderr only: the JSON a lead reads stays as it was.
 EFFORT_ALONE_NOTE = ("ccx: --effort is used only together with --model (or --provider); without one the route picks the "
-                     "model and its effort. For a stronger pick name both (--model gpt-6.1-sol --effort high) or "
-                     "raise the tier (--tier T2)")
+                     "model and its effort. To set the effort, name the model too (--model <m> --effort <e>), or pick "
+                     "a tier (--tier T0..T4)")
 NO_CHECK_NUDGE = ("ccx: tip: this run may edit files and has no --check; add --check \"<test command>\" so ccx re-runs "
                   "it and the result is checked, not only reported")
 

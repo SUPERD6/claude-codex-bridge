@@ -19,9 +19,18 @@ ccx run --to codex --mode read "Summarise README.md in three lines for a new use
 本机已经有 hub 时，`ccx init --hub` 换一个文件夹会停下并显示正在用的 hub，确实要换就加 `--force`（旧 hub 里的文件原样留着）。
 `--snapshot` / `--external-sync` 要改掉内容不同的 `layout.toml` 时也一样。
 
-没有 pipx？用一个虚拟环境一样能装：`python -m venv ~/.relayline`，再
-`~/.relayline/bin/python -m pip install git+https://github.com/SUPERD6/relayline`（Windows 上是
-`%USERPROFILE%\.relayline\Scripts\python.exe`），然后把那个 `bin`（`Scripts`）文件夹加进 PATH，就能找到 `ccx`。
+没有 pipx？给它单独建一个虚拟环境一样能装：
+
+```bash
+python3 -m venv ~/.relayline && ~/.relayline/bin/python -m pip install git+https://github.com/SUPERD6/relayline
+```
+
+```powershell
+python -m venv "$env:USERPROFILE\.relayline"; & "$env:USERPROFILE\.relayline\Scripts\python.exe" -m pip install git+https://github.com/SUPERD6/relayline
+```
+
+然后从这个环境的 `bin`（Windows 上是 `Scripts`）文件夹运行 `ccx`，或者只把 `ccx` 一个文件链接到 PATH 里的某个文件夹
+（把整个文件夹加进 PATH，会让它的 `python`、`pip` 排到前面）。
 
 **从插件市场装**（仓库本身就是一个插件市场，名字 `relayline`）：
 
