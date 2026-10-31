@@ -536,13 +536,13 @@ def reviewers(cfg: dict, worker: str, installed, p=None, cheapest: bool = False)
 
 def brief(run_id: str, task: str, summary: str, diff: str, max_chars: int, check: dict | None = None,
           edited: list[str] | None = None, static: str = "", cwd: Path | None = None,
-          focus: dict | None = None) -> str:
-    """The reviewer's brief. `edited` (default: found in `diff`) names pre-existing test files the change edited;
+          focus: dict | None = None, repro: bool = False) -> str:
+    """The reviewer's brief. `repro` ([review] must_needs_repro on, ccx's check passed): a [must] needs a `repro:`. `edited` (default: found in `diff`) names pre-existing test files the change edited;
     `static`: what ccx's own static checks found (namecheck), as weak evidence under Checks.
     `cwd` (the reviewed tree): add the code around the change, in what is left of `max_chars` after the diff.
     `focus` ({issues, delta}: [review] fix_rereview = "focus", a fix round's review): see FOCUS_HEAD."""
     if focus:
-        return _focus_brief(run_id, task, summary, diff, max_chars, check, edited, static, focus)
+        return _focus_brief(run_id, task, summary, diff, max_chars, check, edited, static, focus, repro)
     edited = edited_tests(diff) if edited is None else edited
     ed = (f"\nExisting tests edited: {', '.join(edited[:8])} — check the task requires it; an existing assertion "
           f"changed to fit the new code without the task asking for it is a [must] (b)." if edited else "")
@@ -550,6 +550,8 @@ def brief(run_id: str, task: str, summary: str, diff: str, max_chars: int, check
     ran = (f"ccx ran the acceptance command `{check['cmd']}` after the change: "
            f"{'passed' if check.get('passed') else 'FAILED (exit %s)' % check.get('exit')}." if check
            else "No acceptance command was given; nobody ran the tests for you.")
+    if check and check.get("passed") and repro:
+        ran += REPRO_NOTE
     if check:
         # ccx's own result stands in for running it: the reviewer is given no permission to run tests (r6a)
         ran += " You need not run it yourself."
@@ -568,13 +570,13 @@ def brief(run_id: str, task: str, summary: str, diff: str, max_chars: int, check
 
 
 def _focus_brief(run_id: str, task: str, summary: str, diff: str, max_chars: int, check: dict | None,
-                 edited: list[str] | None, static: str, focus: dict) -> str:
+                 edited: list[str] | None, static: str, focus: dict, repro: bool = False) -> str:
     """brief() for a fix round's review with [review] fix_rereview = "focus": the whole change (or, past max_chars,
     a note that only the fix is shown), then the first review's problems and the fix alone, and FOCUS_ANSWER."""
     edited = edited_tests(diff) if edited is None else edited
     too_big = len(diff) > max_chars
     full = brief(run_id, task, summary, FOCUS_TOO_BIG.format(n=max_chars) if too_big else diff, max_chars, check,
-                 edited, static)
+                 edited, static, repro=repro)
     delta = focus.get("delta") or ""
     dmax = max_chars if too_big else max(4000, max_chars - len(diff))
     dcut = f"; cut to {dmax} characters, open the files for the rest" if len(delta) > dmax else ""
@@ -614,6 +616,60 @@ def _verdict_in_item(items: list[str]) -> tuple[str | None, list[str]]:
         rest = x[m.end():].lstrip(" \t*_`:：.—–-\r\n")
         out += [y.strip() for y in _TAG_SPLIT.split(rest) if y.strip()]
     return hint, out
+
+
+# [review] must_needs_repro (P1-10, default off): when ccx's acceptance check passed, a [must] must carry a reproducible
+# failure, or it is no reason for a fix round. Of the 65 receipts after #158 that said "not ok" but were right, 38 came
+# from review [must]s on a passed check (all claude haiku low); none of the [must]s looked at carried a runnable repro.
+REPRO_NOTE = (" Because it passed, every [must] has to show a reproducible failure, written inside the item as "
+              "`repro: <the command to run, or the input and the wrong result it gives, or the test that fails>`; "
+              "a [must] without one counts as a [should] and starts no fix round.")
+_REPRO = re.compile(r"\brepro\s*[:：]\s*\S.{5,}", re.I | re.S)
+CONFIRM = """
+## A first reviewer's [must] items (none shows a reproducible failure)
+{items}
+
+Settle each one from the code: keep it as a `[must]` only with a reproducible failure written as `repro: ...` (the
+command, or the input and the wrong result, or the test that fails); otherwise it is a `[note]`. Then answer as below.
+"""
+
+
+def must_needs_repro(rc: dict) -> str:
+    """[review] must_needs_repro: "off" (default; false / "" too), "downgrade" (true too) or "confirm"."""
+    v = rc.get("must_needs_repro", False)
+    if v is True:
+        return "downgrade"
+    v = str(v or "").strip().lower()
+    return v if v in ("downgrade", "confirm") else "off"
+
+
+def _musts(v: dict) -> list[str]:
+    return [x for x in (v.get("issues_full") or v.get("issues") or []) if x.lstrip().lower().startswith("[must]")]
+
+
+def without_repro(v: dict) -> list[str]:
+    """The verdict's [must] items that show no `repro:`."""
+    return [x for x in _musts(v) if not _REPRO.search(x)]
+
+
+def downgrade(v: dict) -> dict:
+    """[must] items without a `repro:` become [should]: notes, no fix round. With none left the verdict is a pass."""
+    lacking = without_repro(v)
+    if not lacking:
+        return v
+    full = v.get("issues_full") or v.get("issues") or []
+    kept = [x for x in full if x not in lacking]
+    should = ["[should]" + x.lstrip()[len("[must]"):] for x in lacking]
+    out = {k: w for k, w in v.items() if k not in ("issues", "issues_full", "notes")}
+    out["downgraded"] = len(lacking)
+    if kept:
+        out.update(verdict="issues", issues=[x[:ISSUE_CHARS] for x in kept])
+        if any(len(x) > ISSUE_CHARS for x in kept):
+            out["issues_full"] = kept
+        out["notes"] = [x[:ISSUE_CHARS] for x in should][:3]
+    else:
+        out.update(verdict="pass", issues=[], notes=([x[:ISSUE_CHARS] for x in should] + (v.get("notes") or []))[:3])
+    return out
 
 
 def verdict(result: dict | None) -> dict:
@@ -712,9 +768,12 @@ def review_run(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path, run_d
             delta = None
         if delta is not None:
             focus = {"issues": list(req.prior_issues), "delta": delta}
+    # P1-10: only when ccx's own check passed (the review of a run whose check failed does not count anyway)
+    repro_mode = rv.must_needs_repro(rc) if (record.get("check") or {}).get("passed") else "off"
     text = rv.brief(record["run_id"], task_for_review(p, req), res.get("summary", ""), diff,
                     int(rc.get("max_diff_chars", 12000)), record.get("check"), edited, nck.brief_note(nc),
-                    cwd=cwd if rc.get("context", False) else None, **({"focus": focus} if focus else {}))
+                    cwd=cwd if rc.get("context", False) else None, **({"focus": focus} if focus else {}),
+                    repro=repro_mode != "off")
     usd, tried = 0.0, []
     for agent, model, effort in cands[:2]:
         if cancel is not None and cancel.is_set():
@@ -728,7 +787,31 @@ def review_run(req: Request, p: Paths, cfg: dict, record: dict, cwd: Path, run_d
                                                                  "summary": (rev.get("error") or "")[:300]}
         if v["verdict"] != "not-run":
             break
+    repro_note = None
+    if repro_mode != "off" and v["verdict"] == "issues" and rv.without_repro(v):
+        repro_note = {"mode": repro_mode, "without_repro": len(rv.without_repro(v))}
+        if repro_mode == "confirm" and len(rv.without_repro(v)) == len(rv._musts(v)):
+            # every [must] lacks a repro: the next stronger reviewer settles them once (not after a downgrade)
+            more = [c for c in rv.reviewers(cfg, req.provider or req.to, find_bin, p)
+                    if f"{c[0]}:{c[1]}:{c[2]}" not in tried]
+            if more and not (cancel is not None and cancel.is_set()):
+                agent, model, effort = more[0]
+                items = "\n".join(f"{i}. {x}" for i, x in enumerate(rv._musts(v), 1))
+                ctext = text.replace("\n## Answer\n", rv.CONFIRM.format(items=items) + "\n## Answer\n", 1)
+                crev = run(Request(to=agent, model=model, effort=effort, tier="auto", mode="read", cwd=cwd,
+                                   brief=ctext, caller="ccx-review", escalate=False, fallback=False, review="off",
+                                   allow_subagents=False, ephemeral=True, label=f"review:{record['run_id']}"), p)
+                usd += sum(a.get("ae_usd") or 0 for a in crev.get("attempts", []))
+                cv = rv.verdict(crev.get("result")) if crev.get("ok") else {"verdict": "not-run"}
+                repro_note.update(confirm_by=f"{agent}:{model}:{effort}", confirm_run=crev["run_id"],
+                                  confirm_verdict=cv["verdict"])
+                if cv["verdict"] in ("issues", "pass"):
+                    v = cv
+        v = rv.downgrade(v)               # whatever still has no repro does not start a fix round
+        repro_note["downgraded"] = v.get("downgraded", 0)
     record["review"] = {**v, "reason": why, "by": tried[-1], "run_id": rev["run_id"], "usd": round(usd, 4)}
+    if repro_note:
+        record["review"]["repro"] = repro_note
     if len(tried) > 1:
         record["review"]["tried"] = tried
     if focus:
