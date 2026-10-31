@@ -945,6 +945,11 @@ def run(req: Request, p: Paths) -> dict:
             _review(req, p, cfg, record, cwd, run_dir)
         except Exception as e:  # noqa: BLE001 — a review that can't run never fails the work itself
             record["review"] = {"verdict": "not-run", "error": f"{type(e).__name__}: {e}"[:200]}
+    if (req.mode == "read" and oc.ok and status in ("done", "partial") and record.get("kind") in (None, "ok")
+            and len("".join(((oc.result or {}).get("summary") or "").split())) < NO_ANSWER_CHARS):
+        # 2026-10-31 install walkthrough: the README's first example (a read run on T1) came back 4/4 with an empty
+        # answer and the receipt said ok. A read run's answer is its summary: none is not a success
+        record["kind"] = "no_answer"
     if no_change:
         # r5: an apply_patch that failed was reported as ok, and a check passed on the untouched tree. Only a label
         # (no retry: the task may already have been met): not a success, the lead decides. A failed or broken
@@ -971,7 +976,7 @@ def run(req: Request, p: Paths) -> dict:
     # `ccx verify` (the lead's verdict) adds or corrects this later.
     verified = check_passed is not None or (oc.result or {}).get("verification", "not-run") not in ("", "not-run")
     if oc.kind not in ("quota", "auth", "timeout", "model", "needs_write", "split", "over_budget", "user_stopped",
-                       "review_issues", "review_failed", "env") and record.get("kind") not in ("check_broken", "no_changes") and (status in ("blocked", "failed") or not oc.ok
+                       "review_issues", "review_failed", "env") and record.get("kind") not in ("check_broken", "no_changes", "no_answer") and (status in ("blocked", "failed") or not oc.ok
                                                         or (status == "done" and verified)):
         try:
             learn.record_outcomes(p, record, final_ok=oc.ok and status == "done" and check_passed is not False)
@@ -1142,6 +1147,7 @@ REVIEW_FAILED_HINT = ("an independent review still finds problems after one fix 
 
 
 NO_CHANGES_NOTE = "ran on unchanged tree"
+NO_ANSWER_CHARS = 10        # a read run whose summary has fewer non-blank characters gave no answer
 
 
 def _left_unchanged(p: Paths, record: dict) -> bool | None:
@@ -1168,7 +1174,7 @@ def exit_ok(record: dict) -> bool:
     exit codes of existing commands stay as they were."""
     # review_issues as a final kind = the review found problems and no fix round ran: not a success either
     return bool(record["ok"]) and record.get("kind") not in ("review_issues", "review_failed", "check_broken",
-                                                              "no_changes")
+                                                              "no_changes", "no_answer")
 
 
 def compact(record: dict) -> dict:
@@ -1226,6 +1232,11 @@ def compact(record: dict) -> dict:
                            f"accept it; otherwise `ccx resume {record['run_id']} "
                            f"\"nothing was changed: make the change\"`")
             out["needs_lead"] = f"no_changes: status {st}, nothing changed"
+        if record["kind"] == "no_answer":
+            out["needs_lead"] = "no_answer: the read run returned no answer"
+            out["hint"] = (f"the sub-agent said {r.get('status') or 'done'} but its answer is empty; ask again on a "
+                           f"stronger tier (`ccx resume {record['run_id']} \"answer the question\" --tier T2`) or read "
+                           f"it yourself")
         if record["kind"] == "needs_write":
             out["hint"] = ("read-only run: the sub-agent says it needs to edit files (see summary). If you agree, "
                            f"run it again with --mode write")

@@ -136,7 +136,8 @@ In Claude Code you say: "make `loader.py` accept a custom delimiter and add test
    filter or a node id runs part of them, and flags `basis changed` when the sub-agent edited one of them or a
    `conftest.py` above them, "tests added by the sub-agent in …" when it only added tests to one, and "written by
    the sub-agent" / "only tests the sub-agent wrote" for new test files. It is shown in the result, the recap line,
-   `ccx show` and the ledger; the verdict rules do not change.
+   `ccx show` and the ledger; the verdict rules do not change. A read run that answers nothing (an empty summary) is
+   not ok: kind `no_answer`, with a hint to ask again on a stronger tier.
 5. **Recover from problems.**
    - Codex reports `blocked`: ccx continues **in the same Codex session** one rung up (high), with no re-briefing.
    - Codex says done but ccx's own `--check` fails: it climbs a rung too (in the same session when the agent stays
