@@ -456,8 +456,9 @@ def cmd_ask(a) -> int:
                   escalate=False, label="ask", model=spec["model"], effort=effort, ephemeral=True)
     rec = run(req, p)
     c = compact(rec)
-    _out({k: c.get(k) for k in ("run_id", "agent", "model", "ok", "summary", "open_questions", "tokens")})
-    return 0 if rec["ok"] else 2
+    _out({k: c.get(k) for k in ("run_id", "agent", "model", "ok", "summary", "open_questions", "tokens", "kind",
+                                "hint") if k in c or k not in ("kind", "hint")})
+    return 0 if c["ok"] else 2
 
 
 def _run_records(p):

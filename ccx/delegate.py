@@ -950,6 +950,12 @@ def run(req: Request, p: Paths) -> dict:
             _review(req, p, cfg, record, cwd, run_dir)
         except Exception as e:  # noqa: BLE001 — a review that can't run never fails the work itself
             record["review"] = {"verdict": "not-run", "error": f"{type(e).__name__}: {e}"[:200]}
+    res_now = oc.result or {}
+    if (req.mode == "read" and oc.ok and status in ("done", "partial") and record.get("kind") in (None, "ok")
+            and not str(req.label or "").startswith("discuss") and no_answer(res_now)):
+        # 2026-10-31 install walkthrough: the README's first example (a read run on T1) came back 4/4 with an empty
+        # answer and the receipt said ok. A read run's answer is its summary: none is not a success
+        record["kind"] = "no_answer"
     if no_change:
         # r5: an apply_patch that failed was reported as ok, and a check passed on the untouched tree. Only a label
         # (no retry: the task may already have been met): not a success, the lead decides. A failed or broken
@@ -976,7 +982,7 @@ def run(req: Request, p: Paths) -> dict:
     # `ccx verify` (the lead's verdict) adds or corrects this later.
     verified = check_passed is not None or (oc.result or {}).get("verification", "not-run") not in ("", "not-run")
     if oc.kind not in ("quota", "auth", "timeout", "model", "needs_write", "split", "over_budget", "user_stopped",
-                       "review_issues", "review_failed", "env") and record.get("kind") not in ("check_broken", "no_changes") and (status in ("blocked", "failed") or not oc.ok
+                       "review_issues", "review_failed", "env") and record.get("kind") not in ("check_broken", "no_changes", "no_answer") and (status in ("blocked", "failed") or not oc.ok
                                                         or (status == "done" and verified)):
         try:
             learn.record_outcomes(p, record, final_ok=oc.ok and status == "done" and check_passed is not False)
@@ -993,14 +999,26 @@ def run(req: Request, p: Paths) -> dict:
         if ds:
             record["diffstat"] = ds
         mark_run_end(run_dir, cwd)           # the tree as this run left it: a resume inherits only if still so
-        if snap and "edited_tests" not in record:
+        chk = record.get("check") or {}
+        want_cov = bool(chk.get("cmd")) and chk.get("reason") != "namecheck"
+        if snap and ("edited_tests" not in record or want_cov):
             # changed pre-existing tests are flagged for every write run, not only when a review step ran
-            # (review off, an ephemeral run): the lead looks at those first
+            # (review off, an ephemeral run): the lead looks at those first. P1-10: the check's record says which
+            # test files it ran and which of them this run changed or wrote (display only)
+            diff, ed = None, record.get("edited_tests") or []
             try:
                 from .review import changes, edited_tests
-                ed = edited_tests(changes(cwd, snap)[1])
+                diff = changes(cwd, snap)[1]
+                ed = ed or edited_tests(diff)
             except Exception:  # noqa: BLE001 — weak evidence only
-                ed = []
+                pass
+            if want_cov and diff is not None:
+                try:
+                    from . import coverage
+                    chk["covers"] = coverage.summarize(chk["cmd"], cwd, Path(snap.get("repo") or cwd), ed,
+                                                       coverage.new_tests(diff), coverage.added_to_tests(diff))
+                except Exception:  # noqa: BLE001 — display only; the run's result stands without it
+                    pass
             if ed:
                 record["edited_tests"] = ed
     beat.set()
@@ -1138,6 +1156,18 @@ REVIEW_FAILED_HINT = ("an independent review still finds problems after one fix 
 
 
 NO_CHANGES_NOTE = "ran on unchanged tree"
+# a read run's summary that says nothing: empty, or only a placeholder word ("ok", "done", ...)
+NO_ANSWER_WORDS = {"", "ok", "okay", "done", "finished", "complete", "completed", "n/a", "none", "完成", "好", "好的",
+                   "已完成", "无"}
+
+
+def no_answer(res: dict) -> bool:
+    """The read run answered nothing: its summary is empty or a placeholder, and nothing is in open_questions or
+    next_step either (a short real answer such as "42" or "Yes." counts)."""
+    if res.get("open_questions") or str(res.get("next_step") or "").strip():
+        return False
+    s = " ".join(str(res.get("summary") or "").split()).strip(" .!。！").lower()
+    return s in NO_ANSWER_WORDS
 
 
 def _left_unchanged(p: Paths, record: dict) -> bool | None:
@@ -1164,7 +1194,7 @@ def exit_ok(record: dict) -> bool:
     exit codes of existing commands stay as they were."""
     # review_issues as a final kind = the review found problems and no fix round ran: not a success either
     return bool(record["ok"]) and record.get("kind") not in ("review_issues", "review_failed", "check_broken",
-                                                              "no_changes")
+                                                              "no_changes", "no_answer")
 
 
 def compact(record: dict) -> dict:
@@ -1222,6 +1252,13 @@ def compact(record: dict) -> dict:
                            f"accept it; otherwise `ccx resume {record['run_id']} "
                            f"\"nothing was changed: make the change\"`")
             out["needs_lead"] = f"no_changes: status {st}, nothing changed"
+        if record["kind"] == "no_answer":
+            out["needs_lead"] = "no_answer: the read run returned no answer"
+            out["hint"] = (f"the sub-agent said {r.get('status') or 'done'} but its answer is empty; " +
+                           ("ask again (one-off session: nothing to resume), on another agent or model, or read it "
+                            "yourself" if record.get("ephemeral") else
+                            f"ask again on a stronger tier (`ccx resume {record['run_id']} \"answer the question\" "
+                            f"--tier T2`) or read it yourself"))
         if record["kind"] == "needs_write":
             out["hint"] = ("read-only run: the sub-agent says it needs to edit files (see summary). If you agree, "
                            f"run it again with --mode write")
@@ -1255,6 +1292,13 @@ def compact(record: dict) -> dict:
         out["check"] = {"cmd": c["cmd"], "passed": c["passed"], "exit": c["exit"],
                         **({"weak": c["weak"], "note": c["note"]} if c.get("weak") else {}),
                         **({"status": "check_broken"} if c.get("broken") else {})}
+        if c.get("covers"):                         # P1-10: what it ran, and whether the run changed its yardstick
+            from .coverage import text
+            out["check"]["covers"] = text(c["covers"])
+            if c["covers"].get("unknown"):
+                out["check"]["covers_unknown"] = True
+            if c["covers"].get("basis_changed"):
+                out["check"]["basis_changed"] = c["covers"]["edited"]
         if c.get("unchanged_tree") and c.get("passed"):
             # it passed on the tree as it was before the run: no evidence about this run's work
             out["check"].update(passed=None, status=NO_CHANGES_NOTE)
@@ -1281,6 +1325,8 @@ def recap(record: dict, res: dict) -> str:
     check = "none" if not c else (NO_CHANGES_NOTE.replace(" ", "-") if c.get("status") == NO_CHANGES_NOTE else
                                   "passed" if c.get("passed") else
                                   f"{'broken' if record.get('kind') == 'check_broken' else 'failed'} (exit {c.get('exit')})")
+    if c and c.get("passed") and c.get("covers") and not c.get("covers_unknown"):
+        check += f" ({c['covers']})"                # P1-10: "check passed (covers: ...)"; unknown: the record has it
     review = (res.get("review") or {}).get("verdict") or "none"
     usd = sum(a.get("ae_usd") or 0 for a in record.get("attempts") or []) + ((res.get("review") or {}).get("usd") or 0)
     cc = record.get("cost_chain") or {}
